@@ -15,3 +15,16 @@ services:
       - ~/.claude:/home/devuser/.claude
     # Keep the container running
     command: /bin/sh -c "while sleep 1000; do :; done"
+    depends_on:
+      - greenmail
+
+  # In-memory IMAP/SMTP server for integration tests.
+  # Accessible from dev-env as hostname "greenmail".
+  # Users are created automatically on first SMTP delivery; password = email address.
+  greenmail:
+    image: greenmail/standalone:2.1.3
+    environment:
+      - GREENMAIL_OPTS=-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0
+    ports:
+      - "3143:3143"  # IMAP
+      - "3025:3025"  # SMTP (test data injection)

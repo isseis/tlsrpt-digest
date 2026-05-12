@@ -8,6 +8,15 @@
     "workspaceFolder": "/workspaces/ubuntu",
     "remoteUser": "devuser",
     "postCreateCommand": "cd /workspaces/ubuntu && pre-commit install",
+    "remoteEnv": {
+        "IMAP_TEST_HOST": "greenmail",
+        "IMAP_TEST_PORT": "3143",
+        "IMAP_TEST_USER": "imap-test@example.com",
+        "IMAP_TEST_PASS": "imap-test@example.com",
+        "IMAP_TEST_MAILBOX": "INBOX",
+        "IMAP_TEST_SMTP_HOST": "greenmail",
+        "IMAP_TEST_SMTP_PORT": "3025"
+    },
     "customizations": {
         "vscode": {
             "settings": {

@@ -227,58 +227,52 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 | 方法 | メリット | デメリット |
 |---|---|---|
-| **A: Docker コンテナ（推奨）** | 再現性が高い。CI に組み込める。テストデータを完全に制御できる | Docker が必要 |
-| **B: 実 IMAP サーバー** | 追加インフラ不要 | アカウント発行が必要。メールボックスの汚染リスクがある |
+| **A: devcontainer（推奨）** | 環境変数が事前設定済み。追加作業不要。全開発者で同一環境 | devcontainer の使用が前提 |
+| **B: 実 IMAP サーバー** | devcontainer 不使用の環境でも動作 | アカウント発行が必要。メールボックスの汚染リスクがある |
 
 ---
 
-### 5.2 方法 A: Docker コンテナ（GreenMail）
+### 5.2 方法 A: devcontainer（推奨）
 
-[GreenMail](https://greenmail-mail-test.github.io/greenmail/) は IMAP/SMTP をインメモリで提供するテスト用メールサーバー。
+このプロジェクトの devcontainer には [GreenMail](https://greenmail-mail-test.github.io/greenmail/)（IMAP/SMTP のインメモリテストサーバー）が組み込み済みである。devcontainer を起動すると GreenMail コンテナが自動的に起動し、環境変数も自動設定される。追加の操作は不要。
 
-**起動手順**
+**設定済みの環境変数**
+
+| 変数 | 値 |
+|---|---|
+| `IMAP_TEST_HOST` | `greenmail`（docker-compose サービス名で名前解決）|
+| `IMAP_TEST_PORT` | `3143` |
+| `IMAP_TEST_USER` | `imap-test@example.com` |
+| `IMAP_TEST_PASS` | `imap-test@example.com`（GreenMail のデフォルト: パスワード = メールアドレス）|
+| `IMAP_TEST_MAILBOX` | `INBOX` |
+| `IMAP_TEST_SMTP_HOST` | `greenmail` |
+| `IMAP_TEST_SMTP_PORT` | `3025` |
+
+**テストデータの投入（`TestMain` で実施）**
+
+GreenMail はメール受信時にアカウントを自動作成する。統合テストの `TestMain` でテスト用メールを SMTP 経由で投入し、テスト終了後に削除する。
+
+```go
+// TestMain injects test emails via SMTP and cleans up after all tests.
+func TestMain(m *testing.M) {
+    injectTestMessages() // send via SMTP to IMAP_TEST_SMTP_HOST:IMAP_TEST_SMTP_PORT
+    code := m.Run()
+    cleanupTestMessages() // UID STORE \Deleted + EXPUNGE
+    os.Exit(code)
+}
+```
+
+**devcontainer 外で手動起動する場合**
 
 ```bash
-docker run -d --name greenmail-imap \
-  -p 3143:3143 \
-  -e GREENMAIL_OPTS="-Dgreenmail.setup.test.imap -Dgreenmail.hostname=0.0.0.0" \
+docker run -d --name greenmail \
+  -p 3143:3143 -p 3025:3025 \
+  -e GREENMAIL_OPTS="-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0" \
   greenmail/standalone:2.1.3
-```
 
-**テストアカウントの作成**
-
-GreenMail はメール受信時にアカウントを自動作成する。SMTP で 1 通送信することでアカウントと受信ボックスが生成される。
-
-```bash
-# テスト用メールを投入（SMTP ポート 3025）
-curl --url "smtp://localhost:3025" \
-  --mail-from "sender@example.com" \
-  --mail-rcpt "tlsrpt-test@example.com" \
-  --upload-file /dev/stdin <<'EOF'
-From: sender@example.com
-To: tlsrpt-test@example.com
-Subject: TLSRPT Test Message 1
-Date: Mon, 12 May 2026 10:00:00 +0000
-Message-ID: <test-msg-001@example.com>
-
-Test body
-EOF
-```
-
-**環境変数の設定**
-
-```bash
-export IMAP_TEST_HOST=localhost
-export IMAP_TEST_PORT=3143
-export IMAP_TEST_USER=tlsrpt-test@example.com
-export IMAP_TEST_PASS=tlsrpt-test@example.com  # GreenMail はパスワード = メールアドレス
-export IMAP_TEST_MAILBOX=INBOX
-```
-
-**クリーンアップ**
-
-```bash
-docker stop greenmail-imap && docker rm greenmail-imap
+export IMAP_TEST_HOST=localhost IMAP_TEST_PORT=3143
+export IMAP_TEST_USER=imap-test@example.com IMAP_TEST_PASS=imap-test@example.com
+export IMAP_TEST_MAILBOX=INBOX IMAP_TEST_SMTP_HOST=localhost IMAP_TEST_SMTP_PORT=3025
 ```
 
 ---
@@ -287,7 +281,7 @@ docker stop greenmail-imap && docker rm greenmail-imap
 
 **サーバー側の準備（管理者が実施）**
 
-1. テスト専用アカウントを作成する（例: `tlsrpt-test@yourdomain.example`）
+1. テスト専用アカウントを作成する（例: `imap-test@yourdomain.example`）
 2. アカウントのパスワードを設定し、環境変数として開発者に共有する
 3. メールボックスは INBOX のみ使用する
 
