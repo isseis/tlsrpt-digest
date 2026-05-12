@@ -180,12 +180,13 @@ sequenceDiagram
 ```go
 // Config は IMAP 接続設定
 type Config struct {
-    Host      string
-    Port      int
-    Username  string
-    Password  config.Secret // ログ出力時に [REDACTED] となる
-    Mailbox   string        // 監視するメールボックス名（デフォルト: "INBOX"）
-    TLSCACert string        // カスタム CA 証明書ファイルパス（空 = OS バンドル使用）
+    Host            string
+    Port            int
+    Username        string
+    Password        config.Secret // ログ出力時に [REDACTED] となる
+    Mailbox         string        // 監視するメールボックス名（デフォルト: "INBOX"）
+    TLSCACert       string        // カスタム CA 証明書ファイルパス（空 = OS バンドル使用）
+    MaxMessageBytes int64         // ダウンロード上限バイト数（0 = 無制限）。RFC822.SIZE がこの値を超えるメールはスキップして WARN ログを出力する
 }
 
 // MessageMeta は本文を含まない IMAP メタ情報。
@@ -248,6 +249,7 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 | SEARCH/FETCH 失敗 | `"imap: fetch meta: %w"` |
 | UID 不存在 | `"imap: download: uid 123 not found"` |
 | UID STORE 失敗 | `"imap: mark seen: %w"` |
+| メッセージサイズ超過 | WARN ログ + スキップ（エラーを返さず処理継続） |
 
 呼び出し元は `errors.Is` / `errors.As` でエラー判定する。
 
@@ -262,6 +264,7 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 | カスタム CA | `Config.TLSCACert` が設定されている場合、`x509.CertPool` を構築して使用 |
 | パスワード非漏洩 | `Config.Password` は `config.Secret` 型。ログ出力時に `[REDACTED]` になる |
 | デバッグ出力分離 | IMAP ライブラリのデバッグ出力は専用 `io.Writer` 変数に割り当て、Notifier（Slack）には流さない |
+| 最大メッセージサイズ（DoS 対策） | `Config.MaxMessageBytes > 0` の場合、`FetchMeta` で取得した `MessageMeta.Size` がこの値を超えるメールをダウンロード対象から除外し WARN ログを出力する。RFC822.SIZE はサーバー申告値のためダウンロード前に判定できる |
 
 詳細は [通知セキュリティガイドライン](../../dev/developer_guide/notification_security.ja.md) の原則4を参照。
 
@@ -326,11 +329,19 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 
 現在のスコープ外だが、将来対応が想定される拡張と設計上の考慮事項を示す。
 
+### 高優先（現実のシナリオで発生リスクが高い）
+
+| 拡張 | 背景・リスク | 設計上の考慮事項 |
+|---|---|---|
+| **接続リトライ・再接続** | IMAP サーバーの一時再起動やネットワーク障害で接続が途中で切断される | 現在は one-shot 接続でリトライなし。対応が必要な場合、コネクション管理を `MailFetcher` の外層でラップするミドルウェアパターンを採用し、インターフェースを変更せずに透過的にリトライを追加できる |
+| **UIDVALIDITY 検証** | メールボックスの再作成・名前変更等でサーバーが UID を再割り当てすると、ローカルの `.eml` ファイルが誤った UID に対応してしまう | `Store` に UIDVALIDITY を永続化し、`FetchMeta` 呼び出し時の `SELECT` 応答と照合する。ミスマッチを検出した場合は WARN ログを出力し、既存 `.eml` ファイルとの対応を無効化する（offlineimap3 の `get_uidvalidity()` に相当） |
+
+### 中優先（要件次第で対応を検討）
+
 | 拡張 | 設計上の考慮事項 |
 |---|---|
 | **IMAP IDLE / push 方式** | 現在は one-shot ポーリング。IDLE コマンド対応が必要になる場合、`MailFetcher` インターフェースに通知コールバックを追加するか、専用の `IdleFetcher` インターフェースを別途定義する |
-| **STARTTLS サポート** | 現在は TLS 専用（ポート 993）。STARTTLS が必要な場合、`Config` に `UseTLS bool` / `UseSTARTTLS bool` 等のフラグを追加し、接続ロジックを分岐させる |
-| **接続リトライ・再接続** | 現在は one-shot 接続でリトライなし。長時間稼働への対応が必要な場合、コネクション管理を `MailFetcher` の外層でラップするミドルウェアパターンを採用する |
-| **OAuth 2.0 / XOAUTH2 認証** | 現在は LOGIN のみ対応。OAuth 対応が必要な場合、`Config` に `AuthMechanism` フィールドを追加し、認証シーケンスを抽象化する |
+| **STARTTLS サポート** | 現在は TLS 専用（ポート 993）。STARTTLS が必要な場合、`Config` に接続方式フラグを追加し、接続ロジックを分岐させる |
+| **OAuth 2.0 / XOAUTH2 認証** | 現在は LOGIN のみ対応。Google Workspace 等で必要な場合、`Config` に `AuthMechanism` フィールドを追加し、認証シーケンスを抽象化する |
 | **複数メールボックスの同時監視** | 現在は 1 接続につき 1 メールボックス。複数ボックスに対応する場合、呼び出し元でメールボックスごとに `IMAPClient` を生成するか、`FetchMeta` に `mailbox` パラメータを追加する |
-| **ラージメッセージの部分フェッチ** | 現在は `BODY.PEEK[]` で全体取得。サイズ制限が必要になる場合、`BODY.PEEK[]<0.N>` による範囲取得を `Download` に追加する |
+　
