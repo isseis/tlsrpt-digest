@@ -7,14 +7,25 @@ Verify that the target file is a Japanese document (`.ja.md`).
 If not, stop.
 
 Determine the output path for the English version (`.ja.md` → `.md`).
-If the English version already exists, ask the user to confirm overwrite before continuing.
 
-## Load Glossary
+## Mode Selection: Full Translation or Differential Translation
+
+**If the English version does not exist**: proceed with full translation (see "Full Translation" section).
+
+**If the English version already exists**: proceed with differential translation (see "Differential Translation" section).
+
+---
+
+## Full Translation
+
+Translate the entire Japanese file from scratch.
+
+### Load Glossary
 
 Read `docs/translation_glossary.md`.
 Use the terms listed there consistently throughout the translation.
 
-## Translate
+### Translate
 
 Translate strictly following these principles:
 
@@ -23,6 +34,50 @@ Translate strictly following these principles:
 - **Structural consistency**: Match chapter headings and sentence structure to the Japanese version.
 
 Write the translated English version to the output path.
+
+---
+
+## Differential Translation
+
+Translate only the sections that changed in the Japanese file since the English file was last updated.
+
+### Find the Sync Point
+
+Run the following command to find the last commit that modified the English file:
+
+```bash
+git log --oneline -1 -- <en-file>
+```
+
+Record the commit hash (call it `SYNC_HASH`).
+
+### Get the Diff
+
+Run:
+
+```bash
+git diff SYNC_HASH -- <ja-file>
+```
+
+If the diff is empty, the English file is already up to date. Stop and report this to the user.
+
+### Load Glossary
+
+Read `docs/translation_glossary.md`.
+Use the terms listed there consistently throughout the translation.
+
+### Translate Only Changed Sections
+
+From the diff, identify which sections (by heading) were added, modified, or removed.
+
+For each changed section:
+- **Added lines** (`+`): translate the new Japanese content into English.
+- **Removed lines** (`-`): identify the corresponding content in the English file and remove it.
+- **Modified lines**: translate the new Japanese content and replace the old English content.
+
+Apply these changes to the English file. Do not touch sections that are not in the diff.
+
+---
 
 ## Update Glossary
 
