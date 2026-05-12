@@ -89,6 +89,7 @@ Include the following section at the top of `01_requirements.md`:
 5. **Security Considerations (セキュリティ考慮事項)**
    - Security design patterns
    - Threat models with Mermaid diagrams
+   - For features involving notification, follow the [Notification Security Guidelines](notification_security.md)
 
 6. **Processing Flow Details**
    - Key processing flows with sequence/flowchart diagrams
