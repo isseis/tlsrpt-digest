@@ -106,7 +106,7 @@ sequenceDiagram
     srv-->>c: TLS ハンドシェイク完了
     c->>srv: LOGIN username password
     srv-->>c: OK authenticated
-    c-->>cmd: *IMAPClient (MailFetcher として利用可)
+    c-->>cmd: MailFetcher（接続済み）
 
     Note over cmd: 処理を実行…
 
@@ -207,6 +207,7 @@ type FetchMetaResult struct {
 }
 
 // MailFetcher は IMAP 操作を抽象化するインターフェース。
+// 接続ライフサイクル（Close）を含め、IMAP 操作のすべてをこのインターフェース経由で行う。
 // 実装: IMAPClient（本番）、FakeMailFetcher（テスト）。
 type MailFetcher interface {
     // FetchMeta は since 以降に受信した全メールのメタ情報を返す。
@@ -223,18 +224,21 @@ type MailFetcher interface {
 
     // MarkSeen は指定 UID のメールに SEEN フラグを付与する。
     MarkSeen(ctx context.Context, uids []uint32) error
+
+    // Close は IMAP 接続を閉じる。呼び出し元は defer client.Close() で確実に呼ぶこと。
+    // FakeMailFetcher では no-op 実装（return nil）とする。
+    Close() error
 }
 ```
 
-**コンストラクタと接続ライフサイクル**
+**コンストラクタ**
 
-`MailFetcher` インターフェースには `Close()` を含めない。接続のクローズは `*IMAPClient` が持つメソッドとして提供し、呼び出し元が `defer client.Close()` で管理する。
+`Close()` が `MailFetcher` に含まれるため、コンストラクタはインターフェース型で返せる。
 
 ```go
-// NewIMAPClient は IMAP サーバーへの TLS 接続を確立し *IMAPClient を返す。
-// *IMAPClient は MailFetcher を満たす。
+// NewIMAPClient は IMAP サーバーへの TLS 接続を確立し MailFetcher を返す。
 // 呼び出し元は defer client.Close() で接続を閉じる責任を持つ。
-func NewIMAPClient(cfg Config) (*IMAPClient, error)
+func NewIMAPClient(cfg Config) (MailFetcher, error)
 ```
 
 ### 3.2 コンポーネント責務
@@ -242,7 +246,7 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 | コンポーネント | 責務 | 変更種別 |
 |---|---|---|
 | `internal/imap/imap.go` | `MailFetcher` インターフェース・`MessageMeta`・`Config` 型定義 | 新規 |
-| `internal/imap/client.go` | `IMAPClient` 実装（TLS 接続・IMAP コマンド発行） | 新規 |
+| `internal/imap/client.go` | `IMAPClient` 実装（TLS 接続・IMAP コマンド発行・`Close`） | 新規 |
 | `internal/imap/fake.go` | `FakeMailFetcher`（テスト用スタブ・スパイ） | 新規 |
 
 ---
@@ -290,6 +294,7 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 - `Download` の返却値（`map[uint32]*mail.Message`）を事前設定するフィールド
 - 各メソッドの呼び出し引数を記録するスパイフィールド（`MarkSeenCalls [][]uint32` 等）
 - 各メソッドで任意のエラーを返せるフィールド
+- `Close()` は no-op（`return nil`）として実装し、テスト時の接続管理を不要にする
 
 これにより上位コンポーネント（`cmd/tlsrpt-digest`）のテストで実 IMAP サーバーが不要になる。
 
