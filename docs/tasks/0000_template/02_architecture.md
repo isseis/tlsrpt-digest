@@ -148,3 +148,11 @@ sequenceDiagram
 ### Phase 2: [Phase Name]
 
 1. ...
+
+---
+
+## 8. Future Extensibility
+
+(Describe design considerations for features that are currently out of scope but anticipated in future extensions.)
+
+- ...

@@ -319,3 +319,18 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 8. `Download` の実装
 9. `MarkSeen` の実装
 10. TLS 設定テスト（カスタム CA・エラーパス）
+
+---
+
+## 8. 将来の拡張性
+
+現在のスコープ外だが、将来対応が想定される拡張と設計上の考慮事項を示す。
+
+| 拡張 | 設計上の考慮事項 |
+|---|---|
+| **IMAP IDLE / push 方式** | 現在は one-shot ポーリング。IDLE コマンド対応が必要になる場合、`MailFetcher` インターフェースに通知コールバックを追加するか、専用の `IdleFetcher` インターフェースを別途定義する |
+| **STARTTLS サポート** | 現在は TLS 専用（ポート 993）。STARTTLS が必要な場合、`Config` に `UseTLS bool` / `UseSTARTTLS bool` 等のフラグを追加し、接続ロジックを分岐させる |
+| **接続リトライ・再接続** | 現在は one-shot 接続でリトライなし。長時間稼働への対応が必要な場合、コネクション管理を `MailFetcher` の外層でラップするミドルウェアパターンを採用する |
+| **OAuth 2.0 / XOAUTH2 認証** | 現在は LOGIN のみ対応。OAuth 対応が必要な場合、`Config` に `AuthMechanism` フィールドを追加し、認証シーケンスを抽象化する |
+| **複数メールボックスの同時監視** | 現在は 1 接続につき 1 メールボックス。複数ボックスに対応する場合、呼び出し元でメールボックスごとに `IMAPClient` を生成するか、`FetchMeta` に `mailbox` パラメータを追加する |
+| **ラージメッセージの部分フェッチ** | 現在は `BODY.PEEK[]` で全体取得。サイズ制限が必要になる場合、`BODY.PEEK[]<0.N>` による範囲取得を `Download` に追加する |

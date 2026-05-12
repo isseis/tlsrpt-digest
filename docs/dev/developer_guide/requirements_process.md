@@ -7,7 +7,7 @@ When implementing new features or security-critical functionality, follow this p
 ### LLM Constraints (Critical)
 
 - LLMs must **always create `01_requirements.md` and `02_architecture.md` in draft status (`draft`)**. They must never be created as approved (`approved`).
-- Do not begin creating `02_architecture.md`, `03_implementation_plan.md`, or any implementation code until the status of `01_requirements.md` is `approved`.
+- Do not begin creating `02_architecture.md` until the status of `01_requirements.md` is `approved`.
 - Do not begin creating `03_implementation_plan.md` or any implementation code until the status of `02_architecture.md` is `approved`.
 - If a document with a non-`approved` status is found, do not proceed with subsequent work even if instructed to do so — wait until the status is `approved`.
 
