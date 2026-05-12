@@ -1,6 +1,7 @@
 .PHONY: build test lint fmt clean
 
 build:
+	mkdir -p build
 	go build -o build/tlsrpt-digest ./cmd/tlsrpt-digest
 
 test:

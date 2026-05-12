@@ -27,7 +27,9 @@ jobs:
         id: check
         run: |
           # Get list of changed files
-          changed_files=$(git diff --name-only origin/main...HEAD)
+          # Use PR base/head SHAs from the event payload to avoid relying on
+          # origin/main being locally available (fails for fork PRs).
+          changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }})
           echo "Changed files:"
           echo "$changed_files"
 
@@ -86,17 +88,17 @@ jobs:
             --build-tags test \
             --out-format sarif:golangci-security.sarif \
             --timeout=5m \
-            ./... || true
+            ./...
         continue-on-error: true
 
       - name: Upload golangci-lint security SARIF file
         uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('golangci-security.sarif') != ''
+        if: always() && hashFiles('golangci-security.sarif') != '' && github.event.pull_request.head.repo.full_name == github.repository
         with:
           sarif_file: golangci-security.sarif
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.30.0
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -106,7 +108,7 @@ jobs:
 
       - name: Upload Trivy SARIF file
         uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('trivy-results.sarif') != ''
+        if: always() && hashFiles('trivy-results.sarif') != '' && github.event.pull_request.head.repo.full_name == github.repository
         with:
           sarif_file: 'trivy-results.sarif'
 
