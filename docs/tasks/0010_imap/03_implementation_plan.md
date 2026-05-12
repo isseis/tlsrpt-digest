@@ -180,8 +180,9 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 - [ ] **4-5** 統合テストの骨格を用意する（`internal/imap/client_integration_test.go`）
   - `//go:build integration` ビルドタグを付与する
-  - 環境変数 `IMAP_TEST_HOST`, `IMAP_TEST_USER`, `IMAP_TEST_PASS` で接続先を指定する
+  - 環境変数 `IMAP_TEST_HOST`, `IMAP_TEST_USER`, `IMAP_TEST_PASS`, `IMAP_TEST_MAILBOX` で接続先を指定する
   - 通常の CI では skip される（F-001 AC-1, F-002 AC-2, AC-4, F-003 AC-1, AC-3, F-005 AC-1, AC-3 の結合確認）
+  - テスト前に **§4 統合テスト用 IMAP サーバー準備** の手順を完了していること
 
 ---
 
@@ -214,10 +215,138 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 - `//go:build integration` で通常 CI はスキップ
 - 環境変数で接続先を指定
 - F-001 AC-1, F-002 AC-2・AC-4, F-003 AC-1・AC-3, F-005 AC-1・AC-3 を確認
+- サーバー準備手順は §4 参照
 
 ---
 
-## 5. リスク管理
+## 5. 統合テスト用 IMAP サーバー準備
+
+### 5.1 サーバーの選択
+
+統合テストには実際の IMAP サーバーとの通信が必要。以下の 2 通りから選択する。
+
+| 方法 | メリット | デメリット |
+|---|---|---|
+| **A: Docker コンテナ（推奨）** | 再現性が高い。CI に組み込める。テストデータを完全に制御できる | Docker が必要 |
+| **B: 実 IMAP サーバー** | 追加インフラ不要 | アカウント発行が必要。メールボックスの汚染リスクがある |
+
+---
+
+### 5.2 方法 A: Docker コンテナ（GreenMail）
+
+[GreenMail](https://greenmail-mail-test.github.io/greenmail/) は IMAP/SMTP をインメモリで提供するテスト用メールサーバー。
+
+**起動手順**
+
+```bash
+docker run -d --name greenmail-imap \
+  -p 3143:3143 \
+  -e GREENMAIL_OPTS="-Dgreenmail.setup.test.imap -Dgreenmail.hostname=0.0.0.0" \
+  greenmail/standalone:2.1.3
+```
+
+**テストアカウントの作成**
+
+GreenMail はメール受信時にアカウントを自動作成する。SMTP で 1 通送信することでアカウントと受信ボックスが生成される。
+
+```bash
+# テスト用メールを投入（SMTP ポート 3025）
+curl --url "smtp://localhost:3025" \
+  --mail-from "sender@example.com" \
+  --mail-rcpt "tlsrpt-test@example.com" \
+  --upload-file /dev/stdin <<'EOF'
+From: sender@example.com
+To: tlsrpt-test@example.com
+Subject: TLSRPT Test Message 1
+Date: Mon, 12 May 2026 10:00:00 +0000
+Message-ID: <test-msg-001@example.com>
+
+Test body
+EOF
+```
+
+**環境変数の設定**
+
+```bash
+export IMAP_TEST_HOST=localhost
+export IMAP_TEST_PORT=3143
+export IMAP_TEST_USER=tlsrpt-test@example.com
+export IMAP_TEST_PASS=tlsrpt-test@example.com  # GreenMail はパスワード = メールアドレス
+export IMAP_TEST_MAILBOX=INBOX
+```
+
+**クリーンアップ**
+
+```bash
+docker stop greenmail-imap && docker rm greenmail-imap
+```
+
+---
+
+### 5.3 方法 B: 実 IMAP サーバー
+
+**サーバー側の準備（管理者が実施）**
+
+1. テスト専用アカウントを作成する（例: `tlsrpt-test@yourdomain.example`）
+2. アカウントのパスワードを設定し、環境変数として開発者に共有する
+3. メールボックスは INBOX のみ使用する
+
+**テストデータの投入**
+
+統合テスト実行前に以下のメールをテスト用 INBOX に投入しておく。
+
+| 番号 | SEEN フラグ | サイズ | 用途 |
+|---|---|---|---|
+| msg-001 | UNSEEN | 〜1 KB | FetchMeta の基本動作確認 |
+| msg-002 | SEEN | 〜1 KB | FetchMeta での既読スキップ確認 |
+| msg-003 | UNSEEN | 〜5 KB | Download の本文取得確認（添付あり）|
+
+メール投入コマンド例（SMTP 経由）:
+
+```bash
+# 各メールを SMTP 経由で送信後、サーバー管理画面または別の IMAP クライアントで
+# msg-002 に SEEN フラグを付与する
+```
+
+**環境変数の設定**
+
+```bash
+export IMAP_TEST_HOST=imap.yourdomain.example
+export IMAP_TEST_PORT=993
+export IMAP_TEST_USER=tlsrpt-test@yourdomain.example
+export IMAP_TEST_PASS=<secret>
+export IMAP_TEST_MAILBOX=INBOX
+```
+
+**テスト後のクリーンアップ**
+
+統合テストは実行後に投入したメールを削除する（テスト内で `UID STORE +FLAGS (\Deleted)` → `EXPUNGE` を呼ぶ）。
+
+---
+
+### 5.4 テストデータの仕様
+
+統合テストは以下の状態のメールボックスを前提とする。テスト開始時に `TestMain` でセットアップ・終了後にティアダウンを実施することを推奨する。
+
+| 状態 | 件数 | 説明 |
+|---|---|---|
+| UNSEEN・正常サイズ | 2 件以上 | FetchMeta・Download・MarkSeen の基本動作確認 |
+| SEEN・正常サイズ | 1 件以上 | FetchMeta で SEEN フラグが変化しないこと確認 |
+
+各テストケースはテスト開始前に状態を確認し、前提条件が満たされない場合は `t.Skip()` でスキップする。
+
+---
+
+### 5.5 統合テストの実行
+
+```bash
+# 環境変数を設定した上で実行
+go test -v -tags integration ./internal/imap/...
+```
+
+---
+
+## 6. リスク管理
 
 | リスク | 軽減策 |
 |---|---|
@@ -227,7 +356,7 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 ---
 
-## 6. 実装チェックリスト
+## 7. 実装チェックリスト
 
 ### フェーズ 0
 - [ ] `internal/config/secret.go`: `Secret` 型定義
@@ -264,7 +393,7 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 ---
 
-## 7. 成功基準
+## 8. 成功基準
 
 - 全受け入れ基準（F-001〜F-005）に対応するテストが存在する
 - `make test` と `make lint` が通る
@@ -273,7 +402,7 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 ---
 
-## 8. 受け入れ基準の確認（AC トレーサビリティ）
+## 9. 受け入れ基準の確認（AC トレーサビリティ）
 
 ### F-001: IMAP サーバーへの接続
 
@@ -387,6 +516,6 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 ---
 
-## 9. 次のステップ
+## 10. 次のステップ
 
 実装完了後、`0020_tlsrpt` の実装に進む。`MailFetcher.Download` で取得した `*mail.Message` を `internal/tlsrpt` パッケージが受け取り、RFC 8460 JSON 添付をパースする。
