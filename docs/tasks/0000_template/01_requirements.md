@@ -1,5 +1,17 @@
 # Requirements Document: [Feature Name]
 
+## Document Status
+
+| Item | Value |
+|---|---|
+| Status | `draft` |
+| Created | YYYY-MM-DD |
+| Review date | - |
+| Reviewer | - |
+| Comments | - |
+
+---
+
 ## 1. Background and Purpose
 
 ### 1.1 Background

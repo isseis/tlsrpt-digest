@@ -2,6 +2,41 @@
 
 When implementing new features or security-critical functionality, follow this process to prevent implementation gaps.
 
+## 0. Review Workflow
+
+### LLM Constraints (Critical)
+
+- LLMs must **always create `01_requirements.md` in draft status (`draft`)**. It must never be created as approved (`approved`).
+- Do not begin creating `02_architecture.md`, `03_implementation_plan.md`, or any implementation code until the status of `01_requirements.md` is `approved`.
+- If a requirements document with a non-`approved` status is found, do not proceed with subsequent work (architecture design, etc.) even if instructed to do so — wait until the status is `approved`.
+
+### Review Flow
+
+```
+LLM creates 01_requirements.md (status: draft)
+  → Human review and revision
+  → Reviewer updates status to approved
+  → Proceed to creating 02_architecture.md
+```
+
+### Document Status Format
+
+Include the following section at the top of `01_requirements.md`:
+
+```markdown
+## Document Status
+
+| Item | Value |
+|---|---|
+| Status | `draft` or `approved` |
+| Created | YYYY-MM-DD |
+| Review date | YYYY-MM-DD (or `-` when draft) |
+| Reviewer | Name (or `-` when draft) |
+| Comments | Review notes and changes (or `-` if none) |
+```
+
+---
+
 ## 1. Requirements Document (`docs/tasks/XXXX_feature/01_requirements.md`)
 
 **Mandatory for each functional requirement:**
