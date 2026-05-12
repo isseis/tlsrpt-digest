@@ -352,4 +352,5 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 | **STARTTLS サポート** | 現在は TLS 専用（ポート 993）。STARTTLS が必要な場合、`Config` に接続方式フラグを追加し、接続ロジックを分岐させる |
 | **OAuth 2.0 / XOAUTH2 認証** | 現在は LOGIN のみ対応。Google Workspace 等で必要な場合、`Config` に `AuthMechanism` フィールドを追加し、認証シーケンスを抽象化する |
 | **複数メールボックスの同時監視** | 現在は 1 接続につき 1 メールボックス。複数ボックスに対応する場合、呼び出し元でメールボックスごとに `IMAPClient` を生成するか、`FetchMeta` に `mailbox` パラメータを追加する |
+| **`Download` のバッチ分割（メモリ上限対策）** | 現在の `Download(uids)` は指定した全 UID のメール本文を一括でメモリに読み込む。想定件数（週数十件・各メール数十 KB 程度の TLSRPT レポート）では問題ないが、件数や 1 件あたりサイズが増大した場合にメモリ使用量が急増する。対応が必要な場合、UID リストをチャンクに分割して複数回に分けて `Download` を呼ぶか、ストリーミング型の API（コールバックまたはチャネル渡し）に変更する。`Config.MaxMessageBytes` による事前フィルタがある程度の緩和策となる |
 　
