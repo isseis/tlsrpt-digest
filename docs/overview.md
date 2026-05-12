@@ -26,7 +26,7 @@ tlsrpt-digest automates the following:
 ```mermaid
 flowchart TD
     A[("IMAP mailbox")]
-    B["Fetch unread messages<br>internal/imap"]
+    B["Fetch message metadata (all in window)<br>internal/imap"]
     C["Extract attachment<br>.json.gz → JSON"]
     D["Parse RFC 8460 JSON<br>internal/tlsrpt"]
     E{"failure_session_count > 0?"}
@@ -66,7 +66,7 @@ tlsrpt-digest/
 ├── cmd/
 │   └── tlsrpt-digest/        # Entry point, subcommands, one-shot execution
 ├── internal/
-│   ├── imap/                 # IMAP connection, unread message fetching, marking as read
+│   ├── imap/                 # IMAP connection, metadata fetch (all in window), selective download, marking as read
 │   ├── tlsrpt/               # RFC 8460 JSON parsing, failure detection
 │   ├── notify/               # Slack / email notification (immediate alerts and weekly summaries)
 │   └── store/                # Report persistence (.json / .eml), data management for weekly summaries
@@ -78,7 +78,7 @@ tlsrpt-digest/
 
 | Package | Responsibility |
 |---|---|
-| `internal/imap` | Connecting to the IMAP server, fetching unread messages, marking messages as read after processing |
+| `internal/imap` | Connecting to the IMAP server, fetching metadata for all messages in the lookback window, selectively downloading messages, marking as read after processing |
 | `internal/tlsrpt` | Extracting .json.gz attachments, parsing RFC 8460 JSON, evaluating failure_session_count |
 | `internal/notify` | Sending notifications via Slack Webhook / email (both immediate alerts and weekly summaries) |
 | `internal/store` | Saving and loading .eml files, persisting report data as JSON, aggregation for weekly summaries |

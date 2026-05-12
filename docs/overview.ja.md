@@ -26,7 +26,7 @@ tlsrpt-digest は以下を自動化します：
 ```mermaid
 flowchart TD
     A[("IMAP メールボックス")]
-    B["未読メール取得<br>internal/imap"]
+    B["メタ情報取得（期間内全件）<br>internal/imap"]
     C["添付ファイル展開<br>.json.gz → JSON"]
     D["RFC 8460 JSON パース<br>internal/tlsrpt"]
     E{"failure_session_count > 0?"}
@@ -66,7 +66,7 @@ tlsrpt-digest/
 ├── cmd/
 │   └── tlsrpt-digest/        # エントリポイント・サブコマンド・one-shot 実行
 ├── internal/
-│   ├── imap/                 # IMAP接続・未読メール取得・既読マーク
+│   ├── imap/                 # IMAP接続・メタ情報取得（期間内全件）・選択的ダウンロード・既読マーク
 │   ├── tlsrpt/               # RFC 8460 JSON パース・failure判定
 │   ├── notify/               # Slack / メール通知（即時アラート・週次サマリ）
 │   └── store/                # レポート永続化（.json / .eml）・週次サマリ用データ管理
@@ -78,7 +78,7 @@ tlsrpt-digest/
 
 | パッケージ | 責務 |
 |---|---|
-| `internal/imap` | IMAP サーバへの接続、未読メールの取得、処理後の既読マーク |
+| `internal/imap` | IMAP サーバへの接続、取得期間内の全メールのメタ情報取得、選択的ダウンロード、処理後の既読マーク |
 | `internal/tlsrpt` | .json.gz 添付ファイルの展開、RFC 8460 JSON のパース、failure_session_count の評価 |
 | `internal/notify` | Slack Webhook / メールによる通知送信（即時アラートと週次サマリの両方） |
 | `internal/store` | .eml ファイルの保存・読み込み、JSON によるレポートデータの永続化、週次サマリ用の集計 |

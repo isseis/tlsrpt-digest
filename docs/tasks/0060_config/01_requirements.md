@@ -70,7 +70,7 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 1. IMAP ホスト名が空の場合はエラーを返す
 2. IMAP ポート番号が 1〜65535 の範囲外の場合はエラーを返す
 3. IMAP ユーザ名またはパスワードが空の場合はエラーを返す
-4. 通知設定（Slack Webhook URL またはメール設定）が一つも設定されていない場合はエラーを返す
+4. Slack Webhook URL は環境変数（`TLSRPT_SLACK_WEBHOOK_URL_SUCCESS`・`TLSRPT_SLACK_WEBHOOK_URL_ERROR`）で管理するため、設定ファイルには `notify.slack.allowed_host` のみを記載する。「少なくとも1つの通知手段が設定されているか」の検証は `internal/notify` パッケージが担い、`internal/config` は `notify.slack.allowed_host` の形式チェック（ポート番号・スキームを含まない完全修飾ホスト名）のみを行う
 5. `imap.fetch_days` が 1 未満の場合はエラーを返す
 6. `imap.tls_ca_cert` が設定されている場合、指定パスのファイルが存在しかつ PEM 形式の証明書として読み込めることを確認する。読み込めない場合はエラーを返す
 

@@ -105,6 +105,16 @@ Redaction in the Debug Logger can be toggled on/off via configuration. On the ot
 
 The debug output destination (`io.Writer`) of the IMAP library and similar components is assigned to a variable dedicated to the Debug Logger, and managed separately from the Notifier's handler.
 
+#### Principle 5: Type Safety When Using slog.Handler as Notifier
+
+The Slack notification handler is implemented as `slog.Handler`. Although `slog.Record` carries a free-form `Message` string, the same type-constraint goal is achieved by the following rules:
+
+1. **Typed event functions only**: All writes to the notification logger go through typed helper functions (e.g., `LogAlert(ctx, logger, alert Alert)`). External packages never call `logger.Info(...)` directly on the notification logger.
+2. **Private logger**: The `*slog.Logger` connected to the Slack handler is kept private inside `internal/notify`. It is not exported.
+3. **No debug path to the Slack handler**: Debug output (e.g., IMAP communication traces) is written to a separate `io.Writer` and never reaches the Slack handler.
+
+These rules ensure that only well-typed, structured notification payloads flow to external channels, even though the underlying transport is `slog.Handler`.
+
 ---
 
 ## 3. Complementary Measure: Protection of Sensitive Fields Through Secret Type
@@ -143,6 +153,7 @@ This guideline applies throughout the project. The following components are part
 
 Include the following tests for each notification implementation (Slack, email, standard output):
 
-1. A test verifying that `Notifier.SendAlert()` includes only the fields of the `Alert` struct in the message
+1. A test verifying that the typed event helper (e.g., `LogAlert`) emits a `slog.Record` containing only the fields of the `Alert` struct — no raw strings, no config fields
 2. A test verifying that sensitive fields of the Config struct (of `Secret` type) are not included in notification messages
-3. A test verifying that the debug output destination (`io.Writer`) is managed as a separate variable from the Notifier's handler
+3. A test verifying that the debug output destination (`io.Writer`) is managed as a separate variable from the Notifier's handler, and that writing to the debug output does not trigger the Slack handler
+4. A test verifying that the notification `*slog.Logger` is not accessible outside `internal/notify` (i.e., no exported symbol exposes it)
