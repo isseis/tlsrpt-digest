@@ -206,7 +206,7 @@ systemctl enable --now tlsrpt-digest-summary.timer
 `/etc/cron.d/tlsrpt-digest` などに記述する。本質的には systemd timer と同等であり、環境変数は別ファイルで管理するか、実行前に source する。
 
 ```crontab
-# 毎時0分に IMAP ポーリング
+# 毎時0分に IMAP メール取得
 0 * * * *  root  . /etc/tlsrpt-digest/secrets.env && /usr/local/bin/tlsrpt-digest poll -config /etc/tlsrpt-digest/config.toml
 
 # 毎週月曜9時に週次サマリ
