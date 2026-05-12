@@ -196,6 +196,7 @@
 
 | 日本語 | English | 備考 |
 |--------|---------|------|
+| 漏洩 | exposure / leakage | 機密情報漏洩の文脈 |
 | 活用 | leverage / leveraging | |
 | 学習 | learn / learning | |
 | ライセンス | license | |
@@ -337,6 +338,7 @@
 | 日本語 | English | 備考 |
 |--------|---------|------|
 | 安全 | safe | |
+| 第二の防御線 | second line of defense | セキュリティ多層防御の文脈 |
 | 関心の分離 | separation of concerns | 設計パターンの文脈 |
 | シーケンス図 | sequence diagram | Mermaid sequenceDiagram の文脈 |
 | スタックトレース | stack trace | |
@@ -387,6 +389,7 @@
 
 | 日本語 | English | 備考 |
 |--------|---------|------|
+| 脅威モデル | threat model | セキュリティ設計の文脈 |
 | タグ | tag | |
 | タスク | task | |
 | 一時 | temporary | |

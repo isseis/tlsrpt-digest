@@ -111,7 +111,7 @@ See [Test Organization Guide](docs/dev/developer_guide/test_organization.md) for
 
 ## Development Notes
 
-- Uses Go modules with Go 1.23
+- Uses Go modules with Go 1.26
 - Key dependencies: `emersion/go-imap`, `stretchr/testify`
 - Interface-driven design for testability and modularity
 - After editing go files, make sure to run `make fmt` to format the files.
