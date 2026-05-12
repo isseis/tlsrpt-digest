@@ -249,7 +249,7 @@ systemctl enable --now tlsrpt-digest-summary.timer
 
 ### 単体テスト
 
-- `fetch` 処理フローのテスト（`FakeMailFetcher`・`SpyNotifier`・`FakeStore` を使用）
+- `fetch` 処理フローのテスト（`FakeMailFetcher`・スパイハンドラ・`FakeStore` を使用）
   - SEEN + サイズ一致 → スキップされること
   - UNSEEN + ファイルなし → ダウンロード・処理・SEEN マークが行われること
   - UNSEEN + ファイルあり + サイズ一致 → ダウンロードせず既存ファイルを処理・SEEN マークが行われること
@@ -258,7 +258,7 @@ systemctl enable --now tlsrpt-digest-summary.timer
   - failure あり / failure なし のアラート分岐テスト
   - 1 件エラー時の継続動作テスト
   - 重複実行しても結果が変わらないこと（冪等性）
-- `summary` 処理フローのテスト（`FakeStore`・`SpyNotifier` を使用）
+- `summary` 処理フローのテスト（`FakeStore`・スパイハンドラ を使用）
 - `reprocess` 処理フローのテスト（`testdata/` の実際の `.eml` を canned データとして使用）
   - `--notify` なしでアラートが送信されないこと
   - 重複実行しても結果が変わらないこと（冪等性）

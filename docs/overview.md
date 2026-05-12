@@ -101,7 +101,7 @@ The rationale for adopting IMAP polling instead of the Postfix pipe approach:
 
 ### Interface-Driven Design
 
-By defining interfaces such as `MailFetcher` and `Notifier`, the design allows mock implementations (`FakeMailFetcher`, `SpyNotifier`) to be substituted during testing.
+By defining interfaces such as `MailFetcher` and implementing notifications as a `slog.Handler` with typed event helpers, the design allows test doubles (`FakeMailFetcher`, spy handler) to be substituted during testing.
 
 ### Adopting File-Based Storage for Data Accumulation
 
