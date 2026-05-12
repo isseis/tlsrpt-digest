@@ -124,7 +124,7 @@ sequenceDiagram
     participant srv as IMAP サーバー
 
     caller->>c: FetchMeta(ctx, since)
-    Note over c: since を日付（00:00 UTC）に切り捨て
+    Note over c: since の時刻部分を切り捨てて日付単位で照合
 
     c->>srv: SELECT mailbox
     srv-->>c: OK (EXISTS count)
@@ -147,10 +147,11 @@ sequenceDiagram
     participant srv as IMAP サーバー
 
     caller->>c: "Download(ctx, uids)"
-    c->>srv: "UID FETCH uid-set RFC822"
+    c->>srv: "UID FETCH uid-set BODY.PEEK[]"
     srv-->>c: RFC 2822 形式のメール本文
 
     Note over c: 各メッセージを *mail.Message にパース
+    Note over c: 返却 UID を照合し、欠落があればエラーにする
 
     c-->>caller: "[]*mail.Message"
     Note over caller: SEEN フラグは変更されない
@@ -192,7 +193,8 @@ type MailFetcher interface {
     // IMAP SEARCH SINCE は日付単位。since の時刻部分は切り捨てる。
     FetchMeta(ctx context.Context, since time.Time) ([]MessageMeta, error)
 
-    // Download は指定 UID のメール本文を取得する。SEEN フラグは変更しない。
+    // Download は指定 UID のメール本文を取得する。BODY.PEEK[] を用いて
+    // SEEN フラグは変更しない。指定 UID が存在しない場合はエラーを返す。
     Download(ctx context.Context, uids []uint32) ([]*mail.Message, error)
 
     // MarkSeen は指定 UID のメールに SEEN フラグを付与する。
@@ -231,6 +233,7 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 | 認証失敗 | `"imap: login: %w"`（パスワードはメッセージに含まれない） |
 | SELECT 失敗 | `"imap: select mailbox INBOX: %w"` |
 | SEARCH/FETCH 失敗 | `"imap: fetch meta: %w"` |
+| UID 不存在 | `"imap: download: uid 123 not found"` |
 | UID STORE 失敗 | `"imap: mark seen: %w"` |
 
 呼び出し元は `errors.Is` / `errors.As` でエラー判定する。
@@ -269,6 +272,12 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 - カスタム CA 証明書ファイルを読み込めること
 - 存在しないパスや不正なファイルをエラーで返すこと
 - `InsecureSkipVerify` が設定されないこと
+
+### `IMAPClient` のプロトコル動作テスト
+
+- `Download` が `BODY.PEEK[]` を用い、SEEN フラグを変更しないこと
+- `Download` で要求した UID が 1 件でも欠落した場合にエラーを返すこと
+- `FetchMeta` が `since` の時刻部分を無視して日付単位で検索条件を構築すること
 
 ### 統合テスト（オプション）
 
