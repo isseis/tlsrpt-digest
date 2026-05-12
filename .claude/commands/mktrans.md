@@ -46,10 +46,10 @@ Translate only the sections that changed in the Japanese file since the English 
 Run the following command to find the last commit that modified the English file:
 
 ```bash
-git log --oneline -1 -- <en-file>
+git log -1 --format=%H -- <en-file>
 ```
 
-Record the commit hash (call it `SYNC_HASH`).
+Record the commit hash (call it `SYNC_HASH`). If no hash is returned (e.g., the file is not yet committed), stop and inform the user that differential translation requires the English file to be committed.
 
 ### Get the Diff
 
