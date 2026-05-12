@@ -99,7 +99,7 @@ RUN mkdir -p /home/$USERNAME/.vscode-server/extensions \
     && mkdir -p /home/$USERNAME/.ssh \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME
 
+RUN echo 'eval "$(direnv hook bash)"' >> /etc/bash.bashrc
+
 WORKDIR /home/$USERNAME
 USER $USERNAME
-
-RUN echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
