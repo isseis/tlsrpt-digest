@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     bash-completion \
     build-essential \
     curl \
+    direnv \
     git \
     libssl-dev \
     locales \
@@ -100,3 +101,5 @@ RUN mkdir -p /home/$USERNAME/.vscode-server/extensions \
 
 WORKDIR /home/$USERNAME
 USER $USERNAME
+
+RUN echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
