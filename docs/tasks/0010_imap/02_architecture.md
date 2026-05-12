@@ -153,7 +153,7 @@ sequenceDiagram
     Note over c: 各メッセージを *mail.Message にパース
     Note over c: 返却 UID を照合し、欠落があればエラーにする
 
-    c-->>caller: "[]*mail.Message"
+    c-->>caller: "map[uint32]*mail.Message"
     Note over caller: SEEN フラグは変更されない
 ```
 
@@ -178,10 +178,22 @@ sequenceDiagram
 ### 3.1 インターフェース・型定義
 
 ```go
-// MessageMeta は本文を含まない IMAP メタ情報
+// Config は IMAP 接続設定
+type Config struct {
+    Host      string
+    Port      int
+    Username  string
+    Password  config.Secret // ログ出力時に [REDACTED] となる
+    Mailbox   string        // 監視するメールボックス名（デフォルト: "INBOX"）
+    TLSCACert string        // カスタム CA 証明書ファイルパス（空 = OS バンドル使用）
+}
+
+// MessageMeta は本文を含まない IMAP メタ情報。
+// Date は ENVELOPE から取得し、ログ・デバッグ用途に使用する。
 type MessageMeta struct {
     UID       uint32
-    Size      uint32 // RFC822.SIZE（サーバー側バイト数）
+    Size      uint32    // RFC822.SIZE（サーバー側バイト数）
+    Date      time.Time // メール受信日時（ENVELOPE の Date フィールド）
     Seen      bool
     MessageID string
 }
@@ -194,8 +206,9 @@ type MailFetcher interface {
     FetchMeta(ctx context.Context, since time.Time) ([]MessageMeta, error)
 
     // Download は指定 UID のメール本文を取得する。BODY.PEEK[] を用いて
-    // SEEN フラグは変更しない。指定 UID が存在しない場合はエラーを返す。
-    Download(ctx context.Context, uids []uint32) ([]*mail.Message, error)
+    // SEEN フラグは変更しない。戻り値のマップは UID をキーとする。
+    // 指定 UID が存在しない場合はエラーを返す。
+    Download(ctx context.Context, uids []uint32) (map[uint32]*mail.Message, error)
 
     // MarkSeen は指定 UID のメールに SEEN フラグを付与する。
     MarkSeen(ctx context.Context, uids []uint32) error
@@ -260,8 +273,8 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 
 `FakeMailFetcher` は以下を提供する：
 
-- `FetchMeta` の返却値を事前設定するフィールド
-- `Download` の返却値を事前設定するフィールド
+- `FetchMeta` の返却値（`[]MessageMeta`）を事前設定するフィールド
+- `Download` の返却値（`map[uint32]*mail.Message`）を事前設定するフィールド
 - 各メソッドの呼び出し引数を記録するスパイフィールド（`MarkSeenCalls [][]uint32` 等）
 - 各メソッドで任意のエラーを返せるフィールド
 
