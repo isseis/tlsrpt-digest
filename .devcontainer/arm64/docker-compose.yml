@@ -1,0 +1,10 @@
+services:
+  dev-env:
+    platform: linux/arm64
+    hostname: tlsrpt-digest-arm64
+    container_name: tlsrpt-digest-arm64
+    volumes:
+      - vscode-extensions-cache-arm64:/home/devuser/.vscode-server/extensions
+
+volumes:
+  vscode-extensions-cache-arm64:

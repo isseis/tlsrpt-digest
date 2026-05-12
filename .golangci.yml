@@ -1,0 +1,135 @@
+version: "2"
+
+run:
+  timeout: 10m
+
+linters:
+  enable:
+    # Default linters
+    - "errcheck"    # Detect unchecked errors
+    - "govet"       # Reports suspicious constructs
+    - "ineffassign" # Detects unused variable assignments
+    - "staticcheck" # go vet on steroids
+    - "unused"      # Detect unused constants, variables, functions and types
+
+    # Suggested additional linters
+    - "gocyclo"   # Detect cyclomatic complexity
+    - "goconst"   # Detect repeated values that can be made constants
+    - "gocritic"  # Provides diagnostics that check for bugs, performance and style issues.
+    - "gosec"     # Security linter
+    - "importas"  # Enforces consistent import aliases.
+    - "misspell"  # Fix spelling errors
+    - "revive"    # General purpose linter
+    - "unconvert" # Detect unnecessary type conversions
+    - "unparam"   # Detect unused function parameters
+
+    # Optional
+    - "bodyclose"  # Check whether HTTP response bodies are closed
+    - "err113"     # Enforce standard error handling practices
+    - "depguard"   # Forbid certain package imports
+    - "dupl"       # Detect duplicate code
+    - "errchkjson" # some JSON-specific checks
+    - "mnd"        # Detect magic numbers
+    - "nakedret"   # Detect naked returns
+
+  settings:
+    gocyclo:
+      min-complexity: 20
+
+    depguard:
+      rules:
+        filevalidator:
+          files:
+            - "**/internal/**"
+          allow:
+            - $gostd
+            - github.com/isseis/go-safe-cmd-runner/internal/arm64util
+            - github.com/isseis/go-safe-cmd-runner/internal/cmdcommon
+            - github.com/isseis/go-safe-cmd-runner/internal/common
+            - github.com/isseis/go-safe-cmd-runner/internal/dynamicanalysis
+            - github.com/isseis/go-safe-cmd-runner/internal/dynlib
+            - github.com/isseis/go-safe-cmd-runner/internal/elfdynlib
+            - github.com/isseis/go-safe-cmd-runner/internal/fileanalysis
+            - github.com/isseis/go-safe-cmd-runner/internal/libccache
+            - github.com/isseis/go-safe-cmd-runner/internal/machodylib
+            - github.com/isseis/go-safe-cmd-runner/internal/redaction
+            - github.com/isseis/go-safe-cmd-runner/internal/security
+            - github.com/isseis/go-safe-cmd-runner/internal/filevalidator
+            - github.com/isseis/go-safe-cmd-runner/internal/groupmembership
+            - github.com/isseis/go-safe-cmd-runner/internal/logging
+            - github.com/isseis/go-safe-cmd-runner/internal/ansicolor
+            - github.com/isseis/go-safe-cmd-runner/internal/runner
+            - github.com/isseis/go-safe-cmd-runner/internal/safefileio
+            - github.com/isseis/go-safe-cmd-runner/internal/shebang
+            - github.com/isseis/go-safe-cmd-runner/internal/terminal
+            - github.com/isseis/go-safe-cmd-runner/internal/testutil
+            - github.com/isseis/go-safe-cmd-runner/internal/verification
+            - github.com/oklog/ulid/v2
+            - github.com/joho/godotenv
+            - github.com/pelletier/go-toml/v2
+            - github.com/stretchr/testify/assert
+            - github.com/stretchr/testify/require
+            - github.com/stretchr/testify/mock
+            - golang.org/x/arch
+            - golang.org/x/term
+
+
+        main:
+          files:
+            - $all
+            - "!$test"
+            - "!**/internal/**"
+            - "!**/*test_helpers.go"
+          allow:
+            - $gostd
+            - github.com/joho/godotenv
+            - github.com/isseis/go-safe-cmd-runner/internal/cmdcommon
+            - github.com/isseis/go-safe-cmd-runner/internal/common
+            - github.com/isseis/go-safe-cmd-runner/internal/dynamicanalysis
+            - github.com/isseis/go-safe-cmd-runner/internal/dynlib
+            - github.com/isseis/go-safe-cmd-runner/internal/elfdynlib
+            - github.com/isseis/go-safe-cmd-runner/internal/fileanalysis
+            - github.com/isseis/go-safe-cmd-runner/internal/filevalidator
+            - github.com/isseis/go-safe-cmd-runner/internal/libccache
+            - github.com/isseis/go-safe-cmd-runner/internal/logging
+            - github.com/isseis/go-safe-cmd-runner/internal/machodylib
+            - github.com/isseis/go-safe-cmd-runner/internal/redaction
+            - github.com/isseis/go-safe-cmd-runner/internal/security
+            - github.com/isseis/go-safe-cmd-runner/internal/ansicolor
+            - github.com/isseis/go-safe-cmd-runner/internal/runner
+            - github.com/isseis/go-safe-cmd-runner/internal/safefileio
+            - github.com/isseis/go-safe-cmd-runner/internal/shebang
+            - github.com/isseis/go-safe-cmd-runner/internal/terminal
+            - github.com/isseis/go-safe-cmd-runner/internal/verification
+
+    mnd:
+      checks:
+        - argument
+        - case
+        - condition
+        - operation
+        - return
+        - assign
+
+      ignored-numbers:
+        - '0o644' # Default file permissions for files
+        - '0o755' # Default file permissions for directories
+
+  exclusions:
+    rules:
+      # Exclude some linters from running on tests files.
+      - path: _test\.go
+        linters:
+          - gocyclo
+          - errcheck
+          - err113
+          - dupl
+          - gosec
+          - goconst
+
+      # Exclude SA5011 (nil pointer dereference after t.Fatal) from test files
+      # t.Fatal() stops execution, but staticcheck doesn't recognize this
+      - path: _test\.go
+        text: "SA5011"
+        linters:
+          - staticcheck

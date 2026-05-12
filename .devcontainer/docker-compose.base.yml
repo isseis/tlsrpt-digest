@@ -1,0 +1,17 @@
+services:
+  dev-env:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    environment:
+      - SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock
+    volumes:
+      - ..:/workspaces/ubuntu:cached
+      # Share SSH authentication socket/keys for Git operations
+      - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+      - ~/.ssh/id_ed25519.pub:/home/devuser/.ssh/id_ed25519.pub:ro
+      # Share GitHub CLI and Claude credentials for seamless authentication in the container
+      - ~/.config/gh:/home/devuser/.config/gh
+      - ~/.claude:/home/devuser/.claude
+    # Keep the container running
+    command: /bin/sh -c "while sleep 1000; do :; done"
