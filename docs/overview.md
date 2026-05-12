@@ -14,7 +14,7 @@ TLSRPT reports arrive in large volumes every day, making manual review impractic
 
 tlsrpt-digest automates the following:
 
-1. Fetching report emails by polling an IMAP mailbox
+1. Fetching report emails by connecting to an IMAP mailbox
 2. Parsing the attached JSON and evaluating failure_session_count
 3. Sending immediate alerts when failures are detected
 4. Accumulating data on normal days and sending weekly summary notifications
@@ -43,18 +43,18 @@ flowchart TD
     G --> H
 ```
 
-### Polling Cycle
+### Execution Model
+
+The program runs as a one-shot process and exits after completing its work. Periodic execution is delegated to an external scheduler (systemd timer or cron).
 
 ```mermaid
 flowchart LR
-    S["Scheduler<br>cmd/tlsrpt-digest"]
-    P["Polling processing"]
-    M["Fetch and process messages"]
-    W["Weekly summary check"]
+    S["External scheduler<br>systemd timer / cron"]
+    Poll["poll subcommand<br>Fetch and process messages"]
+    Summary["summary subcommand<br>Send weekly summary"]
 
-    S -->|"Periodic execution (configured interval)"| P
-    P --> M
-    P --> W
+    S -->|"Periodic execution (e.g. hourly)"| Poll
+    S -->|"Periodic execution (e.g. every Monday)"| Summary
 ```
 
 ---
@@ -66,7 +66,7 @@ tlsrpt-digest/
 ├── cmd/
 │   └── tlsrpt-digest/        # Entry point, main loop, scheduler
 ├── internal/
-│   ├── imap/                 # IMAP polling, unread message fetching, marking as read
+│   ├── imap/                 # IMAP connection, unread message fetching, marking as read
 │   ├── tlsrpt/               # RFC 8460 JSON parsing, failure detection
 │   ├── notify/               # Slack / email notification (immediate alerts and weekly summaries)
 │   └── store/                # Report accumulation in SQLite, data management for weekly summaries
@@ -81,8 +81,8 @@ tlsrpt-digest/
 | `internal/imap` | Connecting to the IMAP server, fetching unread messages, marking messages as read after processing |
 | `internal/tlsrpt` | Extracting .json.gz attachments, parsing RFC 8460 JSON, evaluating failure_session_count |
 | `internal/notify` | Sending notifications via Slack Webhook / email (both immediate alerts and weekly summaries) |
-| `internal/store` | Persisting report data using SQLite, aggregation queries for weekly summaries |
-| `cmd/tlsrpt-digest` | Loading configuration files, initializing each package, controlling the polling loop |
+| `internal/store` | Saving and loading .eml files, persisting report data as JSON, aggregation for weekly summaries |
+| `cmd/tlsrpt-digest` | Loading configuration files, initializing each package, running subcommands (poll / summary / reprocess) |
 
 ---
 
