@@ -84,7 +84,7 @@
 
 ## 5. Constraints
 
-- The implementation language is Go (Go 1.23 or later).
+- The implementation language is Go (Go 1.26 or later).
 - ...
 
 ---

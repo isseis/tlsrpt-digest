@@ -102,7 +102,7 @@ gzip 圧縮された JSON バイト列を展開する。
 
 ## 5. 制約
 
-- 使用言語は Go とする（Go 1.23 以上）
+- 使用言語は Go とする（Go 1.26 以上）
 - RFC 8460 の JSON フィールド名はケバブケース（`failure-session-count` 等）のため、構造体タグで対応する
 - テストには `stretchr/testify` を使用する
 

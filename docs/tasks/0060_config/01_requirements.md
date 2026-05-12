@@ -102,7 +102,7 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 
 ## 5. 制約
 
-- 使用言語は Go とする（Go 1.23 以上）
+- 使用言語は Go とする（Go 1.26 以上）
 - TOML ライブラリには `BurntSushi/toml` を使用する
 - テストには `stretchr/testify` を使用する
 
