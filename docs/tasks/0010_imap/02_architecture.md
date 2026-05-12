@@ -199,12 +199,20 @@ type MessageMeta struct {
     MessageID string
 }
 
+// FetchMetaResult は FetchMeta の戻り値。
+// メッセージ一覧に加え、SELECT 応答から得られるメールボックスレベルの情報を含む。
+type FetchMetaResult struct {
+    Messages    []MessageMeta
+    UIDValidity uint32 // SELECT 応答の UIDVALIDITY 値。前回値と異なる場合は UID が再割り当てされている
+}
+
 // MailFetcher は IMAP 操作を抽象化するインターフェース。
 // 実装: IMAPClient（本番）、FakeMailFetcher（テスト）。
 type MailFetcher interface {
     // FetchMeta は since 以降に受信した全メールのメタ情報を返す。
     // IMAP SEARCH SINCE は日付単位。since の時刻部分は切り捨てる。
-    FetchMeta(ctx context.Context, since time.Time) ([]MessageMeta, error)
+    // UIDValidity の変化の検出は呼び出し元（internal/store）の責務。
+    FetchMeta(ctx context.Context, since time.Time) (FetchMetaResult, error)
 
     // Download は指定 UID のメール本文を取得する。BODY.PEEK[] を用いて
     // SEEN フラグは変更しない。戻り値のマップは UID をキーとする。
@@ -276,7 +284,7 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 
 `FakeMailFetcher` は以下を提供する：
 
-- `FetchMeta` の返却値（`[]MessageMeta`）を事前設定するフィールド
+- `FetchMeta` の返却値（`FetchMetaResult`：メッセージ一覧 + `UIDValidity`）を事前設定するフィールド
 - `Download` の返却値（`map[uint32]*mail.Message`）を事前設定するフィールド
 - 各メソッドの呼び出し引数を記録するスパイフィールド（`MarkSeenCalls [][]uint32` 等）
 - 各メソッドで任意のエラーを返せるフィールド
@@ -294,6 +302,7 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 - `Download` が `BODY.PEEK[]` を用い、SEEN フラグを変更しないこと
 - `Download` で要求した UID が 1 件でも欠落した場合にエラーを返すこと
 - `FetchMeta` が `since` の時刻部分を無視して日付単位で検索条件を構築すること
+- `FetchMeta` が `SELECT` 応答の `UIDValidity` を `FetchMetaResult` に含めること
 
 ### 統合テスト（オプション）
 
@@ -334,7 +343,6 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 | 拡張 | 背景・リスク | 設計上の考慮事項 |
 |---|---|---|
 | **接続リトライ・再接続** | IMAP サーバーの一時再起動やネットワーク障害で接続が途中で切断される | 現在は one-shot 接続でリトライなし。対応が必要な場合、コネクション管理を `MailFetcher` の外層でラップするミドルウェアパターンを採用し、インターフェースを変更せずに透過的にリトライを追加できる |
-| **UIDVALIDITY 検証** | メールボックスの再作成・名前変更等でサーバーが UID を再割り当てすると、ローカルの `.eml` ファイルが誤った UID に対応してしまう | `Store` に UIDVALIDITY を永続化し、`FetchMeta` 呼び出し時の `SELECT` 応答と照合する。ミスマッチを検出した場合は WARN ログを出力し、既存 `.eml` ファイルとの対応を無効化する（offlineimap3 の `get_uidvalidity()` に相当） |
 
 ### 中優先（要件次第で対応を検討）
 
