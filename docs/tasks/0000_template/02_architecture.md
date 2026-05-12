@@ -1,5 +1,17 @@
 # Architecture Design Document: [Feature Name]
 
+## Document Status
+
+| Item | Value |
+|---|---|
+| Status | `draft` |
+| Created | YYYY-MM-DD |
+| Review date | - |
+| Reviewer | - |
+| Comments | - |
+
+---
+
 ## 1. Design Overview
 
 ### 1.1 Design Principles
