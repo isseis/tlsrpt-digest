@@ -31,7 +31,7 @@ flowchart TD
     D["RFC 8460 JSON パース<br>internal/tlsrpt"]
     E{"failure_session_count > 0?"}
     F["即時アラート送信<br>internal/notify"]
-    G[("SQLite<br>internal/store")]
+    G[("保存済みレポート / .eml<br>internal/store")]
     H["週次サマリ生成・通知<br>internal/notify"]
 
     A --> B
@@ -64,12 +64,12 @@ flowchart LR
 ```
 tlsrpt-digest/
 ├── cmd/
-│   └── tlsrpt-digest/        # エントリポイント・メインループ・スケジューラ
+│   └── tlsrpt-digest/        # エントリポイント・サブコマンド・one-shot 実行
 ├── internal/
 │   ├── imap/                 # IMAP接続・未読メール取得・既読マーク
 │   ├── tlsrpt/               # RFC 8460 JSON パース・failure判定
 │   ├── notify/               # Slack / メール通知（即時アラート・週次サマリ）
-│   └── store/                # SQLiteへのレポート蓄積・週次サマリ用データ管理
+│   └── store/                # レポート永続化（.json / .eml）・週次サマリ用データ管理
 ├── testdata/                 # テスト用実データ（.eml, .json.gz）
 └── docs/                     # ドキュメント
 ```
@@ -103,9 +103,9 @@ Postfix のパイプ方式ではなく IMAP ポーリング方式を採用した
 
 `MailFetcher`、`Notifier` などのインターフェースを定義することで、テスト時にモック実装（`FakeMailFetcher`、`SpyNotifier`）に差し替えられる設計とする。
 
-### データ蓄積に SQLite を採用
+### データ蓄積にファイルベースの保存方式を採用
 
-週次サマリのためにレポートデータを蓄積する必要があるが、外部データベースサーバなしで動作させるために SQLite を採用する。
+週次サマリのためにレポートデータを蓄積する必要がある。外部データベースサーバなしで動作させるため、集計済みレポートデータは JSON ファイルに保存し、再処理用に元メールを `.eml` ファイルとして保存する。
 
 ---
 
@@ -140,28 +140,20 @@ Postfix のパイプ方式ではなく IMAP ポーリング方式を採用した
 | `imap.username` | 認証ユーザ名 | `"tlsrpt@example.com"` |
 | `imap.password` | 認証パスワード | `"secret"` |
 | `imap.mailbox` | 監視するメールボックス名 | `"INBOX"` |
+| `imap.fetch_days` | `fetch` 実行時に取得対象とする日数 | `14` |
 
-### ポーリング設定
-
-| 項目 | 説明 | 例 |
-|---|---|---|
-| `polling.interval` | ポーリング間隔 | `"1h"` |
-| `polling.weekly_summary_day` | 週次サマリ送信曜日 | `"Monday"` |
+実行スケジュールは `systemd timer` や `cron` などの外部スケジューラーで管理し、アプリケーション自体は `polling.*` 設定を持たない。
 
 ### 通知設定
 
 | 項目 | 説明 | 例 |
 |---|---|---|
-| `notify.slack_webhook_url` | Slack Incoming Webhook URL | `"https://hooks.slack.com/..."` |
+| `notify.slack.allowed_host` | 許可する Slack Webhook のホスト名 | `"hooks.slack.com"` |
+| `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` | 正常時通知用 Webhook URL（環境変数） | `"https://hooks.slack.com/..."` |
+| `TLSRPT_SLACK_WEBHOOK_URL_ERROR` | 異常時通知用 Webhook URL（環境変数） | `"https://hooks.slack.com/..."` |
 | `notify.email.smtp_host` | メール送信用 SMTP ホスト | `"smtp.example.com"` |
 | `notify.email.from` | 送信元メールアドレス | `"alert@example.com"` |
 | `notify.email.to` | 送信先メールアドレス | `["admin@example.com"]` |
-
-### データ蓄積設定
-
-| 項目 | 説明 | 例 |
-|---|---|---|
-| `store.sqlite_path` | SQLite データベースファイルパス | `"/var/lib/tlsrpt-digest/data.db"` |
 
 ---
 
@@ -171,5 +163,4 @@ Postfix のパイプ方式ではなく IMAP ポーリング方式を採用した
 |---|---|
 | `emersion/go-imap` | IMAP クライアント |
 | `stretchr/testify` | テストアサーション |
-| `mattn/go-sqlite3` または `modernc.org/sqlite` | SQLite ドライバ |
 | TOML ライブラリ（`BurntSushi/toml` など） | 設定ファイル読み込み |

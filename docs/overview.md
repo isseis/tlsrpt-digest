@@ -31,7 +31,7 @@ flowchart TD
     D["Parse RFC 8460 JSON<br>internal/tlsrpt"]
     E{"failure_session_count > 0?"}
     F["Send immediate alert<br>internal/notify"]
-    G[("SQLite<br>internal/store")]
+    G[("Stored reports / .eml<br>internal/store")]
     H["Generate and send weekly summary<br>internal/notify"]
 
     A --> B
@@ -64,12 +64,12 @@ flowchart LR
 ```
 tlsrpt-digest/
 ├── cmd/
-│   └── tlsrpt-digest/        # Entry point, main loop, scheduler
+│   └── tlsrpt-digest/        # Entry point, subcommands, one-shot execution
 ├── internal/
 │   ├── imap/                 # IMAP connection, unread message fetching, marking as read
 │   ├── tlsrpt/               # RFC 8460 JSON parsing, failure detection
 │   ├── notify/               # Slack / email notification (immediate alerts and weekly summaries)
-│   └── store/                # Report accumulation in SQLite, data management for weekly summaries
+│   └── store/                # Report persistence (.json / .eml), data management for weekly summaries
 ├── testdata/                 # Real test data (.eml, .json.gz)
 └── docs/                     # Documentation
 ```
@@ -103,9 +103,9 @@ The rationale for adopting IMAP polling instead of the Postfix pipe approach:
 
 By defining interfaces such as `MailFetcher` and `Notifier`, the design allows mock implementations (`FakeMailFetcher`, `SpyNotifier`) to be substituted during testing.
 
-### Adopting SQLite for Data Accumulation
+### Adopting File-Based Storage for Data Accumulation
 
-Report data must be accumulated for the weekly summary. SQLite is adopted to enable operation without an external database server.
+Report data must be accumulated for the weekly summary. The project uses JSON files for aggregated report data and stores original emails as `.eml` files so it can operate without an external database server while preserving inputs for reprocessing.
 
 ---
 
@@ -140,28 +140,20 @@ The configuration file uses TOML format.
 | `imap.username` | Authentication username | `"tlsrpt@example.com"` |
 | `imap.password` | Authentication password | `"secret"` |
 | `imap.mailbox` | Mailbox name to monitor | `"INBOX"` |
+| `imap.fetch_days` | Lookback window in days for `fetch` processing | `14` |
 
-### Polling Settings
-
-| Item | Description | Example |
-|---|---|---|
-| `polling.interval` | Polling interval | `"1h"` |
-| `polling.weekly_summary_day` | Day of the week to send the weekly summary | `"Monday"` |
+Scheduling is controlled by an external scheduler such as `systemd timer` or `cron`; the application itself does not provide `polling.*` configuration.
 
 ### Notification Settings
 
 | Item | Description | Example |
 |---|---|---|
-| `notify.slack_webhook_url` | Slack Incoming Webhook URL | `"https://hooks.slack.com/..."` |
+| `notify.slack.allowed_host` | Allowed Slack Webhook host name | `"hooks.slack.com"` |
+| `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` | Success notification Webhook URL (environment variable) | `"https://hooks.slack.com/..."` |
+| `TLSRPT_SLACK_WEBHOOK_URL_ERROR` | Error notification Webhook URL (environment variable) | `"https://hooks.slack.com/..."` |
 | `notify.email.smtp_host` | SMTP host for email sending | `"smtp.example.com"` |
 | `notify.email.from` | Sender email address | `"alert@example.com"` |
 | `notify.email.to` | Recipient email address(es) | `["admin@example.com"]` |
-
-### Data Accumulation Settings
-
-| Item | Description | Example |
-|---|---|---|
-| `store.sqlite_path` | SQLite database file path | `"/var/lib/tlsrpt-digest/data.db"` |
 
 ---
 
@@ -171,5 +163,4 @@ The configuration file uses TOML format.
 |---|---|
 | `emersion/go-imap` | IMAP client |
 | `stretchr/testify` | Test assertions |
-| `mattn/go-sqlite3` or `modernc.org/sqlite` | SQLite driver |
 | TOML library (e.g., `BurntSushi/toml`) | Configuration file loading |
