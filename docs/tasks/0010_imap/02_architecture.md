@@ -210,8 +210,10 @@ type FetchMetaResult struct {
 // 実装: IMAPClient（本番）、FakeMailFetcher（テスト）。
 type MailFetcher interface {
     // FetchMeta は since 以降に受信した全メールのメタ情報を返す。
-    // IMAP SEARCH SINCE は日付単位。since の時刻部分は切り捨てる。
-    // UIDValidity の変化の検出は呼び出し元（internal/store）の責務。
+    // IMAP SEARCH SINCE は日付単位。since の時刻部分は切り捨てるため、
+    // 同一日内の重複実行では同じ UID セットが返される。
+    // 呼び出し元はローカルの保存済みファイルと照合して未取得のもののみを
+    // Download する責務を持つ。UIDValidity の変化の検出は internal/store の責務。
     FetchMeta(ctx context.Context, since time.Time) (FetchMetaResult, error)
 
     // Download は指定 UID のメール本文を取得する。BODY.PEEK[] を用いて
@@ -247,7 +249,7 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 
 ## 4. エラーハンドリング設計
 
-カスタムエラー型は定義しない。`fmt.Errorf("imap: <操作>: %w", err)` でコンテキストを付加して返す。
+カスタムエラー型は原則定義しない。`fmt.Errorf("imap: <操作>: %w", err)` でコンテキストを付加し、`%w` によるラップを維持することで、将来の接続リトライ実装が一時的なネットワークエラーと永続的な認証エラーを `errors.Is` / `errors.As` で判別できるようにする。
 
 | 状況 | エラーメッセージ例 |
 |---|---|
@@ -353,4 +355,3 @@ func NewIMAPClient(cfg Config) (*IMAPClient, error)
 | **OAuth 2.0 / XOAUTH2 認証** | 現在は LOGIN のみ対応。Google Workspace 等で必要な場合、`Config` に `AuthMechanism` フィールドを追加し、認証シーケンスを抽象化する |
 | **複数メールボックスの同時監視** | 現在は 1 接続につき 1 メールボックス。複数ボックスに対応する場合、呼び出し元でメールボックスごとに `IMAPClient` を生成するか、`FetchMeta` に `mailbox` パラメータを追加する |
 | **`Download` のバッチ分割（メモリ上限対策）** | 現在の `Download(uids)` は指定した全 UID のメール本文を一括でメモリに読み込む。想定件数（週数十件・各メール数十 KB 程度の TLSRPT レポート）では問題ないが、件数や 1 件あたりサイズが増大した場合にメモリ使用量が急増する。対応が必要な場合、UID リストをチャンクに分割して複数回に分けて `Download` を呼ぶか、ストリーミング型の API（コールバックまたはチャネル渡し）に変更する。`Config.MaxMessageBytes` による事前フィルタがある程度の緩和策となる |
-　

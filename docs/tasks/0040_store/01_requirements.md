@@ -120,10 +120,10 @@ IMAP UID はメールボックス単位で割り当てられ、`UIDVALIDITY` 値
 
 **受け入れ条件（Acceptance Criteria）**:
 
-1. `SaveUIDValidity(mailbox string, v uint32)` で メールボックス単位の UIDVALIDITY を保存できる
+1. `SaveUIDValidity(mailbox string, v uint32)` でメールボックス単位の UIDVALIDITY を保存できる
 2. `LoadUIDValidity(mailbox string) (uint32, bool, error)` で保存済みの値を取得できる（未保存の場合は `false`）
 3. 呼び出し元（エントリポイント）が前回値と今回値を比較し、変化を検出した場合は WARN ログを出力する
-4. UIDVALIDITY が変化した場合、既存の `.eml` ファイルと UID の対応が無効になる可能性があるため、エントリポイントは当該 fetch サイクルの `.eml` ファイルとの整合性チェックをスキップし、全件を強制ダウンロード対象とする
+4. UIDVALIDITY が変化した場合、既存の `.eml` ファイルと UID の対応が無効になる可能性があるため、エントリポイントは当該 fetch サイクルの `.eml` ファイルとの整合性チェックをスキップし、全件を強制ダウンロード対象とする。DB 保存は `report-id` を一意識別子とした UPSERT（F-002 AC#2）で行うため、同一レポートの重複保存が生じても整合性は保たれる
 
 ---
 
