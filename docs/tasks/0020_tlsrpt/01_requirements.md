@@ -67,7 +67,7 @@ gzip 圧縮された JSON バイト列を展開する。
 **受け入れ条件（Acceptance Criteria）**:
 
 1. 有効な RFC 8460 JSON を正しく `TLSRPTReport` 構造体に変換する
-2. 必須フィールド（`organization-name`、`date-range`、`policies`）が欠如している場合はエラーを返す
+2. 必須フィールド（`organization-name`、`report-id`、`date-range`、`policies`）が欠如している場合はエラーを返す
 3. `policies` 配列内の各ポリシーレコードが正しくパースされる
 4. `failure-details` フィールドが存在する場合、正しく取得できる
 5. `testdata/` 内の実際のレポートファイルを正しくパースできる
