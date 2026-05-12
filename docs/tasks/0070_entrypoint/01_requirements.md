@@ -27,7 +27,7 @@
 ### 1.2 目的
 
 1. **主目的**: 設定を読み込み、各コンポーネントを初期化して1回の処理を実行して終了する
-2. **副次的目的**: 2つのサブコマンド（`poll` / `summary`）で処理を明確に分離する
+2. **副次的目的**: 2つのサブコマンド（`fetch` / `summary`）で処理を明確に分離する
 
 ---
 
@@ -35,10 +35,10 @@
 
 ### 対象範囲（In Scope）
 
-- サブコマンドのパース（`poll` / `summary`）
+- サブコマンドのパース（`fetch` / `summary`）
 - コマンドライン引数のパース（設定ファイルパスの指定）
 - 設定ファイルの読み込みと各コンポーネントの初期化
-- `poll` サブコマンド：IMAP ポーリング・即時アラート送信・ストア保存の1サイクル実行
+- `fetch` サブコマンド：IMAP ポーリング・即時アラート送信・ストア保存の1サイクル実行
 - `summary` サブコマンド：週次サマリの生成・送信
 
 ### 対象外（Out of Scope）
@@ -63,12 +63,12 @@
 
 **受け入れ条件（Acceptance Criteria）**:
 
-1. `poll`、`summary`、`reprocess` のいずれかのサブコマンドを受け付ける
+1. `fetch`、`summary`、`reprocess` のいずれかのサブコマンドを受け付ける
 2. サブコマンドを省略または不正な値を指定した場合、使い方を表示してエラー終了する
 3. `-config <path>` フラグで設定ファイルパスを指定できる（全サブコマンド共通）
 4. 設定ファイルパスを省略した場合、デフォルトパス（例：`./config.toml`）を使用する
-5. `poll` サブコマンドは `--refetch-since <duration>` フラグを受け付ける（例：`--refetch-since 14d`）
-6. `--refetch-since` の duration は日単位（`d`）または週単位（`w`）で指定できる（例：`14d`、`2w`）
+5. `fetch` サブコマンドは `--since <duration>` フラグを受け付ける（例：`--since 14d`）
+6. `--since` の duration は日単位（`d`）または週単位（`w`）で指定できる（例：`14d`、`2w`）
 
 ### F-002: コンポーネントの初期化
 
@@ -78,13 +78,13 @@
 
 1. 設定読み込みに失敗した場合、エラーメッセージを出力して終了コード 1 で終了する
 2. ストアの初期化に失敗した場合、エラーメッセージを出力して終了コード 1 で終了する
-3. `poll` サブコマンドで IMAP 接続に失敗した場合、エラーメッセージを出力して終了コード 1 で終了する
+3. `fetch` サブコマンドで IMAP 接続に失敗した場合、エラーメッセージを出力して終了コード 1 で終了する
 
-### F-003: `poll` サブコマンドの処理フロー
+### F-003: `fetch` サブコマンドの処理フロー
 
-IMAP サーバーからメールを取得し、レポートを処理・保存する。`--refetch-since` フラグの有無によって動作が変わる。
+IMAP サーバーからメールを取得し、レポートを処理・保存する。`--since` フラグの有無によって動作が変わる。
 
-#### 通常モード（`--refetch-since` なし）
+#### 通常モード（`--since` なし）
 
 **受け入れ条件（Acceptance Criteria）**:
 
@@ -96,7 +96,7 @@ IMAP サーバーからメールを取得し、レポートを処理・保存す
 6. 1 件のメール処理失敗が他のメール処理に影響しない
 7. 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
 
-#### 再取得モード（`--refetch-since <duration>`）
+#### 再取得モード（`--since <duration>`）
 
 ローカルデータ消失時の復旧を目的とする。SEEN フラグを無視して指定期間内のすべてのメールを再処理する。
 
@@ -145,7 +145,7 @@ IMAP サーバーからメールを取得し、レポートを処理・保存す
 ### 信頼性
 
 - 1 件のメール処理失敗が他のメール処理に影響しないこと
-- 外部スケジューラーの `Persistent` 設定（後述）により、システム停止中に実行できなかった `poll` を復旧時に補完できること
+- 外部スケジューラーの `Persistent` 設定（後述）により、システム停止中に実行できなかった `fetch` を復旧時に補完できること
 
 ---
 
@@ -163,23 +163,23 @@ IMAP サーバーからメールを取得し、レポートを処理・保存す
 
 ### 6.1 systemd timer を使う場合
 
-`poll` 用と `summary` 用でそれぞれ `.service` / `.timer` ファイルを作成する。
+`fetch` 用と `summary` 用でそれぞれ `.service` / `.timer` ファイルを作成する。
 
 ```ini
-# /etc/systemd/system/tlsrpt-digest-poll.service
+# /etc/systemd/system/tlsrpt-digest-fetch.service
 [Unit]
-Description=tlsrpt-digest IMAP poll (one-shot)
+Description=tlsrpt-digest IMAP fetch (one-shot)
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/tlsrpt-digest poll -config /etc/tlsrpt-digest/config.toml
+ExecStart=/usr/local/bin/tlsrpt-digest fetch -config /etc/tlsrpt-digest/config.toml
 EnvironmentFile=/etc/tlsrpt-digest/secrets.env
 ```
 
 ```ini
-# /etc/systemd/system/tlsrpt-digest-poll.timer
+# /etc/systemd/system/tlsrpt-digest-fetch.timer
 [Unit]
-Description=Run tlsrpt-digest poll hourly
+Description=Run tlsrpt-digest fetch hourly
 
 [Timer]
 OnCalendar=hourly
@@ -216,7 +216,7 @@ WantedBy=timers.target
 有効化：
 
 ```bash
-systemctl enable --now tlsrpt-digest-poll.timer
+systemctl enable --now tlsrpt-digest-fetch.timer
 systemctl enable --now tlsrpt-digest-summary.timer
 ```
 
@@ -226,7 +226,7 @@ systemctl enable --now tlsrpt-digest-summary.timer
 
 ```crontab
 # 毎時0分に IMAP メール取得
-0 * * * *  root  . /etc/tlsrpt-digest/secrets.env && /usr/local/bin/tlsrpt-digest poll -config /etc/tlsrpt-digest/config.toml
+0 * * * *  root  . /etc/tlsrpt-digest/secrets.env && /usr/local/bin/tlsrpt-digest fetch -config /etc/tlsrpt-digest/config.toml
 
 # 毎週月曜9時に週次サマリ
 0 9 * * 1  root  . /etc/tlsrpt-digest/secrets.env && /usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml
@@ -238,11 +238,11 @@ systemctl enable --now tlsrpt-digest-summary.timer
 
 ### 単体テスト
 
-- `poll` 通常モードのテスト（`FakeMailFetcher`・`SpyNotifier`・`FakeStore` を使用）
+- `fetch` 通常モードのテスト（`FakeMailFetcher`・`SpyNotifier`・`FakeStore` を使用）
   - failure あり / failure なし の分岐テスト
   - `.eml` 保存がパースより前に行われることの確認
   - 1 件エラー時の継続動作テスト
-- `poll --refetch-since` 再取得モードのテスト
+- `fetch --since` 再取得モードのテスト
   - SEEN・UNSEEN 両方のメールが処理されること
   - SEEN フラグが変更されないこと
   - `--notify` なしでアラートが送信されないこと

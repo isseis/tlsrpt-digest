@@ -50,7 +50,7 @@ The program runs as a one-shot process and exits after completing its work. Peri
 ```mermaid
 flowchart LR
     S["External scheduler<br>systemd timer / cron"]
-    Poll["poll subcommand<br>Fetch and process messages"]
+    Poll["fetch subcommand<br>Fetch and process messages"]
     Summary["summary subcommand<br>Send weekly summary"]
 
     S -->|"Periodic execution (e.g. hourly)"| Poll
@@ -82,7 +82,7 @@ tlsrpt-digest/
 | `internal/tlsrpt` | Extracting .json.gz attachments, parsing RFC 8460 JSON, evaluating failure_session_count |
 | `internal/notify` | Sending notifications via Slack Webhook / email (both immediate alerts and weekly summaries) |
 | `internal/store` | Saving and loading .eml files, persisting report data as JSON, aggregation for weekly summaries |
-| `cmd/tlsrpt-digest` | Loading configuration files, initializing each package, running subcommands (poll / summary / reprocess) |
+| `cmd/tlsrpt-digest` | Loading configuration files, initializing each package, running subcommands (fetch / summary / reprocess) |
 
 ---
 

@@ -50,7 +50,7 @@ flowchart TD
 ```mermaid
 flowchart LR
     S["外部スケジューラ<br>systemd timer / cron"]
-    Poll["poll サブコマンド<br>メール取得・処理"]
+    Poll["fetch サブコマンド<br>メール取得・処理"]
     Summary["summary サブコマンド<br>週次サマリ送信"]
 
     S -->|"定期実行（例：毎時）"| Poll
@@ -82,7 +82,7 @@ tlsrpt-digest/
 | `internal/tlsrpt` | .json.gz 添付ファイルの展開、RFC 8460 JSON のパース、failure_session_count の評価 |
 | `internal/notify` | Slack Webhook / メールによる通知送信（即時アラートと週次サマリの両方） |
 | `internal/store` | .eml ファイルの保存・読み込み、JSON によるレポートデータの永続化、週次サマリ用の集計 |
-| `cmd/tlsrpt-digest` | 設定ファイル読み込み、各パッケージの初期化、サブコマンド（poll / summary / reprocess）の実行 |
+| `cmd/tlsrpt-digest` | 設定ファイル読み込み、各パッケージの初期化、サブコマンド（fetch / summary / reprocess）の実行 |
 
 ---
 
