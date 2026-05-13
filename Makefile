@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt clean
+.PHONY: build test test-integration lint fmt clean
 
 build:
 	mkdir -p build
@@ -6,6 +6,11 @@ build:
 
 test:
 	go test -v ./...
+
+# Run integration tests against GreenMail (requires devcontainer or manual GreenMail setup).
+# See docs/tasks/0010_imap/03_implementation_plan.md section 5.2 for setup instructions.
+test-integration:
+	go test -v -count=1 -tags integration ./internal/imap/...
 
 lint:
 	golangci-lint run
