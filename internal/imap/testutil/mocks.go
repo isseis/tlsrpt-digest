@@ -1,5 +1,6 @@
 //go:build test
 
+// Package imaptestutil provides test doubles for the imap package.
 package imaptestutil
 
 import (
@@ -28,6 +29,7 @@ type FakeMailFetcher struct {
 
 var _ imap.MailFetcher = (*FakeMailFetcher)(nil)
 
+// FetchMeta implements imap.MailFetcher.
 func (f *FakeMailFetcher) FetchMeta(_ context.Context, since time.Time) (imap.FetchMetaResult, error) {
 	f.FetchMetaCalls = append(f.FetchMetaCalls, since)
 	if f.FetchMetaErr != nil {
@@ -36,6 +38,7 @@ func (f *FakeMailFetcher) FetchMeta(_ context.Context, since time.Time) (imap.Fe
 	return f.FetchMetaResult, nil
 }
 
+// Download implements imap.MailFetcher.
 func (f *FakeMailFetcher) Download(_ context.Context, uids []uint32) (map[uint32]*mail.Message, error) {
 	f.DownloadCalls = append(f.DownloadCalls, cloneUIDs(uids))
 	if f.DownloadErr != nil {
@@ -44,11 +47,13 @@ func (f *FakeMailFetcher) Download(_ context.Context, uids []uint32) (map[uint32
 	return f.DownloadResult, nil
 }
 
+// MarkSeen implements imap.MailFetcher.
 func (f *FakeMailFetcher) MarkSeen(_ context.Context, uids []uint32) error {
 	f.MarkSeenCalls = append(f.MarkSeenCalls, cloneUIDs(uids))
 	return f.MarkSeenErr
 }
 
+// Close implements imap.MailFetcher.
 func (f *FakeMailFetcher) Close() error {
 	return f.CloseErr
 }

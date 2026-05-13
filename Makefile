@@ -13,8 +13,8 @@ test-integration:
 	go test -v -count=1 -tags test,integration ./internal/imap/...
 
 lint:
-	golangci-lint run
-	golangci-lint run --config .golangci-security.yml
+	golangci-lint run --build-tags test --timeout=5m
+	golangci-lint run --config .golangci-security.yml --build-tags test --timeout=5m
 
 fmt:
 	gofumpt -w .
