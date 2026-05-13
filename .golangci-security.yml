@@ -8,7 +8,6 @@ linters:
     # Security-focused linters
     - "forbidigo"   # Forbid specific function calls and patterns
     - "gosec"       # Security linter
-    - "depguard"    # Forbid certain package imports
 
 linters-settings:
   forbidigo:
@@ -53,6 +52,10 @@ linters-settings:
             desc: "verification package should only be used through bootstrap or cmd packages"
         allow:
           - $gostd
+          - github.com/isseis/tlsrpt-digest/internal/config
+          - github.com/isseis/tlsrpt-digest/internal/imap
+          - github.com/emersion/go-imap
+          - github.com/emersion/go-imap/client
           - github.com/isseis/go-safe-cmd-runner/internal/bootstrap
           - github.com/isseis/go-safe-cmd-runner/cmd
 

@@ -42,7 +42,7 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 `config.Secret` が未定義の場合のみ実施する。
 
-- [ ] **0-1** `internal/config/secret.go` を作成し `Secret` 型を定義する
+- [x] **0-1** `internal/config/secret.go` を作成し `Secret` 型を定義する
   - `String() string` → `"[REDACTED]"` を返す
   - `LogValue() slog.Value` → `"[REDACTED]"` を返す
   - `Value() string` → 実際の値を返す専用メソッド
@@ -55,19 +55,19 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 **推定工数**: 1 時間
 
-- [ ] **1-1** `Config` 構造体を定義する
+- [x] **1-1** `Config` 構造体を定義する
   - フィールド: `Host string`, `Port int`, `Username string`, `Password config.Secret`, `Mailbox string`, `TLSCACert string`, `MaxMessageBytes int64`
   - 成功条件: コンパイルが通る
 
-- [ ] **1-2** `MessageMeta` 構造体を定義する
+- [x] **1-2** `MessageMeta` 構造体を定義する
   - フィールド: `UID uint32`, `Size uint32`, `Date time.Time`, `Seen bool`, `MessageID string`
   - 成功条件: コンパイルが通る
 
-- [ ] **1-3** `FetchMetaResult` 構造体を定義する
+- [x] **1-3** `FetchMetaResult` 構造体を定義する
   - フィールド: `Messages []MessageMeta`, `UIDValidity uint32`
   - 成功条件: コンパイルが通る
 
-- [ ] **1-4** `MailFetcher` インターフェースを定義する
+- [x] **1-4** `MailFetcher` インターフェースを定義する
   - メソッド: `FetchMeta`, `Download`, `MarkSeen`, `Close`
   - 成功条件: コンパイルが通る
   - AC 対応: F-004 AC-1, AC-2
@@ -84,26 +84,26 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 `FakeMailFetcher` は `MailFetcher` インターフェース（公開API）のみを実装し、他パッケージからも参照されるため、[Test Organization Guide](../../dev/developer_guide/test_organization.md) の Classification A（`testutil/` サブディレクトリ）に分類する。
 
-- [ ] **2-1** `FakeMailFetcher` 構造体を定義し `MailFetcher` インターフェースを実装する
+- [x] **2-1** `FakeMailFetcher` 構造体を定義し `MailFetcher` インターフェースを実装する
   - `var _ imap.MailFetcher = (*FakeMailFetcher)(nil)` によるコンパイル時チェックを追加する
   - AC 対応: F-004 AC-1
 
-- [ ] **2-2** `FetchMeta` の戻り値プリセットフィールドとスパイを実装する
+- [x] **2-2** `FetchMeta` の戻り値プリセットフィールドとスパイを実装する
   - フィールド: `FetchMetaResult imap.FetchMetaResult`, `FetchMetaErr error`, `FetchMetaCalls []time.Time`
   - AC 対応: F-002 AC-5, F-004 AC-4
 
-- [ ] **2-3** `Download` の戻り値プリセットフィールドとスパイを実装する
+- [x] **2-3** `Download` の戻り値プリセットフィールドとスパイを実装する
   - フィールド: `DownloadResult map[uint32]*mail.Message`, `DownloadErr error`, `DownloadCalls [][]uint32`
   - AC 対応: F-004 AC-3, F-005 AC-4
 
-- [ ] **2-4** `MarkSeen` のスパイとエラー注入フィールドを実装する
+- [x] **2-4** `MarkSeen` のスパイとエラー注入フィールドを実装する
   - フィールド: `MarkSeenErr error`, `MarkSeenCalls [][]uint32`
   - AC 対応: F-004 AC-4
 
-- [ ] **2-5** `Close` を no-op として実装する（`return nil`）
+- [x] **2-5** `Close` を no-op として実装する（`return nil`）
   - フィールド: `CloseErr error`（エラー注入用）
 
-- [ ] **2-6** `FakeMailFetcher` の単体テストを作成する（`internal/imap/testutil/mocks_test.go`）
+- [x] **2-6** `FakeMailFetcher` の単体テストを作成する（`internal/imap/testutil/mocks_test.go`）
   - `FetchMeta` が設定値と呼び出し引数を記録すること
   - `Download` が設定値を返し呼び出し引数を記録すること
   - `MarkSeen` が呼び出し引数を記録すること
@@ -119,7 +119,7 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 #### 3-A: TLS 接続・認証・クローズ
 
-- [ ] **3-1** `NewIMAPClient(cfg Config) (MailFetcher, error)` を実装する
+- [x] **3-1** `NewIMAPClient(cfg Config) (MailFetcher, error)` を実装する
   - `tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: false}` を設定する
   - `cfg.TLSCACert` が空でなければ PEM ファイルを読み込み `x509.CertPool` を構築する。空であれば `RootCAs: nil`（OS バンドル）とする
   - `cfg.Mailbox` が空であれば `"INBOX"` をデフォルト値として使用する
@@ -127,13 +127,13 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
   - エラーは `fmt.Errorf("imap: <operation>: %w", err)` 形式でラップして返す（`%w` を維持し将来のリトライで区別可能にする）
   - AC 対応: F-001 AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7
 
-- [ ] **3-2** `Close() error` を実装する
+- [x] **3-2** `Close() error` を実装する
   - `Logout()` を呼び出して接続を閉じる
   - エラーは `fmt.Errorf("imap: logout: %w", err)` でラップして返す
 
 #### 3-B: メタ情報取得
 
-- [ ] **3-3** `FetchMeta(ctx, since) (FetchMetaResult, error)` を実装する
+- [x] **3-3** `FetchMeta(ctx, since) (FetchMetaResult, error)` を実装する
   - `since` の時・分・秒を `time.Date(...)` で切り捨てて日付のみにする
   - `SELECT mailbox` → `UID SEARCH SINCE date` → `UID FETCH (UID RFC822.SIZE FLAGS ENVELOPE)` を発行する
   - `SELECT` 応答の `UIDValidity` を `FetchMetaResult.UIDValidity` に格納する
@@ -146,7 +146,7 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 #### 3-C: 選択的ダウンロード
 
-- [ ] **3-4** `Download(ctx, uids) (map[uint32]*mail.Message, error)` を実装する
+- [x] **3-4** `Download(ctx, uids) (map[uint32]*mail.Message, error)` を実装する
   - `UID FETCH uid-set BODY.PEEK[]` を発行する（`RFC822` ではなく `BODY.PEEK[]` を使用し SEEN フラグを変更しない）
   - 応答メッセージを `mail.ReadMessage` でパースし `map[uint32]*mail.Message` に格納する
   - 要求した UID が 1 件でも欠落していれば `fmt.Errorf("imap: download: uid %d not found", uid)` を返す
@@ -154,7 +154,7 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 #### 3-D: 既読マーク
 
-- [ ] **3-5** `MarkSeen(ctx, uids) error` を実装する
+- [x] **3-5** `MarkSeen(ctx, uids) error` を実装する
   - `UID STORE uid-set +FLAGS (\Seen)` を発行する
   - 既に SEEN のメッセージへの再付与はサーバーが無視するため追加処理不要
   - AC 対応: F-003 AC-1, AC-2, AC-3
@@ -165,7 +165,7 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 **推定工数**: 2 時間
 
-- [ ] **4-1** TLS 設定ロジックのテスト
+- [x] **4-1** TLS 設定ロジックのテスト
   - カスタム CA ファイルを読み込んで `CertPool` が構築されること（F-001 AC-6）
   - 存在しないパスをエラーで返すこと（F-001 AC-6）
   - 不正なファイル（非 PEM）をエラーで返すこと（F-001 AC-6）
@@ -173,21 +173,21 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
   - `TLSMinVersion` が `tls.VersionTLS12` であること（F-001 AC-4）
   - 成功条件: `go test ./internal/imap/...` が通る
 
-- [ ] **4-2** `since` 日付切り捨てのユニットテスト
+- [x] **4-2** `since` 日付切り捨てのユニットテスト
   - `time.Time` の時・分・秒が切り捨てられること（F-002 AC-1）
   - 成功条件: `go test ./internal/imap/...` が通る
 
-- [ ] **4-3** `MaxMessageBytes` フィルタリングのユニットテスト
+- [x] **4-3** `MaxMessageBytes` フィルタリングのユニットテスト
   - `Size > MaxMessageBytes` のメッセージが除外されること
   - `Size == MaxMessageBytes` のメッセージが通過すること（境界値）
   - `MaxMessageBytes == 0` のとき全件通過すること
   - 成功条件: `go test ./internal/imap/...` が通る
 
-- [ ] **4-4** `Download` の UID 欠落エラーテスト
+- [x] **4-4** `Download` の UID 欠落エラーテスト
   - 要求 UID が 1 件でも欠落した場合にエラーを返すこと（F-005 AC-2）
   - 成功条件: `go test ./internal/imap/...` が通る
 
-- [ ] **4-5** 統合テストの骨格を用意する（`internal/imap/client_integration_test.go`）
+- [x] **4-5** 統合テストの骨格を用意する（`internal/imap/client_integration_test.go`）
   - `//go:build integration` ビルドタグを付与する
   - 環境変数 `IMAP_TEST_HOST`, `IMAP_TEST_USER`, `IMAP_TEST_PASS`, `IMAP_TEST_MAILBOX` で接続先を指定する
   - 通常の CI では skip される（F-001 AC-1, F-002 AC-2, AC-4, F-003 AC-1, AC-3, F-005 AC-1, AC-3 の結合確認）
@@ -394,37 +394,37 @@ go test -v -tags integration ./internal/imap/...
 ## 7. 実装チェックリスト
 
 ### フェーズ 0
-- [ ] `internal/config/secret.go`: `Secret` 型定義
+- [x] `internal/config/secret.go`: `Secret` 型定義
 
 ### フェーズ 1
-- [ ] `Config` 構造体
-- [ ] `MessageMeta` 構造体
-- [ ] `FetchMetaResult` 構造体
-- [ ] `MailFetcher` インターフェース
+- [x] `Config` 構造体
+- [x] `MessageMeta` 構造体
+- [x] `FetchMetaResult` 構造体
+- [x] `MailFetcher` インターフェース
 
 ### フェーズ 2
-- [ ] `FakeMailFetcher` 実装
-- [ ] `FakeMailFetcher` テスト（`fake_test.go`）
+- [x] `FakeMailFetcher` 実装
+- [x] `FakeMailFetcher` テスト（`fake_test.go`）
 
 ### フェーズ 3
-- [ ] `NewIMAPClient`（TLS 設定・認証）
-- [ ] `Close`
-- [ ] `FetchMeta`（SELECT・SEARCH・FETCH・UIDValidity・MaxMessageBytes）
-- [ ] `Download`（BODY.PEEK[]・UID 欠落エラー）
-- [ ] `MarkSeen`
+- [x] `NewIMAPClient`（TLS 設定・認証）
+- [x] `Close`
+- [x] `FetchMeta`（SELECT・SEARCH・FETCH・UIDValidity・MaxMessageBytes）
+- [x] `Download`（BODY.PEEK[]・UID 欠落エラー）
+- [x] `MarkSeen`
 
 ### フェーズ 4
-- [ ] TLS 設定テスト
-- [ ] 日付切り捨てテスト
-- [ ] `MaxMessageBytes` フィルタテスト
-- [ ] UID 欠落エラーテスト
-- [ ] 統合テスト骨格
+- [x] TLS 設定テスト
+- [x] 日付切り捨てテスト
+- [x] `MaxMessageBytes` フィルタテスト
+- [x] UID 欠落エラーテスト
+- [x] 統合テスト骨格
 
 ### 最終確認
-- [ ] `make test` が通る
-- [ ] `make lint` が通る
-- [ ] `make fmt` を実行済み
-- [ ] Go コードに日本語が含まれない
+- [x] `make test` が通る
+- [x] `make lint` が通る
+- [x] `make fmt` を実行済み
+- [x] Go コードに日本語が含まれない
 
 ---
 
