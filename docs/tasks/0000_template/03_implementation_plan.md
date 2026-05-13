@@ -1,5 +1,15 @@
 # Implementation Plan: [Feature Name]
 
+## Document Status
+
+| Item | Value |
+|---|---|
+| Status | `draft` |
+| Created | YYYY-MM-DD |
+| Review date | - |
+| Reviewer | - |
+| Comments | - |
+
 ## 1. Implementation Overview
 
 - **Purpose**: ...
