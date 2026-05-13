@@ -34,7 +34,7 @@
 ### 対象範囲（In Scope）
 
 - `multipart/mixed` および `multipart/related` などのネストした MIME 構造の解析
-- `Content-Transfer-Encoding`（base64・quoted-printable・7bit・8bit）のデコード
+- `Content-Transfer-Encoding: base64` のデコード
 - `Content-Disposition: attachment` および `Content-Type` の `name` パラメータからのファイル名取得
 - ファイル名の RFC 2231 エンコード（`filename*=UTF-8''...` 形式）のデコード
 - 添付ファイルのバイト列と対応するファイル名を返す
