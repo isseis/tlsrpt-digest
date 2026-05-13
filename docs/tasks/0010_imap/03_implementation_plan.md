@@ -250,17 +250,49 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 **テストデータの投入（`TestMain` で実施）**
 
-GreenMail はメール受信時にアカウントを自動作成する。統合テストの `TestMain` でテスト用メールを SMTP 経由で投入し、テスト終了後に削除する。
+GreenMail はメール受信時にアカウントを自動作成する。統合テストの `TestMain` で以下の順序で処理することで再現性を確保する。
+
+1. **メールボックスを空にする** — 前回のテストが中断した場合でも汚染状態を排除する（`UID STORE \Deleted` + `EXPUNGE`）
+2. **テスト用メールを投入** — SMTP 経由で既知のメッセージを送信する
+3. **テストを実行**
+4. **クリーンアップ** — テスト終了後にメールボックスを再度空にする
 
 ```go
-// TestMain injects test emails via SMTP and cleans up after all tests.
+// TestMain clears the mailbox, injects test emails, runs tests, then cleans up.
 func TestMain(m *testing.M) {
-    injectTestMessages() // send via SMTP to IMAP_TEST_SMTP_HOST:IMAP_TEST_SMTP_PORT
+    cleanupTestMessages() // purge any leftover messages (UID STORE \Deleted + EXPUNGE)
+    injectTestMessages()  // send via SMTP to IMAP_TEST_SMTP_HOST:IMAP_TEST_SMTP_PORT
     code := m.Run()
-    cleanupTestMessages() // UID STORE \Deleted + EXPUNGE
+    cleanupTestMessages() // clean up after tests
     os.Exit(code)
 }
 ```
+
+**統合テストの実行**
+
+```bash
+make test-integration
+```
+
+`test-integration` ターゲットは `-tags integration` ビルドタグを付与してテストを実行する。統合テストファイルは先頭に `//go:build integration` を記述することで `make test`（通常の単体テスト）から除外される。
+
+**複数 worktree での並列開発**
+
+同一 devcontainer 内で複数の git worktree を使う場合、worktree ごとに `IMAP_TEST_USER` を変えることで GreenMail のユーザーレベルで分離できる。GreenMail は SMTP 配信先アドレスでユーザーを自動作成するため、アドレスを変えるだけで INBOX が独立する。
+
+```bash
+# worktree A の .envrc（direnv を使用）
+export IMAP_TEST_USER=imap-test-wt1@example.com
+export IMAP_TEST_PASS=imap-test-wt1@example.com
+
+# worktree B の .envrc
+export IMAP_TEST_USER=imap-test-wt2@example.com
+export IMAP_TEST_PASS=imap-test-wt2@example.com
+```
+
+`direnv` を利用すると worktree のディレクトリに入った時点で自動的に切り替わる。フォルダ管理コードの変更は不要で、`TestMain` のフローはそのまま維持できる。
+
+---
 
 **devcontainer 外で手動起動する場合**
 
