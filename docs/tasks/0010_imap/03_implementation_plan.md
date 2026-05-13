@@ -130,10 +130,11 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
   - `SELECT mailbox` → `UID SEARCH SINCE date` → `UID FETCH (UID RFC822.SIZE FLAGS ENVELOPE)` を発行する
   - `SELECT` 応答の `UIDValidity` を `FetchMetaResult.UIDValidity` に格納する
   - `ENVELOPE` の `Date`・`MessageId` を `MessageMeta.Date`・`MessageMeta.MessageID` に格納する
-  - `MaxMessageBytes > 0` かつ `MessageMeta.Size > uint32(cfg.MaxMessageBytes)` のメッセージを結果から除外し WARN ログを出力する（`slog.Warn`）
+  - `MaxMessageBytes > 0` かつ `MessageMeta.Size > uint32(cfg.MaxMessageBytes)` のメッセージを結果から除外し WARN ログを出力する（`slog.Warn`）。ログには UID と Date を含める（デバッグのため）
   - 該当メッセージが存在しない場合 `FetchMetaResult{Messages: []MessageMeta{}}` を返す（エラーにしない）
   - SEEN フラグを変更しない（STORE コマンドを発行しない）
   - AC 対応: F-002 AC-1, AC-2, AC-3, AC-4
+  - Note: `SEARCH SINCE` は日付精度のみであるため、同日中に処理済みのメッセージが再度返される可能性がある。呼び出し元はローカルストア（処理済み UID の記録）と照合して重複を除外する責任を持つ。また、呼び出し元は `UIDValidity` が変化していないかを確認し、変化していた場合はローカルストアを無効化する必要がある。
 
 #### 3-C: 選択的ダウンロード
 

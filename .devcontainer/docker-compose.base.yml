@@ -5,6 +5,13 @@ services:
       dockerfile: .devcontainer/Dockerfile
     environment:
       - SSH_AUTH_SOCK=/run/host-services/ssh-auth.sock
+      - IMAP_TEST_HOST=greenmail
+      - IMAP_TEST_PORT=3143
+      - IMAP_TEST_USER=imap-test@example.com
+      - IMAP_TEST_PASS=imap-test@example.com
+      - IMAP_TEST_MAILBOX=INBOX
+      - IMAP_TEST_SMTP_HOST=greenmail
+      - IMAP_TEST_SMTP_PORT=3025
     volumes:
       - ..:/workspaces/ubuntu:cached
       # Share SSH authentication socket/keys for Git operations
@@ -16,7 +23,8 @@ services:
     # Keep the container running
     command: /bin/sh -c "while sleep 1000; do :; done"
     depends_on:
-      - greenmail
+      greenmail:
+        condition: service_healthy
 
   # In-memory IMAP/SMTP server for integration tests.
   # Accessible from dev-env as hostname "greenmail".
@@ -26,5 +34,11 @@ services:
     environment:
       - GREENMAIL_OPTS=-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0
     ports:
-      - "3143:3143"  # IMAP
-      - "3025:3025"  # SMTP (test data injection)
+      - "127.0.0.1:3143:3143"  # IMAP
+      - "127.0.0.1:3025:3025"  # SMTP (test data injection)
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3143"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
