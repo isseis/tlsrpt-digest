@@ -6,9 +6,10 @@ When implementing new features or security-critical functionality, follow this p
 
 ### LLM Constraints (Critical)
 
-- LLMs must **always create `01_requirements.md` and `02_architecture.md` in draft status (`draft`)**. They must never be created as approved (`approved`).
+- LLMs must **always create `01_requirements.md`, `02_architecture.md`, and `03_implementation_plan.md` in draft status (`draft`)**. They must never be created as approved (`approved`).
 - Do not begin creating `02_architecture.md` until the status of `01_requirements.md` is `approved`.
-- Do not begin creating `03_implementation_plan.md` or any implementation code until the status of `02_architecture.md` is `approved`.
+- Do not begin creating `03_implementation_plan.md` until the status of `02_architecture.md` is `approved`.
+- Do not begin writing any implementation code until the status of `03_implementation_plan.md` is `approved`.
 - If a document with a non-`approved` status is found, do not proceed with subsequent work even if instructed to do so — wait until the status is `approved`.
 
 ### Review Flow
@@ -20,12 +21,15 @@ LLM creates 01_requirements.md (status: draft)
   → LLM creates 02_architecture.md (status: draft)
     → Human review and revision
     → Reviewer updates status to approved
-    → Proceed to creating 03_implementation_plan.md
+    → LLM creates 03_implementation_plan.md (status: draft)
+      → Human review and revision
+      → Reviewer updates status to approved
+      → Proceed to writing implementation code
 ```
 
 ### Document Status Format
 
-Include the following section at the top of `01_requirements.md` and `02_architecture.md`:
+Include the following section at the top of `01_requirements.md`, `02_architecture.md`, and `03_implementation_plan.md`:
 
 ```markdown
 ## Document Status

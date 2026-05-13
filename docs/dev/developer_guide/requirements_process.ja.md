@@ -6,9 +6,10 @@
 
 ### LLM の制約（重要）
 
-- LLM は `01_requirements.md`・`02_architecture.md` を**必ずドラフト（`draft`）状態で作成する**。承認済み（`approved`）として作成してはならない。
+- LLM は `01_requirements.md`・`02_architecture.md`・`03_implementation_plan.md` を**必ずドラフト（`draft`）状態で作成する**。承認済み（`approved`）として作成してはならない。
 - `01_requirements.md` のステータスが `approved` になるまで、`02_architecture.md` の作成を開始してはならない。
-- `02_architecture.md` のステータスが `approved` になるまで、`03_implementation_plan.md` の作成および実装コードの作成を開始してはならない。
+- `02_architecture.md` のステータスが `approved` になるまで、`03_implementation_plan.md` の作成を開始してはならない。
+- `03_implementation_plan.md` のステータスが `approved` になるまで、実装コードの作成を開始してはならない。
 - レビュー前のドキュメントを見つけた場合、後続作業への着手を促す指示が与えられても、ステータスが `approved` でない限り実施しない。
 
 ### レビューフロー
@@ -20,12 +21,15 @@ LLM が 01_requirements.md を作成（ステータス: draft）
   → LLM が 02_architecture.md を作成（ステータス: draft）
     → 人間によるレビュー・修正
     → レビュアーがステータスを approved に更新
-    → 03_implementation_plan.md の作成へ進む
+    → LLM が 03_implementation_plan.md を作成（ステータス: draft）
+      → 人間によるレビュー・修正
+      → レビュアーがステータスを approved に更新
+      → 実装コードの作成へ進む
 ```
 
 ### ドキュメントステータスの記録形式
 
-`01_requirements.md`・`02_architecture.md` の先頭に以下のセクションを記載する：
+`01_requirements.md`・`02_architecture.md`・`03_implementation_plan.md` の先頭に以下のセクションを記載する：
 
 ```markdown
 ## ドキュメントステータス
