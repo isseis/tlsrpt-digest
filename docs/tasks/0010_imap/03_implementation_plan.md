@@ -72,16 +72,22 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 
 ---
 
-### フェーズ 2: テストダブル（`internal/imap/fake.go`）
+### フェーズ 2: テストダブル（`internal/imap/testutil/mocks.go`）
 
 **推定工数**: 2 時間
 
+ファイル構成:
+- `internal/imap/testutil/mocks.go` — `package imaptestutil`、`//go:build test` 付き
+- `internal/imap/testutil/mocks_test.go` — `package imaptestutil`、`//go:build test` 付き
+
+`FakeMailFetcher` は `MailFetcher` インターフェース（公開API）のみを実装し、他パッケージからも参照されるため、[Test Organization Guide](../../dev/developer_guide/test_organization.md) の Classification A（`testutil/` サブディレクトリ）に分類する。
+
 - [ ] **2-1** `FakeMailFetcher` 構造体を定義し `MailFetcher` インターフェースを実装する
-  - `var _ MailFetcher = (*FakeMailFetcher)(nil)` によるコンパイル時チェックを追加する
+  - `var _ imap.MailFetcher = (*FakeMailFetcher)(nil)` によるコンパイル時チェックを追加する
   - AC 対応: F-004 AC-1
 
 - [ ] **2-2** `FetchMeta` の戻り値プリセットフィールドとスパイを実装する
-  - フィールド: `FetchMetaResult FetchMetaResult`, `FetchMetaErr error`, `FetchMetaCalls []time.Time`
+  - フィールド: `FetchMetaResult imap.FetchMetaResult`, `FetchMetaErr error`, `FetchMetaCalls []time.Time`
   - AC 対応: F-002 AC-5, F-004 AC-4
 
 - [ ] **2-3** `Download` の戻り値プリセットフィールドとスパイを実装する
@@ -95,12 +101,12 @@ task 0010 の着手時点で `internal/config` が存在しない場合、先行
 - [ ] **2-5** `Close` を no-op として実装する（`return nil`）
   - フィールド: `CloseErr error`（エラー注入用）
 
-- [ ] **2-6** `FakeMailFetcher` の単体テストを作成する（`internal/imap/fake_test.go`）
+- [ ] **2-6** `FakeMailFetcher` の単体テストを作成する（`internal/imap/testutil/mocks_test.go`）
   - `FetchMeta` が設定値と呼び出し引数を記録すること
   - `Download` が設定値を返し呼び出し引数を記録すること
   - `MarkSeen` が呼び出し引数を記録すること
   - `Close` が nil を返すこと
-  - 成功条件: `go test ./internal/imap/...` が通る
+  - 成功条件: `go test -tags test ./internal/imap/...` が通る
   - AC 対応: F-002 AC-5, F-004 AC-3, AC-4, F-005 AC-4
 
 ---
