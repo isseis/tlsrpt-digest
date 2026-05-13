@@ -46,7 +46,20 @@ Only process threads where `isResolved: false`. If there are none, stop.
 
 Process each thread in order as follows.
 
-### When the fix is clear
+### Step 1: Assess validity of the comment
+
+Before making any change, evaluate whether the suggested fix is actually correct and beneficial for this codebase. Consider:
+
+- Does the fix align with the project's design principles, conventions, and goals?
+- Could the suggestion be based on a misunderstanding of the context (e.g., applying general style rules to a domain-specific file like an AI prompt)?
+- Does it improve correctness, clarity, or maintainability — or is it a stylistic preference that doesn't apply here?
+
+Based on this assessment, classify the thread as one of:
+- **Valid**: The fix is clearly correct and beneficial.
+- **Invalid**: The fix is incorrect or inappropriate for this context.
+- **Unclear**: You are uncertain whether the fix is appropriate.
+
+### When the comment is valid and the fix is clear
 
 1. Fix the code as indicated by the comment.
 2. Run `make lint` and `make test` to confirm no errors.
@@ -59,6 +72,27 @@ Process each thread in order as follows.
    ```
 
 5. Resolve the thread.
+
+   ```
+   gh api graphql -F threadId=THREAD_ID -f query='
+     mutation($threadId:ID!) {
+       resolveReviewThread(input:{threadId:$threadId}) {
+         thread { id isResolved }
+       }
+     }
+   '
+   ```
+
+### When the comment is invalid
+
+1. Reply to the PR comment thread explaining why the suggestion does not apply (in English).
+
+   ```
+   gh api repos/OWNER/REPO/pulls/NUMBER/comments/COMMENT_ID/replies \
+     -X POST -f body="Explanation of why the suggestion is not applicable"
+   ```
+
+2. Resolve the thread.
 
    ```
    gh api graphql -F threadId=THREAD_ID -f query='
