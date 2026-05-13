@@ -55,9 +55,9 @@ Before making any change, evaluate whether the suggested fix is actually correct
 - Does it improve correctness, clarity, or maintainability — or is it a stylistic preference that doesn't apply here?
 
 Based on this assessment, classify the thread as one of:
-- **Valid**: The fix is clearly correct and beneficial.
-- **Invalid**: The fix is incorrect or inappropriate for this context.
-- **Unclear**: You are uncertain whether the fix is appropriate.
+- **Valid**: The fix is clearly correct and beneficial → follow [When the comment is valid and the fix is clear].
+- **Invalid**: The fix is incorrect or inappropriate for this context → follow [When the comment is invalid].
+- **Unclear**: You are uncertain whether the fix is appropriate → follow [When the fix is unclear].
 
 ### When the comment is valid and the fix is clear
 
@@ -67,7 +67,7 @@ Based on this assessment, classify the thread as one of:
 4. Reply to the PR comment thread with a description of the fix (in English).
 
    ```
-   gh api repos/OWNER/REPO/pulls/NUMBER/comments/COMMENT_ID/replies \
+   gh api repos/OWNER/REPO/pulls/NUMBER/comments/DATABASE_ID/replies \
      -X POST -f body="Description of the fix in English"
    ```
 
@@ -88,7 +88,7 @@ Based on this assessment, classify the thread as one of:
 1. Reply to the PR comment thread explaining why the suggestion does not apply (in English).
 
    ```
-   gh api repos/OWNER/REPO/pulls/NUMBER/comments/COMMENT_ID/replies \
+   gh api repos/OWNER/REPO/pulls/NUMBER/comments/DATABASE_ID/replies \
      -X POST -f body="Explanation of why the suggestion is not applicable"
    ```
 
