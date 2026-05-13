@@ -54,6 +54,7 @@ LLM が 01_requirements.md を作成（ステータス: draft）
   - 具体的かつ測定可能であること
   - 独立して検証可能であること
   - 実装ではなく振る舞いに焦点を当てること
+- 各受け入れ基準に**文書全体で一意の識別子**（`AC-01`、`AC-02`、…）を付与すること。識別子はドキュメント内の全機能要件にわたって連番で割り当てる（例：F-001 が AC-01〜AC-05、F-002 が AC-06〜AC-08）。これにより、他の基準や実装計画・テストコードからの参照が一意になる。
 
 **フォーマット例：**
 ```markdown
@@ -62,11 +63,11 @@ LLM が 01_requirements.md を作成（ステータス: draft）
 [機能の説明]
 
 **受け入れ基準**：
-1. [具体的な観察可能な振る舞い #1]
-2. [具体的な観察可能な振る舞い #2]
-3. [エラーハンドリングの要件]
-4. [セキュリティ要件]
-5. [エッジケースの処理]
+- **AC-01**: [具体的な観察可能な振る舞い #1]
+- **AC-02**: [具体的な観察可能な振る舞い #2]
+- **AC-03**: [エラーハンドリングの要件]
+- **AC-04**: [セキュリティ要件]
+- **AC-05**: [エッジケースの処理]
 ```
 
 ## 2. アーキテクチャ設計ドキュメント (`docs/tasks/XXXX_feature/02_architecture.md`)
@@ -196,12 +197,12 @@ LLM が 01_requirements.md を作成（ステータス: draft）
 `03_implementation_plan.md` で各受け入れ基準を検証するテストを文書化する：
 
 ```markdown
-**AC-1: [最初の受け入れ基準]**
+**AC-01: [最初の受け入れ基準]**
 - テスト場所：`internal/package/subpackage_test.go::TestFunctionName`
 - 実装：`internal/package/subpackage.go:123-145`
 - 検証方法：[確認方法]
 
-**AC-2: [2番目の受け入れ基準]**
+**AC-02: [2番目の受け入れ基準]**
 - テスト場所：`internal/package/integration_test.go::TestIntegrationScenario`
 - 実装：`internal/package/another.go:67-89`
 - 検証方法：[確認方法]
@@ -209,7 +210,7 @@ LLM が 01_requirements.md を作成（ステータス: draft）
 
 **トレーサビリティコメント付きのテスト例：**
 ```go
-// TestFoo は [振る舞い] を検証する（要件 F-001、AC-2）。
+// TestFoo は [振る舞い] を検証する（要件 F-001、AC-02）。
 func TestFoo(t *testing.T) {
     // 特定の基準を検証するテスト実装
 }
