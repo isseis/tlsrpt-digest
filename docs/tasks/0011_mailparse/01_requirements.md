@@ -60,17 +60,17 @@
 
 **受け入れ条件（Acceptance Criteria）**:
 
-1. `*mail.Message` を受け取り、`[]Attachment` を返す。各 `Attachment` はファイル名（`Filename string`）と内容（`Content []byte`）を持つ
-2. 以下のいずれかを満たすパートを添付ファイルとみなす：`Content-Disposition: attachment` がある、または `Content-Disposition` ヘッダが存在せず `Content-Type` に `name` パラメータがある
-3. `Content-Disposition: inline` のパートは `Content-Type` に `name` パラメータがある場合でも添付ファイルとして扱わない
-4. `multipart/*` 形式のメールに含まれる全添付ファイルを再帰的に抽出する
-5. トップレベルが非 `multipart` のメール（例：`Content-Type: application/gzip; name="report.json.gz"` 単体）は、2. の条件を満たす場合に限り 1 件の添付ファイルとして扱う
-6. トップレベルが非 `multipart` かつ 2. の条件を満たさないメール（例：プレーンテキスト）は、空のスライスを返す（エラーにしない）
-7. `Content-Transfer-Encoding: base64` でエンコードされた添付ファイルを正しくデコードする
-8. ファイル名は `Content-Disposition` の `filename` パラメータを優先し、なければ `Content-Type` の `name` パラメータを使用する。どちらにもない場合は `Filename` を空文字列とする
-9. ファイル名が RFC 2231 形式（`filename*=UTF-8''...`）でエンコードされている場合、正しくデコードする
-10. 添付ファイルが存在しない場合、空のスライスを返す（エラーにしない）
-11. `Content-Type` ヘッダが解析不能、または `multipart/*` の boundary が不正な場合はエラーを返す
+- **AC-01**: `*mail.Message` を受け取り、`[]Attachment` を返す。各 `Attachment` はファイル名（`Filename string`）と内容（`Content []byte`）を持つ
+- **AC-02**: 以下のいずれかを満たすパートを添付ファイルとみなす：`Content-Disposition: attachment` がある、または `Content-Disposition` ヘッダが存在せず `Content-Type` に `name` パラメータがある
+- **AC-03**: `Content-Disposition: inline` のパートは `Content-Type` に `name` パラメータがある場合でも添付ファイルとして扱わない
+- **AC-04**: `multipart/*` 形式のメールに含まれる全添付ファイルを再帰的に抽出する
+- **AC-05**: トップレベルが非 `multipart` のメール（例：`Content-Type: application/gzip; name="report.json.gz"` 単体）は、AC-02 の条件を満たす場合に限り 1 件の添付ファイルとして扱う
+- **AC-06**: トップレベルが非 `multipart` かつ AC-02 の条件を満たさないメール（例：プレーンテキスト）は、空のスライスを返す（エラーにしない）
+- **AC-07**: `Content-Transfer-Encoding: base64` でエンコードされた添付ファイルを正しくデコードする
+- **AC-08**: ファイル名は `Content-Disposition` の `filename` パラメータを優先し、なければ `Content-Type` の `name` パラメータを使用する。どちらにもない場合は `Filename` を空文字列とする
+- **AC-09**: ファイル名が RFC 2231 形式（`filename*=UTF-8''...`）でエンコードされている場合、正しくデコードする
+- **AC-10**: 添付ファイルが存在しない場合、空のスライスを返す（エラーにしない）
+- **AC-11**: `Content-Type` ヘッダが解析不能、または `multipart/*` の boundary が不正な場合はエラーを返す
 
 ### F-002: 抽出サイズの上限
 
@@ -78,9 +78,9 @@
 
 **受け入れ条件（Acceptance Criteria）**:
 
-1. 全添付ファイルの合計サイズが上限（デフォルト 1 MB）を超えた場合、エラーを返す
-2. 上限値は呼び出し元から指定可能とする（0 以下の場合は上限なし）
-3. 上限超過の場合は専用のエラー型（`ErrSizeLimitExceeded`）を返す
+- **AC-12**: 全添付ファイルの合計サイズが上限（デフォルト 1 MB）を超えた場合、エラーを返す
+- **AC-13**: 上限値は呼び出し元から指定可能とする（0 以下の場合は上限なし）
+- **AC-14**: 上限超過の場合は専用のエラー型（`ErrSizeLimitExceeded`）を返す
 
 ---
 
@@ -117,8 +117,8 @@
 - ネストした `multipart/*` 構造からの抽出テスト
 - `Content-Disposition` なし・`Content-Type name` パラメータのみのパート抽出テスト
 - `Content-Disposition: inline` パートが除外されるテスト
-- トップレベルが非 `multipart` でかつ添付条件を満たすメールのテスト（5.）
-- プレーンテキストメールに対する空スライス返却テスト（6.）
+- トップレベルが非 `multipart` でかつ添付条件を満たすメールのテスト（AC-05）
+- プレーンテキストメールに対する空スライス返却テスト（AC-06）
 - base64 エンコードされた添付ファイルのデコードテスト
 - RFC 2231 エンコードされたファイル名のデコードテスト
 - サイズ上限超過時の `ErrSizeLimitExceeded` テスト
