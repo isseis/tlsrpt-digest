@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/mail"
 	"os"
 	"slices"
+	"strconv"
 	"time"
 
 	goimap "github.com/emersion/go-imap"
@@ -19,7 +21,7 @@ import (
 
 var (
 	errInvalidTLSCAPEM = errors.New("imap: invalid tls ca pem")
-	errUIDNotFound     = errors.New("imap: uid not found")
+	errUIDNotFound     = errors.New("uid not found")
 )
 
 type imapSession interface {
@@ -57,7 +59,7 @@ func NewIMAPClient(cfg Config) (MailFetcher, error) {
 	}
 	cfg.Mailbox = mailbox
 
-	address := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
+	address := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
 	session, err := dialTLS(address, tlsConfig)
 	if err != nil {
 		return nil, fmt.Errorf("imap: connect to %s: %w", address, err)
@@ -139,6 +141,7 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 			continue
 		}
 		if msg.Envelope == nil {
+			slog.Warn("imap: skip message with missing envelope", "uid", msg.Uid)
 			continue
 		}
 
@@ -216,7 +219,7 @@ func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32]*m
 	}
 
 	if missingUID, ok := firstMissingUID(uids, out); ok {
-		return nil, fmt.Errorf("%w: %d", errUIDNotFound, missingUID)
+		return nil, fmt.Errorf("imap: download: %w: %d", errUIDNotFound, missingUID)
 	}
 
 	return out, nil

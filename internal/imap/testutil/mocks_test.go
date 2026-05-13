@@ -63,6 +63,16 @@ func TestFakeMailFetcherMarkSeen(t *testing.T) {
 func TestFakeMailFetcherClose(t *testing.T) {
 	t.Parallel()
 
-	f := &FakeMailFetcher{CloseErr: errors.New("ignored")}
-	require.NoError(t, f.Close())
+	t.Run("no error", func(t *testing.T) {
+		t.Parallel()
+		f := &FakeMailFetcher{}
+		require.NoError(t, f.Close())
+	})
+
+	t.Run("injected error", func(t *testing.T) {
+		t.Parallel()
+		closeErr := errors.New("close error")
+		f := &FakeMailFetcher{CloseErr: closeErr}
+		require.ErrorIs(t, f.Close(), closeErr)
+	})
 }

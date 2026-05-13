@@ -50,7 +50,7 @@ func (f *FakeMailFetcher) MarkSeen(_ context.Context, uids []uint32) error {
 }
 
 func (f *FakeMailFetcher) Close() error {
-	return nil
+	return f.CloseErr
 }
 
 func cloneUIDs(uids []uint32) []uint32 {
