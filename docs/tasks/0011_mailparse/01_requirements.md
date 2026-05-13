@@ -61,14 +61,16 @@
 **受け入れ条件（Acceptance Criteria）**:
 
 1. `*mail.Message` を受け取り、`[]Attachment` を返す。各 `Attachment` はファイル名（`Filename string`）と内容（`Content []byte`）を持つ
-2. `multipart/mixed` 形式のメールに含まれる添付ファイルをすべて抽出できる
-3. ネストした `multipart/*` 構造（例：`multipart/related` 内に `multipart/mixed`）でも正しく抽出できる
-4. `Content-Transfer-Encoding: base64` でエンコードされた添付ファイルを正しくデコードする
-5. `Content-Disposition: attachment; filename="..."` からファイル名を取得する
-6. `Content-Disposition` が存在しない場合、`Content-Type` の `name` パラメータをファイル名として使用する
-7. ファイル名が RFC 2231 形式（`filename*=UTF-8''...`）でエンコードされている場合、正しくデコードする
-8. 添付ファイルが存在しない場合、空のスライスを返す（エラーにしない）
-9. MIME パースに失敗した場合はエラーを返す
+2. 以下のいずれかを満たすパートを添付ファイルとみなす：`Content-Disposition: attachment` がある、または `Content-Disposition` ヘッダが存在せず `Content-Type` に `name` パラメータがある
+3. `Content-Disposition: inline` のパートは `Content-Type` に `name` パラメータがある場合でも添付ファイルとして扱わない
+4. `multipart/*` 形式のメールに含まれる全添付ファイルを再帰的に抽出する
+5. トップレベルが非 `multipart` のメール（例：`Content-Type: application/gzip; name="report.json.gz"` 単体）は、AC-2 の条件を満たす場合に限り 1 件の添付ファイルとして扱う
+6. トップレベルが非 `multipart` かつ AC-2 の条件を満たさないメール（例：プレーンテキスト）は、空のスライスを返す（エラーにしない）
+7. `Content-Transfer-Encoding: base64` でエンコードされた添付ファイルを正しくデコードする
+8. ファイル名は `Content-Disposition` の `filename` パラメータを優先し、なければ `Content-Type` の `name` パラメータを使用する。どちらにもない場合は `Filename` を空文字列とする
+9. ファイル名が RFC 2231 形式（`filename*=UTF-8''...`）でエンコードされている場合、正しくデコードする
+10. 添付ファイルが存在しない場合、空のスライスを返す（エラーにしない）
+11. `Content-Type` ヘッダが解析不能、または `multipart/*` の boundary が不正な場合はエラーを返す
 
 ### F-002: 抽出サイズの上限
 
@@ -113,11 +115,14 @@
 
 - `multipart/mixed` メールからの添付ファイル抽出テスト
 - ネストした `multipart/*` 構造からの抽出テスト
+- `Content-Disposition` なし・`Content-Type name` パラメータのみのパート抽出テスト
+- `Content-Disposition: inline` パートが除外されるテスト
+- トップレベルが非 `multipart` でかつ添付条件を満たすメールのテスト（AC-5）
+- プレーンテキストメールに対する空スライス返却テスト（AC-6）
 - base64 エンコードされた添付ファイルのデコードテスト
 - RFC 2231 エンコードされたファイル名のデコードテスト
-- 添付ファイルなしメールに対する空スライス返却テスト
 - サイズ上限超過時の `ErrSizeLimitExceeded` テスト
-- 不正な MIME 構造に対するエラーテスト
+- 不正な MIME boundary・解析不能 `Content-Type` に対するエラーテスト
 
 ### 統合テスト
 
