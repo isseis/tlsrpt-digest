@@ -186,7 +186,8 @@ RFC 8460 の JSON フィールド名はケバブケース（例: `failure-sessio
 
 | コンポーネント | 責務 | 変更種別 |
 |---|---|---|
-| `internal/tlsrpt/tlsrpt.go` | `TLSRPTReport` および関連構造体の定義、`Parse()` 関数、`HasFailure()` メソッド、エラー型の定義 | 新規追加 |
+| `internal/tlsrpt/tlsrpt.go` | `TLSRPTReport` および関連構造体の定義、gzip 圧縮レポートのパース API、failure 判定 API、エラー型の定義 | 新規追加 |
+| `cmd/tlsrpt-digest/main.go` | `internal/tlsrpt` のパース結果を受け取り、通知・保存系コンポーネントへ橋渡しする統合ポイント | 既存ファイルの変更対象 |
 
 ---
 
@@ -209,7 +210,7 @@ type ErrMissingRequiredField struct {
 }
 ```
 
-不正な gzip データおよび不正な JSON については、標準ライブラリのエラーを `fmt.Errorf("tlsrpt: ...: %w", err)` でラップして返す。これにより `errors.Is` / `errors.As` を使った原因エラーの取り出しが可能となる。
+不正な gzip データおよび不正な JSON については、原因となる低レベルエラーを保持したまま `tlsrpt` パッケージの文脈を付加して返す。これにより、呼び出し側は失敗種別を保ったまま原因を判別できる。
 
 ### 4.2 エラーメッセージパターン
 
@@ -260,7 +261,7 @@ flowchart TD
 ### 5.2 Zip Bomb 対策
 
 - **脅威**: 圧縮率を極端に高めた .json.gz ファイルにより、展開時にメモリを過大消費させる DoS 攻撃
-- **対策**: gzip 展開時に `io.LimitedReader` で読み込みバイト数を制限し、上限超過時は `ErrDecompressedSizeLimitExceeded` を返す
+- **対策**: gzip 展開時にストリーム読み込みと展開後サイズの監視を組み合わせ、上限超過時は `ErrDecompressedSizeLimitExceeded` を返す
 - **参考パターン**: `internal/mailparse` の `maxBytes` 引数によるサイズ制限と同様のアプローチを採用する
 - **上限値**: パッケージ内定数として定義する（例: 10 MB）
 
@@ -279,15 +280,15 @@ flowchart TD
 ```mermaid
 flowchart TD
     Start(["Parse(data []byte) 呼び出し"])
-    Decompress["io.LimitedReader + gzip.NewReader<br>で展開"]
+    Decompress["gzip 圧縮データを展開<br>サイズ上限を監視"]
     CheckSize{"展開サイズ<br>上限超過?"}
-    ParseJSON["encoding/json でパース"]
+    ParseJSON["RFC 8460 JSON を<br>構造体へ変換"]
     CheckJSON{"パース成功?"}
-    Validate["必須フィールド検証<br>organization-name<br>report-id<br>date-range<br>policies"]
+    Validate["トップレベル必須フィールドを検証<br>organization-name<br>report-id<br>date-range<br>policies"]
     CheckField{"全必須フィールド<br>存在?"}
     ReturnOK["*TLSRPTReport を返す"]
     ErrSize["ErrDecompressedSizeLimitExceeded を返す"]
-    ErrJSON["エラーをラップして返す"]
+    ErrJSON["パース失敗を表すエラーを返す"]
     ErrField["ErrMissingRequiredField を返す"]
 
     Start --> Decompress
@@ -307,7 +308,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     Start(["HasFailure() 呼び出し"])
-    Loop["全 PolicyRecord を走査"]
+    Loop["全 PolicyRecord を評価"]
     Check{"failure-session-count<br>> 0?"}
     ReturnTrue["true を返す"]
     ReturnFalse["false を返す"]
