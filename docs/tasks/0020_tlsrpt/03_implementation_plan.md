@@ -285,67 +285,67 @@ N/A — `internal/tlsrpt` は新規パッケージであり、既存の呼び出
 
 ## 7. 受け入れ条件の検証
 
-**`AC-01`: 有効な gzip JSON → `*Report` が返り JSON フィールド値が反映されている**
+`AC-01`: 有効な gzip JSON → `*Report` が返り JSON フィールド値が反映されている
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_GzipValid`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — gzip 判定・展開パス
 - 検証方法: `gzipOf(minimalValidJSON())` を `Parse()` に渡し、エラーなし・`Report.OrganizationName` が期待値と一致することを `assert` で確認
 
-**`AC-02`: 有効な非圧縮 JSON → `*Report` が返り JSON フィールド値が反映されている**
+`AC-02`: 有効な非圧縮 JSON → `*Report` が返り JSON フィールド値が反映されている
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_PlainJSONValid`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — 非圧縮パス
 - 検証方法: `minimalValidJSON()` を `Parse()` に渡し、エラーなし・`Report.OrganizationName` が期待値と一致することを `assert` で確認
 
-**`AC-03`: 不正 gzip データ → エラー返却**
+`AC-03`: 不正 gzip データ → エラー返却
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_InvalidGzip`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — gzip.NewReader エラー処理
 - 検証方法: 不正バイト列（gzip マジックバイトで始まるが壊れたデータ）を入力し、エラーが返ることを `require.Error` で確認
 
-**`AC-04`: 展開後 JSON 不正 → エラー返却**
+`AC-04`: 展開後 JSON 不正 → エラー返却
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_InvalidJSONAfterDecompress`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — json.Unmarshal エラー処理
 - 検証方法: `gzipOf([]byte("not json"))` を入力し、エラーが返ることを `require.Error` で確認
 
-**`AC-05`: サイズ上限超過 → `ErrDecompressedSizeLimitExceeded`**
+`AC-05`: サイズ上限超過 → `ErrDecompressedSizeLimitExceeded`
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_SizeLimitExceeded`（gzip・非圧縮サブテスト）
 - 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — サイズチェック
 - 検証方法: `maxDecompressedSize + 1` バイトのデータを各パスで渡し、`errors.AsType[*ErrDecompressedSizeLimitExceeded]` が成功することを確認
 
-**`AC-06`: 有効 RFC 8460 JSON → `tlsrpt.Report` 構造体へ正確に変換**
+`AC-06`: 有効 RFC 8460 JSON → `tlsrpt.Report` 構造体へ正確に変換
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_GzipValid`, `TestParse_PlainJSONValid`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — json.Unmarshal と構造体定義
 - 検証方法: 各フィールドを含む JSON を入力し、返された `Report` の各フィールド値が期待値と一致することを `assert.Equal` で確認
 
-**`AC-07`: 必須フィールド欠如 → `ErrMissingRequiredField`**
+`AC-07`: 必須フィールド欠如 → `ErrMissingRequiredField`
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_MissingRequiredField`（各フィールドのサブテスト）
 - 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — 必須フィールド検証ブロック
 - 検証方法: 4 種の必須フィールドを個別に除いた JSON を入力し、`errors.AsType[*ErrMissingRequiredField]` が成功し `Field` が正しいフィールド名であることを確認
 
-**`AC-08`: `policies` 配列の各フィールドが正しくパースされる**
+`AC-08`: `policies` 配列の各フィールドが正しくパースされる
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_PoliciesFields`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `PolicyRecord`・`Policy`・`Summary` 構造体定義と JSON タグ
 - 検証方法: `policies` に複数のレコードを含む JSON を入力し、`Report.Policies[0].Policy.PolicyType` 等を `assert.Equal` で確認
 
-**`AC-09`: `failure-details` フィールドが正しく取得される**
+`AC-09`: `failure-details` フィールドが正しく取得される
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_FailureDetails`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `FailureDetail` 構造体定義と JSON タグ
 - 検証方法: `failure-details` を含む JSON を入力し、`Report.Policies[0].FailureDetails` の各フィールドを `assert.Equal` で確認
 
-**`AC-10`: 実際のレポートファイルを正しくパースできる**
+`AC-10`: 実際のレポートファイルを正しくパースできる
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_RealReport`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` 全体
 - 検証方法: `testdata/tlsrpt_google.eml` から `.json.gz` 添付を抽出・`Parse()` し、エラーなし・`Report.OrganizationName` が空でないことを確認
 
-**`AC-11`: 全 `total-failure-session-count` が 0 → `HasFailure()` は `false`**
+`AC-11`: 全 `total-failure-session-count` が 0 → `HasFailure()` は `false`
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestHasFailure_AllZero`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `(*Report).HasFailure()`
 - 検証方法: 全ポリシーの `TotalFailureSessionCount` を 0 にした `Report` を構築し、`HasFailure()` が `false` を返すことを `assert.False` で確認
 
-**`AC-12`: いずれかの `total-failure-session-count` が 1 以上 → `HasFailure()` は `true`**
+`AC-12`: いずれかの `total-failure-session-count` が 1 以上 → `HasFailure()` は `true`
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestHasFailure_AnyNonZero`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `(*Report).HasFailure()`
 - 検証方法: 複数ポリシーのうち 1 件だけ `TotalFailureSessionCount` を 1 にした `Report` を構築し、`HasFailure()` が `true` を返すことを `assert.True` で確認
 
-**`AC-13`: `Policies` が空 → `HasFailure()` は `false`**
+`AC-13`: `Policies` が空 → `HasFailure()` は `false`
 - テスト: `internal/tlsrpt/tlsrpt_test.go::TestHasFailure_EmptyPolicies`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `(*Report).HasFailure()`
 - 検証方法: `Policies` が `nil` または空スライスの `Report` を構築し、`HasFailure()` が `false` を返すことを `assert.False` で確認
