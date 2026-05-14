@@ -54,7 +54,11 @@ Include the following section at the top of `01_requirements.md`, `02_architectu
   - Specific and measurable
   - Independently verifiable
   - Focused on behavior, not implementation
-- Assign a **document-wide unique identifier** (`AC-01`, `AC-02`, …) to each acceptance criterion. Identifiers are assigned sequentially across all requirements in the document (e.g., `F-001` gets `AC-01`–`AC-05`, `F-002` gets `AC-06`–`AC-08`). This makes references from other criteria, the implementation plan, and test code unambiguous.
+- Assign a **document-wide unique identifier** (`AC-01`, `AC-02`, …) to each acceptance criterion. Rules for managing identifiers:
+  - On initial creation, assign sequentially across all requirements (e.g., `F-001` gets `AC-01`–`AC-05`, `F-002` gets `AC-06`–`AC-08`)
+  - **Deletion**: remove the criterion and leave the identifier unused — gaps are permitted
+  - **Addition**: append the next available number, or use a suffix (`AC-01a`) when inserting between existing identifiers
+  - Never renumber existing identifiers — doing so would break references in the implementation plan and test code
 
 **Example format:**
 ```markdown
