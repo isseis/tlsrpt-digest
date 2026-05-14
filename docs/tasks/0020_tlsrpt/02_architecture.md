@@ -342,24 +342,23 @@ flowchart TD
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | 有効な `.json.gz`（gzip 圧縮）→ `*Report` が返る | `F-001` `AC-1`, `F-002` `AC-1` |
-| `Parse()` | 有効な非圧縮 JSON → `*Report` が返る | `F-001` `AC-2`, `F-002` `AC-1` |
-| `Parse()` | 不正な gzip データ → エラー返却 | `F-001` `AC-3` |
-| `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `F-001` `AC-4` |
-| `Parse()` | 非圧縮 JSON でサイズ上限超過 → `ErrDecompressedSizeLimitExceeded` | `F-001` `AC-5` |
-| `Parse()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `F-002` `AC-2` |
-| `Parse()` | `policies` 配列の各フィールドが正しくパースされる | `F-002` `AC-3` |
-| `Parse()` | `failure-details` フィールドが存在する場合に正しく取得できる | `F-002` `AC-4` |
-| `Parse()` | gzip 展開サイズが上限超過 → `ErrDecompressedSizeLimitExceeded` | NFR セキュリティ |
-| `HasFailure()` | 全ポリシーレコードの `total-failure-session-count` が 0 → `false` | `F-003` `AC-1` |
-| `HasFailure()` | いずれかのポリシーレコードの `total-failure-session-count` が 1 以上 → `true` | `F-003` `AC-2` |
-| `HasFailure()` | `policies` が空 → `false` | `F-003` `AC-3` |
+| `Parse()` | 有効な `.json.gz`（gzip 圧縮）→ `*Report` が返る | `AC-01`, `AC-06` |
+| `Parse()` | 有効な非圧縮 JSON → `*Report` が返る | `AC-02`, `AC-06` |
+| `Parse()` | 不正な gzip データ → エラー返却 | `AC-03` |
+| `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `AC-04` |
+| `Parse()` | gzip・非圧縮ともにサイズ上限超過 → `ErrDecompressedSizeLimitExceeded` | `AC-05`, NFR セキュリティ |
+| `Parse()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `AC-07` |
+| `Parse()` | `policies` 配列の各フィールドが正しくパースされる | `AC-08` |
+| `Parse()` | `failure-details` フィールドが存在する場合に正しく取得できる | `AC-09` |
+| `HasFailure()` | 全ポリシーレコードの `total-failure-session-count` が 0 → `false` | `AC-11` |
+| `HasFailure()` | いずれかのポリシーレコードの `total-failure-session-count` が 1 以上 → `true` | `AC-12` |
+| `HasFailure()` | `policies` が空 → `false` | `AC-13` |
 
 ### 統合テスト
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | `testdata/` 内の実際のレポートファイルを正しくパースできる | `F-002` `AC-5` |
+| `Parse()` | `testdata/` 内の実際のレポートファイルを正しくパースできる | `AC-10` |
 
 統合テストでは `testdata/tlsrpt_google.eml` から `internal/mailparse` で抽出した `.json.gz` 添付ファイルのバイト列を使用する。
 
