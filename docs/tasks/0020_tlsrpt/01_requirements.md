@@ -4,7 +4,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | `draft` |
+| ステータス | `approved` |
 | 作成日 | 2026-05-12 |
 | レビュー日 | 2026-05-12 |
 | レビュアー | isseis |
@@ -30,8 +30,8 @@ TLSRPT レポートメールには .json.gz 形式の添付ファイルが含ま
 
 ### 対象範囲（In Scope）
 
-- .json.gz バイト列の gzip 展開
-- RFC 8460 JSON のパース（`TLSRPTReport` 構造体への変換）
+- RFC 8460 JSON のデコード（gzip 圧縮・非圧縮の両形式を自動検出）
+- RFC 8460 JSON のパース（`report-id` を必須フィールドとして含む `tlsrpt.Report` 構造体への変換）
 - failure_session_count の集計と評価
 - パース失敗時のエラーハンドリング
 
@@ -50,15 +50,17 @@ TLSRPT レポートメールには .json.gz 形式の添付ファイルが含ま
 
 ## 3. 機能要件
 
-### F-001: .json.gz の展開
+### F-001: JSON デコード（gzip / 非圧縮 自動検出）
 
-gzip 圧縮された JSON バイト列を展開する。
+入力バイト列が gzip 圧縮か非圧縮かを自動検出し、適切にデコードする。
 
 **受け入れ条件（Acceptance Criteria）**:
 
-1. 有効な .json.gz バイト列を入力すると、展開された JSON バイト列を返す
-2. 不正な gzip データを入力するとエラーを返す
-3. 展開後のデータが有効な JSON でない場合もエラーを返す
+- **AC-01**: 有効な `.json.gz`（gzip 圧縮）バイト列を入力すると、展開された JSON バイト列を返す
+- **AC-02**: 有効な非圧縮 JSON バイト列を入力すると、そのまま JSON バイト列として扱う
+- **AC-03**: 不正な gzip データを入力するとエラーを返す
+- **AC-04**: 展開後のデータが有効な JSON でない場合もエラーを返す
+- **AC-05**: gzip・非圧縮ともに、展開（またはそのまま）のサイズが上限を超える場合はエラーを返す
 
 ### F-002: RFC 8460 JSON のパース
 
@@ -66,21 +68,21 @@ gzip 圧縮された JSON バイト列を展開する。
 
 **受け入れ条件（Acceptance Criteria）**:
 
-1. 有効な RFC 8460 JSON を正しく `TLSRPTReport` 構造体に変換する
-2. 必須フィールド（`organization-name`、`report-id`、`date-range`、`policies`）が欠如している場合はエラーを返す
-3. `policies` 配列内の各ポリシーレコードが正しくパースされる
-4. `failure-details` フィールドが存在する場合、正しく取得できる
-5. `testdata/` 内の実際のレポートファイルを正しくパースできる
+- **AC-06**: 有効な RFC 8460 JSON を正しく `tlsrpt.Report` 構造体に変換する
+- **AC-07**: 必須フィールド（`organization-name`、`report-id`、`date-range`、`policies`）が欠如している場合はエラーを返す
+- **AC-08**: `policies` 配列内の各ポリシーレコードが正しくパースされる
+- **AC-09**: `failure-details` フィールドが存在する場合、正しく取得できる
+- **AC-10**: `testdata/` 内の実際のレポートファイルを正しくパースできる
 
 ### F-003: failure_session_count の評価
 
-レポート内のすべてのポリシーレコードにわたる failure_session_count を評価する。
+レポート内のすべてのポリシーレコードにわたる `total-failure-session-count` を評価する。
 
 **受け入れ条件（Acceptance Criteria）**:
 
-1. すべてのポリシーレコードの `failure-session-count` の合計が 0 の場合、`HasFailure()` は `false` を返す
-2. いずれかのポリシーレコードの `failure-session-count` が 1 以上の場合、`HasFailure()` は `true` を返す
-3. `policies` が空の場合、`HasFailure()` は `false` を返す
+- **AC-11**: すべてのポリシーレコードの `total-failure-session-count` の合計が 0 の場合、`HasFailure()` は `false` を返す
+- **AC-12**: いずれかのポリシーレコードの `total-failure-session-count` が 1 以上の場合、`HasFailure()` は `true` を返す
+- **AC-13**: `policies` が空の場合、`HasFailure()` は `false` を返す
 
 ---
 
