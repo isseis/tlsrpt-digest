@@ -16,7 +16,7 @@
 
 ### 1.1 設計原則
 
-- **単一責任**: `internal/tlsrpt` パッケージは `.json.gz` の展開・RFC 8460 JSON のパース・`total-failure-session-count` の評価のみを担う。メール取得・MIME 解析・通知送信とは明確に分離する。
+- **単一責任**: `internal/tlsrpt` パッケージは RFC 8460 JSON のデコード（gzip 自動検出）・パース・`total-failure-session-count` の評価のみを担う。メール取得・MIME 解析・通知送信とは明確に分離する。
 - **防御的入力検証**: TLSRPT レポートは外部データとして扱い、展開サイズの上限チェックと必須フィールドの検証を行う。
 - **シンプルな公開 API**: `Parse()` 関数と `(*Report).HasFailure()` メソッドのみを公開する。内部処理の詳細は非公開とする。
 - **既存パッケージとの協調**: MIME 添付ファイル抽出は `internal/mailparse` が担当し、本パッケージはその結果として受け取った `[]byte` を処理する。
@@ -289,8 +289,10 @@ flowchart TD
 ```mermaid
 flowchart TD
     Start(["Parse(data []byte) 呼び出し"])
-    Decompress["gzip 圧縮データを展開<br>サイズ上限を監視"]
+    DetectFormat{"先頭2バイトが<br>gzip マジックバイト?<br>0x1f 0x8b"}
+    Decompress["gzip 展開<br>サイズ上限を監視"]
     CheckSize{"展開サイズ<br>上限超過?"}
+    CheckSizeRaw{"データサイズ<br>上限超過?"}
     ParseJSON["RFC 8460 JSON を<br>構造体へ変換"]
     CheckJSON{"パース成功?"}
     Validate["トップレベル必須フィールドを検証<br>organization-name<br>report-id<br>date-range<br>policies"]
@@ -300,10 +302,14 @@ flowchart TD
     ErrJSON["パース失敗を表すエラーを返す"]
     ErrField["ErrMissingRequiredField を返す"]
 
-    Start --> Decompress
+    Start --> DetectFormat
+    DetectFormat -->|"Yes（gzip）"| Decompress
+    DetectFormat -->|"No（非圧縮 JSON）"| CheckSizeRaw
     Decompress --> CheckSize
     CheckSize -->|"Yes"| ErrSize
     CheckSize -->|"No"| ParseJSON
+    CheckSizeRaw -->|"Yes"| ErrSize
+    CheckSizeRaw -->|"No"| ParseJSON
     ParseJSON --> CheckJSON
     CheckJSON -->|"No"| ErrJSON
     CheckJSON -->|"Yes"| Validate
@@ -336,13 +342,15 @@ flowchart TD
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | 有効な `.json.gz` → `*Report` が返る | `F-001` `AC-1`, `F-002` `AC-1` |
-| `Parse()` | 不正な gzip データ → エラー返却 | `F-001` `AC-2` |
-| `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `F-001` `AC-3` |
+| `Parse()` | 有効な `.json.gz`（gzip 圧縮）→ `*Report` が返る | `F-001` `AC-1`, `F-002` `AC-1` |
+| `Parse()` | 有効な非圧縮 JSON → `*Report` が返る | `F-001` `AC-2`, `F-002` `AC-1` |
+| `Parse()` | 不正な gzip データ → エラー返却 | `F-001` `AC-3` |
+| `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `F-001` `AC-4` |
+| `Parse()` | 非圧縮 JSON でサイズ上限超過 → `ErrDecompressedSizeLimitExceeded` | `F-001` `AC-5` |
 | `Parse()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `F-002` `AC-2` |
 | `Parse()` | `policies` 配列の各フィールドが正しくパースされる | `F-002` `AC-3` |
 | `Parse()` | `failure-details` フィールドが存在する場合に正しく取得できる | `F-002` `AC-4` |
-| `Parse()` | 展開サイズが上限超過 → `ErrDecompressedSizeLimitExceeded` | NFR セキュリティ |
+| `Parse()` | gzip 展開サイズが上限超過 → `ErrDecompressedSizeLimitExceeded` | NFR セキュリティ |
 | `HasFailure()` | 全ポリシーレコードの `total-failure-session-count` が 0 → `false` | `F-003` `AC-1` |
 | `HasFailure()` | いずれかのポリシーレコードの `total-failure-session-count` が 1 以上 → `true` | `F-003` `AC-2` |
 | `HasFailure()` | `policies` が空 → `false` | `F-003` `AC-3` |
@@ -386,5 +394,4 @@ flowchart TD
 ## 9. 将来の拡張性
 
 - **RFC 8460 オプションフィールドの追加**: RFC 8460 には `contact-info` など省略可能なフィールドが多数存在する。現時点では必須フィールドのみを定義するが、将来的に必要に応じてフィールドを追加できる構造体レイアウトとする。
-- **非圧縮 JSON のサポート**: 現在は gzip 圧縮 JSON のみを対象とするが、将来的に非圧縮 JSON への対応が必要になった場合、`Parse()` の入力受け付けを拡張できる設計とする。
 - **FailureDetail の活用**: `FailureDetail` は現時点では即時アラートのトリガー判定に使用しないが、将来の詳細通知機能で利用できるよう構造体として保持する。
