@@ -22,7 +22,7 @@
 
 ### 実装原則
 
-- 標準ライブラリのみ使用（外部依存を追加しない）
+- プロダクションコードは標準ライブラリのみ使用（外部依存を追加しない）。テストコードでは `stretchr/testify` を使用する（01_requirements.md §5）
 - パッケージ外部への公開 API は `ExtractAttachments`・`Attachment`・`ErrSizeLimitExceeded`・`ErrMIMETooDeep` のみ
 - Go ソースコード中のコメント・識別子・文字列リテラルは英語で記述する
 - `maxBytes` の既定値 1 MB を呼び出し元で設定する作業は本タスクの対象外とし、本タスクでは呼び出し元から渡された上限値に対する挙動を実装・検証する
