@@ -39,49 +39,51 @@ func minimalValidJSON() []byte {
 	}`)
 }
 
-func TestParse_GzipValid(t *testing.T) {
-	data := gzipOf(minimalValidJSON())
-	r, err := tlsrpt.Parse(data)
+func TestParseGzip_Valid(t *testing.T) {
+	r, err := tlsrpt.ParseGzip(gzipOf(minimalValidJSON()))
 	require.NoError(t, err)
 	assert.Equal(t, "Example Corp", r.OrganizationName)
 	assert.Equal(t, "report-001", r.ReportID)
 	assert.False(t, r.DateRange.StartDatetime.IsZero())
 }
 
-func TestParse_PlainJSONValid(t *testing.T) {
-	r, err := tlsrpt.Parse(minimalValidJSON())
+func TestParseJSON_Valid(t *testing.T) {
+	r, err := tlsrpt.ParseJSON(minimalValidJSON())
 	require.NoError(t, err)
 	assert.Equal(t, "Example Corp", r.OrganizationName)
 	assert.Equal(t, "report-001", r.ReportID)
 	assert.False(t, r.DateRange.StartDatetime.IsZero())
 }
 
-func TestParse_InvalidGzip(t *testing.T) {
+func TestParseGzip_InvalidGzip(t *testing.T) {
 	// gzip magic bytes followed by garbage
 	data := []byte{0x1f, 0x8b, 0x00, 0x01, 0x02, 0x03}
-	_, err := tlsrpt.Parse(data)
+	_, err := tlsrpt.ParseGzip(data)
 	require.Error(t, err)
 }
 
-func TestParse_InvalidJSONAfterDecompress(t *testing.T) {
-	data := gzipOf([]byte("not json"))
-	_, err := tlsrpt.Parse(data)
+func TestParseGzip_InvalidJSONAfterDecompress(t *testing.T) {
+	_, err := tlsrpt.ParseGzip(gzipOf([]byte("not json")))
+	require.Error(t, err)
+}
+
+func TestParseJSON_InvalidJSON(t *testing.T) {
+	_, err := tlsrpt.ParseJSON([]byte("not json"))
 	require.Error(t, err)
 }
 
 func TestParse_SizeLimitExceeded(t *testing.T) {
-	// maxDecompressedSize is 10 MB; create slightly-over-limit data.
 	large := make([]byte, 10*1024*1024+1)
 
-	t.Run("gzip", func(t *testing.T) {
-		_, err := tlsrpt.Parse(gzipOf(large))
+	t.Run("ParseGzip", func(t *testing.T) {
+		_, err := tlsrpt.ParseGzip(gzipOf(large))
 		var sizeErr *tlsrpt.ErrDecompressedSizeLimitExceeded
 		require.True(t, errors.As(err, &sizeErr), "expected ErrDecompressedSizeLimitExceeded, got %v", err)
 		assert.Greater(t, sizeErr.Actual, sizeErr.Limit)
 	})
 
-	t.Run("plain", func(t *testing.T) {
-		_, err := tlsrpt.Parse(large)
+	t.Run("ParseJSON", func(t *testing.T) {
+		_, err := tlsrpt.ParseJSON(large)
 		var sizeErr *tlsrpt.ErrDecompressedSizeLimitExceeded
 		require.True(t, errors.As(err, &sizeErr), "expected ErrDecompressedSizeLimitExceeded, got %v", err)
 		assert.Greater(t, sizeErr.Actual, sizeErr.Limit)
@@ -134,7 +136,7 @@ func TestParse_MissingRequiredField(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := tlsrpt.Parse([]byte(tc.json))
+			_, err := tlsrpt.ParseJSON([]byte(tc.json))
 			var missingErr *tlsrpt.ErrMissingRequiredField
 			require.True(t, errors.As(err, &missingErr), "expected ErrMissingRequiredField, got %v", err)
 			assert.Equal(t, tc.field, missingErr.Field)
@@ -163,7 +165,7 @@ func TestParse_PoliciesFields(t *testing.T) {
 			}
 		]
 	}`)
-	r, err := tlsrpt.Parse(data)
+	r, err := tlsrpt.ParseJSON(data)
 	require.NoError(t, err)
 	require.Len(t, r.Policies, 1)
 	p := r.Policies[0]
@@ -198,7 +200,7 @@ func TestParse_FailureDetails(t *testing.T) {
 			}
 		]
 	}`)
-	r, err := tlsrpt.Parse(data)
+	r, err := tlsrpt.ParseJSON(data)
 	require.NoError(t, err)
 	require.Len(t, r.Policies[0].FailureDetails, 1)
 	fd := r.Policies[0].FailureDetails[0]
@@ -235,14 +237,11 @@ func TestHasFailure_AnyNonZero(t *testing.T) {
 }
 
 func TestHasFailure_EmptyPolicies(t *testing.T) {
-	r := &tlsrpt.Report{Policies: []tlsrpt.PolicyRecord{}}
-	assert.False(t, r.HasFailure())
-
-	r2 := &tlsrpt.Report{Policies: nil}
-	assert.False(t, r2.HasFailure())
+	assert.False(t, (&tlsrpt.Report{Policies: []tlsrpt.PolicyRecord{}}).HasFailure())
+	assert.False(t, (&tlsrpt.Report{Policies: nil}).HasFailure())
 }
 
-func TestParse_RealReport(t *testing.T) {
+func TestParseRealReport(t *testing.T) {
 	data, err := os.ReadFile("../../testdata/tlsrpt_google.eml")
 	require.NoError(t, err)
 
@@ -252,18 +251,25 @@ func TestParse_RealReport(t *testing.T) {
 	attachments, err := mailparse.ExtractAttachments(msg, 10<<20)
 	require.NoError(t, err)
 
-	var tlsrptAttachments []mailparse.Attachment
+	var parsed []*tlsrpt.Report
 	for _, att := range attachments {
 		name := strings.ToLower(att.Filename)
-		if strings.HasSuffix(name, ".json.gz") || strings.HasSuffix(name, ".json") {
-			tlsrptAttachments = append(tlsrptAttachments, att)
+		var r *tlsrpt.Report
+		var parseErr error
+		switch {
+		case strings.HasSuffix(name, ".json.gz"):
+			r, parseErr = tlsrpt.ParseGzip(att.Content)
+		case strings.HasSuffix(name, ".json"):
+			r, parseErr = tlsrpt.ParseJSON(att.Content)
+		default:
+			continue
 		}
-	}
-	require.NotEmpty(t, tlsrptAttachments, "no .json.gz or .json attachments found in test email")
-
-	for _, att := range tlsrptAttachments {
-		r, parseErr := tlsrpt.Parse(att.Content)
 		require.NoError(t, parseErr)
+		parsed = append(parsed, r)
+	}
+
+	require.NotEmpty(t, parsed, "no .json.gz or .json attachments found in test email")
+	for _, r := range parsed {
 		assert.NotEmpty(t, r.OrganizationName)
 	}
 }

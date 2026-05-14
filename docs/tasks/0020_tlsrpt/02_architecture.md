@@ -114,9 +114,14 @@ sequenceDiagram
 
     CMD->>MP: ExtractAttachments(msg)
     MP-->>CMD: []Attachment
-    loop 各 .json.gz Attachment
-        CMD->>TR: Parse(attachment.Content)
-        Note over TR: gzip 展開（サイズ上限チェックあり）
+    loop 各 Attachment
+        alt filename ends with .json.gz
+            CMD->>TR: ParseGzip(attachment.Content)
+            Note over TR: gzip 展開（サイズ上限チェックあり）
+        else filename ends with .json
+            CMD->>TR: ParseJSON(attachment.Content)
+            Note over TR: サイズ上限チェック
+        end
         Note over TR: JSON パース
         Note over TR: 必須フィールド検証
         alt パース失敗
@@ -141,8 +146,12 @@ sequenceDiagram
 ### 3.1 インターフェース・型定義
 
 ```go
-// Parse は gzip 圧縮された RFC 8460 レポートを展開・パースして返す。
-func Parse(data []byte) (*Report, error)
+// ParseGzip decompresses gzip data and parses it as an RFC 8460 report.
+// The caller determines the format from the attachment filename or Content-Type.
+func ParseGzip(data []byte) (*Report, error)
+
+// ParseJSON parses plain JSON data as an RFC 8460 report.
+func ParseJSON(data []byte) (*Report, error)
 
 // Report は RFC 8460 のトップレベル構造体。
 type Report struct {
@@ -284,16 +293,18 @@ flowchart TD
 
 ## 6. 処理フロー詳細
 
-### 6.1 Parse() の処理フロー
+### 6.1 ParseGzip() / ParseJSON() の処理フロー
 
 ```mermaid
 flowchart TD
-    Start(["Parse(data []byte) 呼び出し"])
-    DetectFormat{"先頭2バイトが<br>gzip マジックバイト?<br>0x1f 0x8b"}
+    classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
+
+    StartG(["ParseGzip(data []byte) 呼び出し"])
+    StartJ(["ParseJSON(data []byte) 呼び出し"])
     Decompress["gzip 展開<br>サイズ上限を監視"]
-    CheckSize{"展開サイズ<br>上限超過?"}
-    CheckSizeRaw{"データサイズ<br>上限超過?"}
-    ParseJSON["RFC 8460 JSON を<br>構造体へ変換"]
+    CheckSizeG{"展開サイズ<br>上限超過?"}
+    CheckSizeJ{"データサイズ<br>上限超過?"}
+    ParseJSONNode["RFC 8460 JSON を<br>構造体へ変換"]
     CheckJSON{"パース成功?"}
     Validate["トップレベル必須フィールドを検証<br>organization-name<br>report-id<br>date-range<br>policies"]
     CheckField{"全必須フィールド<br>存在?"}
@@ -302,15 +313,14 @@ flowchart TD
     ErrJSON["パース失敗を表すエラーを返す"]
     ErrField["ErrMissingRequiredField を返す"]
 
-    Start --> DetectFormat
-    DetectFormat -->|"Yes（gzip）"| Decompress
-    DetectFormat -->|"No（非圧縮 JSON）"| CheckSizeRaw
-    Decompress --> CheckSize
-    CheckSize -->|"Yes"| ErrSize
-    CheckSize -->|"No"| ParseJSON
-    CheckSizeRaw -->|"Yes"| ErrSize
-    CheckSizeRaw -->|"No"| ParseJSON
-    ParseJSON --> CheckJSON
+    StartG --> Decompress
+    StartJ --> CheckSizeJ
+    Decompress --> CheckSizeG
+    CheckSizeG -->|"Yes"| ErrSize
+    CheckSizeG -->|"No"| ParseJSONNode
+    CheckSizeJ -->|"Yes"| ErrSize
+    CheckSizeJ -->|"No"| ParseJSONNode
+    ParseJSONNode --> CheckJSON
     CheckJSON -->|"No"| ErrJSON
     CheckJSON -->|"Yes"| Validate
     Validate --> CheckField
@@ -342,14 +352,15 @@ flowchart TD
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | 有効な `.json.gz`（gzip 圧縮）→ `*Report` が返る | `AC-01`, `AC-06` |
-| `Parse()` | 有効な非圧縮 JSON → `*Report` が返る | `AC-02`, `AC-06` |
-| `Parse()` | 不正な gzip データ → エラー返却 | `AC-03` |
-| `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `AC-04` |
-| `Parse()` | gzip・非圧縮ともにサイズ上限超過 → `ErrDecompressedSizeLimitExceeded` | `AC-05`, NFR セキュリティ |
-| `Parse()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `AC-07` |
-| `Parse()` | `policies` 配列の各フィールドが正しくパースされる | `AC-08` |
-| `Parse()` | `failure-details` フィールドが存在する場合に正しく取得できる | `AC-09` |
+| `ParseGzip()` | 有効な gzip 圧縮 JSON → `*Report` が返る | `AC-01`, `AC-06` |
+| `ParseJSON()` | 有効な非圧縮 JSON → `*Report` が返る | `AC-02`, `AC-06` |
+| `ParseGzip()` | 不正な gzip データ → エラー返却 | `AC-03` |
+| `ParseGzip()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `AC-04` |
+| `ParseGzip()` | gzip 展開サイズ上限超過 → `ErrDecompressedSizeLimitExceeded` | `AC-05`, NFR セキュリティ |
+| `ParseJSON()` | 入力サイズ上限超過 → `ErrDecompressedSizeLimitExceeded` | `AC-05` |
+| `ParseGzip()` / `ParseJSON()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `AC-07` |
+| `ParseGzip()` / `ParseJSON()` | `policies` 配列の各フィールドが正しくパースされる | `AC-08` |
+| `ParseGzip()` / `ParseJSON()` | `failure-details` フィールドが存在する場合に正しく取得できる | `AC-09` |
 | `HasFailure()` | 全ポリシーレコードの `total-failure-session-count` が 0 → `false` | `AC-11` |
 | `HasFailure()` | いずれかのポリシーレコードの `total-failure-session-count` が 1 以上 → `true` | `AC-12` |
 | `HasFailure()` | `policies` が空 → `false` | `AC-13` |

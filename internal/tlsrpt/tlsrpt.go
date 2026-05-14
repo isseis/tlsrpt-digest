@@ -2,6 +2,7 @@
 package tlsrpt
 
 import (
+	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -11,14 +12,14 @@ import (
 
 const maxDecompressedSize = 10 * 1024 * 1024 // 10 MB
 
-// ErrDecompressedSizeLimitExceeded is returned when the decompressed size exceeds the limit.
+// ErrDecompressedSizeLimitExceeded is returned when the data size exceeds the limit.
 type ErrDecompressedSizeLimitExceeded struct {
 	Limit  int64
 	Actual int64
 }
 
 func (e *ErrDecompressedSizeLimitExceeded) Error() string {
-	return fmt.Sprintf("tlsrpt: decompressed size %d exceeds limit %d", e.Actual, e.Limit)
+	return fmt.Sprintf("tlsrpt: size %d exceeds limit %d", e.Actual, e.Limit)
 }
 
 // ErrMissingRequiredField is returned when a required top-level field is absent.
@@ -86,50 +87,49 @@ type FailureDetail struct {
 	FailureReasonCode     string `json:"failure-reason-code"`
 }
 
-// Parse decodes data (gzip-compressed or plain JSON) and parses it as an RFC 8460 report.
-func Parse(data []byte) (*Report, error) {
-	var jsonData []byte
-
-	if len(data) >= 2 && data[0] == 0x1f && data[1] == 0x8b {
-		// gzip path
-		br := byteReader(data)
-		gr, err := gzip.NewReader(
-			&io.LimitedReader{R: &br, N: int64(maxDecompressedSize) + 1},
-		)
-		if err != nil {
-			return nil, fmt.Errorf("tlsrpt: decompress: %w", err)
-		}
-		decompressed, readErr := io.ReadAll(gr)
-		closeErr := gr.Close()
-		if readErr != nil {
-			return nil, fmt.Errorf("tlsrpt: decompress: %w", readErr)
-		}
-		if closeErr != nil {
-			return nil, fmt.Errorf("tlsrpt: decompress: %w", closeErr)
-		}
-		if len(decompressed) > maxDecompressedSize {
-			return nil, &ErrDecompressedSizeLimitExceeded{
-				Limit:  maxDecompressedSize,
-				Actual: int64(len(decompressed)),
-			}
-		}
-		jsonData = decompressed
-	} else {
-		// plain JSON path
-		if len(data) > maxDecompressedSize {
-			return nil, &ErrDecompressedSizeLimitExceeded{
-				Limit:  maxDecompressedSize,
-				Actual: int64(len(data)),
-			}
-		}
-		jsonData = data
+// ParseGzip decompresses gzip data and parses it as an RFC 8460 report.
+// The caller determines the format from the attachment filename or Content-Type.
+func ParseGzip(data []byte) (*Report, error) {
+	gr, err := gzip.NewReader(
+		&io.LimitedReader{R: bytes.NewReader(data), N: int64(maxDecompressedSize) + 1},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("tlsrpt: decompress: %w", err)
 	}
+	decompressed, readErr := io.ReadAll(gr)
+	closeErr := gr.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("tlsrpt: decompress: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("tlsrpt: decompress: %w", closeErr)
+	}
+	if len(decompressed) > maxDecompressedSize {
+		return nil, &ErrDecompressedSizeLimitExceeded{
+			Limit:  maxDecompressedSize,
+			Actual: int64(len(decompressed)),
+		}
+	}
+	return parseJSON(decompressed)
+}
 
+// ParseJSON parses plain JSON data as an RFC 8460 report.
+func ParseJSON(data []byte) (*Report, error) {
+	if len(data) > maxDecompressedSize {
+		return nil, &ErrDecompressedSizeLimitExceeded{
+			Limit:  maxDecompressedSize,
+			Actual: int64(len(data)),
+		}
+	}
+	return parseJSON(data)
+}
+
+// parseJSON unmarshals JSON and validates required fields.
+func parseJSON(data []byte) (*Report, error) {
 	var r Report
-	if err := json.Unmarshal(jsonData, &r); err != nil {
+	if err := json.Unmarshal(data, &r); err != nil {
 		return nil, fmt.Errorf("tlsrpt: parse json: %w", err)
 	}
-
 	if r.OrganizationName == "" {
 		return nil, &ErrMissingRequiredField{Field: "organization-name"}
 	}
@@ -142,18 +142,5 @@ func Parse(data []byte) (*Report, error) {
 	if r.Policies == nil {
 		return nil, &ErrMissingRequiredField{Field: "policies"}
 	}
-
 	return &r, nil
-}
-
-// byteReader wraps a byte slice as an io.Reader for gzip.NewReader.
-type byteReader []byte
-
-func (b *byteReader) Read(p []byte) (n int, err error) {
-	if len(*b) == 0 {
-		return 0, io.EOF
-	}
-	n = copy(p, *b)
-	*b = (*b)[n:]
-	return n, nil
 }
