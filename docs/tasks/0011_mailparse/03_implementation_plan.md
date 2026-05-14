@@ -172,6 +172,12 @@
 - [ ] `TestExtractAttachments_Integration` を `testdata/tlsrpt_google.eml` を読み込む形に書き換える。
 - [ ] `testdata/tlsrpt_google.eml` を git に追加する
 
+#### 4-2c: CI での統合テスト実行確認
+
+- [ ] `testdata/tlsrpt_google.eml` を git に追加した PR の CI (`test` ジョブ) で `TestExtractAttachments_Integration` が通ることを確認する
+
+なお `.github/workflows/ci.yml` の `test` ジョブは `make test`（`go test -v ./...`）を実行しており、ワークフローの変更は不要。`testdata/private/` は `.gitignore` 対象だが `testdata/tlsrpt_google.eml` はその対象外のため、PR の `check-changes` ジョブがコード変更と判定してテストが実行される。
+
 #### 4-3. セキュリティテスト
 
 - [ ] `maxBytes = 1` などの低い上限値で `ErrSizeLimitExceeded` が返ることを確認する（F-002）
