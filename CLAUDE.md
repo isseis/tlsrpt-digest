@@ -59,6 +59,7 @@ When translating Japanese documentation to English:
 - `make lint` - Run linter with golangci-lint
 - `golangci-lint run` - Run linter directly
 - `make fmt` - Run formatter with gofumpt
+- `make deadcode` - Detect unreachable functions via `deadcode -test ./cmd/tlsrpt-digest`
 
 ### Individual Binary Builds
 - Build tlsrpt-digest binary: `go build -o build/tlsrpt-digest -v cmd/tlsrpt-digest/main.go`
