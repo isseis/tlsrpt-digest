@@ -50,11 +50,11 @@
 
 **Acceptance Criteria**:
 
-- **AC-01**: [Specific, verifiable behavior #1]
-- **AC-02**: [Specific, verifiable behavior #2]
-- **AC-03**: [Error handling requirement]
-- **AC-04**: [Security requirement]
-- **AC-05**: [Boundary values / edge cases]
+- AC-01: [Specific, verifiable behavior #1]
+- AC-02: [Specific, verifiable behavior #2]
+- AC-03: [Error handling requirement]
+- AC-04: [Security requirement]
+- AC-05: [Boundary values / edge cases]
 
 ### F-002: [Feature Name]
 
@@ -62,7 +62,7 @@
 
 **Acceptance Criteria**:
 
-- **AC-06**: ...
+- AC-06: ...
 
 ---
 
