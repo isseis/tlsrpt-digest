@@ -56,7 +56,7 @@
 
 #### 2-1. Content-Type 解析とトップレベル振り分け
 
-- [ ] `mime.ParseMediaType` で `Content-Type` を解析し、失敗時に `fmt.Errorf("mailparse: parse content-type: %w", err)` を返す（AC-11）
+- [ ] `mime.ParseMediaType` で `Content-Type` を解析し、失敗時に `fmt.Errorf("mailparse: parse content-type: %w", err)` を返す（`AC-11`）
 - [ ] `mediaType` が `multipart/*` かどうかで処理を振り分ける
 - [ ] 非 `multipart` の場合は AC-02 の添付判定を行い、条件を満たさなければ空スライスを返す（AC-05/AC-06）
 
@@ -66,7 +66,7 @@
 - [ ] `mime/multipart.NewReader` で boundary を用いてパートを分割する（AC-04）
 - [ ] boundary 不正などのパースエラーを `fmt.Errorf("mailparse: parse multipart: %w", err)` でラップして返す（AC-11）
 - [ ] 各パートの `Content-Type` が `multipart/*` の場合は `depth+1` で再帰する（AC-04）
-- [ ] `depth >= maxMultipartDepth` の場合は `fmt.Errorf("%w: depth=%d limit=%d", ErrMIMETooDeep, depth, maxMultipartDepth)` を返す（AC-17）
+- [ ] `depth > maxMultipartDepth` の場合は `fmt.Errorf("%w: depth=%d limit=%d", ErrMIMETooDeep, depth, maxMultipartDepth)` を返す（`AC-17`）
 
 #### 2-3. 添付ファイル判定
 
@@ -111,7 +111,7 @@
 #### 3-2. MIME ネスト深度制限（AC-17）
 
 - [ ] `extractParts` の再帰呼び出しごとに深度カウンタを更新する
-- [ ] 深度カウンタが `maxMultipartDepth` を超えた時点で `fmt.Errorf("%w: depth=%d limit=%d", ErrMIMETooDeep, depth, maxMultipartDepth)` を返す
+- [ ] `depth > maxMultipartDepth` になった時点で `fmt.Errorf("%w: depth=%d limit=%d", ErrMIMETooDeep, depth, maxMultipartDepth)` を返す
 
 詳細なサイズチェックの設計は [02_architecture.md §6.2](02_architecture.md#62-サイズ上限チェックac-14ac-15) を参照。
 
@@ -176,7 +176,7 @@
 
 - [ ] `testdata/tlsrpt_google.eml` を git に追加した PR の CI (`test` ジョブ) で `TestExtractAttachments_Integration` が通ることを確認する
 
-なお `.github/workflows/ci.yml` の `test` ジョブは `make test`（`go test -v ./...`）を実行しており、ワークフローの変更は不要。`testdata/private/` は `.gitignore` 対象だが `testdata/tlsrpt_google.eml` はその対象外のため、PR の `check-changes` ジョブがコード変更と判定してテストが実行される。
+なお `.github/workflows/ci.yml` の `test` ジョブは `make test`（`go test -v -tags test ./...`）を実行しており、ワークフローの変更は不要。`testdata/private/` は `.gitignore` 対象だが `testdata/tlsrpt_google.eml` はその対象外のため、PR の `check-changes` ジョブがコード変更と判定してテストが実行される。
 
 #### 4-3. セキュリティテスト
 
@@ -229,7 +229,7 @@
 統合テストの確認内容：
 - 返された `[]Attachment` のファイル名が期待値と一致すること
 - 返された `Content` が非空で、gzip ヘッダ（`\x1f\x8b`）で始まること
-- ビルドタグは不要（`go test ./...` で実行）
+- ビルドタグは不要（`make test` で実行）
 
 ### テストヘルパーファイル
 
@@ -343,6 +343,6 @@
 実装完了後に実施すること：
 
 1. `cmd/tlsrpt-digest` に `ExtractAttachments` の呼び出しを組み込む（別タスクとして計画）
-	- このタスクで `maxBytes` の運用上の既定値 1 MB を設定し、F-002 の既定値要件を満たす
+   - このタスクで `maxBytes` の運用上の既定値 1 MB を設定し、F-002 の既定値要件を満たす
 2. 新しい送信元の TLSRPT メールが届いた場合は `testdata/private/` に保存し、加工済みデータを `testdata/` に追加する
 3. `03_implementation_plan.md` の受け入れ条件検証表に実装箇所の最終的な行番号を記入する
