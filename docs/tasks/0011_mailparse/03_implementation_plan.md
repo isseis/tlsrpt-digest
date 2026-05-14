@@ -35,12 +35,12 @@
 
 **対象ファイル**: `internal/mailparse/mailparse.go`（新規作成）
 
-- [ ] パッケージ宣言と import 節を記述する
-- [ ] `Attachment` 構造体（`Filename string`、`Content []byte`）を定義する
-- [ ] `ErrSizeLimitExceeded` 構造体（`Limit int64`、`Actual int64`）と `Error() string` メソッドを定義する
-- [ ] `ErrMIMETooDeep` sentinel var を定義する（`errors.New` を使用）
-- [ ] `maxMultipartDepth` パッケージ内定数（値: 10）を定義する
-- [ ] `ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)` のシグネチャをスタブ実装する（`return nil, nil`）
+- [x] パッケージ宣言と import 節を記述する
+- [x] `Attachment` 構造体（`Filename string`、`Content []byte`）を定義する
+- [x] `ErrSizeLimitExceeded` 構造体（`Limit int64`、`Actual int64`）と `Error() string` メソッドを定義する
+- [x] `ErrMIMETooDeep` sentinel var を定義する（`errors.New` を使用）
+- [x] `maxMultipartDepth` パッケージ内定数（値: 10）を定義する
+- [x] `ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)` のシグネチャをスタブ実装する（`return nil, nil`）
 
 **成功基準**: `go build ./internal/mailparse/` が通ること
 
@@ -56,39 +56,39 @@
 
 #### 2-1. Content-Type 解析とトップレベル振り分け
 
-- [ ] `mime.ParseMediaType` で `Content-Type` を解析し、失敗時に `fmt.Errorf("mailparse: parse content-type: %w", err)` を返す（`AC-11`）
-- [ ] `mediaType` が `multipart/*` かどうかで処理を振り分ける
-- [ ] 非 `multipart` の場合は AC-02 の添付判定を行い、条件を満たさなければ空スライスを返す（AC-05/AC-06）
+- [x] `mime.ParseMediaType` で `Content-Type` を解析し、失敗時に `fmt.Errorf("mailparse: parse content-type: %w", err)` を返す（`AC-11`）
+- [x] `mediaType` が `multipart/*` かどうかで処理を振り分ける
+- [x] 非 `multipart` の場合は AC-02 の添付判定を行い、条件を満たさなければ空スライスを返す（AC-05/AC-06）
 
 #### 2-2. multipart 再帰パース
 
-- [ ] `depth` パラメータを持つ内部再帰関数（例: `extractParts`）を定義する
-- [ ] `mime/multipart.NewReader` で boundary を用いてパートを分割する（AC-04）
-- [ ] boundary 不正などのパースエラーを `fmt.Errorf("mailparse: parse multipart: %w", err)` でラップして返す（AC-11）
-- [ ] 各パートの `Content-Type` が `multipart/*` の場合は `depth+1` で再帰する（AC-04）
-- [ ] `depth > maxMultipartDepth` の場合は `fmt.Errorf("%w: depth=%d limit=%d", ErrMIMETooDeep, depth, maxMultipartDepth)` を返す（`AC-17`）
+- [x] `depth` パラメータを持つ内部再帰関数（例: `extractParts`）を定義する
+- [x] `mime/multipart.NewReader` で boundary を用いてパートを分割する（AC-04）
+- [x] boundary 不正などのパースエラーを `fmt.Errorf("mailparse: parse multipart: %w", err)` でラップして返す（AC-11）
+- [x] 各パートの `Content-Type` が `multipart/*` の場合は `depth+1` で再帰する（AC-04）
+- [x] `depth > maxMultipartDepth` の場合は `fmt.Errorf("%w: depth=%d limit=%d", ErrMIMETooDeep, depth, maxMultipartDepth)` を返す（`AC-17`）
 
 #### 2-3. 添付ファイル判定
 
-- [ ] `Content-Disposition` ヘッダを解析して disposition 値（`attachment`/`inline`/省略）を取得する
-- [ ] `Content-Disposition: attachment` がある場合は添付とみなす（AC-02）
-- [ ] `Content-Disposition` ヘッダが存在せず `Content-Type` に `name` パラメータがある場合は添付とみなす（AC-02）
-- [ ] `Content-Disposition: inline` の場合は `name` パラメータの有無にかかわらず添付としない（AC-03）
-- [ ] 上記以外は添付としない
+- [x] `Content-Disposition` ヘッダを解析して disposition 値（`attachment`/`inline`/省略）を取得する
+- [x] `Content-Disposition: attachment` がある場合は添付とみなす（AC-02）
+- [x] `Content-Disposition` ヘッダが存在せず `Content-Type` に `name` パラメータがある場合は添付とみなす（AC-02）
+- [x] `Content-Disposition: inline` の場合は `name` パラメータの有無にかかわらず添付としない（AC-03）
+- [x] 上記以外は添付としない
 
 #### 2-4. ファイル名抽出
 
-- [ ] `Content-Disposition` の `filename` パラメータを優先的に取得する（AC-08）
-- [ ] `filename` がない場合は `Content-Type` の `name` パラメータを使用する（AC-08）
-- [ ] どちらにもない場合は `Filename` を空文字列とする（AC-08）
-- [ ] `mime.WordDecoder.DecodeHeader` を使い RFC 2047 形式（`=?charset?enc?text?=`）をデコードする（AC-12）
-- [ ] RFC 2231 形式（`filename*=UTF-8''...`）は `mime.ParseMediaType` が自動的にデコードするため別途処理不要（AC-09）
+- [x] `Content-Disposition` の `filename` パラメータを優先的に取得する（AC-08）
+- [x] `filename` がない場合は `Content-Type` の `name` パラメータを使用する（AC-08）
+- [x] どちらにもない場合は `Filename` を空文字列とする（AC-08）
+- [x] `mime.WordDecoder.DecodeHeader` を使い RFC 2047 形式（`=?charset?enc?text?=`）をデコードする（AC-12）
+- [x] RFC 2231 形式（`filename*=UTF-8''...`）は `mime.ParseMediaType` が自動的にデコードするため別途処理不要（AC-09）
 
 #### 2-5. base64 デコード
 
-- [ ] `Content-Transfer-Encoding: base64` のパートは `encoding/base64` でデコードする（AC-07）
-- [ ] base64 以外の `Content-Transfer-Encoding` を持つパートはスキップする（エラーなし）（AC-13）
-- [ ] base64 デコードに失敗したパートはスキップする（エラーを返さない）（AC-07）
+- [x] `Content-Transfer-Encoding: base64` のパートは `encoding/base64` でデコードする（AC-07）
+- [x] base64 以外の `Content-Transfer-Encoding` を持つパートはスキップする（エラーなし）（AC-13）
+- [x] base64 デコードに失敗したパートはスキップする（エラーを返さない）（AC-07）
 
 **成功基準**: `go build ./internal/mailparse/` が通ること
 
@@ -104,14 +104,14 @@
 
 #### 3-1. 累積サイズチェック（AC-14/AC-15/AC-16）
 
-- [ ] `maxBytes <= 0` の場合はサイズ制限なしとする（AC-15）
-- [ ] base64 デコードをストリーミングで行い、デコード済みチャンクを読み出すたびに累積サイズを更新する（AC-14）
-- [ ] 累積サイズが `maxBytes` を超えた時点で即座に `&ErrSizeLimitExceeded{Limit: maxBytes, Actual: actual}` を返す（AC-14/AC-16）
+- [x] `maxBytes <= 0` の場合はサイズ制限なしとする（AC-15）
+- [x] base64 デコードをストリーミングで行い、デコード済みチャンクを読み出すたびに累積サイズを更新する（AC-14）
+- [x] 累積サイズが `maxBytes` を超えた時点で即座に `&ErrSizeLimitExceeded{Limit: maxBytes, Actual: actual}` を返す（AC-14/AC-16）
 
 #### 3-2. MIME ネスト深度制限（AC-17）
 
-- [ ] `extractParts` の再帰呼び出しごとに深度カウンタを更新する
-- [ ] `depth > maxMultipartDepth` になった時点で `fmt.Errorf("%w: depth=%d limit=%d", ErrMIMETooDeep, depth, maxMultipartDepth)` を返す
+- [x] `extractParts` の再帰呼び出しごとに深度カウンタを更新する
+- [x] `depth > maxMultipartDepth` になった時点で `fmt.Errorf("%w: depth=%d limit=%d", ErrMIMETooDeep, depth, maxMultipartDepth)` を返す
 
 詳細なサイズチェックの設計は [02_architecture.md §6.2](02_architecture.md#62-サイズ上限チェックac-14ac-15) を参照。
 
@@ -133,44 +133,44 @@
 
 各 AC に対して最低 1 つのテストケースを `TestExtractAttachments` のテーブル駆動テストとして実装する。
 
-- [ ] `Content-Disposition: attachment` を持つパートが抽出される（AC-01/AC-02）
-- [ ] `Content-Disposition` なし・`Content-Type name` のみのパートが抽出される（AC-02）
-- [ ] `Content-Disposition: inline` かつ `name` ありのパートが除外される（AC-03）
-- [ ] `multipart/mixed` から複数の添付ファイルが抽出される（AC-01/AC-04）
-- [ ] ネストした `multipart/*` 構造から再帰的に抽出される（AC-04）
-- [ ] トップレベルが非 `multipart` かつ添付条件を満たすメールで 1 件が返る（AC-05）
-- [ ] プレーンテキストメール（添付条件を満たさない）で空スライスが返る（AC-06）
-- [ ] `Content-Transfer-Encoding: base64` の添付ファイルが正しくデコードされる（AC-07）
-- [ ] base64 デコード失敗のパートがスキップされ、エラーが返らない（AC-07）
-- [ ] ファイル名が `Content-Disposition` の `filename` パラメータから取得される（AC-08）
-- [ ] ファイル名が `Content-Type` の `name` パラメータから取得される（`filename` なしの場合）（AC-08）
-- [ ] `filename` も `name` もない場合に `Filename` が空文字列になる（AC-08）
-- [ ] RFC 2231 形式（`filename*=UTF-8''...`）のファイル名がデコードされる（AC-09）
-- [ ] 添付ファイルなしのメールで空スライスが返る（AC-10）
-- [ ] 解析不能な `Content-Type` でエラーが返る（AC-11）
-- [ ] 不正 boundary でエラーが返る（AC-11）
-- [ ] RFC 2047 形式（`=?UTF-8?B?...?=`）のファイル名がデコードされる（AC-12）
-- [ ] `Content-Transfer-Encoding: quoted-printable` のパートがスキップされる（エラーなし）（AC-13）
-- [ ] 累積サイズが `maxBytes` を超えた時点で `ErrSizeLimitExceeded` が返る（AC-14）
-- [ ] `maxBytes = 0` でサイズ制限なしとなる（AC-15）
-- [ ] `maxBytes < 0` でサイズ制限なしとなる（AC-15）
-- [ ] `errors.AsType[*ErrSizeLimitExceeded]` で `ErrSizeLimitExceeded` が取得できる（AC-16）
-- [ ] `ErrSizeLimitExceeded` に正しい `Limit` と `Actual` 値が入る（AC-16）
-- [ ] ネスト深度 > 10 のメールで `ErrMIMETooDeep` を含むエラーが返る（AC-17）
-- [ ] `errors.Is(err, ErrMIMETooDeep)` が `true` になる（AC-17）
+- [x] `Content-Disposition: attachment` を持つパートが抽出される（AC-01/AC-02）
+- [x] `Content-Disposition` なし・`Content-Type name` のみのパートが抽出される（AC-02）
+- [x] `Content-Disposition: inline` かつ `name` ありのパートが除外される（AC-03）
+- [x] `multipart/mixed` から複数の添付ファイルが抽出される（AC-01/AC-04）
+- [x] ネストした `multipart/*` 構造から再帰的に抽出される（AC-04）
+- [x] トップレベルが非 `multipart` かつ添付条件を満たすメールで 1 件が返る（AC-05）
+- [x] プレーンテキストメール（添付条件を満たさない）で空スライスが返る（AC-06）
+- [x] `Content-Transfer-Encoding: base64` の添付ファイルが正しくデコードされる（AC-07）
+- [x] base64 デコード失敗のパートがスキップされ、エラーが返らない（AC-07）
+- [x] ファイル名が `Content-Disposition` の `filename` パラメータから取得される（AC-08）
+- [x] ファイル名が `Content-Type` の `name` パラメータから取得される（`filename` なしの場合）（AC-08）
+- [x] `filename` も `name` もない場合に `Filename` が空文字列になる（AC-08）
+- [x] RFC 2231 形式（`filename*=UTF-8''...`）のファイル名がデコードされる（AC-09）
+- [x] 添付ファイルなしのメールで空スライスが返る（AC-10）
+- [x] 解析不能な `Content-Type` でエラーが返る（AC-11）
+- [x] 不正 boundary でエラーが返る（AC-11）
+- [x] RFC 2047 形式（`=?UTF-8?B?...?=`）のファイル名がデコードされる（AC-12）
+- [x] `Content-Transfer-Encoding: quoted-printable` のパートがスキップされる（エラーなし）（AC-13）
+- [x] 累積サイズが `maxBytes` を超えた時点で `ErrSizeLimitExceeded` が返る（AC-14）
+- [x] `maxBytes = 0` でサイズ制限なしとなる（AC-15）
+- [x] `maxBytes < 0` でサイズ制限なしとなる（AC-15）
+- [x] `errors.AsType[*ErrSizeLimitExceeded]` で `ErrSizeLimitExceeded` が取得できる（AC-16）
+- [x] `ErrSizeLimitExceeded` に正しい `Limit` と `Actual` 値が入る（AC-16）
+- [x] ネスト深度 > 10 のメールで `ErrMIMETooDeep` を含むエラーが返る（AC-17）
+- [x] `errors.Is(err, ErrMIMETooDeep)` が `true` になる（AC-17）
 
 #### 4-2. 統合テスト
 
 **4-2a: ローカル動作確認（`testdata/private/tlsrpt_google.eml` 使用）**
 
-- [ ] `TestExtractAttachments_Integration` を `testdata/private/tlsrpt_google.eml` を読み込んで `ExtractAttachments` に渡し、`.json.gz` バイト列が正しく抽出する形で実装し、ローカルで確認する。
+- [x] `TestExtractAttachments_Integration` を `testdata/private/tlsrpt_google.eml` を読み込んで `ExtractAttachments` に渡し、`.json.gz` バイト列が正しく抽出する形で実装し、ローカルで確認する。
 - `testdata/private/tlsrpt_google.eml` は実際のメールのため git には追加しない（`testdata/private/` は `.gitignore` 対象）
 
 **4-2b: 恒久テスト用加工済みデータの作成**
 
-- [ ] `testdata/private/tlsrpt_google.eml` を元に個人情報・機密情報を除去した `testdata/tlsrpt_google.eml` を作成する（加工内容は §4 テスト戦略を参照）
-- [ ] `TestExtractAttachments_Integration` を `testdata/tlsrpt_google.eml` を読み込む形に書き換える。
-- [ ] `testdata/tlsrpt_google.eml` を git に追加する
+- [x] `testdata/private/tlsrpt_google.eml` を元に個人情報・機密情報を除去した `testdata/tlsrpt_google.eml` を作成する（加工内容は §4 テスト戦略を参照）
+- [x] `TestExtractAttachments_Integration` を `testdata/tlsrpt_google.eml` を読み込む形に書き換える。
+- [x] `testdata/tlsrpt_google.eml` を git に追加する
 
 #### 4-2c: CI での統合テスト実行確認
 
@@ -180,9 +180,9 @@
 
 #### 4-3. セキュリティテスト
 
-- [ ] `maxBytes = 1` などの低い上限値で `ErrSizeLimitExceeded` が返ることを確認する（F-002）
-- [ ] RFC 2231 のパストラバーサル的なファイル名（`../etc/passwd`）が本パッケージでサニタイズされずそのまま返ることを確認する（呼び出し元への責務の明確化）
-- [ ] 深度 11 の `multipart/*` ネストで `ErrMIMETooDeep` が返ることを確認する（F-003/AC-17）
+- [x] `maxBytes = 1` などの低い上限値で `ErrSizeLimitExceeded` が返ることを確認する（F-002）
+- [x] RFC 2231 のパストラバーサル的なファイル名（`../etc/passwd`）が本パッケージでサニタイズされずそのまま返ることを確認する（呼び出し元への責務の明確化）
+- [x] 深度 11 の `multipart/*` ネストで `ErrMIMETooDeep` が返ることを確認する（F-003/AC-17）
 
 **成功基準**: `make test` がすべて通ること
 
@@ -254,34 +254,34 @@
 ## 6. 実装チェックリスト
 
 ### フェーズ 1
-- [ ] `internal/mailparse/mailparse.go` を新規作成
-- [ ] `Attachment`・`ErrSizeLimitExceeded`・`ErrMIMETooDeep` を定義
-- [ ] `ExtractAttachments` スタブを定義
-- [ ] `go build` が通ること
+- [x] `internal/mailparse/mailparse.go` を新規作成
+- [x] `Attachment`・`ErrSizeLimitExceeded`・`ErrMIMETooDeep` を定義
+- [x] `ExtractAttachments` スタブを定義
+- [x] `go build` が通ること
 
 ### フェーズ 2
-- [ ] Content-Type 解析・トップレベル振り分けを実装
-- [ ] multipart 再帰パースを実装
-- [ ] 添付ファイル判定ロジックを実装
-- [ ] ファイル名抽出（RFC 2047/2231 対応）を実装
-- [ ] base64 デコードを実装
-- [ ] `go build` が通ること
+- [x] Content-Type 解析・トップレベル振り分けを実装
+- [x] multipart 再帰パースを実装
+- [x] 添付ファイル判定ロジックを実装
+- [x] ファイル名抽出（RFC 2047/2231 対応）を実装
+- [x] base64 デコードを実装
+- [x] `go build` が通ること
 
 ### フェーズ 3
-- [ ] 累積サイズチェック（ストリーミング）を実装
-- [ ] MIME ネスト深度制限を実装
-- [ ] `maxBytes <= 0` で無制限となることを実装
-- [ ] `go build` が通ること
+- [x] 累積サイズチェック（ストリーミング）を実装
+- [x] MIME ネスト深度制限を実装
+- [x] `maxBytes <= 0` で無制限となることを実装
+- [x] `go build` が通ること
 
 ### フェーズ 4
-- [ ] 全 AC に対応する単体テストを実装
+- [x] 全 AC に対応する単体テストを実装
 - 任意: `testdata/private/tlsrpt_google.eml` でローカル動作確認（4-2a）
-- [ ] 加工済み `testdata/tlsrpt_google.eml` を作成して git に追加（4-2b）
-- [ ] 統合テストを加工済みファイルに切り替え
-- [ ] セキュリティテストを実装
-- [ ] `make test` がすべて通ること
-- [ ] `make lint` がすべて通ること
-- [ ] `make fmt` 適用後に差分がないこと
+- [x] 加工済み `testdata/tlsrpt_google.eml` を作成して git に追加（4-2b）
+- [x] 統合テストを加工済みファイルに切り替え
+- [x] セキュリティテストを実装
+- [x] `make test` がすべて通ること
+- [x] `make lint` がすべて通ること
+- [x] `make fmt` 適用後に差分がないこと
 
 ---
 
@@ -319,22 +319,22 @@
 
 ### 機能完全性
 
-- [ ] 全 17 件の受け入れ条件（AC-01 〜 AC-17）を検証するテストが存在し、全テストが通ること
+- [x] 全 17 件の受け入れ条件（AC-01 〜 AC-17）を検証するテストが存在し、全テストが通ること
 
 ### 品質指標
 
-- [ ] `make test` がすべて通ること（単体テスト・統合テスト含む）
-- [ ] `make lint` がすべて通ること
-- [ ] `make fmt` 適用後に差分がないこと
+- [x] `make test` がすべて通ること（単体テスト・統合テスト含む）
+- [x] `make lint` がすべて通ること
+- [x] `make fmt` 適用後に差分がないこと
 
 ### セキュリティ検証
 
-- [ ] 累積サイズ上限超過テストが通ること（F-002）
-- [ ] ネスト深度上限超過テストが通ること（F-003/AC-17）
+- [x] 累積サイズ上限超過テストが通ること（F-002）
+- [x] ネスト深度上限超過テストが通ること（F-003/AC-17）
 
 ### ドキュメント完全性
 
-- [ ] 任意手順を除く本実装計画書の全チェックボックスが完了状態になること
+- [x] 任意手順を除く本実装計画書の全チェックボックスが完了状態になること
 
 ---
 
