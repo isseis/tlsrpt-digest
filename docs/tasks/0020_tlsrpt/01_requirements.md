@@ -31,7 +31,7 @@ TLSRPT レポートメールには .json.gz 形式の添付ファイルが含ま
 ### 対象範囲（In Scope）
 
 - .json.gz バイト列の gzip 展開
-- RFC 8460 JSON のパース（`tlsrpt.Report` 構造体への変換）
+- RFC 8460 JSON のパース（`report-id` を必須フィールドとして含む `tlsrpt.Report` 構造体への変換）
 - failure_session_count の集計と評価
 - パース失敗時のエラーハンドリング
 
@@ -74,12 +74,12 @@ gzip 圧縮された JSON バイト列を展開する。
 
 ### F-003: failure_session_count の評価
 
-レポート内のすべてのポリシーレコードにわたる failure_session_count を評価する。
+レポート内のすべてのポリシーレコードにわたる `total-failure-session-count` を評価する。
 
 **受け入れ条件（Acceptance Criteria）**:
 
-1. すべてのポリシーレコードの `failure-session-count` の合計が 0 の場合、`HasFailure()` は `false` を返す
-2. いずれかのポリシーレコードの `failure-session-count` が 1 以上の場合、`HasFailure()` は `true` を返す
+1. すべてのポリシーレコードの `total-failure-session-count` の合計が 0 の場合、`HasFailure()` は `false` を返す
+2. いずれかのポリシーレコードの `total-failure-session-count` が 1 以上の場合、`HasFailure()` は `true` を返す
 3. `policies` が空の場合、`HasFailure()` は `false` を返す
 
 ---

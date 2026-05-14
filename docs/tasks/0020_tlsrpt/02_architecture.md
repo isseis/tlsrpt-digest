@@ -16,7 +16,7 @@
 
 ### 1.1 設計原則
 
-- **単一責任**: `internal/tlsrpt` パッケージは .json.gz の展開・RFC 8460 JSON のパース・failure_session_count の評価のみを担う。メール取得・MIME 解析・通知送信とは明確に分離する。
+- **単一責任**: `internal/tlsrpt` パッケージは `.json.gz` の展開・RFC 8460 JSON のパース・`total-failure-session-count` の評価のみを担う。メール取得・MIME 解析・通知送信とは明確に分離する。
 - **防御的入力検証**: TLSRPT レポートは外部データとして扱い、展開サイズの上限チェックと必須フィールドの検証を行う。
 - **シンプルな公開 API**: `Parse()` 関数と `(*Report).HasFailure()` メソッドのみを公開する。内部処理の詳細は非公開とする。
 - **既存パッケージとの協調**: MIME 添付ファイル抽出は `internal/mailparse` が担当し、本パッケージはその結果として受け取った `[]byte` を処理する。
@@ -78,8 +78,11 @@ flowchart LR
     NT["internal/notify<br>Notifier"]
     ST["internal/store<br>Store"]
 
-    IMAP --> IM --> MP
-    MP -->|".json.gz バイト列"| TR
+    IMAP --> IM
+    IM -->|"*mail.Message"| CMD
+    CMD -->|"*mail.Message"| MP
+    MP -->|"[]Attachment"| CMD
+    CMD -->|".json.gz バイト列"| TR
     TR -->|"*Report"| CMD
     CMD --> NT
     CMD --> ST
@@ -105,25 +108,29 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram
+    participant CMD as cmd/tlsrpt-digest
     participant MP as internal/mailparse
     participant TR as internal/tlsrpt
-    participant CMD as cmd/tlsrpt-digest
 
-    MP->>TR: Parse(gzipBytes []byte)
-    Note over TR: gzip 展開（サイズ上限チェックあり）
-    Note over TR: JSON パース
-    Note over TR: 必須フィールド検証
-    alt パース失敗
-        TR-->>CMD: nil, error
-    else パース成功
-        TR-->>CMD: *Report, nil
-        CMD->>TR: report.HasFailure()
-        TR-->>CMD: bool
-    end
-    alt HasFailure() == true
-        CMD->>CMD: 即時アラート処理（別パッケージ）
-    else HasFailure() == false
-        CMD->>CMD: 週次サマリー蓄積（別パッケージ）
+    CMD->>MP: ExtractAttachments(msg)
+    MP-->>CMD: []Attachment
+    loop 各 .json.gz Attachment
+        CMD->>TR: Parse(attachment.Content)
+        Note over TR: gzip 展開（サイズ上限チェックあり）
+        Note over TR: JSON パース
+        Note over TR: 必須フィールド検証
+        alt パース失敗
+            TR-->>CMD: nil, error
+        else パース成功
+            TR-->>CMD: *Report, nil
+            CMD->>TR: report.HasFailure()
+            TR-->>CMD: bool
+        end
+        alt HasFailure() == true
+            CMD->>CMD: 即時アラート処理（別パッケージ）
+        else HasFailure() == false
+            CMD->>CMD: 週次サマリー蓄積（別パッケージ）
+        end
     end
 ```
 
@@ -329,22 +336,22 @@ flowchart TD
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | 有効な .json.gz → `*Report` が返る | `F-001` AC-1, `F-002` AC-1 |
-| `Parse()` | 不正な gzip データ → エラー返却 | `F-001` AC-2 |
-| `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `F-001` AC-3 |
-| `Parse()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `F-002` AC-2 |
-| `Parse()` | `policies` 配列の各フィールドが正しくパースされる | `F-002` AC-3 |
-| `Parse()` | `failure-details` フィールドが存在する場合に正しく取得できる | `F-002` AC-4 |
+| `Parse()` | 有効な `.json.gz` → `*Report` が返る | `F-001` `AC-1`, `F-002` `AC-1` |
+| `Parse()` | 不正な gzip データ → エラー返却 | `F-001` `AC-2` |
+| `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `F-001` `AC-3` |
+| `Parse()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `F-002` `AC-2` |
+| `Parse()` | `policies` 配列の各フィールドが正しくパースされる | `F-002` `AC-3` |
+| `Parse()` | `failure-details` フィールドが存在する場合に正しく取得できる | `F-002` `AC-4` |
 | `Parse()` | 展開サイズが上限超過 → `ErrDecompressedSizeLimitExceeded` | NFR セキュリティ |
-| `HasFailure()` | 全ポリシーレコードの total-failure-session-count が 0 → `false` | `F-003` AC-1 |
-| `HasFailure()` | いずれかのポリシーレコードの total-failure-session-count が 1 以上 → `true` | `F-003` AC-2 |
-| `HasFailure()` | `policies` が空 → `false` | `F-003` AC-3 |
+| `HasFailure()` | 全ポリシーレコードの `total-failure-session-count` が 0 → `false` | `F-003` `AC-1` |
+| `HasFailure()` | いずれかのポリシーレコードの `total-failure-session-count` が 1 以上 → `true` | `F-003` `AC-2` |
+| `HasFailure()` | `policies` が空 → `false` | `F-003` `AC-3` |
 
 ### 統合テスト
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | `testdata/` 内の実際のレポートファイルを正しくパースできる | `F-002` AC-5 |
+| `Parse()` | `testdata/` 内の実際のレポートファイルを正しくパースできる | `F-002` `AC-5` |
 
 統合テストでは `testdata/tlsrpt_google.eml` から `internal/mailparse` で抽出した `.json.gz` 添付ファイルのバイト列を使用する。
 

@@ -208,7 +208,7 @@ sequenceDiagram
 
         loop 各 Attachment（ファイル名フィルタは cmd が担当）
             cmd->>tlsrpt: Parse(attachment.Content)
-            tlsrpt-->>cmd: tlsrpt.Report
+            tlsrpt-->>cmd: *tlsrpt.Report
         end
     end
 ```
