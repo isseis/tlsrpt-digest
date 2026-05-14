@@ -25,6 +25,7 @@
 - 標準ライブラリのみ使用（外部依存を追加しない）
 - パッケージ外部への公開 API は `ExtractAttachments`・`Attachment`・`ErrSizeLimitExceeded`・`ErrMIMETooDeep` のみ
 - Go ソースコード中のコメント・識別子・文字列リテラルは英語で記述する
+- `maxBytes` の既定値 1 MB を呼び出し元で設定する作業は本タスクの対象外とし、本タスクでは呼び出し元から渡された上限値に対する挙動を実装・検証する
 
 ---
 
@@ -107,6 +108,11 @@
 - [ ] base64 デコードをストリーミングで行い、デコード済みチャンクを読み出すたびに累積サイズを更新する（AC-14）
 - [ ] 累積サイズが `maxBytes` を超えた時点で即座に `&ErrSizeLimitExceeded{Limit: maxBytes, Actual: actual}` を返す（AC-14/AC-16）
 
+#### 3-2. MIME ネスト深度制限（AC-17）
+
+- [ ] `extractParts` の再帰呼び出しごとに深度カウンタを更新する
+- [ ] 深度カウンタが `maxMultipartDepth` を超えた時点で `fmt.Errorf("%w: depth=%d limit=%d", ErrMIMETooDeep, depth, maxMultipartDepth)` を返す
+
 詳細なサイズチェックの設計は [02_architecture.md §6.2](02_architecture.md#62-サイズ上限チェックac-14ac-15) を参照。
 
 **成功基準**: `go build ./internal/mailparse/` が通ること
@@ -157,13 +163,13 @@
 
 **4-2a: ローカル動作確認（`testdata/private/tlsrpt_google.eml` 使用）**
 
-- [ ] `testdata/private/tlsrpt_google.eml` を読み込んで `ExtractAttachments` に渡し、`.json.gz` バイト列が正しく抽出できることをローカルで確認する
-- このファイルは実際のメールのため git には追加しない（`testdata/private/` は `.gitignore` 対象）
+- [ ] `TestExtractAttachments_Integration` を `testdata/private/tlsrpt_google.eml` を読み込んで `ExtractAttachments` に渡し、`.json.gz` バイト列が正しく抽出する形で実装し、ローカルで確認する。
+- `testdata/private/tlsrpt_google.eml` は実際のメールのため git には追加しない（`testdata/private/` は `.gitignore` 対象）
 
 **4-2b: 恒久テスト用加工済みデータの作成**
 
 - [ ] `testdata/private/tlsrpt_google.eml` を元に個人情報・機密情報を除去した `testdata/tlsrpt_google.eml` を作成する（加工内容は §4 テスト戦略を参照）
-- [ ] テストコードを `testdata/tlsrpt_google.eml` を読み込む形に書き換える
+- [ ] `TestExtractAttachments_Integration` を `testdata/tlsrpt_google.eml` を読み込む形に書き換える。
 - [ ] `testdata/tlsrpt_google.eml` を git に追加する
 
 #### 4-3. セキュリティテスト
@@ -235,6 +241,7 @@
 | RFC 2047 と RFC 2231 の混在ファイル名の挙動が不定 | 低 | 中 | `mime.WordDecoder` で RFC 2047 を試み、失敗時はそのまま使用する。実 `.eml` で動作を確認する |
 | `mime/multipart` の `NextPart` が EOF 以外でエラーを返す条件の見落とし | 低 | 中 | `io.EOF` のみをループ終了とし、それ以外はエラーとして伝搬する |
 | base64 のストリーミングデコード中のサイズチェックで `io.Reader` ラッパーが複雑になる | 中 | 低 | `io.LimitReader` + 手動読み取りループで実装し、超過時に `ErrSizeLimitExceeded` を返す |
+| `maxBytes` の既定値 1 MB を本パッケージ側で持ってしまい API 責務が曖昧になる | 中 | 中 | 本タスクでは `maxBytes` 引数の挙動のみ実装し、運用上の既定値設定は `cmd/tlsrpt-digest` 組み込みタスクで明示する |
 
 ---
 
@@ -256,17 +263,19 @@
 
 ### フェーズ 3
 - [ ] 累積サイズチェック（ストリーミング）を実装
+- [ ] MIME ネスト深度制限を実装
 - [ ] `maxBytes <= 0` で無制限となることを実装
 - [ ] `go build` が通ること
 
 ### フェーズ 4
 - [ ] 全 AC に対応する単体テストを実装
-- [ ] `testdata/private/tlsrpt_google.eml` でローカル動作確認（4-2a）
+- 任意: `testdata/private/tlsrpt_google.eml` でローカル動作確認（4-2a）
 - [ ] 加工済み `testdata/tlsrpt_google.eml` を作成して git に追加（4-2b）
 - [ ] 統合テストを加工済みファイルに切り替え
 - [ ] セキュリティテストを実装
 - [ ] `make test` がすべて通ること
 - [ ] `make lint` がすべて通ること
+- [ ] `make fmt` 適用後に差分がないこと
 
 ---
 
@@ -319,7 +328,7 @@
 
 ### ドキュメント完全性
 
-- [ ] 本実装計画書の全チェックボックスが完了状態になること
+- [ ] 任意手順を除く本実装計画書の全チェックボックスが完了状態になること
 
 ---
 
@@ -328,5 +337,6 @@
 実装完了後に実施すること：
 
 1. `cmd/tlsrpt-digest` に `ExtractAttachments` の呼び出しを組み込む（別タスクとして計画）
+	- このタスクで `maxBytes` の運用上の既定値 1 MB を設定し、F-002 の既定値要件を満たす
 2. 新しい送信元の TLSRPT メールが届いた場合は `testdata/private/` に保存し、加工済みデータを `testdata/` に追加する
 3. `03_implementation_plan.md` の受け入れ条件検証表に実装箇所の最終的な行番号を記入する
