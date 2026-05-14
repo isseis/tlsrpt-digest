@@ -49,6 +49,5 @@ Review checklist:
 - [ ] `make lint` passes with no errors.
 - [ ] `make test` passes with no errors.
 
-7. Push and summarize.
-- Run `git push` to push the branch.
+7. Summarize.
 - Provide a concise summary of what was implemented, which acceptance criteria were verified, and any assumptions made.
