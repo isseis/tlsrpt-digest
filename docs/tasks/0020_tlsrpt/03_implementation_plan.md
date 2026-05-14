@@ -51,6 +51,10 @@
 
 - `go build ./internal/tlsrpt/...` がエラーなしで通る
 
+#### 所要時間
+
+- 見積: 30 分 / 実績: -
+
 ---
 
 ### フェーズ 2: Parse() の実装
@@ -84,6 +88,10 @@
 
 - `go build ./internal/tlsrpt/...` がエラーなしで通る
 
+#### 所要時間
+
+- 見積: 60 分 / 実績: -
+
 ---
 
 ### フェーズ 3: Parse() のユニットテスト（`AC-01`〜`AC-09`）
@@ -98,8 +106,8 @@
 - [ ] テスト用ローカルヘルパー関数の実装（テストファイル内）
   - [ ] `gzipOf(data []byte) []byte` — バイト列を gzip 圧縮して返す（`compress/gzip` 使用）
   - [ ] `minimalValidJSON() []byte` — 最小限の有効 RFC 8460 JSON バイト列（必須フィールドを全て含む）を返す
-- [ ] `TestParse_GzipValid` — 有効な gzip 圧縮 JSON を入力し `*Report` が返ることを確認（`AC-01`, `AC-06`）
-- [ ] `TestParse_PlainJSONValid` — 有効な非圧縮 JSON を入力し `*Report` が返ることを確認（`AC-02`, `AC-06`）
+- [ ] `TestParse_GzipValid` — 有効な gzip 圧縮 JSON を入力し、エラーなしで `*Report` が返り、`Report.OrganizationName` など入力 JSON のフィールド値が正しく反映されていることを確認（`AC-01`, `AC-06`）
+- [ ] `TestParse_PlainJSONValid` — 有効な非圧縮 JSON を入力し、エラーなしで `*Report` が返り、`Report.OrganizationName` など入力 JSON のフィールド値が正しく反映されていることを確認（`AC-02`, `AC-06`）
 - [ ] `TestParse_InvalidGzip` — 不正な gzip データを入力しエラーが返ることを確認（`AC-03`）
 - [ ] `TestParse_InvalidJSONAfterDecompress` — 有効な gzip だが展開後 JSON 不正のケースでエラーを確認（`AC-04`）
 - [ ] `TestParse_SizeLimitExceeded` — gzip・非圧縮両パスでサイズ上限超過時に `ErrDecompressedSizeLimitExceeded` が返ることをサブテストで確認（`AC-05`）
@@ -110,6 +118,10 @@
 #### 完了基準
 
 - `go test -v ./internal/tlsrpt/...` が全テストパス
+
+#### 所要時間
+
+- 見積: 60 分 / 実績: -
 
 ---
 
@@ -135,6 +147,10 @@
 
 - `go test -v ./internal/tlsrpt/...` が全テストパス
 
+#### 所要時間
+
+- 見積: 30 分 / 実績: -
+
 ---
 
 ### フェーズ 5: 統合テスト（`AC-10`）
@@ -146,17 +162,22 @@
 #### 作業内容
 
 - [ ] `TestParse_RealReport` 統合テストの実装
-  - [ ] `../../testdata/tlsrpt_google.eml` を `os.Open` で開く
+  - [ ] `../../testdata/tlsrpt_google.eml` を `os.ReadFile` で読み込む（`mailparse_test.go` の統合テストパターンに倣う）
   - [ ] `net/mail.ReadMessage()` でパース
   - [ ] `mailparse.ExtractAttachments()` で全添付ファイルを抽出
-  - [ ] 添付ファイル数が 1 件以上であることを `require` で確認
-  - [ ] ファイル名が `.json.gz` または `.json` で終わる添付ファイルを対象に `tlsrpt.Parse()` を呼び出す
+  - [ ] 全添付ファイルの中から拡張子が `.json.gz` または `.json` のものをフィルタする
+  - [ ] 対象添付ファイルが 1 件以上あることを `require.NotEmpty` で確認（空の場合はテストデータの前提が崩れているため即失敗させる）
+  - [ ] 各対象添付ファイルに `tlsrpt.Parse()` を呼び出す
   - [ ] エラーなしで `*Report` が返ることを確認（`AC-10`）
   - [ ] `Report.OrganizationName` が空でないことを確認
 
 #### 完了基準
 
 - `go test -v -run TestParse_RealReport ./internal/tlsrpt/...` がパス
+
+#### 所要時間
+
+- 見積: 30 分 / 実績: -
 
 ---
 
@@ -167,6 +188,10 @@
 - [ ] `make fmt` を実行しフォーマットエラーがないことを確認
 - [ ] `make lint` を実行し lint エラーがないことを確認
 - [ ] `make test` で全テストがパスすることを確認
+
+#### 所要時間
+
+- 見積: 15 分 / 実績: -
 
 ---
 
@@ -179,6 +204,8 @@
 | M3: failure 判定完了 | フェーズ 4 | `HasFailure()` 実装 + `AC-11`〜`AC-13` のテストがパス |
 | M4: 統合テスト完了 | フェーズ 5 | `AC-10` の統合テストがパス |
 | M5: 品質確認完了 | フェーズ 6 | lint・fmt・全テストがパス |
+
+**総見積時間**: 約 3.5 時間
 
 ---
 
@@ -199,6 +226,10 @@
 ### セキュリティテスト
 
 - zip bomb テスト: `maxDecompressedSize + 1` バイトのゼロバイト列を gzip 圧縮し、`Parse()` が `ErrDecompressedSizeLimitExceeded` を返すことを確認する（`AC-05`）
+
+### 後方互換性テスト
+
+N/A — `internal/tlsrpt` は新規パッケージであり、既存の呼び出し元が存在しない。後方互換性の考慮は不要。
 
 ### テストヘルパーファイルの方針
 
@@ -254,21 +285,70 @@
 
 ## 7. 受け入れ条件の検証
 
-| AC | 検証テスト | テストファイル |
-|---|---|---|
-| `AC-01` | `TestParse_GzipValid` | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-02` | `TestParse_PlainJSONValid` | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-03` | `TestParse_InvalidGzip` | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-04` | `TestParse_InvalidJSONAfterDecompress` | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-05` | `TestParse_SizeLimitExceeded`（gzip・非圧縮サブテスト） | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-06` | `TestParse_GzipValid`, `TestParse_PlainJSONValid` | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-07` | `TestParse_MissingRequiredField`（各フィールドのサブテスト） | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-08` | `TestParse_PoliciesFields` | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-09` | `TestParse_FailureDetails` | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-10` | `TestParse_RealReport` | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-11` | `TestHasFailure_AllZero` | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-12` | `TestHasFailure_AnyNonZero` | `internal/tlsrpt/tlsrpt_test.go` |
-| `AC-13` | `TestHasFailure_EmptyPolicies` | `internal/tlsrpt/tlsrpt_test.go` |
+**`AC-01`: 有効な gzip JSON → `*Report` が返り JSON フィールド値が反映されている**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_GzipValid`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — gzip 判定・展開パス
+- 検証方法: `gzipOf(minimalValidJSON())` を `Parse()` に渡し、エラーなし・`Report.OrganizationName` が期待値と一致することを `assert` で確認
+
+**`AC-02`: 有効な非圧縮 JSON → `*Report` が返り JSON フィールド値が反映されている**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_PlainJSONValid`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — 非圧縮パス
+- 検証方法: `minimalValidJSON()` を `Parse()` に渡し、エラーなし・`Report.OrganizationName` が期待値と一致することを `assert` で確認
+
+**`AC-03`: 不正 gzip データ → エラー返却**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_InvalidGzip`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — gzip.NewReader エラー処理
+- 検証方法: 不正バイト列（gzip マジックバイトで始まるが壊れたデータ）を入力し、エラーが返ることを `require.Error` で確認
+
+**`AC-04`: 展開後 JSON 不正 → エラー返却**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_InvalidJSONAfterDecompress`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — json.Unmarshal エラー処理
+- 検証方法: `gzipOf([]byte("not json"))` を入力し、エラーが返ることを `require.Error` で確認
+
+**`AC-05`: サイズ上限超過 → `ErrDecompressedSizeLimitExceeded`**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_SizeLimitExceeded`（gzip・非圧縮サブテスト）
+- 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — サイズチェック
+- 検証方法: `maxDecompressedSize + 1` バイトのデータを各パスで渡し、`errors.AsType[*ErrDecompressedSizeLimitExceeded]` が成功することを確認
+
+**`AC-06`: 有効 RFC 8460 JSON → `tlsrpt.Report` 構造体へ正確に変換**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_GzipValid`, `TestParse_PlainJSONValid`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — json.Unmarshal と構造体定義
+- 検証方法: 各フィールドを含む JSON を入力し、返された `Report` の各フィールド値が期待値と一致することを `assert.Equal` で確認
+
+**`AC-07`: 必須フィールド欠如 → `ErrMissingRequiredField`**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_MissingRequiredField`（各フィールドのサブテスト）
+- 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` — 必須フィールド検証ブロック
+- 検証方法: 4 種の必須フィールドを個別に除いた JSON を入力し、`errors.AsType[*ErrMissingRequiredField]` が成功し `Field` が正しいフィールド名であることを確認
+
+**`AC-08`: `policies` 配列の各フィールドが正しくパースされる**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_PoliciesFields`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `PolicyRecord`・`Policy`・`Summary` 構造体定義と JSON タグ
+- 検証方法: `policies` に複数のレコードを含む JSON を入力し、`Report.Policies[0].Policy.PolicyType` 等を `assert.Equal` で確認
+
+**`AC-09`: `failure-details` フィールドが正しく取得される**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_FailureDetails`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `FailureDetail` 構造体定義と JSON タグ
+- 検証方法: `failure-details` を含む JSON を入力し、`Report.Policies[0].FailureDetails` の各フィールドを `assert.Equal` で確認
+
+**`AC-10`: 実際のレポートファイルを正しくパースできる**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_RealReport`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `Parse()` 全体
+- 検証方法: `testdata/tlsrpt_google.eml` から `.json.gz` 添付を抽出・`Parse()` し、エラーなし・`Report.OrganizationName` が空でないことを確認
+
+**`AC-11`: 全 `total-failure-session-count` が 0 → `HasFailure()` は `false`**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestHasFailure_AllZero`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `(*Report).HasFailure()`
+- 検証方法: 全ポリシーの `TotalFailureSessionCount` を 0 にした `Report` を構築し、`HasFailure()` が `false` を返すことを `assert.False` で確認
+
+**`AC-12`: いずれかの `total-failure-session-count` が 1 以上 → `HasFailure()` は `true`**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestHasFailure_AnyNonZero`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `(*Report).HasFailure()`
+- 検証方法: 複数ポリシーのうち 1 件だけ `TotalFailureSessionCount` を 1 にした `Report` を構築し、`HasFailure()` が `true` を返すことを `assert.True` で確認
+
+**`AC-13`: `Policies` が空 → `HasFailure()` は `false`**
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestHasFailure_EmptyPolicies`
+- 実装: `internal/tlsrpt/tlsrpt.go` の `(*Report).HasFailure()`
+- 検証方法: `Policies` が `nil` または空スライスの `Report` を構築し、`HasFailure()` が `false` を返すことを `assert.False` で確認
 
 ---
 
