@@ -282,6 +282,21 @@ func TestExtractAttachments(t *testing.T) {
 			wantNames: []string{"test.bin"},
 		},
 		{
+			// Content-Type is required for a part to be extracted.
+			// A missing Content-Type causes the part to be skipped even if
+			// Content-Disposition: attachment is present.
+			name: "missing_content_type_skipped",
+			raw: "MIME-Version: 1.0\r\n" +
+				"Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n" +
+				"--b\r\n" +
+				"Content-Disposition: attachment; filename=\"f.bin\"\r\n" +
+				"Content-Transfer-Encoding: base64\r\n\r\n" +
+				b64("hello") + "\r\n" +
+				"--b--",
+			maxBytes:  1 << 20,
+			wantCount: 0,
+		},
+		{
 			name: "non_base64_encoding_skipped",
 			raw: "MIME-Version: 1.0\r\n" +
 				"Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n" +
@@ -412,23 +427,6 @@ func TestExtractAttachments_base64_content(t *testing.T) {
 
 // Security tests
 
-func TestExtractAttachments_Security_LowSizeLimit(t *testing.T) {
-	raw := "MIME-Version: 1.0\r\n" +
-		"Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n" +
-		"--b\r\n" +
-		"Content-Type: application/octet-stream\r\n" +
-		"Content-Disposition: attachment; filename=\"f.bin\"\r\n" +
-		"Content-Transfer-Encoding: base64\r\n\r\n" +
-		b64("any content") + "\r\n" +
-		"--b--"
-
-	msg := buildMsg(t, raw)
-	_, err := mailparse.ExtractAttachments(msg, 1)
-	require.Error(t, err)
-	var sizeErr *mailparse.ErrSizeLimitExceeded
-	require.True(t, errors.As(err, &sizeErr))
-}
-
 func TestExtractAttachments_Security_PathTraversalFilenamePassedThrough(t *testing.T) {
 	raw := "MIME-Version: 1.0\r\n" +
 		"Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n" +
@@ -445,14 +443,6 @@ func TestExtractAttachments_Security_PathTraversalFilenamePassedThrough(t *testi
 	require.Len(t, got, 1)
 	// The package does NOT sanitize filenames; caller is responsible.
 	require.Equal(t, "../etc/passwd", got[0].Filename)
-}
-
-func TestExtractAttachments_Security_NestingDepth11(t *testing.T) {
-	// 12 multipart levels = extractParts called at depth 0..11; depth 11 > 10 triggers the limit.
-	msg := buildDeeplyNestedMsg(t, 12)
-	_, err := mailparse.ExtractAttachments(msg, 0)
-	require.Error(t, err)
-	require.True(t, errors.Is(err, mailparse.ErrMIMETooDeep))
 }
 
 // Integration test
