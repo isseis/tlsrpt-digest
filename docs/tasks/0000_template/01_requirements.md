@@ -44,7 +44,7 @@
 
 ## 3. Functional Requirements
 
-### F-001: [Feature Name]
+### `F-001`: [Feature Name]
 
 [Feature description]
 
@@ -56,7 +56,7 @@
 - `AC-04`: [Security requirement]
 - `AC-05`: [Boundary values / edge cases]
 
-### F-002: [Feature Name]
+### `F-002`: [Feature Name]
 
 [Feature description]
 
