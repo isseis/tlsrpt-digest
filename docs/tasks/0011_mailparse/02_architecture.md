@@ -139,7 +139,7 @@ flowchart TD
     CheckEnc{"Content-Transfer-Encoding<br>= base64 ?"}
     SkipEnc["スキップ（エラーなし）<br>(AC-13)"]
     DecodeBase64["base64 デコード<br>(AC-07)"]
-    DecodeErr["スキップ（ログのみ）<br>(AC-07)"]
+    DecodeErr["スキップ（戻り値では非エラー）<br>(AC-07)"]
     CheckSize{"累積サイズ ><br>maxBytes ?"}
     SizeErr["ErrSizeLimitExceeded を返す<br>(AC-14/AC-16)"]
     ExtractName["ファイル名を抽出<br>(AC-08/AC-09/AC-12)"]
@@ -195,7 +195,7 @@ sequenceDiagram
     imap-->>cmd: map[uint32]*mail.Message
 
     loop 各 *mail.Message
-        cmd->>mp: ExtractAttachments(msg, maxBytes)
+        cmd->>mp: ExtractAttachments(msg, configuredMaxBytes)
         alt 成功
             mp-->>cmd: []Attachment
         else ErrSizeLimitExceeded
@@ -234,9 +234,8 @@ type ErrSizeLimitExceeded struct {
 
 // ExtractAttachments は *mail.Message から全添付ファイルを抽出して返す（F-001）。
 //
-// maxBytes に 0 以下の値を渡した場合はサイズ制限なし（AC-15）。
-// 注意: 未初期化フィールドのゼロ値（0）も上限なしとして扱われる。
-// サイズ制限を有効にするには正の値を明示的に設定すること。
+// maxBytes は呼び出し元が与える上限値であり、通常運用では既定値 1 MB を渡す。
+// maxBytes に 0 以下の値を渡した場合のみ、明示的にサイズ制限なしとする（AC-15）。
 // 添付ファイルが存在しない場合は空スライスを返す（AC-10）。
 // Content-Type が解析不能、または multipart の boundary が不正な場合はエラーを返す（AC-11）。
 func ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)
@@ -282,9 +281,9 @@ func ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)
 | `multipart/*` の boundary 不正・パース失敗 | `fmt.Errorf("mailparse: parse multipart: %w", err)` | `AC-11` |
 | base64 デコード失敗 | デコードエラーのためスキップ（エラーは返さない） | `AC-07` |
 | 添付ファイルの累積サイズが上限を超過 | `&ErrSizeLimitExceeded{Limit: maxBytes, Actual: actual}` | `AC-14`/`AC-16` |
-| `multipart/*` のネスト深度が上限を超過 | `fmt.Errorf("mailparse: multipart nesting too deep: %w", err)` | `AC-17` |
+| `multipart/*` のネスト深度が上限を超過 | `fmt.Errorf("mailparse: multipart nesting too deep: depth=%d limit=%d", depth, maxMultipartDepth)` | `AC-17` |
 
-呼び出し元は `errors.As` で `*ErrSizeLimitExceeded` を判別し、その他のエラーはラップされた標準エラーとして処理する。
+呼び出し元は `errors.AsType[*ErrSizeLimitExceeded]` で `*ErrSizeLimitExceeded` を判別し、その他のエラーはラップされた標準エラーとして処理する。
 
 ---
 
@@ -320,7 +319,7 @@ flowchart TD
 
 | 脅威 | 対策 | 備考 |
 |---|---|---|
-| 巨大な添付ファイルによるメモリ枯渇 | デコード後バイト数を逐次チェックし、上限超過時点で処理を中断する（F-002） | デフォルト上限 1 MB（AC-14）。呼び出し元が指定可能（AC-15） |
+| 巨大な添付ファイルによるメモリ枯渇 | デコード後バイト数を逐次チェックし、上限超過時点で処理を中断する（F-002） | 既定運用値は 1 MB とし、呼び出し元が `maxBytes` に渡す。`0` 以下は明示的な無制限（AC-15） |
 | パストラバーサルファイル名（`../` 等） | 本パッケージはファイル名をサニタイズしない。パストラバーサル対策は呼び出し元の責務とする | 要件定義書 §4 セキュリティに明記 |
 | MIME bomb（深いネストによる CPU/スタック消費） | `multipart/*` の再帰深度をパッケージ内定数（デフォルト 10）で制限し、超過時はエラーを返す（F-003/AC-17） | TLSRPT レポートアドレスは DNS で公開されるため、任意の送信者が細工したメールを送れる |
 
