@@ -4,7 +4,7 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | `draft` |
+| ステータス | `approved` |
 | 作成日 | 2026-05-14 |
 | レビュー日 | 2026-05-14 |
 | レビュアー | isseis |
@@ -398,7 +398,7 @@ flowchart TD
 | `base64` 以外の `Content-Transfer-Encoding` のスキップ | AC-13 |
 | サイズ上限超過時の `ErrSizeLimitExceeded` | AC-14 |
 | `maxBytes <= 0` で上限なし | AC-15 |
-| `errors.As` で `*ErrSizeLimitExceeded` を取得 | AC-16 |
+| `errors.AsType[*ErrSizeLimitExceeded]` で `*ErrSizeLimitExceeded` を取得 | `AC-16` |
 | ネスト深度上限超過時のエラー | AC-17 |
 
 ### 統合テスト
