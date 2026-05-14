@@ -282,6 +282,7 @@ func ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)
 | `multipart/*` の boundary 不正・パース失敗 | `fmt.Errorf("mailparse: parse multipart: %w", err)` | `AC-11` |
 | base64 デコード失敗 | デコードエラーのためスキップ（エラーは返さない） | `AC-07` |
 | 添付ファイルの累積サイズが上限を超過 | `&ErrSizeLimitExceeded{Limit: maxBytes, Actual: actual}` | `AC-14`/`AC-16` |
+| `multipart/*` のネスト深度が上限を超過 | `fmt.Errorf("mailparse: multipart nesting too deep: %w", err)` | `AC-17` |
 
 呼び出し元は `errors.As` で `*ErrSizeLimitExceeded` を判別し、その他のエラーはラップされた標準エラーとして処理する。
 
@@ -296,13 +297,13 @@ flowchart TD
     classDef problem fill:#ffe6e6,stroke:#d62728,stroke-width:2px,color:#7b0000;
     classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
 
-    attacker["攻撃者<br>(悪意のある<br>メール送信者)"]
+    attacker["攻撃者<br>(DNS で公開された<br>TLSRPT アドレスへの<br>任意メール送信者)"]
     threat1["巨大な添付ファイル<br>(メモリ枯渇)"]
     threat2["パストラバーサル<br>ファイル名<br>(../etc/passwd 等)"]
-    threat3["ZIP Bomb / 多段<br>ネスト MIME<br>(CPU 消費)"]
+    threat3["MIME bomb<br>(深いネストによる<br>CPU/スタック消費)"]
     mitigation1["F-002: サイズ上限<br>デコード逐次チェック<br>(AC-14/AC-15/AC-16)"]
     mitigation2["呼び出し元の責務<br>（本パッケージは<br>サニタイズしない）"]
-    mitigation3["標準ライブラリの<br>multipart パーサーに委ねる<br>（再帰深さは制御しない）"]
+    mitigation3["F-003: ネスト深度上限<br>デフォルト 10 段<br>(AC-17)"]
 
     attacker --> threat1
     attacker --> threat2
@@ -312,7 +313,7 @@ flowchart TD
     threat3 --> mitigation3
 
     class threat1,threat2,threat3 problem
-    class mitigation1 newpkg
+    class mitigation1,mitigation3 newpkg
 ```
 
 ### 5.2 セキュリティ方針
@@ -321,7 +322,7 @@ flowchart TD
 |---|---|---|
 | 巨大な添付ファイルによるメモリ枯渇 | デコード後バイト数を逐次チェックし、上限超過時点で処理を中断する（F-002） | デフォルト上限 1 MB（AC-14）。呼び出し元が指定可能（AC-15） |
 | パストラバーサルファイル名（`../` 等） | 本パッケージはファイル名をサニタイズしない。パストラバーサル対策は呼び出し元の責務とする | 要件定義書 §4 セキュリティに明記 |
-| 多段ネスト MIME による CPU 消費 | 標準ライブラリの `mime/multipart` パーサーに委ねる。再帰深さの明示的な制限は現バージョンでは設けない | TLSRPT レポートメールは通常 2 段程度のネストに限定される |
+| MIME bomb（深いネストによる CPU/スタック消費） | `multipart/*` の再帰深度をパッケージ内定数（デフォルト 10）で制限し、超過時はエラーを返す（F-003/AC-17） | TLSRPT レポートアドレスは DNS で公開されるため、任意の送信者が細工したメールを送れる |
 
 ---
 
@@ -394,6 +395,7 @@ flowchart TD
 | サイズ上限超過時の `ErrSizeLimitExceeded` | AC-14 |
 | `maxBytes <= 0` で上限なし | AC-15 |
 | `errors.As` で `*ErrSizeLimitExceeded` を取得 | AC-16 |
+| ネスト深度上限超過時のエラー | AC-17 |
 
 ### 統合テスト
 
@@ -404,6 +406,7 @@ flowchart TD
 
 - `maxBytes = 1` など低い上限値を設定し、`ErrSizeLimitExceeded` が返ることを確認する。
 - RFC 2231 のパストラバーサル的なファイル名（`../etc/passwd`）が本パッケージでサニタイズされず そのまま返ることを確認する（呼び出し元への責務の明確化）。
+- 上限（10 段）を超えるネスト深度のメールを与えてエラーが返ることを確認する（AC-17）。
 
 ---
 
@@ -425,14 +428,15 @@ flowchart TD
 9. RFC 2231 ファイル名デコード（AC-09）
 10. RFC 2047 ファイル名デコード（AC-12）
 
-### フェーズ 3: サイズ制限（F-002）
+### フェーズ 3: サイズ制限・深度制限（F-002/F-003）
 
 11. 累積サイズチェックの組み込み（AC-14/AC-15/AC-16）
+12. ネスト深度カウンタの組み込み（AC-17）
 
 ### フェーズ 4: テスト
 
-12. 単体テスト（テーブル駆動）
-13. 統合テスト（実 `.eml` ファイル）
+13. 単体テスト（テーブル駆動）
+14. 統合テスト（実 `.eml` ファイル）
 
 ---
 
@@ -442,5 +446,4 @@ flowchart TD
 |---|---|
 | **ファイル名によるフィルタリング** | 現在は呼び出し元が担う。需要が高まれば `ExtractAttachments` にフィルタ述語（`func(Attachment) bool`）を追加するか、専用ラッパー関数を提供する。インターフェースを変えずに対応できる |
 | **quoted-printable デコードのサポート** | 現在は base64 以外をスキップ（AC-13）。将来的に対応する場合は `Content-Transfer-Encoding` の分岐に `quoted-printable` を追加するだけでよい（標準ライブラリ `mime/quotedprintable` が利用可能） |
-| **再帰深さ制限** | 現在は制限なし。TLSRPT レポートのような用途では問題にならないが、汎用ライブラリとして利用する場合は `ExtractAttachments` の第3引数にオプション構造体を追加し `MaxDepth` フィールドで制御できるようにする |
 | **ストリーミング API** | 現在は全 Attachment をメモリに保持して返す。大規模な添付ファイルを扱う場合はコールバック型またはチャネル型の API に移行できるが、現在の TLSRPT ユースケースでは F-002 のサイズ制限で十分対応可能 |
