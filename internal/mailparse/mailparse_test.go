@@ -1,6 +1,7 @@
 package mailparse_test
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -27,8 +28,8 @@ func b64(s string) string {
 	return base64.StdEncoding.EncodeToString([]byte(s))
 }
 
-// buildMultipartNested builds a multipart/mixed email with the given body depth of nested multipart layers.
-// At depth 0 it places a text/plain leaf; the attachment is placed in depth 1.
+// buildDeeplyNestedMsg builds a multipart/mixed email with the given number of nested multipart layers,
+// each wrapping a text/plain leaf at the innermost level.
 func buildDeeplyNestedMsg(t *testing.T, depth int) *mail.Message {
 	t.Helper()
 	// Build from the inside out.
@@ -451,7 +452,7 @@ func TestExtractAttachments_Integration(t *testing.T) {
 	data, err := os.ReadFile("../../testdata/tlsrpt_google.eml")
 	require.NoError(t, err)
 
-	msg, err := mail.ReadMessage(strings.NewReader(string(data)))
+	msg, err := mail.ReadMessage(bytes.NewReader(data))
 	require.NoError(t, err)
 
 	attachments, err := mailparse.ExtractAttachments(msg, 10<<20)

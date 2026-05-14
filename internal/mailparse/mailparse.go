@@ -60,14 +60,14 @@ func ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)
 	enc := msg.Header.Get("Content-Transfer-Encoding")
 	content, err := decodeContent(msg.Body, enc, maxBytes, &accumulated)
 	if err != nil {
-		if errors.As(err, new(*ErrSizeLimitExceeded)) {
+		if _, ok := errors.AsType[*ErrSizeLimitExceeded](err); ok {
 			return nil, err
 		}
 		// decode failure: skip
 		return nil, nil
 	}
 
-	filename := resolveFilename(disp, dispParams, params)
+	filename := resolveFilename(dispParams, params)
 	return []Attachment{{Filename: filename, Content: content}}, nil
 }
 
@@ -131,14 +131,14 @@ func processPart(part *multipart.Part, depth int, maxBytes int64, accumulated *i
 	enc := part.Header.Get("Content-Transfer-Encoding")
 	content, err := decodeContent(part, enc, maxBytes, accumulated)
 	if err != nil {
-		if errors.As(err, new(*ErrSizeLimitExceeded)) {
+		if _, ok := errors.AsType[*ErrSizeLimitExceeded](err); ok {
 			return nil, err
 		}
 		// base64 decode failure: skip
 		return nil, nil
 	}
 
-	filename := resolveFilename(disp, dispParams, params)
+	filename := resolveFilename(dispParams, params)
 	return []Attachment{{Filename: filename, Content: content}}, nil
 }
 
@@ -158,7 +158,7 @@ func isAttachment(disp string, contentTypeParams map[string]string) bool {
 
 // resolveFilename returns the filename for an attachment, preferring Content-Disposition filename
 // over Content-Type name, falling back to empty string.
-func resolveFilename(_ string, dispParams map[string]string, contentTypeParams map[string]string) string {
+func resolveFilename(dispParams map[string]string, contentTypeParams map[string]string) string {
 	var raw string
 	if fn, ok := dispParams["filename"]; ok {
 		raw = fn
