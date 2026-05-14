@@ -41,11 +41,11 @@
 
 `01_requirements.md` の各受け入れ条件とテストの対応を記録する。
 
-**AC-1: [F-001 の条件 1]**
+AC-1: [F-001 の条件 1]
 - テスト: `internal/xxx/yyy_test.go::TestXxx`
 - 実装: `internal/xxx/yyy.go:XX-YY`
 
-**AC-2: [F-001 の条件 2]**
+AC-2: [F-001 の条件 2]
 - テスト: `internal/xxx/yyy_test.go::TestXxx_ErrorCase`
 - 実装: `internal/xxx/yyy.go:ZZ-WW`
 
