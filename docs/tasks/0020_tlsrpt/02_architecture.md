@@ -137,46 +137,46 @@ func Parse(data []byte) (*TLSRPTReport, error)
 
 // TLSRPTReport は RFC 8460 のトップレベル構造体。
 type TLSRPTReport struct {
-    OrganizationName string
-    ReportID         string
-    DateRange        DateRange
-    Policies         []PolicyRecord
+    OrganizationName string        `json:"organization-name"`
+    ReportID         string        `json:"report-id"`
+    DateRange        DateRange     `json:"date-range"`
+    Policies         []PolicyRecord `json:"policies"`
 }
 
 // HasFailure はいずれかのポリシーレコードの failure-session-count が 1 以上のとき true を返す。
 func (r *TLSRPTReport) HasFailure() bool
 
 type DateRange struct {
-    StartDatetime time.Time
-    EndDatetime   time.Time
+    StartDatetime time.Time `json:"start-datetime"`
+    EndDatetime   time.Time `json:"end-datetime"`
 }
 
 type PolicyRecord struct {
-    Policy         Policy
-    Summary        Summary
-    FailureDetails []FailureDetail
+    Policy         Policy         `json:"policy"`
+    Summary        Summary        `json:"summary"`
+    FailureDetails []FailureDetail `json:"failure-details"`
 }
 
 type Policy struct {
-    PolicyType   string
-    PolicyString []string
-    PolicyDomain string
-    MXHost       []string
+    PolicyType   string   `json:"policy-type"`
+    PolicyString []string `json:"policy-string"`
+    PolicyDomain string   `json:"policy-domain"`
+    MXHost       []string `json:"mx-host"`
 }
 
 type Summary struct {
-    TotalSuccessfulSessionCount int64
-    TotalFailureSessionCount    int64
+    TotalSuccessfulSessionCount int64 `json:"total-successful-session-count"`
+    TotalFailureSessionCount    int64 `json:"total-failure-session-count"`
 }
 
 type FailureDetail struct {
-    ResultType            string
-    SendingMTAIP          string
-    ReceivingMXHostname   string
-    ReceivingIP           string
-    FailedSessionCount    int64
-    AdditionalInformation string
-    FailureReasonCode     string
+    ResultType            string `json:"result-type"`
+    SendingMTAIP          string `json:"sending-mta-ip"`
+    ReceivingMXHostname   string `json:"receiving-mx-hostname"`
+    ReceivingIP           string `json:"receiving-ip"`
+    FailedSessionCount    int64  `json:"failed-session-count"`
+    AdditionalInformation string `json:"additional-information"`
+    FailureReasonCode     string `json:"failure-reason-code"`
 }
 ```
 
@@ -327,22 +327,22 @@ flowchart TD
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | 有効な .json.gz → `*TLSRPTReport` が返る | F-001 AC-1, F-002 AC-1 |
-| `Parse()` | 不正な gzip データ → エラー返却 | F-001 AC-2 |
-| `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | F-001 AC-3 |
-| `Parse()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | F-002 AC-2 |
-| `Parse()` | `policies` 配列の各フィールドが正しくパースされる | F-002 AC-3 |
-| `Parse()` | `failure-details` フィールドが存在する場合に正しく取得できる | F-002 AC-4 |
+| `Parse()` | 有効な .json.gz → `*TLSRPTReport` が返る | `F-001` AC-1, `F-002` AC-1 |
+| `Parse()` | 不正な gzip データ → エラー返却 | `F-001` AC-2 |
+| `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `F-001` AC-3 |
+| `Parse()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `F-002` AC-2 |
+| `Parse()` | `policies` 配列の各フィールドが正しくパースされる | `F-002` AC-3 |
+| `Parse()` | `failure-details` フィールドが存在する場合に正しく取得できる | `F-002` AC-4 |
 | `Parse()` | 展開サイズが上限超過 → `ErrDecompressedSizeLimitExceeded` | NFR セキュリティ |
-| `HasFailure()` | 全 failure-session-count が 0 → `false` | F-003 AC-1 |
-| `HasFailure()` | いずれか 1 以上 → `true` | F-003 AC-2 |
-| `HasFailure()` | `policies` が空 → `false` | F-003 AC-3 |
+| `HasFailure()` | 全 failure-session-count が 0 → `false` | `F-003` AC-1 |
+| `HasFailure()` | いずれか 1 以上 → `true` | `F-003` AC-2 |
+| `HasFailure()` | `policies` が空 → `false` | `F-003` AC-3 |
 
 ### 統合テスト
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | `testdata/` 内の実際のレポートファイルを正しくパースできる | F-002 AC-5 |
+| `Parse()` | `testdata/` 内の実際のレポートファイルを正しくパースできる | `F-002` AC-5 |
 
 統合テストでは `testdata/tlsrpt_google.eml` から `internal/mailparse` で抽出した `.json.gz` 添付ファイルのバイト列を使用する。
 
@@ -356,19 +356,19 @@ flowchart TD
 
 ## 8. 実装優先順位
 
-### フェーズ 1: 構造体定義とパース（F-001, F-002）
+### フェーズ 1: 構造体定義とパース（`F-001`, `F-002`）
 
 1. `TLSRPTReport` および関連構造体の定義（JSON タグ含む）
 2. エラー型 `ErrDecompressedSizeLimitExceeded`・`ErrMissingRequiredField` の定義
 3. `Parse()` 関数の実装（gzip 展開 → JSON パース → 必須フィールド検証）
 4. 単体テストの実装（有効データ・不正データ・必須フィールド欠如）
 
-### フェーズ 2: failure 評価（F-003）
+### フェーズ 2: failure 評価（`F-003`）
 
 1. `HasFailure()` メソッドの実装
 2. 境界値テストの実装（0件・1件・複数件・空）
 
-### フェーズ 3: 統合テスト（F-002 AC-5）
+### フェーズ 3: 統合テスト（`F-002` AC-5）
 
 1. `testdata/tlsrpt_google.eml` を使った統合テストの実装
 
