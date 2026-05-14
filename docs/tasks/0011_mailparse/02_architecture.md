@@ -332,7 +332,7 @@ flowchart TD
     EmptyStr["Filename = 空文字列<br>(AC-08)"]
     IsRFC2231{"RFC 2231 形式?<br>(filename*=...)"}
     DecodeRFC2231["percent-decode + charset 変換<br>(AC-09)"]
-    IsRFC2047{"RFC 2047 形式?<br>(=?charset?enc?text?=)"]
+    IsRFC2047{"RFC 2047 形式?<br>(=?charset?enc?text?=)"}
     DecodeRFC2047["mime.WordDecoder でデコード<br>(AC-12)"]
     UseRaw["そのまま使用"]
     Done(["Filename 確定"])
