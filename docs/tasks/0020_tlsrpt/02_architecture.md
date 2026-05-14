@@ -30,7 +30,7 @@ flowchart LR
     classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
 
     GZ[(".json.gz<br>バイト列")]
-    PARSE["Parse()<br>internal/tlsrpt"]
+    PARSE["ParseGzip() / ParseJSON()<br>internal/tlsrpt"]
     RPT[("Report")]
     HF["HasFailure()"]
     RESULT[("bool<br>failure あり/なし")]
@@ -73,7 +73,7 @@ flowchart LR
     IMAP[("IMAP<br>メールボックス")]
     IM["internal/imap<br>MailFetcher"]
     MP["internal/mailparse<br>ExtractAttachments()"]
-    TR["internal/tlsrpt<br>Parse()"]
+    TR["internal/tlsrpt<br>ParseGzip() / ParseJSON()"]
     CMD["cmd/tlsrpt-digest"]
     NT["internal/notify<br>Notifier"]
     ST["internal/store<br>Store"]
@@ -121,6 +121,8 @@ sequenceDiagram
         else filename ends with .json
             CMD->>TR: ParseJSON(attachment.Content)
             Note over TR: サイズ上限チェック
+        else other filename
+            Note over CMD: スキップ（TLSRPT 対象外）
         end
         Note over TR: JSON パース
         Note over TR: 必須フィールド検証
@@ -369,7 +371,7 @@ flowchart TD
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | `testdata/` 内の実際のレポートファイルを正しくパースできる | `AC-10` |
+| `ParseGzip()` / `ParseJSON()` | `testdata/` 内の実際のレポートファイルを正しくパースできる | `AC-10` |
 
 統合テストでは `testdata/tlsrpt_google.eml` から `internal/mailparse` で抽出した `.json.gz` 添付ファイルのバイト列を使用する。
 
@@ -377,7 +379,7 @@ flowchart TD
 
 | テスト対象 | テストケース |
 |---|---|
-| `Parse()` | zip bomb 相当の高圧縮データ → `ErrDecompressedSizeLimitExceeded` |
+| `ParseGzip()` | zip bomb 相当の高圧縮データ → `ErrDecompressedSizeLimitExceeded` |
 
 ---
 
@@ -387,7 +389,7 @@ flowchart TD
 
 1. `Report` および関連構造体の定義（JSON タグ含む）
 2. エラー型 `ErrDecompressedSizeLimitExceeded`・`ErrMissingRequiredField` の定義
-3. `Parse()` 関数の実装（gzip 展開 → JSON パース → 必須フィールド検証）
+3. `ParseGzip()` / `ParseJSON()` 関数の実装（gzip 展開 → JSON パース → 必須フィールド検証）
 4. 単体テストの実装（有効データ・不正データ・必須フィールド欠如）
 
 ### フェーズ 2: failure 評価（`F-003`）
