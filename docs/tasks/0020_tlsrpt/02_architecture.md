@@ -18,7 +18,7 @@
 
 - **単一責任**: `internal/tlsrpt` パッケージは .json.gz の展開・RFC 8460 JSON のパース・failure_session_count の評価のみを担う。メール取得・MIME 解析・通知送信とは明確に分離する。
 - **防御的入力検証**: TLSRPT レポートは外部データとして扱い、展開サイズの上限チェックと必須フィールドの検証を行う。
-- **シンプルな公開 API**: `Parse()` 関数と `(*TLSRPTReport).HasFailure()` メソッドのみを公開する。内部処理の詳細は非公開とする。
+- **シンプルな公開 API**: `Parse()` 関数と `(*Report).HasFailure()` メソッドのみを公開する。内部処理の詳細は非公開とする。
 - **既存パッケージとの協調**: MIME 添付ファイル抽出は `internal/mailparse` が担当し、本パッケージはその結果として受け取った `[]byte` を処理する。
 
 ### 1.2 概念モデル
@@ -31,7 +31,7 @@ flowchart LR
 
     GZ[(".json.gz<br>バイト列")]
     PARSE["Parse()<br>internal/tlsrpt"]
-    RPT[("TLSRPTReport")]
+    RPT[("Report")]
     HF["HasFailure()"]
     RESULT[("bool<br>failure あり/なし")]
 
@@ -80,7 +80,7 @@ flowchart LR
 
     IMAP --> IM --> MP
     MP -->|".json.gz バイト列"| TR
-    TR -->|"*TLSRPTReport"| CMD
+    TR -->|"*Report"| CMD
     CMD --> NT
     CMD --> ST
 
@@ -116,7 +116,7 @@ sequenceDiagram
     alt パース失敗
         TR-->>CMD: nil, error
     else パース成功
-        TR-->>CMD: *TLSRPTReport, nil
+        TR-->>CMD: *Report, nil
         CMD->>TR: report.HasFailure()
         TR-->>CMD: bool
     end
@@ -135,10 +135,10 @@ sequenceDiagram
 
 ```go
 // Parse は gzip 圧縮された RFC 8460 レポートを展開・パースして返す。
-func Parse(data []byte) (*TLSRPTReport, error)
+func Parse(data []byte) (*Report, error)
 
-// TLSRPTReport は RFC 8460 のトップレベル構造体。
-type TLSRPTReport struct {
+// Report は RFC 8460 のトップレベル構造体。
+type Report struct {
     OrganizationName string        `json:"organization-name"`
     ReportID         string        `json:"report-id"`
     DateRange        DateRange     `json:"date-range"`
@@ -146,7 +146,7 @@ type TLSRPTReport struct {
 }
 
 // HasFailure はいずれかのポリシーレコードの total-failure-session-count が 1 以上のとき true を返す。
-func (r *TLSRPTReport) HasFailure() bool
+func (r *Report) HasFailure() bool
 
 type DateRange struct {
     StartDatetime time.Time `json:"start-datetime"`
@@ -188,7 +188,7 @@ RFC 8460 の JSON フィールド名はケバブケース（例: `failure-sessio
 
 | コンポーネント | 責務 | 変更種別 |
 |---|---|---|
-| `internal/tlsrpt/tlsrpt.go` | `TLSRPTReport` および関連構造体の定義、gzip 圧縮レポートのパース API、failure 判定 API、エラー型の定義 | 新規追加 |
+| `internal/tlsrpt/tlsrpt.go` | `Report` および関連構造体の定義、gzip 圧縮レポートのパース API、failure 判定 API、エラー型の定義 | 新規追加 |
 | `cmd/tlsrpt-digest/main.go` | `internal/tlsrpt` のパース結果を受け取り、通知・保存系コンポーネントへ橋渡しする統合ポイント | 既存ファイルの変更対象 |
 
 ---
@@ -242,7 +242,7 @@ flowchart TD
     SIZECHECK{"展開サイズ<br>上限チェック"}
     PARSEJSON["JSON パース"]
     VALIDATE["必須フィールド<br>検証"]
-    OK["TLSRPTReport 返却"]
+    OK["Report 返却"]
     ERRSIZE["ErrDecompressedSizeLimitExceeded"]
     ERRJSON["エラー返却<br>（不正 JSON）"]
     ERRFIELD["ErrMissingRequiredField"]
@@ -288,7 +288,7 @@ flowchart TD
     CheckJSON{"パース成功?"}
     Validate["トップレベル必須フィールドを検証<br>organization-name<br>report-id<br>date-range<br>policies"]
     CheckField{"全必須フィールド<br>存在?"}
-    ReturnOK["*TLSRPTReport を返す"]
+    ReturnOK["*Report を返す"]
     ErrSize["ErrDecompressedSizeLimitExceeded を返す"]
     ErrJSON["パース失敗を表すエラーを返す"]
     ErrField["ErrMissingRequiredField を返す"]
@@ -329,7 +329,7 @@ flowchart TD
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | 有効な .json.gz → `*TLSRPTReport` が返る | `F-001` AC-1, `F-002` AC-1 |
+| `Parse()` | 有効な .json.gz → `*Report` が返る | `F-001` AC-1, `F-002` AC-1 |
 | `Parse()` | 不正な gzip データ → エラー返却 | `F-001` AC-2 |
 | `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `F-001` AC-3 |
 | `Parse()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `F-002` AC-2 |
@@ -360,7 +360,7 @@ flowchart TD
 
 ### フェーズ 1: 構造体定義とパース（`F-001`, `F-002`）
 
-1. `TLSRPTReport` および関連構造体の定義（JSON タグ含む）
+1. `Report` および関連構造体の定義（JSON タグ含む）
 2. エラー型 `ErrDecompressedSizeLimitExceeded`・`ErrMissingRequiredField` の定義
 3. `Parse()` 関数の実装（gzip 展開 → JSON パース → 必須フィールド検証）
 4. 単体テストの実装（有効データ・不正データ・必須フィールド欠如）

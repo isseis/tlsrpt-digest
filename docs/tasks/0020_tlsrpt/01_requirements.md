@@ -31,7 +31,7 @@ TLSRPT レポートメールには .json.gz 形式の添付ファイルが含ま
 ### 対象範囲（In Scope）
 
 - .json.gz バイト列の gzip 展開
-- RFC 8460 JSON のパース（`TLSRPTReport` 構造体への変換）
+- RFC 8460 JSON のパース（`tlsrpt.Report` 構造体への変換）
 - failure_session_count の集計と評価
 - パース失敗時のエラーハンドリング
 
@@ -66,7 +66,7 @@ gzip 圧縮された JSON バイト列を展開する。
 
 **受け入れ条件（Acceptance Criteria）**:
 
-1. 有効な RFC 8460 JSON を正しく `TLSRPTReport` 構造体に変換する
+1. 有効な RFC 8460 JSON を正しく `tlsrpt.Report` 構造体に変換する
 2. 必須フィールド（`organization-name`、`report-id`、`date-range`、`policies`）が欠如している場合はエラーを返す
 3. `policies` 配列内の各ポリシーレコードが正しくパースされる
 4. `failure-details` フィールドが存在する場合、正しく取得できる
