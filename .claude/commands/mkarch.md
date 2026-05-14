@@ -14,7 +14,7 @@ Work in the following order.
 3. Verify that architecture work is allowed.
 - Check the document status in `01_requirements.md`.
 - If the status is not `approved`, do not create `02_architecture.md`.
-- In that case, stop and report that architecture work cannot begin until `01_requirements.md` is approved.
+- In that case, stop and report that architecture work cannot begin until `01_requirements.md` is `approved`.
 
 4. Read conditional guidance only when relevant.
 - Read `docs/dev/developer_guide/notification_security.md` if the feature sends notifications or handles notification destinations.

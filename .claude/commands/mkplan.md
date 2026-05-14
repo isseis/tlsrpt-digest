@@ -15,7 +15,7 @@ Work in the following order.
 3. Verify that implementation planning is allowed.
 - Check the document status in `02_architecture.md`.
 - If the status is not `approved`, do not create `03_implementation_plan.md`.
-- In that case, stop and report that implementation planning cannot begin until `02_architecture.md` is approved.
+- In that case, stop and report that implementation planning cannot begin until `02_architecture.md` is `approved`.
 
 4. Inspect the current codebase before writing the plan.
 - Check the relevant packages, tests, and test helpers under `cmd/` and `internal/`.
