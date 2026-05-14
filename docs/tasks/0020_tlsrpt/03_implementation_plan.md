@@ -109,7 +109,7 @@
 - [x] `TestParseGzip_Valid` — 有効な gzip 圧縮 JSON を入力し、エラーなしで `*Report` が返り、`Report.OrganizationName` など入力 JSON のフィールド値が正しく反映されていることを確認（`AC-01`, `AC-06`）
 - [x] `TestParseJSON_Valid` — 有効な非圧縮 JSON を入力し、エラーなしで `*Report` が返り、`Report.OrganizationName` など入力 JSON のフィールド値が正しく反映されていることを確認（`AC-02`, `AC-06`）
 - [x] `TestParseGzip_InvalidGzip` — 不正な gzip データを入力しエラーが返ることを確認（`AC-03`）
-- [x] `TestParse_InvalidJSONAfterDecompress` — 有効な gzip だが展開後 JSON 不正のケースでエラーを確認（`AC-04`）
+- [x] `TestParseGzip_InvalidJSONAfterDecompress` — 有効な gzip だが展開後 JSON 不正のケースでエラーを確認（`AC-04`）
 - [x] `TestParse_SizeLimitExceeded` — gzip・非圧縮両パスでサイズ上限超過時に `ErrDecompressedSizeLimitExceeded` が返ることをサブテストで確認（`AC-05`）
 - [x] `TestParse_MissingRequiredField` — 必須フィールド 4 種（`organization-name`・`report-id`・`date-range`・`policies`）を個別に欠如させ、`ErrMissingRequiredField` が返ることをサブテストで確認（`AC-07`）
 - [x] `TestParse_PoliciesFields` — `policies` 配列内の各フィールド（`policy-type`・`policy-domain`等）が正しくパースされることを確認（`AC-08`）
@@ -301,7 +301,7 @@ N/A — `internal/tlsrpt` は新規パッケージであり、既存の呼び出
 - 検証方法: 不正バイト列（gzip マジックバイトで始まるが壊れたデータ）を入力し、エラーが返ることを `require.Error` で確認
 
 `AC-04`: 展開後 JSON 不正 → エラー返却
-- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParse_InvalidJSONAfterDecompress`
+- テスト: `internal/tlsrpt/tlsrpt_test.go::TestParseGzip_InvalidJSONAfterDecompress`
 - 実装: `internal/tlsrpt/tlsrpt.go` の `ParseGzip()` — json.Unmarshal エラー処理
 - 検証方法: `gzipOf([]byte("not json"))` を入力し、エラーが返ることを `require.Error` で確認
 

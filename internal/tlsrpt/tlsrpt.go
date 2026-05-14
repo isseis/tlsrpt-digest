@@ -22,7 +22,9 @@ func (e *ErrDecompressedSizeLimitExceeded) Error() string {
 	return fmt.Sprintf("tlsrpt: size %d exceeds limit %d", e.Actual, e.Limit)
 }
 
-// ErrMissingRequiredField is returned when a required top-level field is absent.
+// ErrMissingRequiredField is returned when a required field is absent or zero-valued.
+// This covers missing top-level fields (e.g. organization-name, report-id, policies)
+// and missing sub-fields within required objects (e.g. start-datetime or end-datetime inside date-range).
 type ErrMissingRequiredField struct {
 	Field string
 }
@@ -39,7 +41,7 @@ type Report struct {
 	Policies         []PolicyRecord `json:"policies"`
 }
 
-// HasFailure reports whether any policy record has a non-zero total-failure-session-count.
+// HasFailure reports whether any policy record has a positive (> 0) total-failure-session-count.
 func (r *Report) HasFailure() bool {
 	for i := range r.Policies {
 		if r.Policies[i].Summary.TotalFailureSessionCount > 0 {

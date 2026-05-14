@@ -30,16 +30,20 @@ flowchart LR
     classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
 
     GZ[(".json.gz<br>バイト列")]
-    PARSE["ParseGzip() / ParseJSON()<br>internal/tlsrpt"]
+    JS[(".json<br>バイト列")]
+    PARSEG["ParseGzip()<br>internal/tlsrpt"]
+    PARSEJ["ParseJSON()<br>internal/tlsrpt"]
     RPT[("Report")]
     HF["HasFailure()"]
     RESULT[("bool<br>failure あり/なし")]
 
-    GZ --> PARSE --> RPT --> HF --> RESULT
+    GZ --> PARSEG --> RPT
+    JS --> PARSEJ --> RPT
+    RPT --> HF --> RESULT
 
-    class GZ data
+    class GZ,JS data
     class RPT data
-    class PARSE,HF newpkg
+    class PARSEG,PARSEJ,HF newpkg
     class RESULT data
 ```
 
@@ -115,28 +119,23 @@ sequenceDiagram
     CMD->>MP: ExtractAttachments(msg)
     MP-->>CMD: []Attachment
     loop 各 Attachment
-        alt filename ends with .json.gz
-            CMD->>TR: ParseGzip(attachment.Content)
-            Note over TR: gzip 展開（サイズ上限チェックあり）
-        else filename ends with .json
-            CMD->>TR: ParseJSON(attachment.Content)
-            Note over TR: サイズ上限チェック
+        alt filename ends with .json.gz または .json
+            CMD->>TR: ParseGzip() / ParseJSON()（拡張子で判断）
+            Note over TR: デコード・JSON パース・必須フィールド検証
+            alt パース失敗
+                TR-->>CMD: nil, error
+            else パース成功
+                TR-->>CMD: *Report, nil
+                CMD->>TR: report.HasFailure()
+                TR-->>CMD: bool
+                alt HasFailure() == true
+                    CMD->>CMD: 即時アラート処理（別パッケージ）
+                else HasFailure() == false
+                    CMD->>CMD: 週次サマリー蓄積（別パッケージ）
+                end
+            end
         else other filename
             Note over CMD: スキップ（TLSRPT 対象外）
-        end
-        Note over TR: JSON パース
-        Note over TR: 必須フィールド検証
-        alt パース失敗
-            TR-->>CMD: nil, error
-        else パース成功
-            TR-->>CMD: *Report, nil
-            CMD->>TR: report.HasFailure()
-            TR-->>CMD: bool
-        end
-        alt HasFailure() == true
-            CMD->>CMD: 即時アラート処理（別パッケージ）
-        else HasFailure() == false
-            CMD->>CMD: 週次サマリー蓄積（別パッケージ）
         end
     end
 ```
