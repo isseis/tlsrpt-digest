@@ -26,14 +26,14 @@ Work in the following order.
 - Apply test helper rules from `docs/dev/developer_guide/test_organization.md`:
   - If new cross-package helpers or mocks are needed, place them under `testutil/` with the correct file naming and package naming.
   - If package-internal helpers are needed, place them in `test_helpers.go` or `test_helpers_<category>.go` with `//go:build test`.
-- After each code change, run `make lint` and `make test` and fix any errors before continuing.
+- After each code change involving Go files: run `make fmt`, then `make test`, then `make lint`. Fix any errors before continuing.
 - When all items in the phase are complete, update the plan's checkboxes (`[x]` for done, `[-]` for skipped with a note) and commit.
 - Return to step 4.
 
 6. Review the implementation.
-- Run `make deadcode` and remove any dead code made obsolete by this change. Commit if changes are made.
+- Run `make deadcode` and remove any dead code made obsolete by this change. If changes were made, run `make fmt && make test && make lint`, then commit.
 - Review the diff between the current branch and its base branch against the checklist below.
-- Fix any issues found, commit, and re-run the checklist until all items pass.
+- For each issue found: fix it, run `make fmt && make test && make lint`, commit, and re-run the checklist until all items pass.
 
 Review checklist:
 - [ ] All acceptance criteria in `01_requirements.md` are satisfied by the implementation.
@@ -45,9 +45,10 @@ Review checklist:
 - [ ] No logic is reimplemented from scratch when an existing function in the codebase can be used.
 - [ ] All source comments and identifiers are in English.
 - [ ] No planning document references (e.g. `AC-01`, `F-001`) remain in source comments or string literals.
+- [ ] `make fmt` produces no diff.
 - [ ] `make lint` passes with no errors.
 - [ ] `make test` passes with no errors.
 
-7. Commit the final state.
-
-When finished, provide a concise summary of what you created and any assumptions you had to make. If your runtime instructions allow committing at this stage, commit with an English commit message after the review is complete.
+7. Push and summarize.
+- Run `git push` to push the branch.
+- Provide a concise summary of what was implemented, which acceptance criteria were verified, and any assumptions made.
