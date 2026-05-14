@@ -40,7 +40,7 @@ flowchart LR
     attachments --> tlsrpt
 
     class msg,attachments data
-    class tlsrpt process
+    class tlsrpt newpkg
     class parser newpkg
 ```
 
@@ -77,7 +77,7 @@ graph TB
 
     subgraph mailparse_pkg ["internal/mailparse/ (新規)"]
         extract["ExtractAttachments()<br>(関数)"]
-        types["Attachment 型<br>ErrSizeLimitExceeded 型"]
+        types[("Attachment 型<br>ErrSizeLimitExceeded 型")]
     end
 
     subgraph tlsrpt_pkg ["internal/tlsrpt/ (予定)"]
@@ -94,8 +94,8 @@ graph TB
     cmd --> extract
 
     class msg,types data
-    class iface,cmd,parse process
-    class extract newpkg
+    class iface,cmd process
+    class extract,parse newpkg
 ```
 
 ### 2.2 パッケージ依存関係
@@ -115,8 +115,8 @@ flowchart LR
     CMD --> TLSRPT
     MAILPARSE -.->|"依存なし"| IMAP
 
-    class CMD,IMAP,TLSRPT process
-    class MAILPARSE newpkg
+    class CMD,IMAP process
+    class MAILPARSE,TLSRPT newpkg
 ```
 
 `internal/mailparse` は `internal/imap` に依存しない。入力は `net/mail.Message`（標準ライブラリ）であり、パッケージ間の依存方向は `cmd` が両者を組み合わせる形とする。
@@ -133,11 +133,13 @@ flowchart TD
     IsMultipart{"multipart/* ?"}
     ParseMultipart["boundary でパートを分割<br>(AC-04)"]
     BoundaryErr["エラーを返す<br>(AC-11)"]
+    IsPartMultipart{"パート自体が<br>multipart/* ?"}
     CheckPart{"添付ファイル判定<br>(AC-02/AC-03)"}
     SkipPart["スキップ"]
     CheckEnc{"Content-Transfer-Encoding<br>= base64 ?"}
     SkipEnc["スキップ（エラーなし）<br>(AC-13)"]
     DecodeBase64["base64 デコード<br>(AC-07)"]
+    DecodeErr["スキップ（ログのみ）<br>(AC-07)"]
     CheckSize{"累積サイズ ><br>maxBytes ?"}
     SizeErr["ErrSizeLimitExceeded を返す<br>(AC-14/AC-16)"]
     ExtractName["ファイル名を抽出<br>(AC-08/AC-09/AC-12)"]
@@ -154,19 +156,23 @@ flowchart TD
     IsMultipart -->|"Yes"| ParseMultipart
     IsMultipart -->|"No"| TopLevelCheck
     ParseMultipart -->|"boundary 不正"| BoundaryErr
-    ParseMultipart -->|"成功"| CheckPart
+    ParseMultipart -->|"成功"| IsPartMultipart
+    IsPartMultipart -->|"Yes（再帰）"| ParseMultipart
+    IsPartMultipart -->|"No"| CheckPart
     CheckPart -->|"添付でない"| SkipPart
     CheckPart -->|"添付"| CheckEnc
     SkipPart --> HasMore
     CheckEnc -->|"base64 以外"| SkipEnc
     CheckEnc -->|"base64"| DecodeBase64
     SkipEnc --> HasMore
-    DecodeBase64 --> CheckSize
+    DecodeBase64 -->|"成功"| CheckSize
+    DecodeBase64 -->|"失敗"| DecodeErr
+    DecodeErr --> HasMore
     CheckSize -->|"超過"| SizeErr
     CheckSize -->|"OK"| ExtractName
     ExtractName --> AppendResult
     AppendResult --> HasMore
-    HasMore -->|"Yes"| CheckPart
+    HasMore -->|"Yes"| IsPartMultipart
     HasMore -->|"No"| Return
     TopLevelCheck --> CheckTopPart
     CheckTopPart -->|"条件を満たす"| CheckEnc
@@ -202,7 +208,7 @@ sequenceDiagram
 
         loop 各 Attachment（ファイル名フィルタは cmd が担当）
             cmd->>tlsrpt: Parse(attachment.Content)
-            tlsrpt-->>cmd: TLSRTPReport
+            tlsrpt-->>cmd: TLSRPTReport
         end
     end
 ```
@@ -228,7 +234,9 @@ type ErrSizeLimitExceeded struct {
 
 // ExtractAttachments は *mail.Message から全添付ファイルを抽出して返す（F-001）。
 //
-// maxBytes にゼロ以下の値を渡した場合はサイズ制限なし（AC-15）。
+// maxBytes に 0 以下の値を渡した場合はサイズ制限なし（AC-15）。
+// 注意: 未初期化フィールドのゼロ値（0）も上限なしとして扱われる。
+// サイズ制限を有効にするには正の値を明示的に設定すること。
 // 添付ファイルが存在しない場合は空スライスを返す（AC-10）。
 // Content-Type が解析不能、または multipart の boundary が不正な場合はエラーを返す（AC-11）。
 func ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)
@@ -270,10 +278,10 @@ func ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)
 
 | 状況 | エラー種別 | AC |
 |---|---|---|
-| `Content-Type` ヘッダの解析失敗 | `fmt.Errorf("mailparse: parse content-type: %w", err)` | AC-11 |
-| `multipart/*` の boundary 不正・パース失敗 | `fmt.Errorf("mailparse: parse multipart: %w", err)` | AC-11 |
-| base64 デコード失敗 | デコードエラーのためスキップ（エラーは返さない） | AC-07 |
-| 添付ファイルの累積サイズが上限を超過 | `&ErrSizeLimitExceeded{Limit: maxBytes, Actual: actual}` | AC-14/AC-16 |
+| `Content-Type` ヘッダの解析失敗 | `fmt.Errorf("mailparse: parse content-type: %w", err)` | `AC-11` |
+| `multipart/*` の boundary 不正・パース失敗 | `fmt.Errorf("mailparse: parse multipart: %w", err)` | `AC-11` |
+| base64 デコード失敗 | デコードエラーのためスキップ（エラーは返さない） | `AC-07` |
+| 添付ファイルの累積サイズが上限を超過 | `&ErrSizeLimitExceeded{Limit: maxBytes, Actual: actual}` | `AC-14`/`AC-16` |
 
 呼び出し元は `errors.As` で `*ErrSizeLimitExceeded` を判別し、その他のエラーはラップされた標準エラーとして処理する。
 
@@ -357,7 +365,7 @@ flowchart TD
 
 ### 6.2 サイズ上限チェック（AC-14/AC-15）
 
-デコード済みバイト列を `Attachment.Content` に格納するたびに累積サイズを更新し、`maxBytes > 0` かつ累積サイズが `maxBytes` を超えた時点で `ErrSizeLimitExceeded` を返して処理を中断する。メッセージ全体を先読みせずデコードしながら逐次チェックすることでメモリ効率を高める。
+サイズチェックは base64 デコードのストリーミング中に逐次的に行う。パート全体をメモリに展開してから検査するのではなく、デコードしたチャンクを読み出すたびに累積サイズを更新し、`maxBytes > 0` かつ累積サイズが `maxBytes` を超えた時点で即座に `ErrSizeLimitExceeded` を返して処理を中断する。これにより、単一の巨大な添付ファイルが完全にメモリへ読み込まれる前に処理を止めることができる。
 
 ---
 
