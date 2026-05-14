@@ -41,11 +41,11 @@
 
 #### 作業内容
 
-- [ ] `package tlsrpt` 宣言と必要な import の記述
-- [ ] `maxDecompressedSize` 定数の定義（10 MB = 10 × 1024 × 1024）
-- [ ] `ErrDecompressedSizeLimitExceeded` 構造体（`Limit`, `Actual int64` フィールド）と `Error() string` の実装
-- [ ] `ErrMissingRequiredField` 構造体（`Field string` フィールド）と `Error() string` の実装
-- [ ] `Report`・`DateRange`・`PolicyRecord`・`Policy`・`Summary`・`FailureDetail` 構造体の定義（JSON タグ含む）
+- [x] `package tlsrpt` 宣言と必要な import の記述
+- [x] `maxDecompressedSize` 定数の定義（10 MB = 10 × 1024 × 1024）
+- [x] `ErrDecompressedSizeLimitExceeded` 構造体（`Limit`, `Actual int64` フィールド）と `Error() string` の実装
+- [x] `ErrMissingRequiredField` 構造体（`Field string` フィールド）と `Error() string` の実装
+- [x] `Report`・`DateRange`・`PolicyRecord`・`Policy`・`Summary`・`FailureDetail` 構造体の定義（JSON タグ含む）
 
 #### 完了基準
 
@@ -67,22 +67,22 @@
 
 #### 作業内容
 
-- [ ] `Parse(data []byte) (*Report, error)` 関数のシグネチャ定義
-- [ ] gzip マジックバイト判定（先頭2バイトが `0x1f, 0x8b` かチェック）
-- [ ] gzip 展開パスの実装
-  - [ ] `gzip.NewReader` でリーダーを作成
-  - [ ] `io.LimitedReader{N: maxDecompressedSize + 1}` でサイズ上限を制御
-  - [ ] `io.ReadAll` で全バイト読み込み
-  - [ ] `len(decompressed) > maxDecompressedSize` の場合 `ErrDecompressedSizeLimitExceeded` を返す
-  - [ ] `gzip.NewReader` のエラーを `fmt.Errorf("tlsrpt: decompress: %w", err)` でラップ
-- [ ] 非圧縮 JSON パスの実装
-  - [ ] `len(data) > maxDecompressedSize` のサイズチェック
-  - [ ] 上限超過時は `ErrDecompressedSizeLimitExceeded` を返す
-- [ ] `encoding/json.Unmarshal` で RFC 8460 JSON を内部構造体にパース
-  - [ ] パース失敗時は `fmt.Errorf("tlsrpt: parse json: %w", err)` でラップして返す
-- [ ] 必須フィールド検証（`OrganizationName`・`ReportID`・`DateRange`・`Policies` の空値チェック）
-  - [ ] 欠如フィールドがある場合は `ErrMissingRequiredField` を返す
-- [ ] 検証成功時は `*Report` を返す
+- [x] `Parse(data []byte) (*Report, error)` 関数のシグネチャ定義
+- [x] gzip マジックバイト判定（先頭2バイトが `0x1f, 0x8b` かチェック）
+- [x] gzip 展開パスの実装
+  - [x] `gzip.NewReader` でリーダーを作成
+  - [x] `io.LimitedReader{N: maxDecompressedSize + 1}` でサイズ上限を制御
+  - [x] `io.ReadAll` で全バイト読み込み
+  - [x] `len(decompressed) > maxDecompressedSize` の場合 `ErrDecompressedSizeLimitExceeded` を返す
+  - [x] `gzip.NewReader` のエラーを `fmt.Errorf("tlsrpt: decompress: %w", err)` でラップ
+- [x] 非圧縮 JSON パスの実装
+  - [x] `len(data) > maxDecompressedSize` のサイズチェック
+  - [x] 上限超過時は `ErrDecompressedSizeLimitExceeded` を返す
+- [x] `encoding/json.Unmarshal` で RFC 8460 JSON を内部構造体にパース
+  - [x] パース失敗時は `fmt.Errorf("tlsrpt: parse json: %w", err)` でラップして返す
+- [x] 必須フィールド検証（`OrganizationName`・`ReportID`・`DateRange`・`Policies` の空値チェック）
+  - [x] 欠如フィールドがある場合は `ErrMissingRequiredField` を返す
+- [x] 検証成功時は `*Report` を返す
 
 #### 完了基準
 
@@ -102,18 +102,18 @@
 
 #### 作業内容
 
-- [ ] `package tlsrpt_test` として外部テストパッケージを作成
-- [ ] テスト用ローカルヘルパー関数の実装（テストファイル内）
-  - [ ] `gzipOf(data []byte) []byte` — バイト列を gzip 圧縮して返す（`compress/gzip` 使用）
-  - [ ] `minimalValidJSON() []byte` — 最小限の有効 RFC 8460 JSON バイト列（必須フィールドを全て含む）を返す
-- [ ] `TestParse_GzipValid` — 有効な gzip 圧縮 JSON を入力し、エラーなしで `*Report` が返り、`Report.OrganizationName` など入力 JSON のフィールド値が正しく反映されていることを確認（`AC-01`, `AC-06`）
-- [ ] `TestParse_PlainJSONValid` — 有効な非圧縮 JSON を入力し、エラーなしで `*Report` が返り、`Report.OrganizationName` など入力 JSON のフィールド値が正しく反映されていることを確認（`AC-02`, `AC-06`）
-- [ ] `TestParse_InvalidGzip` — 不正な gzip データを入力しエラーが返ることを確認（`AC-03`）
-- [ ] `TestParse_InvalidJSONAfterDecompress` — 有効な gzip だが展開後 JSON 不正のケースでエラーを確認（`AC-04`）
-- [ ] `TestParse_SizeLimitExceeded` — gzip・非圧縮両パスでサイズ上限超過時に `ErrDecompressedSizeLimitExceeded` が返ることをサブテストで確認（`AC-05`）
-- [ ] `TestParse_MissingRequiredField` — 必須フィールド 4 種（`organization-name`・`report-id`・`date-range`・`policies`）を個別に欠如させ、`ErrMissingRequiredField` が返ることをサブテストで確認（`AC-07`）
-- [ ] `TestParse_PoliciesFields` — `policies` 配列内の各フィールド（`policy-type`・`policy-domain`等）が正しくパースされることを確認（`AC-08`）
-- [ ] `TestParse_FailureDetails` — `failure-details` フィールドが存在する場合に正しく取得されることを確認（`AC-09`）
+- [x] `package tlsrpt_test` として外部テストパッケージを作成
+- [x] テスト用ローカルヘルパー関数の実装（テストファイル内）
+  - [x] `gzipOf(data []byte) []byte` — バイト列を gzip 圧縮して返す（`compress/gzip` 使用）
+  - [x] `minimalValidJSON() []byte` — 最小限の有効 RFC 8460 JSON バイト列（必須フィールドを全て含む）を返す
+- [x] `TestParse_GzipValid` — 有効な gzip 圧縮 JSON を入力し、エラーなしで `*Report` が返り、`Report.OrganizationName` など入力 JSON のフィールド値が正しく反映されていることを確認（`AC-01`, `AC-06`）
+- [x] `TestParse_PlainJSONValid` — 有効な非圧縮 JSON を入力し、エラーなしで `*Report` が返り、`Report.OrganizationName` など入力 JSON のフィールド値が正しく反映されていることを確認（`AC-02`, `AC-06`）
+- [x] `TestParse_InvalidGzip` — 不正な gzip データを入力しエラーが返ることを確認（`AC-03`）
+- [x] `TestParse_InvalidJSONAfterDecompress` — 有効な gzip だが展開後 JSON 不正のケースでエラーを確認（`AC-04`）
+- [x] `TestParse_SizeLimitExceeded` — gzip・非圧縮両パスでサイズ上限超過時に `ErrDecompressedSizeLimitExceeded` が返ることをサブテストで確認（`AC-05`）
+- [x] `TestParse_MissingRequiredField` — 必須フィールド 4 種（`organization-name`・`report-id`・`date-range`・`policies`）を個別に欠如させ、`ErrMissingRequiredField` が返ることをサブテストで確認（`AC-07`）
+- [x] `TestParse_PoliciesFields` — `policies` 配列内の各フィールド（`policy-type`・`policy-domain`等）が正しくパースされることを確認（`AC-08`）
+- [x] `TestParse_FailureDetails` — `failure-details` フィールドが存在する場合に正しく取得されることを確認（`AC-09`）
 
 #### 完了基準
 
@@ -136,12 +136,12 @@
 
 #### 作業内容
 
-- [ ] `(*Report).HasFailure() bool` メソッドの実装
-  - [ ] `r.Policies` を走査し、いずれかの `Summary.TotalFailureSessionCount > 0` の場合 `true` を返す
-  - [ ] 全て 0 または `Policies` が空の場合は `false` を返す
-- [ ] `TestHasFailure_AllZero` — 全ポリシーの `TotalFailureSessionCount` が 0 の場合 `false` を確認（`AC-11`）
-- [ ] `TestHasFailure_AnyNonZero` — いずれかが 1 以上の場合 `true` を確認（`AC-12`）
-- [ ] `TestHasFailure_EmptyPolicies` — `Policies` が空スライスの場合 `false` を確認（`AC-13`）
+- [x] `(*Report).HasFailure() bool` メソッドの実装
+  - [x] `r.Policies` を走査し、いずれかの `Summary.TotalFailureSessionCount > 0` の場合 `true` を返す
+  - [x] 全て 0 または `Policies` が空の場合は `false` を返す
+- [x] `TestHasFailure_AllZero` — 全ポリシーの `TotalFailureSessionCount` が 0 の場合 `false` を確認（`AC-11`）
+- [x] `TestHasFailure_AnyNonZero` — いずれかが 1 以上の場合 `true` を確認（`AC-12`）
+- [x] `TestHasFailure_EmptyPolicies` — `Policies` が空スライスの場合 `false` を確認（`AC-13`）
 
 #### 完了基準
 
@@ -161,15 +161,15 @@
 
 #### 作業内容
 
-- [ ] `TestParse_RealReport` 統合テストの実装
-  - [ ] `../../testdata/tlsrpt_google.eml` を `os.ReadFile` で読み込む（`mailparse_test.go` の統合テストパターンに倣う）
-  - [ ] `net/mail.ReadMessage()` でパース
-  - [ ] `mailparse.ExtractAttachments()` で全添付ファイルを抽出
-  - [ ] 全添付ファイルの中から拡張子が `.json.gz` または `.json` のものをフィルタする
-  - [ ] 対象添付ファイルが 1 件以上あることを `require.NotEmpty` で確認（空の場合はテストデータの前提が崩れているため即失敗させる）
-  - [ ] 各対象添付ファイルに `tlsrpt.Parse()` を呼び出す
-  - [ ] エラーなしで `*Report` が返ることを確認（`AC-10`）
-  - [ ] `Report.OrganizationName` が空でないことを確認
+- [x] `TestParse_RealReport` 統合テストの実装
+  - [x] `../../testdata/tlsrpt_google.eml` を `os.ReadFile` で読み込む（`mailparse_test.go` の統合テストパターンに倣う）
+  - [x] `net/mail.ReadMessage()` でパース
+  - [x] `mailparse.ExtractAttachments()` で全添付ファイルを抽出
+  - [x] 全添付ファイルの中から拡張子が `.json.gz` または `.json` のものをフィルタする
+  - [x] 対象添付ファイルが 1 件以上あることを `require.NotEmpty` で確認（空の場合はテストデータの前提が崩れているため即失敗させる）
+  - [x] 各対象添付ファイルに `tlsrpt.Parse()` を呼び出す
+  - [x] エラーなしで `*Report` が返ることを確認（`AC-10`）
+  - [x] `Report.OrganizationName` が空でないことを確認
 
 #### 完了基準
 
@@ -185,9 +185,9 @@
 
 #### 作業内容
 
-- [ ] `make fmt` を実行しフォーマットエラーがないことを確認
-- [ ] `make lint` を実行し lint エラーがないことを確認
-- [ ] `make test` で全テストがパスすることを確認
+- [x] `make fmt` を実行しフォーマットエラーがないことを確認
+- [x] `make lint` を実行し lint エラーがないことを確認
+- [x] `make test` で全テストがパスすることを確認
 
 #### 所要時間
 
@@ -260,26 +260,26 @@ N/A — `internal/tlsrpt` は新規パッケージであり、既存の呼び出
 ## 6. 実装チェックリスト
 
 ### フェーズ 1
-- [ ] `maxDecompressedSize` 定数定義済み
-- [ ] `ErrDecompressedSizeLimitExceeded` 定義済み
-- [ ] `ErrMissingRequiredField` 定義済み
-- [ ] 全構造体（`Report`・`DateRange`・`PolicyRecord`・`Policy`・`Summary`・`FailureDetail`）定義済み
+- [x] `maxDecompressedSize` 定数定義済み
+- [x] `ErrDecompressedSizeLimitExceeded` 定義済み
+- [x] `ErrMissingRequiredField` 定義済み
+- [x] 全構造体（`Report`・`DateRange`・`PolicyRecord`・`Policy`・`Summary`・`FailureDetail`）定義済み
 
 ### フェーズ 2・3
-- [ ] `Parse()` 実装済み
-- [ ] `AC-01`〜`AC-09` テスト実装済み・パス
+- [x] `Parse()` 実装済み
+- [x] `AC-01`〜`AC-09` テスト実装済み・パス
 
 ### フェーズ 4
-- [ ] `HasFailure()` 実装済み
-- [ ] `AC-11`〜`AC-13` テスト実装済み・パス
+- [x] `HasFailure()` 実装済み
+- [x] `AC-11`〜`AC-13` テスト実装済み・パス
 
 ### フェーズ 5
-- [ ] `AC-10` 統合テスト実装済み・パス
+- [x] `AC-10` 統合テスト実装済み・パス
 
 ### フェーズ 6
-- [ ] `make fmt` エラーなし
-- [ ] `make lint` エラーなし
-- [ ] `make test` 全テストパス
+- [x] `make fmt` エラーなし
+- [x] `make lint` エラーなし
+- [x] `make test` 全テストパス
 
 ---
 
