@@ -54,6 +54,11 @@ Include the following section at the top of `01_requirements.md`, `02_architectu
   - Specific and measurable
   - Independently verifiable
   - Focused on behavior, not implementation
+- Assign a **document-wide unique identifier** (`AC-01`, `AC-02`, …) to each acceptance criterion. Rules for managing identifiers:
+  - On initial creation, assign sequentially across all requirements (e.g., `F-001` gets `AC-01`–`AC-05`, `F-002` gets `AC-06`–`AC-08`)
+  - **Deletion**: remove the criterion and leave the identifier unused — gaps are permitted
+  - **Addition**: append the next available number, or use a suffix (`AC-01a`) when inserting between existing identifiers
+  - Never renumber existing identifiers — doing so would break references in the implementation plan and test code
 
 **Example format:**
 ```markdown
@@ -62,11 +67,11 @@ Include the following section at the top of `01_requirements.md`, `02_architectu
 [Feature description]
 
 **Acceptance Criteria**:
-1. [Specific observable behavior #1]
-2. [Specific observable behavior #2]
-3. [Error handling requirement]
-4. [Security requirement]
-5. [Edge case handling]
+- **AC-01**: [Specific observable behavior #1]
+- **AC-02**: [Specific observable behavior #2]
+- **AC-03**: [Error handling requirement]
+- **AC-04**: [Security requirement]
+- **AC-05**: [Edge case handling]
 ```
 
 ## 2. Architecture Design Document (`docs/tasks/XXXX_feature/02_architecture.md`)
@@ -197,12 +202,12 @@ Include the following section at the top of `01_requirements.md`, `02_architectu
 Document which tests verify each acceptance criterion in `03_implementation_plan.md`:
 
 ```markdown
-**AC-1: [First acceptance criterion]**
+**AC-01: [First acceptance criterion]**
 - Test location: `internal/package/subpackage_test.go::TestFunctionName`
 - Implementation: `internal/package/subpackage.go:123-145`
 - Verification method: [How to verify]
 
-**AC-2: [Second acceptance criterion]**
+**AC-02: [Second acceptance criterion]**
 - Test location: `internal/package/integration_test.go::TestIntegrationScenario`
 - Implementation: `internal/package/another.go:67-89`
 - Verification method: [How to verify]
@@ -210,7 +215,7 @@ Document which tests verify each acceptance criterion in `03_implementation_plan
 
 **Example test with traceability comment:**
 ```go
-// TestFoo verifies that [behavior] (requirement F-001, AC-2).
+// TestFoo verifies that [behavior] (requirement F-001, AC-02).
 func TestFoo(t *testing.T) {
     // Test implementation that verifies the specific criterion
 }
