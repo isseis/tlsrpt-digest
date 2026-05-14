@@ -41,11 +41,11 @@
 
 Record the mapping between each acceptance criterion in `01_requirements.md` and its corresponding test.
 
-`AC-1`: [Condition 1 of `F-001`]
+`AC-01`: [Condition 1 of `F-001`]
 - Test: `internal/xxx/yyy_test.go::TestXxx`
 - Implementation: `internal/xxx/yyy.go:XX-YY`
 
-`AC-2`: [Condition 2 of `F-001`]
+`AC-02`: [Condition 2 of `F-001`]
 - Test: `internal/xxx/yyy_test.go::TestXxx_ErrorCase`
 - Implementation: `internal/xxx/yyy.go:ZZ-WW`
 
