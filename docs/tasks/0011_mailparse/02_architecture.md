@@ -266,14 +266,19 @@ func ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)
 
 | コンポーネント | 責務 | 変更種別 |
 |---|---|---|
-| `internal/mailparse/mailparse.go` | `Attachment` 型・`ErrSizeLimitExceeded` 型・`ExtractAttachments` 関数の定義と実装 | 新規 |
+| `internal/mailparse/mailparse.go` | `Attachment` 型・`ErrSizeLimitExceeded` 型・`ErrMIMETooDeep` sentinel・`ExtractAttachments` 関数の定義と実装 | 新規 |
 | `internal/mailparse/mailparse_test.go` | 単体テスト（テーブル駆動）・統合テスト（実 `.eml` ファイル使用） | 新規 |
 
 ---
 
 ## 4. エラーハンドリング設計
 
-カスタムエラー型は `ErrSizeLimitExceeded` のみ定義する。その他のエラーは `fmt.Errorf("mailparse: ...: %w", err)` でコンテキストを付加してラップする。
+カスタムエラーとして `ErrSizeLimitExceeded`（struct 型）と `ErrMIMETooDeep`（sentinel var）を定義する。その他のエラーは `fmt.Errorf("mailparse: ...: %w", err)` でコンテキストを付加してラップする。
+
+```go
+// ErrMIMETooDeep は multipart/* のネスト深度が上限を超えた場合に返る sentinel エラー（AC-17）。
+var ErrMIMETooDeep = errors.New("mailparse: multipart nesting too deep")
+```
 
 | 状況 | エラー種別 | AC |
 |---|---|---|
@@ -281,9 +286,9 @@ func ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)
 | `multipart/*` の boundary 不正・パース失敗 | `fmt.Errorf("mailparse: parse multipart: %w", err)` | `AC-11` |
 | base64 デコード失敗 | デコードエラーのためスキップ（エラーは返さない） | `AC-07` |
 | 添付ファイルの累積サイズが上限を超過 | `&ErrSizeLimitExceeded{Limit: maxBytes, Actual: actual}` | `AC-14`/`AC-16` |
-| `multipart/*` のネスト深度が上限を超過 | `fmt.Errorf("mailparse: multipart nesting too deep: depth=%d limit=%d", depth, maxMultipartDepth)` | `AC-17` |
+| `multipart/*` のネスト深度が上限を超過 | `fmt.Errorf("%w: depth=%d limit=%d", ErrMIMETooDeep, depth, maxMultipartDepth)` | `AC-17` |
 
-呼び出し元は `errors.AsType[*ErrSizeLimitExceeded]` で `*ErrSizeLimitExceeded` を判別し、その他のエラーはラップされた標準エラーとして処理する。
+呼び出し元は `errors.AsType[*ErrSizeLimitExceeded]` で `*ErrSizeLimitExceeded` を、`errors.Is(err, ErrMIMETooDeep)` でネスト深度超過を判別し、その他のエラーはラップされた標準エラーとして処理する。
 
 ---
 
