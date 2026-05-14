@@ -18,6 +18,10 @@ coverage.*
 profile.cov
 coverage*.html
 
+# Temporary files
+*.swp
+*.swo
+
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
@@ -45,3 +49,6 @@ scripts/__pycache__/
 # Generated performance test configurations
 test/performance/medium_scale.toml
 test/performance/large_scale.toml
+
+# private sample
+testdata/private/
