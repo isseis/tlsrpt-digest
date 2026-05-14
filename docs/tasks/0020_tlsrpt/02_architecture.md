@@ -33,14 +33,14 @@ flowchart LR
     PARSE["Parse()<br>internal/tlsrpt"]
     RPT[("TLSRPTReport")]
     HF["HasFailure()"]
-    RESULT["bool<br>failure あり/なし"]
+    RESULT[("bool<br>failure あり/なし")]
 
     GZ --> PARSE --> RPT --> HF --> RESULT
 
     class GZ data
     class RPT data
     class PARSE,HF newpkg
-    class RESULT process
+    class RESULT data
 ```
 
 **凡例（Legend）**
@@ -98,6 +98,8 @@ flowchart LR
 | `internal/mailparse` | MIME 添付ファイル抽出 | 既存 |
 | `internal/tlsrpt` | .json.gz 展開・RFC 8460 パース・failure 判定 | **新規** |
 | `cmd/tlsrpt-digest` | エントリポイント（パース結果の利用側） | 既存（間接的に影響） |
+| `internal/notify` | 通知送信 | スコープ外（全体アーキテクチャ図の文脈として参照） |
+| `internal/store` | データ蓄積 | スコープ外（全体アーキテクチャ図の文脈として参照） |
 
 ### 2.3 データフロー / シーケンス図
 
@@ -143,7 +145,7 @@ type TLSRPTReport struct {
     Policies         []PolicyRecord `json:"policies"`
 }
 
-// HasFailure はいずれかのポリシーレコードの failure-session-count が 1 以上のとき true を返す。
+// HasFailure はいずれかのポリシーレコードの total-failure-session-count が 1 以上のとき true を返す。
 func (r *TLSRPTReport) HasFailure() bool
 
 type DateRange struct {
@@ -309,7 +311,7 @@ flowchart TD
 flowchart TD
     Start(["HasFailure() 呼び出し"])
     Loop["全 PolicyRecord を評価"]
-    Check{"failure-session-count<br>> 0?"}
+    Check{"total-failure-session-count<br>> 0?"}
     ReturnTrue["true を返す"]
     ReturnFalse["false を返す"]
 
@@ -334,8 +336,8 @@ flowchart TD
 | `Parse()` | `policies` 配列の各フィールドが正しくパースされる | `F-002` AC-3 |
 | `Parse()` | `failure-details` フィールドが存在する場合に正しく取得できる | `F-002` AC-4 |
 | `Parse()` | 展開サイズが上限超過 → `ErrDecompressedSizeLimitExceeded` | NFR セキュリティ |
-| `HasFailure()` | 全 failure-session-count が 0 → `false` | `F-003` AC-1 |
-| `HasFailure()` | いずれか 1 以上 → `true` | `F-003` AC-2 |
+| `HasFailure()` | 全ポリシーレコードの total-failure-session-count が 0 → `false` | `F-003` AC-1 |
+| `HasFailure()` | いずれかのポリシーレコードの total-failure-session-count が 1 以上 → `true` | `F-003` AC-2 |
 | `HasFailure()` | `policies` が空 → `false` | `F-003` AC-3 |
 
 ### 統合テスト
