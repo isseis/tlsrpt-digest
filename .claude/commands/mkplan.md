@@ -2,9 +2,7 @@ Your goal is to create `03_implementation_plan.md` for one task under `docs/task
 
 Work in the following order.
 
-1. Identify the target task directory.
-- If the target task directory is already clear from the current context, use it.
-- If multiple task directories are plausible and the target cannot be determined confidently, stop and report the candidate directories instead of guessing.
+1. Identify the target task directory by following the rules in `docs/dev/developer_guide/task_identification.md`.
 
 2. Read the required input documents.
 - `01_requirements.md` in the target task directory

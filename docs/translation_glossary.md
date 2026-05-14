@@ -177,6 +177,7 @@
 
 | 日本語 | English | 備考 |
 |--------|---------|------|
+| 識別子 | identifier | タスク ID などの一意の識別子 |
 | インジェクション | injection | コマンドインジェクションの文脈では "injection" |
 | 整合性 | integrity | |
 | インターフェース | interface | |
@@ -287,6 +288,7 @@
 | 本番環境 | production (environment) | |
 | 優先度 | priority | |
 | 優先順位 | priority order | |
+| 優先規則 | priority rules | 複数の選択肢から優先適用する規則 |
 | プロセス | process | |
 | 処理 | processing | |
 | プロジェクト | project | |

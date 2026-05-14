@@ -1,4 +1,4 @@
-.PHONY: build test test-integration lint fmt clean
+.PHONY: build test test-integration lint fmt deadcode clean
 
 build:
 	mkdir -p build
@@ -18,6 +18,9 @@ lint:
 
 fmt:
 	gofumpt -w .
+
+deadcode:
+	deadcode -test ./cmd/tlsrpt-digest
 
 clean:
 	rm -rf build/

@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Test Organization Guide: [EN](docs/dev/developer_guide/test_organization.md) / [JA](docs/dev/developer_guide/test_organization.ja.md) - Test helper file organization
 - Mermaid Diagram Reference: [EN](docs/dev/developer_guide/mermaid_reference.md) / [JA](docs/dev/developer_guide/mermaid_reference.ja.md) - Diagram conventions and examples
 - [Package Reference](docs/dev/developer_guide/package_reference.md) - Detailed package structure
+- [Task Identification](docs/dev/developer_guide/task_identification.md) - How slash commands identify the target task directory
 
 **Task Templates:**
 - [docs/tasks/0000_template/](docs/tasks/0000_template/) — Template files for new task directories
@@ -58,6 +59,7 @@ When translating Japanese documentation to English:
 - `make lint` - Run linter with golangci-lint
 - `golangci-lint run` - Run linter directly
 - `make fmt` - Run formatter with gofumpt
+- `make deadcode` - Detect unreachable functions via `deadcode -test ./cmd/tlsrpt-digest`
 
 ### Individual Binary Builds
 - Build tlsrpt-digest binary: `go build -o build/tlsrpt-digest -v cmd/tlsrpt-digest/main.go`
