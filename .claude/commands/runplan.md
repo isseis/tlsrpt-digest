@@ -1,27 +1,55 @@
-## Implementation
+Your goal is to implement one task under `docs/tasks/` by following its `03_implementation_plan.md`.
 
-1. Read `03_implementation_plan.md` under `docs/tasks/` and identify which steps have been completed.
-   Legend: `[ ]` not started, `[x]` done, `[-]` skipped.
-   Work on the next incomplete phase. If a phase has sub-sections (e.g. 2.1, 2.2), complete the entire phase before moving to the next.
-2. Follow the design in `02_architecture.md` when implementing.
-3. After each code change, run `make lint` and `make test` and fix any errors.
-4. At the end of each phase, update the plan's checkboxes (done → `[x]`, skipped → `[-]`) and commit.
-5. Repeat steps 1–4 until all phases are complete, then proceed to review.
+Work in the following order.
 
-## Review
+1. Identify the target task directory.
+- If the target task directory is already clear from the current context, use it.
+- If multiple task directories are plausible and the target cannot be determined confidently, stop and report the candidate directories instead of guessing.
 
-1. Run `make deadcode` and check for any dead code made obsolete by the current changes. Remove any found and commit.
-2. Review the diff between the current branch and its base branch. Check:
-   - All acceptance criteria in `01_requirements.md` are satisfied
-   - Implementation is consistent with the design in `02_architecture.md`
-   - Test coverage is sufficient (non-trivial logic, error paths, and boundary values are covered)
-   - No duplicate tests with existing tests; no tests so trivial they add no value
-   - No logic reimplemented from scratch when an existing function in the codebase can be used
-   - All comments are in English
-   - No development document references (e.g. AC-1) left in comments
-3. Fix any issues found, commit, and return to step 2. If no issues remain, proceed to PR creation.
+2. Read the required input documents.
+- `01_requirements.md` in the target task directory
+- `02_architecture.md` in the target task directory
+- `03_implementation_plan.md` in the target task directory
+- `docs/dev/developer_guide/test_organization.md`
 
-## PR Creation
+3. Verify that implementation is allowed.
+- Check the document status in `03_implementation_plan.md`.
+- If the status is not `approved`, do not begin implementing.
+- In that case, stop and report that implementation cannot begin until `03_implementation_plan.md` is `approved`.
 
-1. If a PR for this branch already exists on GitHub, run `git push` to update it.
-2. If no PR exists, run `git push` and create a draft PR.
+4. Identify the next incomplete phase.
+- Read the checkboxes in `03_implementation_plan.md`. Legend: `[ ]` not started, `[x]` done, `[-]` skipped.
+- Work on the next phase that contains at least one unchecked `[ ]` item.
+- If a phase has sub-sections, complete the entire phase before moving to the next.
+- If all phases are complete, proceed directly to the review step (step 6).
+
+5. Implement the current phase.
+- Follow the design in `02_architecture.md` when implementing.
+- Apply test helper rules from `docs/dev/developer_guide/test_organization.md`:
+  - If new cross-package helpers or mocks are needed, place them under `testutil/` with the correct file naming and package naming.
+  - If package-internal helpers are needed, place them in `test_helpers.go` or `test_helpers_<category>.go` with `//go:build test`.
+- After each code change, run `make lint` and `make test` and fix any errors before continuing.
+- When all items in the phase are complete, update the plan's checkboxes (`[x]` for done, `[-]` for skipped with a note) and commit.
+- Return to step 4.
+
+6. Review the implementation.
+- Run `make deadcode` and remove any dead code made obsolete by this change. Commit if changes are made.
+- Review the diff between the current branch and its base branch against the checklist below.
+- Fix any issues found, commit, and re-run the checklist until all items pass.
+
+Review checklist:
+- [ ] All acceptance criteria in `01_requirements.md` are satisfied by the implementation.
+- [ ] Implementation is consistent with the design in `02_architecture.md`.
+- [ ] Every acceptance criterion in `01_requirements.md` has at least one test that verifies it.
+- [ ] Test coverage is sufficient: non-trivial logic, error paths, and boundary values are covered.
+- [ ] No tests duplicate existing test coverage without good reason.
+- [ ] No tests are so trivial that they add no verification value.
+- [ ] No logic is reimplemented from scratch when an existing function in the codebase can be used.
+- [ ] All source comments and identifiers are in English.
+- [ ] No planning document references (e.g. `AC-01`, `F-001`) remain in source comments or string literals.
+- [ ] `make lint` passes with no errors.
+- [ ] `make test` passes with no errors.
+
+7. Commit the final state.
+
+When finished, provide a concise summary of what you created and any assumptions you had to make. If your runtime instructions allow committing at this stage, commit with an English commit message after the review is complete.
