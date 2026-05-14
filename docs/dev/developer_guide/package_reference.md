@@ -15,7 +15,7 @@ This document provides a detailed reference for the package structure in this co
   - `notify/`: Notification sending (planned)
   - `store/`: Data persistence (planned)
 - `docs/`: Project documentation
-- `testdata/`: Test data files
+- `testdata/`: Test data files (planned)
 
 ## Package Responsibilities
 
