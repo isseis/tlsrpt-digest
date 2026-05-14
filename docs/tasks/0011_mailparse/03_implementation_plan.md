@@ -174,7 +174,7 @@
 
 #### 4-2c: CI での統合テスト実行確認
 
-- [ ] `testdata/tlsrpt_google.eml` を git に追加した PR の CI (`test` ジョブ) で `TestExtractAttachments_Integration` が通ることを確認する
+- [x] `testdata/tlsrpt_google.eml` を git に追加した PR の CI (`test` ジョブ) で `TestExtractAttachments_Integration` が通ることを確認する
 
 なお `.github/workflows/ci.yml` の `test` ジョブは `make test`（`go test -v -tags test ./...`）を実行しており、ワークフローの変更は不要。`testdata/private/` は `.gitignore` 対象だが `testdata/tlsrpt_google.eml` はその対象外のため、PR の `check-changes` ジョブがコード変更と判定してテストが実行される。
 
