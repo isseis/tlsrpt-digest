@@ -334,19 +334,6 @@ func TestExtractAttachments(t *testing.T) {
 			wantCount: 1,
 		},
 		{
-			name: "size_limit_exceeded_error_fields",
-			raw: "MIME-Version: 1.0\r\n" +
-				"Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n" +
-				"--b\r\n" +
-				"Content-Type: application/octet-stream\r\n" +
-				"Content-Disposition: attachment; filename=\"f.bin\"\r\n" +
-				"Content-Transfer-Encoding: base64\r\n\r\n" +
-				b64("hello world") + "\r\n" +
-				"--b--",
-			maxBytes: 5,
-			wantErr:  true,
-		},
-		{
 			name: "nesting_too_deep",
 			// built separately below
 			wantErr:   true,
@@ -403,13 +390,6 @@ func TestExtractAttachments_ErrSizeLimitExceeded_Fields(t *testing.T) {
 	require.True(t, errors.As(err, &sizeErr))
 	require.Equal(t, int64(5), sizeErr.Limit)
 	require.Greater(t, sizeErr.Actual, int64(5))
-}
-
-func TestExtractAttachments_ErrMIMETooDeep_Is(t *testing.T) {
-	msg := buildDeeplyNestedMsg(t, 12)
-	_, err := mailparse.ExtractAttachments(msg, 0)
-	require.Error(t, err)
-	require.True(t, errors.Is(err, mailparse.ErrMIMETooDeep))
 }
 
 func TestExtractAttachments_base64_content(t *testing.T) {
