@@ -72,8 +72,30 @@ func TestParseJSON_InvalidJSON(t *testing.T) {
 	require.Error(t, err)
 }
 
+// maxDecompressedSize mirrors the unexported constant in the tlsrpt package.
+const maxDecompressedSize = 10 * 1024 * 1024
+
+func TestParse_SizeLimitAtBoundary(t *testing.T) {
+	// Exactly at the limit: must pass the size check (error, if any, comes from JSON parsing).
+	exact := make([]byte, maxDecompressedSize)
+
+	t.Run("ParseGzip", func(t *testing.T) {
+		_, err := tlsrpt.ParseGzip(gzipOf(exact))
+		var sizeErr *tlsrpt.ErrDecompressedSizeLimitExceeded
+		assert.False(t, errors.As(err, &sizeErr),
+			"payload at exact size limit must not trigger ErrDecompressedSizeLimitExceeded")
+	})
+
+	t.Run("ParseJSON", func(t *testing.T) {
+		_, err := tlsrpt.ParseJSON(exact)
+		var sizeErr *tlsrpt.ErrDecompressedSizeLimitExceeded
+		assert.False(t, errors.As(err, &sizeErr),
+			"payload at exact size limit must not trigger ErrDecompressedSizeLimitExceeded")
+	})
+}
+
 func TestParse_SizeLimitExceeded(t *testing.T) {
-	large := make([]byte, 10*1024*1024+1)
+	large := make([]byte, maxDecompressedSize+1)
 
 	t.Run("ParseGzip", func(t *testing.T) {
 		_, err := tlsrpt.ParseGzip(gzipOf(large))
