@@ -30,7 +30,7 @@ TLSRPT レポートメールには .json.gz 形式の添付ファイルが含ま
 
 ### 対象範囲（In Scope）
 
-- RFC 8460 JSON のデコード（gzip 圧縮・非圧縮の両形式を自動検出）
+- RFC 8460 JSON のデコード（呼び出し側がファイル名拡張子から形式を判断し `ParseGzip()` / `ParseJSON()` を呼び分ける）
 - RFC 8460 JSON のパース（`report-id` を必須フィールドとして含む `tlsrpt.Report` 構造体への変換）
 - failure_session_count の集計と評価
 - パース失敗時のエラーハンドリング

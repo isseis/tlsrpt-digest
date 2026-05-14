@@ -16,9 +16,9 @@
 
 ### 1.1 設計原則
 
-- **単一責任**: `internal/tlsrpt` パッケージは RFC 8460 JSON のデコード（gzip 自動検出）・パース・`total-failure-session-count` の評価のみを担う。メール取得・MIME 解析・通知送信とは明確に分離する。
+- **単一責任**: `internal/tlsrpt` パッケージは RFC 8460 JSON のデコード・パース・`total-failure-session-count` の評価のみを担う。メール取得・MIME 解析・通知送信とは明確に分離する。
 - **防御的入力検証**: TLSRPT レポートは外部データとして扱い、展開サイズの上限チェックと必須フィールドの検証を行う。
-- **シンプルな公開 API**: `Parse()` 関数と `(*Report).HasFailure()` メソッドのみを公開する。内部処理の詳細は非公開とする。
+- **シンプルな公開 API**: `ParseGzip()` / `ParseJSON()` 関数と `(*Report).HasFailure()` メソッドのみを公開する。内部処理の詳細は非公開とする。
 - **既存パッケージとの協調**: MIME 添付ファイル抽出は `internal/mailparse` が担当し、本パッケージはその結果として受け取った `[]byte` を処理する。
 
 ### 1.2 概念モデル

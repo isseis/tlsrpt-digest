@@ -90,13 +90,13 @@ type FailureDetail struct {
 // ParseGzip decompresses gzip data and parses it as an RFC 8460 report.
 // The caller determines the format from the attachment filename or Content-Type.
 func ParseGzip(data []byte) (*Report, error) {
-	gr, err := gzip.NewReader(
-		&io.LimitedReader{R: bytes.NewReader(data), N: int64(maxDecompressedSize) + 1},
-	)
+	gr, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("tlsrpt: decompress: %w", err)
 	}
-	decompressed, readErr := io.ReadAll(gr)
+	// Limit decompressed bytes to detect zip bombs before fully expanding.
+	lr := &io.LimitedReader{R: gr, N: int64(maxDecompressedSize) + 1}
+	decompressed, readErr := io.ReadAll(lr)
 	closeErr := gr.Close()
 	if readErr != nil {
 		return nil, fmt.Errorf("tlsrpt: decompress: %w", readErr)
@@ -136,7 +136,7 @@ func parseJSON(data []byte) (*Report, error) {
 	if r.ReportID == "" {
 		return nil, &ErrMissingRequiredField{Field: "report-id"}
 	}
-	if r.DateRange.StartDatetime.IsZero() && r.DateRange.EndDatetime.IsZero() {
+	if r.DateRange.StartDatetime.IsZero() || r.DateRange.EndDatetime.IsZero() {
 		return nil, &ErrMissingRequiredField{Field: "date-range"}
 	}
 	if r.Policies == nil {

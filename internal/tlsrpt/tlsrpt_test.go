@@ -115,11 +115,31 @@ func TestParse_MissingRequiredField(t *testing.T) {
 			}`,
 		},
 		{
-			name:  "date-range",
+			name:  "date-range absent",
 			field: "date-range",
 			json: `{
 				"organization-name": "Corp",
 				"report-id": "r1",
+				"policies": []
+			}`,
+		},
+		{
+			name:  "date-range missing start-datetime",
+			field: "date-range",
+			json: `{
+				"organization-name": "Corp",
+				"report-id": "r1",
+				"date-range": {"end-datetime":"2024-01-01T23:59:59Z"},
+				"policies": []
+			}`,
+		},
+		{
+			name:  "date-range missing end-datetime",
+			field: "date-range",
+			json: `{
+				"organization-name": "Corp",
+				"report-id": "r1",
+				"date-range": {"start-datetime":"2024-01-01T00:00:00Z"},
 				"policies": []
 			}`,
 		},
@@ -270,6 +290,10 @@ func TestParseRealReport(t *testing.T) {
 
 	require.NotEmpty(t, parsed, "no .json.gz or .json attachments found in test email")
 	for _, r := range parsed {
-		assert.NotEmpty(t, r.OrganizationName)
+		assert.NotEmpty(t, r.OrganizationName, "OrganizationName should be set")
+		assert.NotEmpty(t, r.ReportID, "ReportID should be set")
+		assert.False(t, r.DateRange.StartDatetime.IsZero(), "DateRange.StartDatetime should be set")
+		assert.False(t, r.DateRange.EndDatetime.IsZero(), "DateRange.EndDatetime should be set")
+		assert.NotNil(t, r.Policies, "Policies should not be nil")
 	}
 }
