@@ -18,10 +18,6 @@ coverage.*
 profile.cov
 coverage*.html
 
-# Temporary files
-*.swp
-*.swo
-
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
@@ -39,6 +35,7 @@ build/
 # Editor/IDE
 .vscode/
 # .idea/
+[._]*.sw[a-p]
 
 # Claude Code
 .claude/settings.local.json
@@ -50,5 +47,5 @@ scripts/__pycache__/
 test/performance/medium_scale.toml
 test/performance/large_scale.toml
 
-# private sample
+# Private test data
 testdata/private/
