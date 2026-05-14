@@ -155,9 +155,16 @@
 
 #### 4-2. 統合テスト
 
-- [ ] `testdata/private/tlsrpt_google.eml` を読み込み、`ExtractAttachments` が `.json.gz` バイト列を正しく抽出できることを確認する（実 TLSRPT メールによる検証）
+**4-2a: ローカル動作確認（`testdata/private/tlsrpt_google.eml` 使用）**
 
-`testdata/private/tlsrpt_google.eml` はリポジトリに既に存在する。
+- [ ] `testdata/private/tlsrpt_google.eml` を読み込んで `ExtractAttachments` に渡し、`.json.gz` バイト列が正しく抽出できることをローカルで確認する
+- このファイルは実際のメールのため git には追加しない（`testdata/private/` は `.gitignore` 対象）
+
+**4-2b: 恒久テスト用加工済みデータの作成**
+
+- [ ] `testdata/private/tlsrpt_google.eml` を元に個人情報・機密情報を除去した `testdata/tlsrpt_google.eml` を作成する（加工内容は §4 テスト戦略を参照）
+- [ ] テストコードを `testdata/tlsrpt_google.eml` を読み込む形に書き換える
+- [ ] `testdata/tlsrpt_google.eml` を git に追加する
 
 #### 4-3. セキュリティテスト
 
@@ -194,9 +201,22 @@
 
 ### 統合テスト方針
 
-- `testdata/private/tlsrpt_google.eml` を `os.ReadFile` で読み込み、`net/mail.ReadMessage` でパースして `ExtractAttachments` に渡す
-- 返された `[]Attachment` のファイル名が `google.com!issei.org!...!001.json.gz` であることを確認する
-- 返された `Content` が非空であることを確認する（gzip ヘッダ `\x1f\x8b` で始まることも確認可）
+テストデータは **2 段階** で管理する。
+
+**フェーズ 4-2a（動作確認用）**: `testdata/private/tlsrpt_google.eml` を使って実装が正しく動くことをローカルで確認する。このファイルは実際のメールのため **git リポジトリには追加しない**（`.gitignore` の `testdata/private/` ディレクトリで除外）。
+
+**フェーズ 4-2b（恒久テスト用）**: 動作確認後、`testdata/private/tlsrpt_google.eml` から個人情報・機密情報を除去した加工済みファイルを `testdata/tlsrpt_google.eml` として作成し、こちらを git に追加する。テストコードはこの加工済みファイルを使用する。
+
+加工の内容：
+- メールアドレスを `@example.com` ドメインに置換
+- メールヘッダ中の実際のメールサーバー名・ホスト名を `mail.example.com` 等に置換
+- IP アドレスを `192.0.2.x`（TEST-NET-1）に置換
+- 添付ファイル名のドメイン部分を `example.com` に置換
+- base64 エンコードされた添付ファイルの中身は **変更しない**（gzip/JSON 構造を維持するため）
+
+統合テストの確認内容：
+- 返された `[]Attachment` のファイル名が期待値と一致すること
+- 返された `Content` が非空で、gzip ヘッダ（`\x1f\x8b`）で始まること
 - ビルドタグは不要（`go test ./...` で実行）
 
 ### テストヘルパーファイル
@@ -241,7 +261,9 @@
 
 ### フェーズ 4
 - [ ] 全 AC に対応する単体テストを実装
-- [ ] 統合テスト（実 `.eml`）を実装
+- [ ] `testdata/private/tlsrpt_google.eml` でローカル動作確認（4-2a）
+- [ ] 加工済み `testdata/tlsrpt_google.eml` を作成して git に追加（4-2b）
+- [ ] 統合テストを加工済みファイルに切り替え
 - [ ] セキュリティテストを実装
 - [ ] `make test` がすべて通ること
 - [ ] `make lint` がすべて通ること
@@ -274,7 +296,7 @@
 
 | シナリオ | テスト名 | 検証内容 |
 |---|---|---|
-| 実際の TLSRPT レポートメール | `TestExtractAttachments_Integration` | `testdata/private/tlsrpt_google.eml` から `.json.gz` が抽出できる |
+| 実際の TLSRPT レポートメール（加工済み） | `TestExtractAttachments_Integration` | `testdata/tlsrpt_google.eml` から `.json.gz` が抽出できる |
 
 ---
 
@@ -306,5 +328,5 @@
 実装完了後に実施すること：
 
 1. `cmd/tlsrpt-digest` に `ExtractAttachments` の呼び出しを組み込む（別タスクとして計画）
-2. `testdata/private/` の `.eml` ファイルを追加する（新しい送信元の TLSRPT メールが届いた場合）
+2. 新しい送信元の TLSRPT メールが届いた場合は `testdata/private/` に保存し、加工済みデータを `testdata/` に追加する
 3. `03_implementation_plan.md` の受け入れ条件検証表に実装箇所の最終的な行番号を記入する
