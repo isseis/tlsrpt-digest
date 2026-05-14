@@ -88,46 +88,58 @@ func extractParts(r io.Reader, boundary string, depth int, maxBytes int64, accum
 			return nil, fmt.Errorf("mailparse: parse multipart: %w", err)
 		}
 
-		partContentType := part.Header.Get("Content-Type")
-		mediaType, params, err := mime.ParseMediaType(partContentType)
-		if err != nil {
-			// Skip unparseable part content-type
-			_ = part.Close()
-			continue
+		attachments, partErr := processPart(part, depth, maxBytes, accumulated)
+		if partErr != nil {
+			return nil, partErr
 		}
-
-		if strings.HasPrefix(mediaType, "multipart/") {
-			nested, nestedErr := extractParts(part, params["boundary"], depth+1, maxBytes, accumulated)
-			_ = part.Close()
-			if nestedErr != nil {
-				return nil, nestedErr
-			}
-			results = append(results, nested...)
-			continue
-		}
-
-		disp, dispParams, _ := mime.ParseMediaType(part.Header.Get("Content-Disposition"))
-		if !isAttachment(disp, params) {
-			_ = part.Close()
-			continue
-		}
-
-		enc := part.Header.Get("Content-Transfer-Encoding")
-		content, err := decodeContent(part, enc, maxBytes, accumulated)
-		_ = part.Close()
-		if err != nil {
-			if errors.As(err, new(*ErrSizeLimitExceeded)) {
-				return nil, err
-			}
-			// base64 decode failure: skip
-			continue
-		}
-
-		filename := resolveFilename(disp, dispParams, params)
-		results = append(results, Attachment{Filename: filename, Content: content})
+		results = append(results, attachments...)
 	}
 
 	return results, nil
+}
+
+func processPart(part *multipart.Part, depth int, maxBytes int64, accumulated *int64) ([]Attachment, error) {
+	defer func() {
+		_ = part.Close()
+	}()
+
+	contentType := part.Header.Get("Content-Type")
+	if contentType == "" {
+		// Keep existing behavior: skip parts without Content-Type.
+		return nil, nil
+	}
+
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		// Skip unparseable part content-type.
+		return nil, nil
+	}
+
+	if strings.HasPrefix(mediaType, "multipart/") {
+		nested, err := extractParts(part, params["boundary"], depth+1, maxBytes, accumulated)
+		if err != nil {
+			return nil, err
+		}
+		return nested, nil
+	}
+
+	disp, dispParams, _ := mime.ParseMediaType(part.Header.Get("Content-Disposition"))
+	if !isAttachment(disp, params) {
+		return nil, nil
+	}
+
+	enc := part.Header.Get("Content-Transfer-Encoding")
+	content, err := decodeContent(part, enc, maxBytes, accumulated)
+	if err != nil {
+		if errors.As(err, new(*ErrSizeLimitExceeded)) {
+			return nil, err
+		}
+		// base64 decode failure: skip
+		return nil, nil
+	}
+
+	filename := resolveFilename(disp, dispParams, params)
+	return []Attachment{{Filename: filename, Content: content}}, nil
 }
 
 // isAttachment returns true if the part should be treated as an attachment.
