@@ -404,7 +404,7 @@
 - [ ] `--dry-run` + URL 未設定の場合: `BuildHandlers` に `IsDryRun=true` を渡したうえで空 URL も許容するモード（`DryRunNoURL`）で呼び出し、URL 検証をスキップして DebugLogger 専用ハンドラを生成する（AC-38「Webhook URL を設定せずに確認」の実現）
 - [ ] Phase 2 の Slack ハンドラ追加は `slog.Logger` が不変であることを前提にロガー再構築で行う。ハンドラの fan-out は `cmd/tlsrpt-digest` 側の bootstrap 補助コードへ閉じ込め、`internal/notify` に新しい合成責務を追加しない
 - [ ] `--dry-run` フラグを CLI に追加し、`SlackHandlerOptions.IsDryRun` に渡す
-- [ ] `runID` を `crypto/rand` と `encoding/hex` などの標準ライブラリで生成する（プロセス起動ごとに衝突しにくい固定長識別子）
+- [ ] `runID` を `github.com/oklog/ulid/v2` の `ulid.Make().String()` で生成する（毎回 unique な ULID。プロセス再起動や複数同時実行でも衝突しない）
 
 **成功基準**: Phase 1 の補助関数は Slack ハンドラ 0 件でローカル出力のみを返す。Phase 2 後は `BuildHandlers` の結果を束ねたロガーへ再構築され、期待する Slack ハンドラ数と `allowed_host` 伝播をテストで確認できる。
 
@@ -525,10 +525,10 @@
 ## 6. 実装チェックリスト
 
 ### Phase 1
-- [ ] Step 1-1: TOML 設定追加・strict decode（`AC-26a`）
-- [ ] Step 1-2: エラー型定義（`AC-04`, `AC-05`, `AC-30`, `AC-31`, `AC-35`）
-- [ ] Step 1-3: コア型・オプション定義（`AC-37`, `AC-18`）
-- [ ] Step 1-4: URL・環境変数検証（`AC-06`〜`AC-10`, `AC-21`〜`AC-26`）
+- [x] Step 1-1: TOML 設定追加・strict decode（`AC-26a`）
+- [x] Step 1-2: エラー型定義（`AC-04`, `AC-05`, `AC-30`, `AC-31`, `AC-35`）
+- [x] Step 1-3: コア型・オプション定義（`AC-37`, `AC-18`）
+- [x] Step 1-4: URL・環境変数検証（`AC-06`〜`AC-10`, `AC-21`〜`AC-26`）
 
 ### Phase 2
 - [ ] Step 2-1: Slack API ペイロード型（`AC-20i`）
