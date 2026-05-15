@@ -245,11 +245,20 @@ type BackoffConfig struct {
     RetryCount int
 }
 
+// PolicyType は RFC 8460 で定義された policy-type 値を表す型。
+type PolicyType string
+
+const (
+    PolicyTypeSTS          PolicyType = "sts"
+    PolicyTypeTLSA         PolicyType = "tlsa"
+    PolicyTypeNoPolicyFound PolicyType = "no-policy-found"
+)
+
 // Alert は即時アラート（TLS failure）の通知ペイロード。
 // public フィールドのみ含み、機密情報は含まない。
 type Alert struct {
     OrganizationName string
-    PolicyType       string // "sts" / "tlsa" / "no-policy-found"
+    PolicyType       PolicyType
     FailureCount     int64
     DateRange        tlsrpt.DateRange
 }
