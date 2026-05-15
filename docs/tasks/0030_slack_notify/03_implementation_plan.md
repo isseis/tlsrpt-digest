@@ -103,7 +103,7 @@
 - [ ] `LevelMode` 型（`string` 基底）と定数 `LevelModeExactInfo`、`LevelModeWarnAndAbove` を定義する
 - [ ] `BackoffConfig` 構造体（`Base time.Duration`, `RetryCount int`）を定義する
 - [ ] `DefaultBackoffConfig` 変数（Base: 2s, RetryCount: 3）を定義する
-- [ ] `SlackHandlerOptions` 構造体を定義する（`WebhookURL config.Secret`, `AllowedHost string`, `RunID string`, `LevelMode LevelMode`, `IsDryRun bool`, `BackoffConfig BackoffConfig`, `DebugLogger *slog.Logger`, `HTTPClient *http.Client`）。`DebugLogger` は dry-run ログ・送信失敗ログの出力先（`nil` の場合は無音）。`HTTPClient` はテスト用 TLS クライアント注入用（`nil` の場合はデフォルト 5 秒タイムアウト）
+- [ ] `SlackHandlerOptions` 構造体を定義する（`WebhookURL config.Secret`, `AllowedHost string`, `RunID string`, `LevelMode LevelMode`, `IsDryRun bool`, `BackoffConfig BackoffConfig`, `DebugLogger *slog.Logger`, `HTTPClient *http.Client`）。`DebugLogger` は dry-run ログ・送信失敗ログの出力先（`nil` の場合は無音）。`HTTPClient` はテスト用 TLS クライアント注入用（`nil` の場合はデフォルト 5 秒タイムアウト）。AC-27 の 5 秒タイムアウトは注入された `HTTPClient` の `Timeout` ではなく、retry.go がリクエストごとに付与する `context` デッドライン（`context.WithTimeout`）で保証するため、注入クライアントが `Timeout == 0` でも AC-27 は満たされる
 - [ ] `PolicyType` 型と定数（`PolicyTypeSTS`, `PolicyTypeTLSA`, `PolicyTypeNoPolicyFound`, `PolicyTypeUnknown`）を定義する
 - [ ] `DateRange` 構造体（`Start, End time.Time`）を定義する
 - [ ] `Alert` 構造体を定義する（`OrganizationName string`, `PolicyType PolicyType`, `FailureCount int64`, `DateRange DateRange`）
@@ -190,7 +190,7 @@
 **対象ファイル**: `internal/notify/retry.go`
 
 - [ ] Slack Webhook への POST 処理を実装する
-- [ ] タイムアウトを 5 秒に設定する
+- [ ] 各 HTTP リクエストに `context.WithTimeout(ctx, 5*time.Second)` でデッドラインを付与する（`http.Client.Timeout` ではなくコンテキストで制御することで、注入された `HTTPClient` の `Timeout` 設定に依存せず AC-27 を保証する）
 - [ ] 5xx / 429 / リクエスト発行失敗をリトライ対象にする
 - [ ] `Retry-After` ヘッダーがある場合はその値（秒単位の整数）を優先して待機し、ない場合は指数バックオフを使う。Slack は秒整数のみ返すが、パース失敗時はバックオフにフォールバックする（HTTP-date 形式は Slack では使用されないためスコープ外）
 - [ ] 累積待機時間を追跡し、残り余裕（例: `30s - 既払い待機時間`）が次の待機に満たない場合は次のリトライを行わず即エラーにする。これにより `5s × 4 + 待機 ≤ 34s` の保証が維持される

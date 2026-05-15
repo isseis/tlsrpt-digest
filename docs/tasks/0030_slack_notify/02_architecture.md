@@ -162,13 +162,13 @@ sequenceDiagram
         Note over M: ローカル出力のみで継続
     else 両方未設定 かつ --dry-run（AC-38）
         Note over M: URL 検証をスキップし DebugLogger 専用ハンドラを生成する
-        M->>N: BuildHandlers("", "", "", DryRunNoURL)
+        M->>N: BuildHandlers("", "", "", DryRunNoURL opts)
         N-->>M: DebugLogger 専用ハンドラ（HTTP POST なし）
     else error のみ or 両方設定（AC-06, AC-07, AC-10）
         N-->>M: 継続
         M->>C: LoadTOML()
         C-->>M: config.allowed_host
-        M->>N: BuildHandlers(allowed_host, successURL, errorURL, dryRun)
+        M->>N: BuildHandlers(successURL, errorURL, allowedHost, opts)
         alt URL 検証失敗（AC-21〜AC-25, AC-35）
             N-->>M: 設定エラーで起動中断
         else 検証成功（AC-34, AC-36, AC-37, AC-39）
@@ -238,8 +238,9 @@ type SlackHandlerOptions struct {
     LevelMode     LevelMode
     IsDryRun      bool
     BackoffConfig BackoffConfig
-    DebugLogger   *slog.Logger  // dry-run ログ・送信失敗ログの出力先（nil の場合は無音）
-    HTTPClient    *http.Client  // テスト用 TLS クライアント注入用（nil の場合はデフォルト 5 秒タイムアウト）
+    DebugLogger   *slog.Logger  // output for dry-run and failure logs; silent when nil
+    HTTPClient    *http.Client  // injected for testing (e.g. TLS trust); nil uses a default 5-second timeout client.
+                                // AC-27 is enforced via per-request context deadline regardless of injected client.
 }
 
 // LevelMode は SlackHandler のレベルフィルタリングモードを定義する。
