@@ -32,7 +32,7 @@ flowchart LR
 
     msg[("*mail.Message<br>(MIME ストリーム)")]
     parser["mailparse<br>ExtractAttachments()"]
-    attachments[("[]Attachment<br>(ファイル名 + バイト列)")]
+    attachments[("[]Attachment<br>(ファイル名 + ContentType + バイト列)")]
     tlsrpt["tlsrpt<br>(予定)"]
 
     msg --> parser
@@ -222,8 +222,9 @@ sequenceDiagram
 ```go
 // Attachment は1件の添付ファイルを表す。
 type Attachment struct {
-    Filename string // ファイル名（空文字列の場合あり、AC-08）
-    Content  []byte // デコード後のバイト列
+    Filename    string // ファイル名（空文字列の場合あり、AC-08）
+    ContentType string // MIME メディアタイプ（例: "application/tlsrpt+gzip"）
+    Content     []byte // デコード後のバイト列
 }
 
 // ErrSizeLimitExceeded は添付ファイルの累積サイズが上限を超えた場合に返るエラー型（AC-16）。

@@ -46,6 +46,7 @@ linters:
             - github.com/isseis/tlsrpt-digest/internal/config
             - github.com/isseis/tlsrpt-digest/internal/imap
             - github.com/isseis/tlsrpt-digest/internal/mailparse
+            - github.com/isseis/tlsrpt-digest/internal/tlsrpt
             - github.com/pelletier/go-toml/v2
             - github.com/stretchr/testify/assert
             - github.com/stretchr/testify/require
@@ -64,6 +65,8 @@ linters:
             - $gostd
             - github.com/isseis/tlsrpt-digest/internal/config
             - github.com/isseis/tlsrpt-digest/internal/imap
+            - github.com/isseis/tlsrpt-digest/internal/mailparse
+            - github.com/isseis/tlsrpt-digest/internal/tlsrpt
             - github.com/emersion/go-imap
             - github.com/emersion/go-imap/client
 

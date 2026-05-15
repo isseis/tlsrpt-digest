@@ -16,9 +16,9 @@
 
 ### 1.1 設計原則
 
-- **単一責任**: `internal/tlsrpt` パッケージは RFC 8460 JSON のデコード（gzip 自動検出）・パース・`total-failure-session-count` の評価のみを担う。メール取得・MIME 解析・通知送信とは明確に分離する。
+- **単一責任**: `internal/tlsrpt` パッケージは RFC 8460 JSON のデコード・パース・`total-failure-session-count` の評価のみを担う。メール取得・MIME 解析・通知送信とは明確に分離する。
 - **防御的入力検証**: TLSRPT レポートは外部データとして扱い、展開サイズの上限チェックと必須フィールドの検証を行う。
-- **シンプルな公開 API**: `Parse()` 関数と `(*Report).HasFailure()` メソッドのみを公開する。内部処理の詳細は非公開とする。
+- **シンプルな公開 API**: `ParseGzip()` / `ParseJSON()` 関数と `(*Report).HasFailure()` メソッドのみを公開する。内部処理の詳細は非公開とする。
 - **既存パッケージとの協調**: MIME 添付ファイル抽出は `internal/mailparse` が担当し、本パッケージはその結果として受け取った `[]byte` を処理する。
 
 ### 1.2 概念モデル
@@ -30,16 +30,20 @@ flowchart LR
     classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
 
     GZ[(".json.gz<br>バイト列")]
-    PARSE["Parse()<br>internal/tlsrpt"]
+    JS[(".json<br>バイト列")]
+    PARSEG["ParseGzip()<br>internal/tlsrpt"]
+    PARSEJ["ParseJSON()<br>internal/tlsrpt"]
     RPT[("Report")]
     HF["HasFailure()"]
     RESULT[("bool<br>failure あり/なし")]
 
-    GZ --> PARSE --> RPT --> HF --> RESULT
+    GZ --> PARSEG --> RPT
+    JS --> PARSEJ --> RPT
+    RPT --> HF --> RESULT
 
-    class GZ data
+    class GZ,JS data
     class RPT data
-    class PARSE,HF newpkg
+    class PARSEG,PARSEJ,HF newpkg
     class RESULT data
 ```
 
@@ -73,7 +77,7 @@ flowchart LR
     IMAP[("IMAP<br>メールボックス")]
     IM["internal/imap<br>MailFetcher"]
     MP["internal/mailparse<br>ExtractAttachments()"]
-    TR["internal/tlsrpt<br>Parse()"]
+    TR["internal/tlsrpt<br>ParseGzip() / ParseJSON()"]
     CMD["cmd/tlsrpt-digest"]
     NT["internal/notify<br>Notifier"]
     ST["internal/store<br>Store"]
@@ -114,22 +118,24 @@ sequenceDiagram
 
     CMD->>MP: ExtractAttachments(msg)
     MP-->>CMD: []Attachment
-    loop 各 .json.gz Attachment
-        CMD->>TR: Parse(attachment.Content)
-        Note over TR: gzip 展開（サイズ上限チェックあり）
-        Note over TR: JSON パース
-        Note over TR: 必須フィールド検証
-        alt パース失敗
-            TR-->>CMD: nil, error
-        else パース成功
-            TR-->>CMD: *Report, nil
-            CMD->>TR: report.HasFailure()
-            TR-->>CMD: bool
-        end
-        alt HasFailure() == true
-            CMD->>CMD: 即時アラート処理（別パッケージ）
-        else HasFailure() == false
-            CMD->>CMD: 週次サマリー蓄積（別パッケージ）
+    loop 各 Attachment
+        alt filename ends with .json.gz または .json
+            CMD->>TR: ParseGzip() / ParseJSON()（拡張子で判断）
+            Note over TR: デコード・JSON パース・必須フィールド検証
+            alt パース失敗
+                TR-->>CMD: nil, error
+            else パース成功
+                TR-->>CMD: *Report, nil
+                CMD->>TR: report.HasFailure()
+                TR-->>CMD: bool
+                alt HasFailure() == true
+                    CMD->>CMD: 即時アラート処理（別パッケージ）
+                else HasFailure() == false
+                    CMD->>CMD: 週次サマリー蓄積（別パッケージ）
+                end
+            end
+        else other filename
+            Note over CMD: スキップ（TLSRPT 対象外）
         end
     end
 ```
@@ -141,8 +147,12 @@ sequenceDiagram
 ### 3.1 インターフェース・型定義
 
 ```go
-// Parse は gzip 圧縮された RFC 8460 レポートを展開・パースして返す。
-func Parse(data []byte) (*Report, error)
+// ParseGzip decompresses gzip data and parses it as an RFC 8460 report.
+// The caller determines the format from the attachment filename or Content-Type.
+func ParseGzip(data []byte) (*Report, error)
+
+// ParseJSON parses plain JSON data as an RFC 8460 report.
+func ParseJSON(data []byte) (*Report, error)
 
 // Report は RFC 8460 のトップレベル構造体。
 type Report struct {
@@ -284,16 +294,18 @@ flowchart TD
 
 ## 6. 処理フロー詳細
 
-### 6.1 Parse() の処理フロー
+### 6.1 ParseGzip() / ParseJSON() の処理フロー
 
 ```mermaid
 flowchart TD
-    Start(["Parse(data []byte) 呼び出し"])
-    DetectFormat{"先頭2バイトが<br>gzip マジックバイト?<br>0x1f 0x8b"}
+    classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
+
+    StartG(["ParseGzip(data []byte) 呼び出し"])
+    StartJ(["ParseJSON(data []byte) 呼び出し"])
     Decompress["gzip 展開<br>サイズ上限を監視"]
-    CheckSize{"展開サイズ<br>上限超過?"}
-    CheckSizeRaw{"データサイズ<br>上限超過?"}
-    ParseJSON["RFC 8460 JSON を<br>構造体へ変換"]
+    CheckSizeG{"展開サイズ<br>上限超過?"}
+    CheckSizeJ{"データサイズ<br>上限超過?"}
+    ParseJSONNode["RFC 8460 JSON を<br>構造体へ変換"]
     CheckJSON{"パース成功?"}
     Validate["トップレベル必須フィールドを検証<br>organization-name<br>report-id<br>date-range<br>policies"]
     CheckField{"全必須フィールド<br>存在?"}
@@ -302,15 +314,14 @@ flowchart TD
     ErrJSON["パース失敗を表すエラーを返す"]
     ErrField["ErrMissingRequiredField を返す"]
 
-    Start --> DetectFormat
-    DetectFormat -->|"Yes（gzip）"| Decompress
-    DetectFormat -->|"No（非圧縮 JSON）"| CheckSizeRaw
-    Decompress --> CheckSize
-    CheckSize -->|"Yes"| ErrSize
-    CheckSize -->|"No"| ParseJSON
-    CheckSizeRaw -->|"Yes"| ErrSize
-    CheckSizeRaw -->|"No"| ParseJSON
-    ParseJSON --> CheckJSON
+    StartG --> Decompress
+    StartJ --> CheckSizeJ
+    Decompress --> CheckSizeG
+    CheckSizeG -->|"Yes"| ErrSize
+    CheckSizeG -->|"No"| ParseJSONNode
+    CheckSizeJ -->|"Yes"| ErrSize
+    CheckSizeJ -->|"No"| ParseJSONNode
+    ParseJSONNode --> CheckJSON
     CheckJSON -->|"No"| ErrJSON
     CheckJSON -->|"Yes"| Validate
     Validate --> CheckField
@@ -342,14 +353,15 @@ flowchart TD
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | 有効な `.json.gz`（gzip 圧縮）→ `*Report` が返る | `AC-01`, `AC-06` |
-| `Parse()` | 有効な非圧縮 JSON → `*Report` が返る | `AC-02`, `AC-06` |
-| `Parse()` | 不正な gzip データ → エラー返却 | `AC-03` |
-| `Parse()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `AC-04` |
-| `Parse()` | gzip・非圧縮ともにサイズ上限超過 → `ErrDecompressedSizeLimitExceeded` | `AC-05`, NFR セキュリティ |
-| `Parse()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `AC-07` |
-| `Parse()` | `policies` 配列の各フィールドが正しくパースされる | `AC-08` |
-| `Parse()` | `failure-details` フィールドが存在する場合に正しく取得できる | `AC-09` |
+| `ParseGzip()` | 有効な gzip 圧縮 JSON → `*Report` が返る | `AC-01`, `AC-06` |
+| `ParseJSON()` | 有効な非圧縮 JSON → `*Report` が返る | `AC-02`, `AC-06` |
+| `ParseGzip()` | 不正な gzip データ → エラー返却 | `AC-03` |
+| `ParseGzip()` | 有効な gzip だが展開後 JSON 不正 → エラー返却 | `AC-04` |
+| `ParseGzip()` | gzip 展開サイズ上限超過 → `ErrDecompressedSizeLimitExceeded` | `AC-05`, NFR セキュリティ |
+| `ParseJSON()` | 入力サイズ上限超過 → `ErrDecompressedSizeLimitExceeded` | `AC-05` |
+| `ParseGzip()` / `ParseJSON()` | 必須フィールド欠如（各フィールド個別）→ `ErrMissingRequiredField` | `AC-07` |
+| `ParseGzip()` / `ParseJSON()` | `policies` 配列の各フィールドが正しくパースされる | `AC-08` |
+| `ParseGzip()` / `ParseJSON()` | `failure-details` フィールドが存在する場合に正しく取得できる | `AC-09` |
 | `HasFailure()` | 全ポリシーレコードの `total-failure-session-count` が 0 → `false` | `AC-11` |
 | `HasFailure()` | いずれかのポリシーレコードの `total-failure-session-count` が 1 以上 → `true` | `AC-12` |
 | `HasFailure()` | `policies` が空 → `false` | `AC-13` |
@@ -358,7 +370,7 @@ flowchart TD
 
 | テスト対象 | テストケース | 対応要件 |
 |---|---|---|
-| `Parse()` | `testdata/` 内の実際のレポートファイルを正しくパースできる | `AC-10` |
+| `ParseGzip()` / `ParseJSON()` | `testdata/` 内の実際のレポートファイルを正しくパースできる | `AC-10` |
 
 統合テストでは `testdata/tlsrpt_google.eml` から `internal/mailparse` で抽出した `.json.gz` 添付ファイルのバイト列を使用する。
 
@@ -366,7 +378,7 @@ flowchart TD
 
 | テスト対象 | テストケース |
 |---|---|
-| `Parse()` | zip bomb 相当の高圧縮データ → `ErrDecompressedSizeLimitExceeded` |
+| `ParseGzip()` | zip bomb 相当の高圧縮データ → `ErrDecompressedSizeLimitExceeded` |
 
 ---
 
@@ -376,7 +388,7 @@ flowchart TD
 
 1. `Report` および関連構造体の定義（JSON タグ含む）
 2. エラー型 `ErrDecompressedSizeLimitExceeded`・`ErrMissingRequiredField` の定義
-3. `Parse()` 関数の実装（gzip 展開 → JSON パース → 必須フィールド検証）
+3. `ParseGzip()` / `ParseJSON()` 関数の実装（gzip 展開 → JSON パース → 必須フィールド検証）
 4. 単体テストの実装（有効データ・不正データ・必須フィールド欠如）
 
 ### フェーズ 2: failure 評価（`F-003`）

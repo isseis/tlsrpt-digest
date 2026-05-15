@@ -14,8 +14,9 @@ import (
 
 // Attachment represents a single attachment extracted from a mail message.
 type Attachment struct {
-	Filename string
-	Content  []byte
+	Filename    string
+	ContentType string // MIME media type, e.g. "application/tlsrpt+gzip"
+	Content     []byte
 }
 
 // ErrSizeLimitExceeded is returned when the cumulative decoded size of attachments exceeds the limit.
@@ -68,7 +69,7 @@ func ExtractAttachments(msg *mail.Message, maxBytes int64) ([]Attachment, error)
 	}
 
 	filename := resolveFilename(dispParams, params)
-	return []Attachment{{Filename: filename, Content: content}}, nil
+	return []Attachment{{Filename: filename, ContentType: mediaType, Content: content}}, nil
 }
 
 func extractParts(r io.Reader, boundary string, depth int, maxBytes int64, accumulated *int64) ([]Attachment, error) {
@@ -139,7 +140,7 @@ func processPart(part *multipart.Part, depth int, maxBytes int64, accumulated *i
 	}
 
 	filename := resolveFilename(dispParams, params)
-	return []Attachment{{Filename: filename, Content: content}}, nil
+	return []Attachment{{Filename: filename, ContentType: mediaType, Content: content}}, nil
 }
 
 // isAttachment returns true if the part should be treated as an attachment.
