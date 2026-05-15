@@ -281,8 +281,7 @@ type SystemError struct {
 // Summary は task 0050 で集計済みの定期サマリ通知ペイロード。
 // 本パッケージは集計済みデータの通知表現のみを担う。
 type Summary struct {
-    PeriodStart       time.Time
-    PeriodEnd         time.Time
+    Period            DateRange
     OrganizationCount int
     ReportCount       int
 }
