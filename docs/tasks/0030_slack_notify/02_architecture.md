@@ -155,11 +155,15 @@ sequenceDiagram
     M->>N: ValidateEnvCombination(successURL, errorURL)
     alt success のみ設定（AC-08）
         N-->>M: 設定エラーで起動中断
-    else 両方未設定（AC-09, AC-26）
+    else 両方未設定 かつ dry-run でない（AC-09, AC-26）
         N-->>M: Slack 無効
         M->>C: LoadTOML()
         C-->>M: config（strict decode、AC-26a）
         Note over M: ローカル出力のみで継続
+    else 両方未設定 かつ --dry-run（AC-38）
+        Note over M: URL 検証をスキップし DebugLogger 専用ハンドラを生成する
+        M->>N: BuildHandlers("", "", "", DryRunNoURL)
+        N-->>M: DebugLogger 専用ハンドラ（HTTP POST なし）
     else error のみ or 両方設定（AC-06, AC-07, AC-10）
         N-->>M: 継続
         M->>C: LoadTOML()
@@ -329,7 +333,8 @@ type SlackClientError struct{}
 | シナリオ | 発生場所 | 処理 |
 |---|---|---|
 | success URL のみ設定 | 起動前の組み合わせ検証 | 設定エラーとして起動を中断（`AC-08`） |
-| 両 URL 未設定 | 起動前の組み合わせ検証 | Slack 無効として継続、URL 検証とハンドラ生成はスキップ（`AC-09` `AC-26`） |
+| 両 URL 未設定 かつ dry-run でない | 起動前の組み合わせ検証 | Slack 無効として継続、URL 検証とハンドラ生成はスキップ（`AC-09` `AC-26`） |
+| 両 URL 未設定 かつ `--dry-run` | `BuildHandlers()` `DryRunNoURL` モード | URL 検証をスキップし DebugLogger 専用ハンドラを生成する。HTTP POST は行わず通知ペイロードを DebugLogger に記録する（`AC-38`） |
 | URL 検証失敗（スキーム不正・ホスト不一致等） | `NewSlackHandler()` → Phase 2 | 設定エラーとして起動を中断 |
 | success/error のホスト名不一致 | `validateWebhookURL()` | 設定エラーとして起動を中断（`AC-23`） |
 | `allowed_host` 未設定かつ URL あり | `validateWebhookURL()` | 設定エラーとして起動を中断（`AC-25`） |
