@@ -103,7 +103,6 @@
 
 **テスト**:
 - [ ] `internal/notify/types_test.go::TestPolicyType_Constants`: `PolicyTypeSTS`、`PolicyTypeTLSA`、`PolicyTypeNoPolicyFound`、`PolicyTypeUnknown` の値が RFC 8460 仕様に一致すること
-- [ ] `internal/notify/options_test.go::TestSlackHandlerOptions_DryRun`: `IsDryRun` フィールドが option として保持されること
 
 **推定工数**: 0.5 日
 
@@ -583,7 +582,7 @@
 | `AC-34` | `cmd/tlsrpt-digest/main_test.go` | `TestBootstrap_Phase2_SlackAdded` | Phase 2 後のハンドラ追加確認 |
 | `AC-35` | `cmd/tlsrpt-digest/main_test.go` | `TestBootstrap_Phase2_ValidationFail_Abort` | URL 検証失敗で起動中断確認 |
 | `AC-36` | `cmd/tlsrpt-digest/main_test.go` | `TestBootstrap_Phase2_SlackAdded` | `allowed_host` 伝播確認 |
-| `AC-37` | `internal/notify/options_test.go` | `TestSlackHandlerOptions_DryRun` | `IsDryRun` フィールド存在確認 |
+| `AC-37` | `internal/notify/handler_test.go` | `TestFlush_DryRun` | `IsDryRun` フラグを持つハンドラが生成できること（`TestFlush_DryRun` でフラグを有効にして動作確認） |
 | `AC-38` | `internal/notify/handler_test.go` | `TestFlush_DryRun` | HTTP POST なし・Debug Logger 出力確認 |
 | `AC-39` | `internal/notify/handler_test.go` | `TestNewSlackHandler_URLValidation` | dry-run でも URL 検証実施確認 |
 | `AC-40` | `cmd/tlsrpt-digest/main_test.go` | `TestBootstrap_DryRunFlag` | `--dry-run` フラグ伝播確認 |
