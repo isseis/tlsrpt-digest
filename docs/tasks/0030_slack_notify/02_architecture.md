@@ -249,9 +249,10 @@ type BackoffConfig struct {
 type PolicyType string
 
 const (
-    PolicyTypeSTS          PolicyType = "sts"
-    PolicyTypeTLSA         PolicyType = "tlsa"
+    PolicyTypeSTS           PolicyType = "sts"
+    PolicyTypeTLSA          PolicyType = "tlsa"
     PolicyTypeNoPolicyFound PolicyType = "no-policy-found"
+    PolicyTypeUnknown       PolicyType = ""  // RFC 8460 未定義値または空値
 )
 
 // Alert は即時アラート（TLS failure）の通知ペイロード。
