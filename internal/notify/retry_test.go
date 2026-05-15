@@ -231,3 +231,90 @@ func TestHTTPPost_RetryAfterCapped(t *testing.T) {
 	// Oversized Retry-After should be capped; only one attempt made.
 	assert.Equal(t, int32(1), calls.Load())
 }
+
+func TestHTTPPost_CumulativeWaitBoundary_ContinueAt29StopAt31(t *testing.T) {
+	var calls atomic.Int32
+	srv, client := newTLSTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		switch calls.Add(1) {
+		case 1:
+			w.Header().Set("Retry-After", "29")
+			w.WriteHeader(http.StatusTooManyRequests)
+		case 2:
+			w.Header().Set("Retry-After", "2")
+			w.WriteHeader(http.StatusTooManyRequests)
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+
+	var sleeps []time.Duration
+	var cumulativeSleep time.Duration
+
+	opts := notify.SlackHandlerOptions{
+		WebhookURL:    config.Secret(srv.URL + "/webhook"),
+		AllowedHost:   "127.0.0.1",
+		RunID:         "test",
+		LevelMode:     notify.LevelModeWarnAndAbove,
+		HTTPClient:    client,
+		BackoffConfig: notify.BackoffConfig{Base: 0, RetryCount: 3},
+	}
+	opts = notify.WithSleepFunc(opts, func(_ context.Context, d time.Duration) error {
+		if d > 0 {
+			sleeps = append(sleeps, d)
+			cumulativeSleep += d
+		}
+		return nil
+	})
+
+	h := mustNewHandler(t, opts)
+	require.NoError(t, h.Handle(context.Background(), warnRecord("test")))
+	err := h.Flush(context.Background())
+	require.Error(t, err)
+
+	// First retry waits 29 seconds and continues to the second attempt.
+	assert.Equal(t, []time.Duration{29 * time.Second}, sleeps)
+	assert.Equal(t, 29*time.Second, cumulativeSleep)
+	// The second Retry-After would push cumulative wait to 31 seconds,
+	// so the retry loop stops before sleeping or making another request.
+	assert.Equal(t, int32(2), calls.Load())
+}
+
+func TestHTTPPost_ExponentialBackoffBoundary_ContinueAt30StopBeyond30(t *testing.T) {
+	var calls atomic.Int32
+	srv, client := newTLSTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		// 429 without Retry-After forces exponential backoff.
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+
+	var sleeps []time.Duration
+	var cumulativeSleep time.Duration
+
+	opts := notify.SlackHandlerOptions{
+		WebhookURL:    config.Secret(srv.URL + "/webhook"),
+		AllowedHost:   "127.0.0.1",
+		RunID:         "test",
+		LevelMode:     notify.LevelModeWarnAndAbove,
+		HTTPClient:    client,
+		BackoffConfig: notify.BackoffConfig{Base: 2 * time.Second, RetryCount: 5},
+	}
+	opts = notify.WithSleepFunc(opts, func(_ context.Context, d time.Duration) error {
+		if d > 0 {
+			sleeps = append(sleeps, d)
+			cumulativeSleep += d
+		}
+		return nil
+	})
+
+	h := mustNewHandler(t, opts)
+	require.NoError(t, h.Handle(context.Background(), warnRecord("test")))
+	err := h.Flush(context.Background())
+	require.Error(t, err)
+
+	// Exponential waits are 2,4,8,16 (=30 total), then the next wait would
+	// exceed the 30-second cumulative cap and must not be slept.
+	assert.Equal(t, []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}, sleeps)
+	assert.Equal(t, 30*time.Second, cumulativeSleep)
+	// Requests are attempted for initial try + retries that fit the cap.
+	assert.Equal(t, int32(5), calls.Load())
+}
