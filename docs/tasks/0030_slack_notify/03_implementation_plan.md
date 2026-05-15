@@ -420,6 +420,7 @@
 **対象ファイル**: `internal/notify/security_test.go`
 
 - [ ] `TestSecretNotInMessage`: `config.Secret` フィールドが通知メッセージ JSON に含まれないこと
+- [ ] `TestWebhookURLNotLogged`: `SlackHandler` を使用するログ出力に Webhook URL の実値が現れないこと（`slog` ログ出力先を検査）
 - [ ] `TestDebugWriterNotTriggerSlack`: Debug Logger への書き込みが `SlackHandler.Handle()` を起動しないこと
 - [ ] `TestPrivateLogger_NotExported`: `internal/notify` パッケージが通知用 `*slog.Logger` をエクスポートしていないこと（シンボル検査）
 - [ ] `TestRedactionAlwaysEnabled`: 通知ハンドラ側に redaction を無効化する option / code path が存在しないこと
