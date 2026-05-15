@@ -94,7 +94,7 @@ See [Package Reference](docs/dev/developer_guide/package_reference.md) for detai
 - **Error Handling**: Comprehensive error types and validation
 - **YAGNI**: Use simple and clear approach to satisfy the requirement. Don't take complex approach for not-yet-planned features.
 - **DRY**: Don't repeat yourself. Before adding new code, check the codebase and prefer reusing existing implementations.
-- **Robustness Principle**: "Be conservative in what you do, be liberal in what you accept from others." (Postel's Law) — when receiving data from external systems (email providers, TLSRPT senders), tolerate non-standard variations (e.g. fallback from Content-Type to filename extension for TLSRPT attachment dispatch). When producing output, strictly follow the relevant specification.
+- **Robustness Principle**: "Be conservative in what you do, be liberal in what you accept from others." (Postel's Law) — when receiving data from external systems (email providers, TLSRPT senders), tolerate non-standard variations (e.g. fallback from `Content-Type` to filename extension for TLSRPT attachment dispatch). When producing output, strictly follow the relevant specification.
 
 ### Configuration
 - Uses TOML format for configuration files

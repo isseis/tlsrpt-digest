@@ -33,7 +33,7 @@ When receiving data from external systems — email servers, TLSRPT report sende
 |---|---|---|
 | `internal/tlsrpt` | Validate required fields before returning `*Report` | `ParseGzip`/`ParseJSON` accept well-compressed data regardless of upstream sender |
 | `internal/notify` | Send strictly formatted Slack messages | — |
-| `cmd/tlsrpt-digest` | — | Dispatch TLSRPT attachments by Content-Type with filename fallback |
+| `cmd/tlsrpt-digest` | — | Dispatch TLSRPT attachments by `Content-Type` with filename fallback |
 
 ## When NOT to Apply
 
