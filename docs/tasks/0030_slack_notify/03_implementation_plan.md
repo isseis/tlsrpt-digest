@@ -192,9 +192,11 @@
 - [ ] Slack Webhook への POST 処理を実装する
 - [ ] タイムアウトを 5 秒に設定する
 - [ ] 5xx / 429 / リクエスト発行失敗をリトライ対象にする
-- [ ] `Retry-After` がある場合はその値を優先し、ない場合は指数バックオフを使う
+- [ ] `Retry-After` ヘッダーがある場合はその値（秒単位の整数）を優先して待機し、ない場合は指数バックオフを使う。Slack は秒整数のみ返すが、パース失敗時はバックオフにフォールバックする（HTTP-date 形式は Slack では使用されないためスコープ外）
+- [ ] `Retry-After` の待機時間には上限（例: 指数バックオフの最大待機時間）を設け、34 秒の最悪ブロック時間の見積もりを超えないようにする
 - [ ] 4xx（429 を除く）は即座に `SlackClientError` を返す
 - [ ] `context` キャンセル時は待機を中断して `ctx.Err()` を返す
+- [ ] 各レスポンスの `resp.Body.Close()` を確実に呼ぶ（リトライ前にもクローズしてコネクション再利用を保証する）
 - [ ] 待機処理は注入可能な関数または時刻取得抽象に切り出し、テストで実時間の `sleep` を避ける
 
 **成功基準**: `go test ./internal/notify/...` が通り、回復可能な失敗のみが再試行される。
@@ -210,6 +212,8 @@
 - [ ] `TestHTTPPost_4xxImmediate`: 4xx（429 以外）で即時 `SlackClientError` を返すこと（`AC-30`）
 - [ ] `TestHTTPPost_AllRetriesExhausted`: 全リトライ失敗後に `SlackServerError` を返すこと（`AC-31`）
 - [ ] `TestHTTPPost_ContextCancel`: `context` キャンセルで待機を中断すること（`AC-32`）
+- [ ] `TestHTTPPost_ResponseBodyClosed`: 5xx リトライ時に前のレスポンスボディがクローズされること
+- [ ] `TestHTTPPost_RetryAfterCapped`: 過大な `Retry-After` 値が上限でキャップされること
 
 **推定工数**: 0.5 日
 
@@ -222,12 +226,17 @@
 **対象ファイル**: `internal/notify/handler.go`
 
 - [ ] `SlackHandler` が `slog.Handler` と `Flusher` を実装する
-- [ ] `NewSlackHandler` で URL 検証、レベルモード、dry-run、Run ID、backoff 設定を受け取る
-- [ ] `Handle()` は内部バッファへの書き込みのみを行い、HTTP 送信は行わない
+- [ ] `SlackHandlerOptions` に `DebugLogger *slog.Logger` フィールドを追加する。dry-run ログおよび送信失敗ログの出力先として使用し、`slog.Default()` への依存（= Slack ハンドラへの再帰）を避ける
+- [ ] `NewSlackHandler` で URL 検証、レベルモード、dry-run、Run ID、backoff 設定、DebugLogger を受け取る
+- [ ] `Handle()` は `Record.Clone()` してから内部バッファに追加する（`slog.Record` は共有バッキングストアを持つため、`Clone()` 必須）
+- [ ] `Handle()` と `Flush()` は内部バッファの読み書きを `sync.Mutex` で保護する（`slog.Handler` は並行呼び出しを受けうる）
+- [ ] `WithAttrs()` / `WithGroup()` は `nop`（`return s`）で実装する。Slack 通知は型付きヘルパー経由でのみ書き込まれるため、`With` 経由の属性付加は行われない。`*slog.Logger` の `With`/`WithGroup` API 経由での利用は設計上禁止する
 - [ ] `Enabled()` はハンドラ自身の `LevelMode` に基づいて判定し、CLI のコンソールログレベル設定と独立させる
-- [ ] `Flush()` は空バッファなら `nil` を返し、蓄積済みメッセージを逐次送信する
-- [ ] dry-run 時は HTTP POST を抑止し、Debug Logger へ記録したうえでバッファをクリアする
-- [ ] 最終失敗時は Debug Logger に詳細を記録してエラーを返す
+- [ ] `Flush()` は空バッファなら `nil` を返し、蓄積済みメッセージをフォーマットして逐次送信する
+- [ ] `Flush()` 内でのフォーマット→切り詰め→送信の順番: フォーマット関数は切り詰めを**行わず**全文のメッセージを返す。切り詰めは HTTP 送信直前に適用し、Debug Logger への記録には切り詰め前の全文を渡す
+- [ ] 送信成功後（またはエラーに関わらず Flush() 終了前）にバッファをクリアして二重送信を防ぐ
+- [ ] dry-run 時は HTTP POST を抑止し、DebugLogger へ記録したうえでバッファをクリアする
+- [ ] 最終失敗時は DebugLogger に詳細を記録してエラーを返す。このとき `net/http`/`url.Error` が内包する URL が外部に漏れないよう、エラーをラップして Webhook URL を除去する
 
 **成功基準**: `Handle()` と `Flush()` の責務が分離され、success / error webhook の振り分け、dry-run、エラー伝播が設計通りに動作する。
 
@@ -245,10 +254,15 @@
 - [ ] `TestFlush_InfoNotToErrorWebhook`: INFO が error webhook に送信されないこと（`AC-15`）
 - [ ] `TestFlush_WarnNotToSuccessOnly`: WARN が success 専用ハンドラに送信されないこと（`AC-16`）
 - [ ] `TestCLILogLevel_Independent`: `Enabled()` が CLI のコンソールログレベル設定と独立していること（`AC-16a`）
-- [ ] `TestFlush_DryRun`: dry-run 時に HTTP POST 不発・Debug Logger 出力があること（`AC-38`）
+- [ ] `TestFlush_DryRun`: dry-run 時に HTTP POST 不発・DebugLogger 出力があること（`AC-38`）
 - [ ] `TestNewSlackHandler_URLValidation`: dry-run を含め不正 URL で `WebhookValidationError` が返ること（`AC-39`）
+- [ ] `TestHandle_ClonesRecord`: `Handle()` 後に元の `slog.Record` を変更してもバッファ内容が変化しないこと
+- [ ] `TestFlush_Concurrent`: `Handle()` と `Flush()` を goroutine で並行実行してもレースやパニックが起きないこと（`-race` フラグで実行）
+- [ ] `TestFlush_ClearsBufferAfterSend`: `Flush()` 成功後に再度 `Flush()` しても HTTP リクエストが発行されないこと
+- [ ] `TestFlush_MultipleAlerts_SinglePost`: 複数の `LogAlert` 呼び出し後の `Flush()` が 1 回の HTTP POST を発行すること（集約確認）
+- [ ] `TestFlush_ErrorStringNoURL`: 送信失敗時のエラー文字列に Webhook URL の実値が含まれないこと
 
-**推定工数**: 0.75 日
+**推定工数**: 1.0 日
 
 **実績**: -
 
@@ -262,10 +276,10 @@
 
 **対象ファイル**: `internal/notify/format.go`
 
-- [ ] `truncateText(s string, maxLen int) string` を実装する（末尾 `...` 付与）
-- [ ] `formatAlerts(alerts []Alert, runID string) slackMessage` を [02_architecture.md](02_architecture.md) の §6.3 に従って実装する
-- [ ] `formatSystemError(e SystemError, runID string) slackMessage` を [02_architecture.md](02_architecture.md) の §6.3 に従って実装する
-- [ ] `formatSummary(s Summary, runID string) slackMessage` を [02_architecture.md](02_architecture.md) の §6.3 に従って実装する
+- [ ] `truncateText(s string, maxLen int) string` を実装する。ルーン単位で切り詰め（マルチバイト文字の途中で切らない）、`...` を末尾に付与した結果がちょうど `maxLen` 文字以内になるよう `maxLen-3` ルーンで切断する
+- [ ] `formatAlerts(alerts []Alert, runID string) slackMessage` を [02_architecture.md](02_architecture.md) の §6.3 に従って実装する。**切り詰めは行わず**全文のメッセージを返す（切り詰めは呼び出し元の `Flush()` が HTTP 送信直前に適用する）
+- [ ] `formatSystemError(e SystemError, runID string) slackMessage` を同様に実装する（切り詰めなし）
+- [ ] `formatSummary(s Summary, runID string) slackMessage` を同様に実装する（切り詰めなし）
 - [ ] 定期サマリは呼び出し側から与えられた `Summary.Period` をそのまま表示し、7 日固定などの間隔仮定を持たない
 
 **成功基準**: 各フォーマット関数が期待する `slackMessage` を返す。
@@ -277,13 +291,16 @@
 - [ ] `TestFormatAlerts_RunID`: Run ID フィールドが含まれること（`AC-20a`）
 - [ ] `TestFormatAlerts_TitleOrgCount`: タイトルに影響組織数 N が含まれること（`AC-20e`）
 - [ ] `TestFormatAlerts_Color`: `attachment.color = "warning"` / 絵文字 ⚠️ であること（`AC-20f`）
-- [ ] `TestFormatAlerts_TruncateText`: 4001 文字入力で末尾が `...` になること（`AC-20b`）
-- [ ] `TestFormatAlerts_TruncateField`: 1001 文字フィールドが切り詰められること（`AC-20c`）
+- [ ] `TestTruncateText_ExactLimit`: 4000 ルーン入力で切り詰めなし、4001 ルーン入力で `...` 付与かつ結果が 4000 ルーン以内であること（`AC-20b`）
+- [ ] `TestTruncateText_MultibyteRune`: マルチバイト文字（例: 日本語）を含む文字列が途中で切れずルーン境界で切り詰められること
+- [ ] `TestTruncateField_ExactLimit`: 1000 ルーン入力で切り詰めなし、1001 ルーン入力で `...` 付与かつ結果が 1000 ルーン以内であること（`AC-20c`）
+- [ ] `TestFormatAlerts_NoTruncation`: `formatAlerts` 自体は切り詰めを行わないこと（切り詰めロジックを `Flush()` 側に委ねる）
 - [ ] `TestFormatAlerts_AttachmentFields`: `fields` 形式で構造化されていること（`AC-20i`）
 - [ ] `TestFormatSystemError_Title`: タイトルにエラー種別が含まれること（`AC-20j`）
 - [ ] `TestFormatSystemError_Fields`: Message, Component, Run ID が含まれること（`AC-20k`, `AC-20l`）
 - [ ] `TestFormatSystemError_Color`: `attachment.color = "danger"` / 絵文字 🚨 であること（`AC-20g`）
 - [ ] `TestFormatSummary_Color`: `attachment.color = "good"` / 絵文字 ✅ であること（`AC-20h`）
+- [ ] `TestFormatSummary_Fields`: Run ID、対象期間、組織数、レポート数が `fields` に含まれること（`AC-20a`）
 - [ ] `TestFormatSummary_UsesProvidedPeriod`: 呼び出し側から与えられた期間をそのまま表示し、7 日固定を仮定しないこと（`AC-16b`）
 - [ ] `TestFormatAlerts_NoPolicyFound`: `no-policy-found` が正しく表示されること（`AC-18`）
 - [ ] `TestFormatAlerts_PolicyTypeUnknown`: `PolicyTypeUnknown`（空値）が通知に含まれること（`AC-18`）
@@ -299,12 +316,15 @@
 **対象ファイル**: `internal/notify/helpers.go`
 
 - [ ] `LogAlert(ctx context.Context, h slog.Handler, alert Alert) error` を実装する
+  - 呼び出し前に `h.Enabled(ctx, slog.LevelWarn)` を確認し、`false` なら `nil` を即返す（`LevelMode` フィルタリングが正しく機能するよう `Handle()` を直接呼ぶ前に必ず `Enabled()` を確認する）
   - `slog.Record` を構築して `h.Handle(ctx, record)` を呼ぶ
   - ログレベル: `slog.LevelWarn`
   - `Handle()` の戻り値をそのまま返す
 - [ ] `LogSystemError(ctx context.Context, h slog.Handler, e SystemError) error` を実装する
+  - `h.Enabled(ctx, slog.LevelError)` を確認してから `h.Handle()` を呼ぶ
   - ログレベル: `slog.LevelError`
 - [ ] `LogSummary(ctx context.Context, h slog.Handler, s Summary) error` を実装する
+  - `h.Enabled(ctx, slog.LevelInfo)` を確認してから `h.Handle()` を呼ぶ
   - ログレベル: `slog.LevelInfo`
 
 **成功基準**: 型付きヘルパーが正しいレベルでレコードを書き込む。外部コードが `logger.Info(...)` を直接呼べないことを設計上保証（プライベートロガー）。
@@ -327,7 +347,7 @@
 
 **対象ファイル**: `internal/notify/handler.go`, `internal/notify/handler_test.go`
 
-`Flush()` 内で `slackMessage` を HTTP 送信する前に、`Debug Logger` を通じて `slog.Debug` でフォーマット済みペイロードを記録する。切り詰めはHTTP 送信ペイロードにのみ適用し、Debug Logger への出力は切り詰めなし。
+`Flush()` 内の処理順序: フォーマット関数（切り詰めなし）でメッセージを構築 → `DebugLogger` に全文記録 → 切り詰め適用 → HTTP POST。これによりファイルログには全文が、Slack には上限内の文字数が届く。フォーマット関数は切り詰めを行わないため（Step 3-1）、`Flush()` 内で `truncateText` を呼び出す責務を持つ。
 
 **成功基準**: Slack 送信ペイロードにのみ切り詰めが適用され、Debug Logger には全文が出力される。
 
@@ -352,7 +372,9 @@
 
 **対象ファイル**: `internal/notify/testutil/mocks.go`（新規）, `internal/notify/testutil/mocks_test.go`（新規）
 
+- [ ] ファイルの先頭に `//go:build test` ビルドタグを付与する（テスト専用コードが通常ビルドに混入しないようにする）
 - [ ] `package notifytestutil` として `SpyHandler` 構造体を実装する（`Records`, `FlushCalled bool`, `FlushErr error`）
+- [ ] `Handle()` では `record.Clone()` を呼んでから `Records` に追加する（`slog.Record` の共有バッキングストア問題を回避する）
 - [ ] `slog.Handler` インターフェースの全メソッドを実装する
 - [ ] `Flusher.Flush()` を実装する（記録後 `FlushErr` を返す）
 - [ ] `internal/notify/testutil/mocks_test.go` に `SpyHandler` の自己テストを追加する
@@ -371,7 +393,7 @@
 
 **対象ファイル**: `internal/notify/handler_test.go`
 
-**テスト**: `internal/notify/handler_test.go` に追加（`httptest.NewServer` 使用）
+**テスト**: `internal/notify/handler_test.go` に追加（`httptest.NewTLSServer` + カスタム `http.Client` 使用、後述）
 - [ ] `TestFlush_SequentialMessages`: TLS failure と system error が同一 `Flush()` で発生した場合、2 回に分けて逐次 POST されること（`AC-20m`）
 
 **成功基準**: 単一の `Flush()` 呼び出しで複数種別の通知が混在しても、期待順序で独立した HTTP リクエストとして送信される。
@@ -386,23 +408,25 @@
 
 **対象ファイル**: `cmd/tlsrpt-digest/main.go`
 
-- [ ] Phase 1: TOML 読み込み前にローカルハンドラ（`slog.NewTextHandler(os.Stderr, ...)` 等）を初期化する（Slack ハンドラ含まない）
-- [ ] 環境変数から `successURL`、`errorURL` を読み込み `ValidateEnvCombination` を呼ぶ
+- [ ] Phase 1: TOML 読み込み前にローカルハンドラ（`slog.NewTextHandler(os.Stderr, ...)` 等）を初期化する（Slack ハンドラ含まない）。`slog.SetDefault(slog.New(localHandler))` で設定する
+- [ ] 環境変数から `successURL`、`errorURL` を読み込み `ValidateEnvCombination` を呼ぶ。`dry-run` かつ両 URL 未設定の場合はテスト用ダミー URL（`https://dry-run.local/...`）を設定してハンドラを生成し、実際には HTTP POST しない（AC-38 の「Webhook URL を設定せずに確認」の実現）
 - [ ] TOML を読み込んで `notify.slack.allowed_host` を取得する
-- [ ] Phase 2: `NewSlackHandler` で success / error 各ハンドラを生成し、既存ロガーに追加する
+- [ ] Phase 2: `validateBothURLs(successURL, errorURL, allowedHost)` を呼んでホスト一致（AC-23）を確認したうえで、`NewSlackHandler` で success / error 各ハンドラを生成する
+- [ ] Phase 2 の Slack ハンドラ追加は `slog.Logger` が不変のため再構築で行う: `MultiHandler(localHandler, successSlack, errorSlack)` を新たに作り `slog.SetDefault(slog.New(multiHandler))` を呼ぶ。`MultiHandler` は `internal/notify` 内に実装する（既存の `MultiHandler` がなければ新規追加）
 - [ ] `--dry-run` フラグを CLI に追加し、`SlackHandlerOptions.IsDryRun` に渡す
 - [ ] `runID` を `github.com/oklog/ulid/v2` の `ulid.Make().String()` で生成する（毎回 unique な ULID。プロセス再起動や複数同時実行でも衝突しない）
 
-**成功基準**: Phase 1 が完了したロガーに Slack ハンドラが含まれない。Phase 2 後に Slack ハンドラが追加されている。
+**成功基準**: Phase 1 が完了したロガーに Slack ハンドラが含まれない。Phase 2 後に Slack ハンドラが追加されている。ロガー再構築は `slog.SetDefault` ベースで行い、ハンドラ一覧は `MultiHandler` 経由で検査可能にする。
 
-**対応 AC**: `AC-33`, `AC-34`, `AC-35`, `AC-36`, `AC-40`
+**対応 AC**: `AC-23`, `AC-33`, `AC-34`, `AC-35`, `AC-36`, `AC-38`, `AC-40`
 
 **テスト**: `cmd/tlsrpt-digest/main_test.go`（統合テスト）
-- [ ] `TestBootstrap_Phase1_NoSlackHandler`: Phase 1 終了時点でロガーに Slack ハンドラが含まれないこと（`AC-33`）
+- [ ] `TestBootstrap_Phase1_NoSlackHandler`: Phase 1 終了時点でロガーに Slack ハンドラが含まれないこと（`AC-33`）。`MultiHandler` 経由でハンドラ一覧を取得して確認する
 - [ ] `TestBootstrap_ErrorOnly_NoSuccessHandler`: error webhook のみ設定時に success ハンドラを生成せず、INFO 通知が無効になること（`AC-07`）
 - [ ] `TestBootstrap_Phase2_SlackAdded`: 両方設定時に Phase 2 後のロガーへ Slack ハンドラが追加されること（`AC-06`, `AC-34`, `AC-36`）
 - [ ] `TestBootstrap_Phase2_ValidationFail_Abort`: URL 検証失敗で起動が中断されること（`AC-35`）
 - [ ] `TestBootstrap_DryRunFlag`: `--dry-run` フラグが `SlackHandlerOptions.IsDryRun` に伝播されること（`AC-40`）
+- [ ] `TestBootstrap_DryRun_NoURLs`: Webhook URL 未設定 + `--dry-run` でも DebugLogger に出力されること（`AC-38`）
 
 **推定工数**: 0.75 日
 
@@ -412,7 +436,9 @@
 
 #### Step 4-4: 統合テスト（モック HTTP サーバ）
 
-**対象ファイル**: `internal/notify/handler_integration_test.go`（`httptest.NewServer` 使用）
+**対象ファイル**: `internal/notify/handler_integration_test.go`（`httptest.NewTLSServer` + カスタム `http.Client` 使用）
+
+`NewSlackHandler` は HTTPS スキームのみ許可するため、テスト用サーバには `httptest.NewTLSServer` を使用する。`SlackHandlerOptions.HTTPClient`（テスト用に注入可能なフィールド）を介してサーバの自己署名証明書を信頼する `http.Client` を渡す。
 
 - [ ] `TestIntegration_SuccessWebhook`: success webhook のみに INFO レコードが届くこと
 - [ ] `TestIntegration_ErrorWebhook`: error webhook のみに WARN/ERROR レコードが届くこと
@@ -420,7 +446,7 @@
 - [ ] `TestIntegration_RetryRecovery`: 5xx → 200 のリトライ復帰シナリオ（`AC-28`, `AC-31`）
 - [ ] `TestIntegration_4xxImmediate`: 4xx（429 以外）で即停止すること（`AC-30`）
 
-**成功基準**: 送信先振り分けとリトライ制御を、`httptest.NewServer` ベースの実 HTTP 通信で再現確認できる。
+**成功基準**: `httptest.NewTLSServer` ベースの実 TLS HTTP 通信で送信先振り分けとリトライ制御を検証できる。
 
 **推定工数**: 0.5 日
 
@@ -434,6 +460,7 @@
 
 - [ ] `TestSecretNotInMessage`: `config.Secret` フィールドが通知メッセージ JSON に含まれないこと
 - [ ] `TestWebhookURLNotLogged`: `SlackHandler` を使用するログ出力に Webhook URL の実値が現れないこと（`slog` ログ出力先を検査）
+- [ ] `TestFlushError_NoURLInErrorString`: 送信失敗時に `Flush()` が返すエラー文字列に Webhook URL の実値が含まれないこと（`url.Error` 等のラップによる漏洩を防ぐ）
 - [ ] `TestDebugWriterNotTriggerSlack`: Debug Logger への書き込みが `SlackHandler.Handle()` を起動しないこと
 - [ ] `TestPrivateLogger_NotExported`: `internal/notify` パッケージが通知用 `*slog.Logger` をエクスポートしていないこと（シンボル検査）
 - [ ] `TestRedactionAlwaysEnabled`: 通知ハンドラ側に redaction を無効化する option / code path が存在しないこと
@@ -492,9 +519,13 @@
 
 | リスク | 影響度 | 対策 |
 |---|---|---|
-| `Retry-After` ヘッダーの解析誤り | 中 | RFC 7231 §7.1.3 に従いヘッダー値を秒単位の整数として解析。パース失敗時はバックオフにフォールバック |
+| `Retry-After` ヘッダーの解析誤り | 中 | Slack は秒整数のみ返す。パース失敗時はバックオフにフォールバック。RFC 7231 の HTTP-date 形式は Slack では使用されないためスコープ外 |
+| `Retry-After` の過大値で 34 秒上限を超える | 中 | `Retry-After` に上限（指数バックオフの最大値等）を設け、上限を超える値はキャップして使用する |
 | `context` キャンセルと `time.After` の競合 | 中 | `select` で `ctx.Done()` と `time.After()` を同時に待機し、キャンセルを優先する |
-| `slog.Handler.WithAttrs`/`WithGroup` の不完全実装 | 低 | `SlackHandler` では通知ペイロードにのみ型付きヘルパー経由で書き込むため、これらは `nop` 実装で可 |
+| `slog.Handler.WithAttrs`/`WithGroup` の不完全実装 | 低 | `SlackHandler` では通知ペイロードにのみ型付きヘルパー経由で書き込む設計のため、`nop` 実装で可。ただし `*slog.Logger.With()` 経由での利用は設計上禁止とし、コードレビューで確認する |
+| `slog.Logger` の不変性 | 中 | Phase 2 のハンドラ追加は `slog.SetDefault(slog.New(MultiHandler(...)))` で新しい `slog.Logger` を再設定する。既存の `*slog.Logger` インスタンスには Slack ハンドラが反映されないため、常に `slog.Default()` / `slog.L()` 等を通じてロギングする |
+| `resp.Body.Close()` の漏れによるコネクションリーク | 中 | Step 2-2 に `resp.Body.Close()` 必須化を明記。テストのモックサーバでコネクション数を監視する |
+| `url.Error` によるエラー文字列への Webhook URL 混入 | 中 | `Flush()` および validation 関数が返す `error` をラップして URL を除去してから呼び出し元へ返す |
 | `internal/config` への変更が既存 IMAP 設定に影響 | 低 | `NotifyConfig` を独立した構造体として追加し、既存フィールドを変更しない |
 | `main.go` の二段階初期化が他の起動処理と干渉 | 中 | Phase 1 / Phase 2 を明確に分離し、各フェーズを関数として切り出す |
 | テストケース増加で工数が膨らむ | 中 | Phase 2 完了時点で見積もりを見直し、Phase 4 に 0.5 日のバッファを確保する |
