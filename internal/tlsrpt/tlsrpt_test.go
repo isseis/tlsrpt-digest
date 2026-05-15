@@ -298,10 +298,13 @@ func TestParseRealReport(t *testing.T) {
 		name := strings.ToLower(att.Filename)
 		var r *tlsrpt.Report
 		var parseErr error
+		// Dispatch by Content-Type (RFC 8460 mandated), fall back to filename suffix.
 		switch {
-		case strings.HasSuffix(name, ".json.gz"):
+		case att.ContentType == "application/tlsrpt+gzip" ||
+			(att.ContentType == "" && strings.HasSuffix(name, ".json.gz")):
 			r, parseErr = tlsrpt.ParseGzip(att.Content)
-		case strings.HasSuffix(name, ".json"):
+		case att.ContentType == "application/tlsrpt+json" ||
+			(att.ContentType == "" && strings.HasSuffix(name, ".json")):
 			r, parseErr = tlsrpt.ParseJSON(att.Content)
 		default:
 			continue

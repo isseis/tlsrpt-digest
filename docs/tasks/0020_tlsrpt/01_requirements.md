@@ -52,7 +52,7 @@ TLSRPT レポートメールには .json.gz 形式の添付ファイルが含ま
 
 ### F-001: JSON デコード（形式を明示指定）
 
-呼び出し側が添付ファイルのファイル名拡張子（`.json.gz` または `.json`）から形式を判断し、対応する関数を呼び出す。`mailparse.Attachment` は Content-Type を公開しないため、拡張子を判断基準とする。
+呼び出し側が添付ファイルの Content-Type（`application/tlsrpt+gzip` または `application/tlsrpt+json`）を優先し、対応する関数を呼び出す。Content-Type が設定されていない場合はファイル名拡張子（`.json.gz` または `.json`）にフォールバックする。
 
 **受け入れ条件（Acceptance Criteria）**:
 

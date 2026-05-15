@@ -50,13 +50,14 @@ func buildDeeplyNestedMsg(t *testing.T, depth int) *mail.Message {
 
 func TestExtractAttachments(t *testing.T) {
 	tests := []struct {
-		name      string
-		raw       string
-		maxBytes  int64
-		wantCount int
-		wantNames []string
-		wantErr   bool
-		wantErrIs error
+		name             string
+		raw              string
+		maxBytes         int64
+		wantCount        int
+		wantNames        []string
+		wantContentTypes []string
+		wantErr          bool
+		wantErrIs        error
 	}{
 		{
 			name: "content_disposition_attachment",
@@ -68,9 +69,10 @@ func TestExtractAttachments(t *testing.T) {
 				"Content-Transfer-Encoding: base64\r\n\r\n" +
 				b64("hello") + "\r\n" +
 				"--b--",
-			maxBytes:  1 << 20,
-			wantCount: 1,
-			wantNames: []string{"file.bin"},
+			maxBytes:         1 << 20,
+			wantCount:        1,
+			wantNames:        []string{"file.bin"},
+			wantContentTypes: []string{"application/octet-stream"},
 		},
 		{
 			name: "no_disposition_with_name",
@@ -142,9 +144,40 @@ func TestExtractAttachments(t *testing.T) {
 				"Content-Type: application/octet-stream; name=\"top.bin\"\r\n" +
 				"Content-Transfer-Encoding: base64\r\n\r\n" +
 				b64("topdata"),
-			maxBytes:  1 << 20,
-			wantCount: 1,
-			wantNames: []string{"top.bin"},
+			maxBytes:         1 << 20,
+			wantCount:        1,
+			wantNames:        []string{"top.bin"},
+			wantContentTypes: []string{"application/octet-stream"},
+		},
+		{
+			name: "tlsrpt_gzip_content_type",
+			raw: "MIME-Version: 1.0\r\n" +
+				"Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n" +
+				"--b\r\n" +
+				"Content-Type: application/tlsrpt+gzip\r\n" +
+				"Content-Disposition: attachment; filename=\"report.json.gz\"\r\n" +
+				"Content-Transfer-Encoding: base64\r\n\r\n" +
+				b64("gzip-data") + "\r\n" +
+				"--b--",
+			maxBytes:         1 << 20,
+			wantCount:        1,
+			wantNames:        []string{"report.json.gz"},
+			wantContentTypes: []string{"application/tlsrpt+gzip"},
+		},
+		{
+			name: "tlsrpt_json_content_type",
+			raw: "MIME-Version: 1.0\r\n" +
+				"Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n" +
+				"--b\r\n" +
+				"Content-Type: application/tlsrpt+json\r\n" +
+				"Content-Disposition: attachment; filename=\"report.json\"\r\n" +
+				"Content-Transfer-Encoding: base64\r\n\r\n" +
+				b64("json-data") + "\r\n" +
+				"--b--",
+			maxBytes:         1 << 20,
+			wantCount:        1,
+			wantNames:        []string{"report.json"},
+			wantContentTypes: []string{"application/tlsrpt+json"},
 		},
 		{
 			name: "plaintext_returns_empty",
@@ -384,6 +417,11 @@ func TestExtractAttachments(t *testing.T) {
 					require.Equal(t, name, got[i].Filename)
 				}
 			}
+			if tc.wantContentTypes != nil {
+				for i, ct := range tc.wantContentTypes {
+					require.Equal(t, ct, got[i].ContentType)
+				}
+			}
 		})
 	}
 }
@@ -465,4 +503,6 @@ func TestExtractAttachments_Integration(t *testing.T) {
 	// Verify gzip magic bytes
 	require.Equal(t, byte(0x1f), att.Content[0])
 	require.Equal(t, byte(0x8b), att.Content[1])
+	// Verify Content-Type is set (RFC 8460 mandates application/tlsrpt+gzip)
+	require.NotEmpty(t, att.ContentType)
 }
