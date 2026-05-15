@@ -203,7 +203,7 @@ Slack attachment を用いて、ログレベルや通知種別を色・絵文字
 **受け入れ条件（Acceptance Criteria）**:
 
 - `AC-17`: TLS failure 集約メッセージに各エントリの送信元組織名（`organization-name`）が含まれる
-- `AC-18`: TLS failure 集約メッセージに各エントリの対象ポリシータイプ（`sts` / `tlsa`）が含まれる
+- `AC-18`: TLS failure 集約メッセージに各エントリの対象ポリシータイプ（`sts` / `tlsa` / `no-policy-found`）が含まれる。`no-policy-found` の失敗も他のポリシータイプと同様に集約・通知する
 - `AC-19`: TLS failure 集約メッセージに各エントリの `failure_session_count` の値が含まれる
 - `AC-20`: TLS failure 集約メッセージに各エントリのレポート対象期間（`date-range`）が含まれる
 - `AC-20a`: 通知メッセージに Run ID（プロセス起動ごとに一意な識別子）が含まれる
