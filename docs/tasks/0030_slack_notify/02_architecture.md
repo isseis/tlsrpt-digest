@@ -23,7 +23,7 @@
 5. **Secret 型**: Webhook URL を保持する全フィールドは `config.Secret` でラップし、ログ漏洩を防ぐ
 6. **設定責務の分離**: `internal/config` は `notify.slack.allowed_host` の構造化・strict decode・形式検証を担い、`internal/notify` は環境変数の組み合わせ妥当性と Webhook URL 検証を担う
 7. **通知レベルの独立性**: Slack 送信先の決定は通知レコード自身の `slog.Level` に基づき、CLI のコンソールログレベル設定とは独立させる
-8. **週次サマリとの責務境界**: 週次サマリの集計と送信間隔の制御はタスク `0050` が担い、本タスクは完成済みサマリの通知表現と配送のみを担う
+8. **定期サマリとの責務境界**: 定期サマリの集計と送信間隔の制御はタスク `0050` が担い、本タスクは集計済みサマリの通知表現と配送のみを担う。集計間隔は `internal/notify` の外部から与えられるため、本パッケージは間隔を仮定しない
 
 ### 1.2 コンセプトモデル
 
@@ -122,7 +122,7 @@ flowchart LR
 | `internal/config` | `TOML` デコード、`unknown-key` 拒否、`notify.slack.allowed_host` の形式検証 | 既存責務を利用し、通知設定の受け皿を追加または更新する |
 | `internal/notify` | 環境変数の組み合わせ検証、Webhook URL 検証、メッセージ整形、配送 | 本タスクの新規責務 |
 | `internal/tlsrpt` | TLSRPT レポートの解析と failure 判定 | 既存責務を再利用し、通知文面の元データを供給する |
-| タスク `0050` の週次サマリ処理 | 正常レポートの集計、送信タイミングの決定 | 本タスクでは再実装せず、集計済みデータを受け取るだけとする |
+| タスク `0050` の定期サマリ処理 | 正常レポートの集計、送信間隔と送信タイミングの決定 | 本タスクでは再実装せず、集計済みデータを受け取るだけとする |
 
 ```mermaid
 flowchart LR
@@ -280,7 +280,7 @@ type Summary struct {
 | `internal/notify/handler.go` | `SlackHandler` 実装（`slog.Handler` + `Flusher`）、バッファ管理 | **新規** |
 | `internal/notify/options.go` | `SlackHandlerOptions`、`BackoffConfig`、`LevelMode` 型定義 | **新規** |
 | `internal/notify/message.go` | Slack API ペイロード型（`SlackMessage`、`SlackAttachment` 等） | **新規** |
-| `internal/notify/format.go` | 通知ペイロードの表現層（TLS failure・システムエラー・集計済み週次サマリの表示、切り詰め処理） | **新規** |
+| `internal/notify/format.go` | 通知ペイロードの表現層（TLS failure・システムエラー・集計済み定期サマリの表示、切り詰め処理） | **新規** |
 | `internal/notify/helpers.go` | 型付きヘルパー（`LogAlert()`、`LogSystemError()`、`LogSummary()`） | **新規** |
 | `internal/notify/retry.go` | HTTP 送信とリトライロジック（`Retry-After` ヘッダー対応） | **新規** |
 | `internal/notify/validate.go` | 環境変数の組み合わせ検証と Webhook URL 検証 | **新規** |
@@ -407,7 +407,7 @@ flowchart TD
     DryRun -->|"No"| Split["TLS failure / system error / summary に分類"]
     Split --> AggMsg["TLS failure を集約メッセージに変換<br>（AC-17〜AC-20i）"]
     Split --> SysMsgs["システムエラーを個別メッセージに変換<br>（AC-20j〜AC-20m）"]
-    Split --> SummaryMsg["集計済み週次サマリを通知表現へ変換<br>（AC-20h）"]
+    Split --> SummaryMsg["集計済み定期サマリを通知表現へ変換<br>（AC-20h）"]
     AggMsg --> Send["LevelMode に対応する webhook へ送信"]
     SysMsgs --> Send
     SummaryMsg --> Send
