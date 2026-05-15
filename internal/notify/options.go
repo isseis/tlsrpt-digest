@@ -60,4 +60,7 @@ type SlackHandlerOptions struct {
 	// test TLS server's certificate) does not bypass the per-request context
 	// deadline that enforces the 5-second limit.
 	HTTPClient *http.Client
+	// testReqTimeout overrides the per-request deadline; zero uses the default 5s.
+	// Set via WithRequestTimeout in test_helpers.go (//go:build test).
+	testReqTimeout time.Duration
 }

@@ -531,9 +531,9 @@
 - [x] Step 1-4: URL・環境変数検証（`AC-06`〜`AC-10`, `AC-21`〜`AC-26`）
 
 ### Phase 2
-- [ ] Step 2-1: Slack API ペイロード型（`AC-20i`）
-- [ ] Step 2-2: HTTP 送信・リトライ（`AC-27`〜`AC-32`）
-- [ ] Step 2-3: SlackHandler 実装（`AC-01`〜`AC-05b`, `AC-14`〜`AC-16a`, `AC-37`〜`AC-39`）
+- [x] Step 2-1: Slack API ペイロード型（`AC-20i`）
+- [x] Step 2-2: HTTP 送信・リトライ（`AC-27`〜`AC-32`）
+- [x] Step 2-3: SlackHandler 実装（`AC-01`〜`AC-05b`, `AC-14`〜`AC-16a`, `AC-37`〜`AC-39`）
 
 ### Phase 3
 - [ ] Step 3-1: メッセージフォーマット（`AC-16b`, `AC-17`〜`AC-20l`）
