@@ -103,7 +103,7 @@
 - [ ] `LevelMode` 型（`string` 基底）と定数 `LevelModeExactInfo`、`LevelModeWarnAndAbove` を定義する
 - [ ] `BackoffConfig` 構造体（`Base time.Duration`, `RetryCount int`）を定義する
 - [ ] `DefaultBackoffConfig` 変数（Base: 2s, RetryCount: 3）を定義する
-- [ ] `SlackHandlerOptions` 構造体を定義する（`WebhookURL config.Secret`, `AllowedHost string`, `RunID string`, `LevelMode LevelMode`, `IsDryRun bool`, `BackoffConfig BackoffConfig`）
+- [ ] `SlackHandlerOptions` 構造体を定義する（`WebhookURL config.Secret`, `AllowedHost string`, `RunID string`, `LevelMode LevelMode`, `IsDryRun bool`, `BackoffConfig BackoffConfig`, `DebugLogger *slog.Logger`, `HTTPClient *http.Client`）。`DebugLogger` は dry-run ログ・送信失敗ログの出力先（`nil` の場合は無音）。`HTTPClient` はテスト用 TLS クライアント注入用（`nil` の場合はデフォルト 5 秒タイムアウト）
 - [ ] `PolicyType` 型と定数（`PolicyTypeSTS`, `PolicyTypeTLSA`, `PolicyTypeNoPolicyFound`, `PolicyTypeUnknown`）を定義する
 - [ ] `DateRange` 構造体（`Start, End time.Time`）を定義する
 - [ ] `Alert` 構造体を定義する（`OrganizationName string`, `PolicyType PolicyType`, `FailureCount int64`, `DateRange DateRange`）
@@ -193,7 +193,7 @@
 - [ ] タイムアウトを 5 秒に設定する
 - [ ] 5xx / 429 / リクエスト発行失敗をリトライ対象にする
 - [ ] `Retry-After` ヘッダーがある場合はその値（秒単位の整数）を優先して待機し、ない場合は指数バックオフを使う。Slack は秒整数のみ返すが、パース失敗時はバックオフにフォールバックする（HTTP-date 形式は Slack では使用されないためスコープ外）
-- [ ] `Retry-After` の待機時間には上限（例: 指数バックオフの最大待機時間）を設け、34 秒の最悪ブロック時間の見積もりを超えないようにする
+- [ ] 累積待機時間を追跡し、残り余裕（例: `30s - 既払い待機時間`）が次の待機に満たない場合は次のリトライを行わず即エラーにする。これにより `5s × 4 + 待機 ≤ 34s` の保証が維持される
 - [ ] 4xx（429 を除く）は即座に `SlackClientError` を返す
 - [ ] `context` キャンセル時は待機を中断して `ctx.Err()` を返す
 - [ ] 各レスポンスの `resp.Body.Close()` を確実に呼ぶ（リトライ前にもクローズしてコネクション再利用を保証する）
@@ -230,13 +230,14 @@
 - [ ] `NewSlackHandler` で URL 検証、レベルモード、dry-run、Run ID、backoff 設定、DebugLogger を受け取る
 - [ ] `Handle()` は `Record.Clone()` してから内部バッファに追加する（`slog.Record` は共有バッキングストアを持つため、`Clone()` 必須）
 - [ ] `Handle()` と `Flush()` は内部バッファの読み書きを `sync.Mutex` で保護する（`slog.Handler` は並行呼び出しを受けうる）
+- [ ] `Flush()` はスナップショット戦略を採る: mutex 取得 → バッファのスナップショットを取り現バッファをクリア → mutex 解放 → スナップショットを処理して HTTP 送信。これにより `Flush()` 実行中に `Handle()` が受け取った新レコードは次回の `Flush()` に回り、通知が失われない
 - [ ] `WithAttrs()` / `WithGroup()` は `nop`（`return s`）で実装する。Slack 通知は型付きヘルパー経由でのみ書き込まれるため、`With` 経由の属性付加は行われない。`*slog.Logger` の `With`/`WithGroup` API 経由での利用は設計上禁止する
 - [ ] `Enabled()` はハンドラ自身の `LevelMode` に基づいて判定し、CLI のコンソールログレベル設定と独立させる
 - [ ] `Flush()` は空バッファなら `nil` を返し、蓄積済みメッセージをフォーマットして逐次送信する
 - [ ] `Flush()` 内でのフォーマット→切り詰め→送信の順番: フォーマット関数は切り詰めを**行わず**全文のメッセージを返す。切り詰めは HTTP 送信直前に適用し、Debug Logger への記録には切り詰め前の全文を渡す
 - [ ] 送信成功後（またはエラーに関わらず Flush() 終了前）にバッファをクリアして二重送信を防ぐ
 - [ ] dry-run 時は HTTP POST を抑止し、DebugLogger へ記録したうえでバッファをクリアする
-- [ ] 最終失敗時は DebugLogger に詳細を記録してエラーを返す。このとき `net/http`/`url.Error` が内包する URL が外部に漏れないよう、エラーをラップして Webhook URL を除去する
+- [ ] 最終失敗時は DebugLogger に詳細を記録してエラーを返す。このとき `net/http`/`url.Error` が内包する URL が外部に漏れないよう、`%w` を用いてエラーをラップし Webhook URL を除去したメッセージで包む（`%w` 使用でエラーチェーンを保持し、呼び出し側が `errors.AsType[*SlackServerError]` 等で型識別できる）
 
 **成功基準**: `Handle()` と `Flush()` の責務が分離され、success / error webhook の振り分け、dry-run、エラー伝播が設計通りに動作する。
 
@@ -258,6 +259,7 @@
 - [ ] `TestNewSlackHandler_URLValidation`: dry-run を含め不正 URL で `WebhookValidationError` が返ること（`AC-39`）
 - [ ] `TestHandle_ClonesRecord`: `Handle()` 後に元の `slog.Record` を変更してもバッファ内容が変化しないこと
 - [ ] `TestFlush_Concurrent`: `Handle()` と `Flush()` を goroutine で並行実行してもレースやパニックが起きないこと（`-race` フラグで実行）
+- [ ] `TestFlush_RecordsDuringFlushPreserved`: `Flush()` 実行中に `Handle()` で追加されたレコードが次回 `Flush()` で送信され、失われないこと（スナップショット戦略の確認）
 - [ ] `TestFlush_ClearsBufferAfterSend`: `Flush()` 成功後に再度 `Flush()` しても HTTP リクエストが発行されないこと
 - [ ] `TestFlush_MultipleAlerts_SinglePost`: 複数の `LogAlert` 呼び出し後の `Flush()` が 1 回の HTTP POST を発行すること（集約確認）
 - [ ] `TestFlush_ErrorStringNoURL`: 送信失敗時のエラー文字列に Webhook URL の実値が含まれないこと
@@ -409,10 +411,11 @@
 **対象ファイル**: `cmd/tlsrpt-digest/main.go`
 
 - [ ] Phase 1: TOML 読み込み前にローカルハンドラ（`slog.NewTextHandler(os.Stderr, ...)` 等）を初期化する（Slack ハンドラ含まない）。`slog.SetDefault(slog.New(localHandler))` で設定する
-- [ ] 環境変数から `successURL`、`errorURL` を読み込み `ValidateEnvCombination` を呼ぶ。`dry-run` かつ両 URL 未設定の場合はテスト用ダミー URL（`https://dry-run.local/...`）を設定してハンドラを生成し、実際には HTTP POST しない（AC-38 の「Webhook URL を設定せずに確認」の実現）
+- [ ] 環境変数から `successURL`、`errorURL` を読み込み `notify.ValidateEnvCombination` を呼ぶ（`ValidateEnvCombination` は `internal/notify` でエクスポートする）
 - [ ] TOML を読み込んで `notify.slack.allowed_host` を取得する
-- [ ] Phase 2: `validateBothURLs(successURL, errorURL, allowedHost)` を呼んでホスト一致（AC-23）を確認したうえで、`NewSlackHandler` で success / error 各ハンドラを生成する
-- [ ] Phase 2 の Slack ハンドラ追加は `slog.Logger` が不変のため再構築で行う: `MultiHandler(localHandler, successSlack, errorSlack)` を新たに作り `slog.SetDefault(slog.New(multiHandler))` を呼ぶ。`MultiHandler` は `internal/notify` 内に実装する（既存の `MultiHandler` がなければ新規追加）
+- [ ] Phase 2: エクスポートされた `notify.BuildHandlers(successURL, errorURL, allowedHost, opts)` を呼び、内部で `validateBothURLs`（AC-23）や各 URL の検証（`AC-21`〜`AC-26`）を行う。この関数は `0〜2` 個の `SlackHandler` を返す（`validateBothURLs` は unexported のままで `BuildHandlers` から呼ぶ）
+- [ ] `--dry-run` + URL 未設定の場合: `BuildHandlers` に `IsDryRun=true` を渡したうえで空 URL も許容するモード（`DryRunNoURL`）で呼び出し、URL 検証をスキップして DebugLogger 専用ハンドラを生成する（AC-38「Webhook URL を設定せずに確認」の実現）
+- [ ] Phase 2 の Slack ハンドラ追加は `slog.Logger` が不変のため再構築で行う: `notify.NewMultiHandler(localHandler, slackHandlers...)` を新たに作り `slog.SetDefault(slog.New(multiHandler))` を呼ぶ。`MultiHandler` は各子ハンドラの `Enabled()` を個別に確認してからレコードを転送し、レベルルーティングの正確性を保証する
 - [ ] `--dry-run` フラグを CLI に追加し、`SlackHandlerOptions.IsDryRun` に渡す
 - [ ] `runID` を `github.com/oklog/ulid/v2` の `ulid.Make().String()` で生成する（毎回 unique な ULID。プロセス再起動や複数同時実行でも衝突しない）
 
@@ -507,7 +510,7 @@
 
 アーキテクチャ設計書 §7「テスト戦略」に詳細を記載。本計画では実施方法のみ補足する。
 
-- **単体テスト**: `httptest.NewServer` でモック HTTP サーバを用意し、実際の HTTP 送受信を行う（`net/http` のモックは使わない）
+- **単体テスト**: HTTP 通信を伴うテストには `httptest.NewTLSServer` を使用する（`NewSlackHandler` が HTTPS のみ許可するため）。リトライロジック等ハンドラ URL 検証を経由しない低レベルテストのみ `httptest.NewServer` を使用可。`SlackHandlerOptions.HTTPClient` にテスト用自己署名証明書を信頼する `*http.Client` を注入する
 - **スパイ**: `internal/notify/testutil/mocks.go` の `SpyHandler` でバッファへの書き込みを検査する
 - **統合テスト**: モック Slack サーバ 2 台（success / error 各 1 台）を立て、振り分けを検証する
 - **後方互換性テスト**: success/error が同一 URL でも許容されること、および定期サマリが呼び出し側から与えられた任意期間をそのまま扱えることを確認する
@@ -598,9 +601,9 @@
 | `AC-18` | `internal/notify/format_test.go` | `TestFormatAlerts_Fields`, `TestFormatAlerts_NoPolicyFound`, `TestFormatAlerts_PolicyTypeUnknown` | PolicyType 文字列確認 |
 | `AC-19` | `internal/notify/format_test.go` | `TestFormatAlerts_Fields` | `total-failure-session-count` フィールド確認 |
 | `AC-20` | `internal/notify/format_test.go` | `TestFormatAlerts_Fields` | `date-range` フィールド確認 |
-| `AC-20a` | `internal/notify/format_test.go` | `TestFormatAlerts_RunID` | Run ID フィールド確認 |
-| `AC-20b` | `internal/notify/format_test.go` | `TestFormatAlerts_TruncateText` | 4001 文字入力で `...` 付与 |
-| `AC-20c` | `internal/notify/format_test.go` | `TestFormatAlerts_TruncateField` | 1001 文字フィールドで `...` 付与 |
+| `AC-20a` | `internal/notify/format_test.go` | `TestFormatAlerts_RunID`, `TestFormatSystemError_Fields`, `TestFormatSummary_Fields` | 全通知種別で Run ID フィールド確認 |
+| `AC-20b` | `internal/notify/format_test.go` | `TestTruncateText_ExactLimit` | 4001 ルーン入力で `...` 付与かつ結果が 4000 ルーン以内 |
+| `AC-20c` | `internal/notify/format_test.go` | `TestTruncateField_ExactLimit` | 1001 ルーン入力で `...` 付与かつ結果が 1000 ルーン以内 |
 | `AC-20d` | `internal/notify/handler_test.go` | `TestFlush_FileLog_NoTruncation` | Debug Logger に全文出力 |
 | `AC-20e` | `internal/notify/format_test.go` | `TestFormatAlerts_TitleOrgCount` | タイトルに N 含有 |
 | `AC-20f` | `internal/notify/format_test.go` | `TestFormatAlerts_Color` | `color = "warning"` / ⚠️ |
@@ -629,7 +632,7 @@
 | `AC-35` | `cmd/tlsrpt-digest/main_test.go` | `TestBootstrap_Phase2_ValidationFail_Abort` | URL 検証失敗で起動中断確認 |
 | `AC-36` | `cmd/tlsrpt-digest/main_test.go` | `TestBootstrap_Phase2_SlackAdded` | `allowed_host` 伝播確認 |
 | `AC-37` | `internal/notify/handler_test.go` | `TestFlush_DryRun` | `IsDryRun` フラグを持つハンドラが生成できること（`TestFlush_DryRun` でフラグを有効にして動作確認） |
-| `AC-38` | `internal/notify/handler_test.go` | `TestFlush_DryRun` | HTTP POST なし・Debug Logger 出力確認 |
+| `AC-38` | `internal/notify/handler_test.go`, `cmd/tlsrpt-digest/main_test.go` | `TestFlush_DryRun`, `TestBootstrap_DryRun_NoURLs` | HTTP POST なし・DebugLogger 出力確認（URL 設定時）、URL 未設定でも DebugLogger 出力確認 |
 | `AC-39` | `internal/notify/handler_test.go` | `TestNewSlackHandler_URLValidation` | dry-run でも URL 検証実施確認 |
 | `AC-40` | `cmd/tlsrpt-digest/main_test.go` | `TestBootstrap_DryRunFlag` | `--dry-run` フラグ伝播確認 |
 
