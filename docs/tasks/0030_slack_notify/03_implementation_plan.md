@@ -536,9 +536,9 @@
 - [x] Step 2-3: SlackHandler 実装（`AC-01`〜`AC-05b`, `AC-14`〜`AC-16a`, `AC-37`〜`AC-39`）
 
 ### Phase 3
-- [ ] Step 3-1: メッセージフォーマット（`AC-16b`, `AC-17`〜`AC-20l`）
-- [ ] Step 3-2: 型付きヘルパー（`AC-14`, `AC-16a`）
-- [ ] Step 3-3: ファイルログ全文出力（`AC-20d`）
+- [x] Step 3-1: メッセージフォーマット（`AC-16b`, `AC-17`〜`AC-20l`）
+- [x] Step 3-2: 型付きヘルパー（`AC-14`, `AC-16a`）
+- [x] Step 3-3: ファイルログ全文出力（`AC-20d`）
 
 ### Phase 4
 - [ ] Step 4-1: スパイハンドラ（`internal/notify/testutil/`）

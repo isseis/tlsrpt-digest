@@ -28,8 +28,13 @@ const (
 	emojiSuccess = "✅"
 )
 
-// truncateText cuts s to at most maxLen runes. If truncation occurs, the result
+// TruncateText cuts s to at most maxLen runes. If truncation occurs, the result
 // ends with "..." and its total rune count is exactly maxLen.
+// Exported for use in tests.
+func TruncateText(s string, maxLen int) string {
+	return truncateText(s, maxLen)
+}
+
 func truncateText(s string, maxLen int) string {
 	if utf8.RuneCountInString(s) <= maxLen {
 		return s
