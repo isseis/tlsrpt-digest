@@ -34,6 +34,20 @@
 
 ---
 
+#### Step 1-0: 依存ライブラリの追加
+
+**対象ファイル**: `go.mod`、`go.sum`
+
+- [ ] `go get github.com/oklog/ulid/v2` を実行して `go.mod` / `go.sum` を更新する
+
+**成功基準**: `go build ./...` が通り、`go.sum` に `github.com/oklog/ulid/v2` のチェックサムが追加される。
+
+**推定工数**: 0.1 日
+
+**実績**: -
+
+---
+
 #### Step 1-1: TOML 設定への `notify.slack` セクション追加
 
 **対象ファイル**: `internal/config/config.go`（新規または既存ファイルへ追記）, `internal/config/config_test.go`（新規）, `internal/config/secret_test.go`（新規）
@@ -377,7 +391,7 @@
 - [ ] TOML を読み込んで `notify.slack.allowed_host` を取得する
 - [ ] Phase 2: `NewSlackHandler` で success / error 各ハンドラを生成し、既存ロガーに追加する
 - [ ] `--dry-run` フラグを CLI に追加し、`SlackHandlerOptions.IsDryRun` に渡す
-- [ ] `runID` を `fmt.Sprintf("%x", ...)` 等でプロセス起動ごとに一意に生成する
+- [ ] `runID` を `github.com/oklog/ulid/v2` の `ulid.Make().String()` で生成する（毎回 unique な ULID。プロセス再起動や複数同時実行でも衝突しない）
 
 **成功基準**: Phase 1 が完了したロガーに Slack ハンドラが含まれない。Phase 2 後に Slack ハンドラが追加されている。
 
@@ -490,6 +504,7 @@
 ## 6. 実装チェックリスト
 
 ### Phase 1
+- [ ] Step 1-0: `github.com/oklog/ulid/v2` 依存追加
 - [ ] Step 1-1: TOML 設定追加・strict decode（`AC-26a`）
 - [ ] Step 1-2: エラー型定義（`AC-04`, `AC-05`, `AC-30`, `AC-31`, `AC-35`）
 - [ ] Step 1-3: コア型・オプション定義（`AC-37`, `AC-18`）
