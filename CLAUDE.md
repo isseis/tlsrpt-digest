@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Mermaid Diagram Reference: [EN](docs/dev/developer_guide/mermaid_reference.md) / [JA](docs/dev/developer_guide/mermaid_reference.ja.md) - Diagram conventions and examples
 - [Package Reference](docs/dev/developer_guide/package_reference.md) - Detailed package structure
 - [Task Identification](docs/dev/developer_guide/task_identification.md) - How slash commands identify the target task directory
+- [Robustness Principle](docs/dev/developer_guide/robustness_principle.md) - Be conservative in output, liberal in input (Postel's Law)
 
 **Task Templates:**
 - [docs/tasks/0000_template/](docs/tasks/0000_template/) — Template files for new task directories
@@ -93,6 +94,7 @@ See [Package Reference](docs/dev/developer_guide/package_reference.md) for detai
 - **Error Handling**: Comprehensive error types and validation
 - **YAGNI**: Use simple and clear approach to satisfy the requirement. Don't take complex approach for not-yet-planned features.
 - **DRY**: Don't repeat yourself. Before adding new code, check the codebase and prefer reusing existing implementations.
+- **Robustness Principle**: "Be conservative in what you do, be liberal in what you accept from others." (Postel's Law) — when receiving data from external systems (email providers, TLSRPT senders), tolerate non-standard variations (e.g. fallback from `Content-Type` to filename extension for TLSRPT attachment dispatch). When producing output, strictly follow the relevant specification.
 
 ### Configuration
 - Uses TOML format for configuration files
