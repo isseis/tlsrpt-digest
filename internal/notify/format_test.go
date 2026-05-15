@@ -42,7 +42,7 @@ func buildCaptureHandler(t *testing.T, levelMode notify.LevelMode, recv *[]byte)
 		RunID:         "run-001",
 		LevelMode:     levelMode,
 		HTTPClient:    srv.Client(),
-		BackoffConfig: notify.BackoffConfig{Base: 1 * time.Millisecond, RetryCount: 0},
+		BackoffConfig: notify.DefaultBackoffConfig,
 	}
 	h, err := notify.NewSlackHandler(opts)
 	require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestFormatAlerts_NoTruncation(t *testing.T) {
 		RunID:         "run-001",
 		LevelMode:     notify.LevelModeWarnAndAbove,
 		HTTPClient:    srv.Client(),
-		BackoffConfig: notify.BackoffConfig{Base: 1 * time.Millisecond, RetryCount: 0},
+		BackoffConfig: notify.DefaultBackoffConfig,
 		DebugLogger:   debugLogger,
 	}
 	h, err := notify.NewSlackHandler(opts)

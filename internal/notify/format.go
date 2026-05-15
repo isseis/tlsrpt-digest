@@ -56,9 +56,11 @@ func truncateMessage(m *slackMessage) {
 	}
 }
 
-// formatRecords converts a slice of slog.Records to a single slackMessage.
-// Records are classified by level and message content.
-func formatRecords(records []slog.Record, runID string) slackMessage {
+// formatRecords converts buffered slog.Records into one or more slackMessages.
+// TLS failures are aggregated into a single message; system errors become
+// individual messages; summaries produce one message. The messages are ordered:
+// TLS-failure aggregate (if any), system errors (one each), summary (if any).
+func formatRecords(records []slog.Record, runID string) []slackMessage {
 	var alerts []Alert
 	var sysErrors []SystemError
 	var summaries []Summary
@@ -75,17 +77,17 @@ func formatRecords(records []slog.Record, runID string) slackMessage {
 		}
 	}
 
-	// Build a combined message. Priority: system errors > alerts > summary.
-	if len(sysErrors) > 0 {
-		return formatSystemErrorList(sysErrors, runID)
-	}
+	var msgs []slackMessage
 	if len(alerts) > 0 {
-		return formatAlerts(alerts, runID)
+		msgs = append(msgs, formatAlerts(alerts, runID))
+	}
+	for _, e := range sysErrors {
+		msgs = append(msgs, formatSystemError(e, runID))
 	}
 	if len(summaries) > 0 {
-		return formatSummary(summaries[0], runID)
+		msgs = append(msgs, formatSummary(summaries[0], runID))
 	}
-	return slackMessage{Text: fmt.Sprintf("notification (Run ID: %s)", runID)}
+	return msgs
 }
 
 // extractAlert reads Alert fields from slog.Attrs stored by LogAlert.
@@ -177,30 +179,6 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 		Text: title,
 		Attachments: []slackAttachment{
 			{Color: colorWarning, Fields: fields},
-		},
-	}
-}
-
-// formatSystemErrorList builds a slackMessage for one or more system errors.
-func formatSystemErrorList(errs []SystemError, runID string) slackMessage {
-	if len(errs) == 1 {
-		return formatSystemError(errs[0], runID)
-	}
-	// Multiple system errors: use first as representative, note count in title.
-	title := fmt.Sprintf("%s System Errors (%d) – first: %s", emojiError, len(errs), errs[0].ErrorType)
-	var fields []slackField
-	for _, e := range errs {
-		fields = append(fields, slackField{
-			Title: "Error / Component",
-			Value: fmt.Sprintf("%s | %s: %s", e.ErrorType, e.Component, e.Message),
-			Short: false,
-		})
-	}
-	fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: true})
-	return slackMessage{
-		Text: title,
-		Attachments: []slackAttachment{
-			{Color: colorDanger, Fields: fields},
 		},
 	}
 }

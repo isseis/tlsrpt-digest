@@ -39,15 +39,18 @@ func warnRecord(_ string) slog.Record {
 }
 
 // retryOpts returns a base SlackHandlerOptions for retry tests using a TLS server.
+// Backoff uses realistic production values (2s base, 3 retries) combined with
+// a no-op sleep function so tests do not actually wait between retries.
 func retryOpts(serverURL string, client *http.Client) notify.SlackHandlerOptions {
-	return notify.SlackHandlerOptions{
+	base := notify.SlackHandlerOptions{
 		WebhookURL:    config.Secret(serverURL + "/webhook"),
 		AllowedHost:   "127.0.0.1",
 		RunID:         "test",
 		LevelMode:     notify.LevelModeWarnAndAbove,
 		HTTPClient:    client,
-		BackoffConfig: notify.BackoffConfig{Base: 1 * time.Millisecond, RetryCount: 3},
+		BackoffConfig: notify.DefaultBackoffConfig, // 2s base, 3 retries
 	}
+	return notify.WithNoOpSleep(base)
 }
 
 func TestHTTPPost_Timeout(t *testing.T) {
@@ -129,14 +132,14 @@ func TestHTTPPost_RequestFailureRetry(t *testing.T) {
 	url := srv.URL + "/webhook"
 	srv.Close()
 
-	opts := notify.SlackHandlerOptions{
+	opts := notify.WithNoOpSleep(notify.SlackHandlerOptions{
 		WebhookURL:    config.Secret(url),
 		AllowedHost:   "127.0.0.1",
 		RunID:         "test",
 		LevelMode:     notify.LevelModeWarnAndAbove,
 		HTTPClient:    client,
-		BackoffConfig: notify.BackoffConfig{Base: 1 * time.Millisecond, RetryCount: 2},
-	}
+		BackoffConfig: notify.BackoffConfig{Base: 2 * time.Second, RetryCount: 2},
+	})
 	h := mustNewHandler(t, opts)
 	require.NoError(t, h.Handle(context.Background(), warnRecord("test")))
 	err := h.Flush(context.Background())

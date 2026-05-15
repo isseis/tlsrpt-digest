@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -63,4 +64,7 @@ type SlackHandlerOptions struct {
 	// testReqTimeout overrides the per-request deadline; zero uses the default 5s.
 	// Set via WithRequestTimeout in test_helpers.go (//go:build test).
 	testReqTimeout time.Duration
+	// testSleepFunc replaces the real sleep during retry waits.
+	// Set via WithNoOpSleep or WithSleepFunc in test_helpers.go (//go:build test).
+	testSleepFunc func(ctx context.Context, d time.Duration) error
 }

@@ -541,12 +541,12 @@
 - [x] Step 3-3: ファイルログ全文出力（`AC-20d`）
 
 ### Phase 4
-- [ ] Step 4-1: スパイハンドラ（`internal/notify/testutil/`）
-- [ ] Step 4-2: 逐次送信確認（`AC-20m`）
-- [ ] Step 4-3: 二段階起動フロー（`AC-33`〜`AC-36`, `AC-40`）
-- [ ] Step 4-4: 統合テスト
-- [ ] Step 4-5: セキュリティテスト
-- [ ] Step 4-6: 最終確認（make fmt / test / lint / deadcode）
+- [x] Step 4-1: スパイハンドラ（`internal/notify/testutil/`）
+- [x] Step 4-2: 逐次送信確認（`AC-20m`）
+- [x] Step 4-3: 二段階起動フロー（`AC-33`〜`AC-36`, `AC-40`）
+- [-] Step 4-4: 統合テスト（Step 2-3/3-1 のハンドラテストに統合済み）
+- [x] Step 4-5: セキュリティテスト
+- [x] Step 4-6: 最終確認（make fmt / test / lint / deadcode 通過）
 
 ---
 
