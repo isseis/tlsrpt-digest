@@ -17,7 +17,7 @@
 ### 1.1 設計原則
 
 1. **出力パスの分離**: `Debug Logger`（stdout/stderr/file）と `Slack ハンドラ` は完全に独立したパスとする（通知セキュリティガイドラインに準拠）
-2. **集約バッファ型**: `Handle()` はバッファに積み、ポーリング実行の終了時に `Flush()` で HTTP POST にまとめる。複数種別のメッセージ（TLS failure 集約・システムエラー個別等）が発生した場合は逐次送信する
+2. **集約バッファ型**: `Handle()` はバッファに積み、1 回の実行サイクルの終了時に `Flush()` で HTTP POST にまとめる。複数種別のメッセージ（TLS failure 集約・システムエラー個別等）が発生した場合は逐次送信する
 3. **型安全な通知**: 外部コードは型付きヘルパー（`LogAlert`、`LogSystemError`、`LogSummary`）経由でのみ通知ロガーに書き込む
 4. **二段階初期化**: `TOML` 読み込み前は `Debug Logger` のみ初期化し、`Slack ハンドラ` は `TOML` 読み込み後に追加する
 5. **Secret 型**: Webhook URL を保持する全フィールドは `config.Secret` でラップし、ログ漏洩を防ぐ
@@ -33,7 +33,7 @@ flowchart LR
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
     classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
 
-    IMAP[("IMAP<br>Mailbox")] --> Fetch["Polling Loop"]
+    IMAP[("IMAP<br>Mailbox")] --> Fetch["One-shot Execution"]
     Fetch --> Parse["TLSRPT Parse"]
     Parse -->|"failure > 0"| Alert["LogAlert()"]
     Parse -->|"failure = 0"| SummarySrc["Weekly Summary<br>(task 0050)"]
@@ -84,8 +84,8 @@ flowchart TD
         TOML --> Phase2["Phase 2:<br>Slack ハンドラ追加"]
     end
 
-    subgraph PollingRun["ポーリング実行"]
-        Loop["main loop"] --> HandleRec["Handle()<br>× N 回"]
+    subgraph OneShot["1 回の実行サイクル（cron / systemd timer 起動）"]
+        Loop["main()"] --> HandleRec["Handle()<br>× N 回"]
         HandleRec --> Buffer[("内部バッファ")]
         Buffer --> Flush["Flush()"]
         Flush -->|"WARN/ERROR"| ErrorHook[("Slack<br>error webhook")]
@@ -173,16 +173,16 @@ sequenceDiagram
     end
 ```
 
-### 2.4 ポーリング実行フロー（シーケンス）
+### 2.4 実行サイクルフロー（シーケンス）
 
 ```mermaid
 sequenceDiagram
-    participant L as "main loop"
+    participant L as "main()"
     participant HS as "notify success handler"
     participant HE as "notify error handler"
     participant S as "Slack API"
 
-    Note over L,HE: ポーリング実行開始
+    Note over L,HE: 実行サイクル開始
     L->>HE: Handle(tlsFailureRecord)
     Note over HE: WARN/ERROR をバッファに追記・HTTP 送信なし（AC-03, AC-05b）
     L->>HE: Handle(systemErrorRecord)
@@ -191,7 +191,7 @@ sequenceDiagram
     Note over HS: INFO を success webhook 用バッファに追記（AC-02, AC-14〜AC-16）
     Note over L,HS: 振り分けは CLI のコンソールログレベル設定と独立（AC-16a）
 
-    Note over L,HS: ポーリング実行終了
+    Note over L,HS: 実行サイクル終了
     L->>HE: Flush(ctx)
     HE->>S: POST error webhook
     alt 5xx / 429 / リクエスト発行失敗
