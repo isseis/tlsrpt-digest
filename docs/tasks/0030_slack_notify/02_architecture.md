@@ -255,13 +255,20 @@ const (
     PolicyTypeUnknown       PolicyType = ""  // RFC 8460 未定義値または空値
 )
 
+// DateRange はレポートの対象期間を表す。
+// tlsrpt.DateRange と同一構造だが、internal/notify を internal/tlsrpt から独立させるため再定義する。
+type DateRange struct {
+    Start time.Time
+    End   time.Time
+}
+
 // Alert は即時アラート（TLS failure）の通知ペイロード。
 // public フィールドのみ含み、機密情報は含まない。
 type Alert struct {
     OrganizationName string
     PolicyType       PolicyType
     FailureCount     int64
-    DateRange        tlsrpt.DateRange
+    DateRange        DateRange
 }
 
 // SystemError はシステムエラーアラートの通知ペイロード。
