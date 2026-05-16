@@ -327,7 +327,7 @@ func TestHTTPPost_LastAttemptRetryAfterDoesNotSleep(t *testing.T) {
 	assert.Empty(t, sleeps, "final attempt must not sleep when no retry remains")
 }
 
-func TestHTTPPost_ExponentialBackoffBoundary_ContinueAt30StopBeyond30(t *testing.T) {
+func TestHTTPPost_ExponentialBackoffBoundary_ContinueAt14StopBeyond14(t *testing.T) {
 	var calls atomic.Int32
 	srv, client := newTLSTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
@@ -359,10 +359,11 @@ func TestHTTPPost_ExponentialBackoffBoundary_ContinueAt30StopBeyond30(t *testing
 	err := h.Flush(context.Background())
 	require.Error(t, err)
 
-	// Exponential waits are 2,4,8,16 (=30 total), then the next wait would
-	// exceed the 30-second cumulative cap and must not be slept.
-	assert.Equal(t, []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}, sleeps)
-	assert.Equal(t, 30*time.Second, cumulativeSleep)
-	// Requests are attempted for initial try + retries that fit the cap.
-	assert.Equal(t, int32(5), calls.Load())
+	// maxCumulativeWait = 14s. Exponential waits: 2+4+8 = 14 (fits exactly).
+	// Next backoff (16s, capped to 14s) would push cumulative to 28 > 14, so
+	// the loop stops before sleeping again.
+	assert.Equal(t, []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second}, sleeps)
+	assert.Equal(t, 14*time.Second, cumulativeSleep)
+	// Requests: initial + 3 retries that fit the cap.
+	assert.Equal(t, int32(4), calls.Load())
 }
