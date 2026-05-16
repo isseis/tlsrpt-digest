@@ -411,14 +411,13 @@
 **対応 AC**: `AC-23`, `AC-33`, `AC-34`, `AC-35`, `AC-36`, `AC-38`, `AC-40`
 
 **テスト**: `cmd/tlsrpt-digest/main_test.go`（統合テスト）
-> **注**: `cmd/tlsrpt-digest/main_test.go` は未作成。bootstrap テストは `setupNotifyHandlers` のリファクタリング後にタスク `0050` と合わせて実装する。
 
-- [-] `TestBootstrap_Phase1_NoSlackHandler`: `setupPhase1Logging` がローカルハンドラのみ設定すること（`AC-33`）— 未実装
-- [-] `TestBootstrap_ErrorOnly_NoSuccessHandler`: error webhook のみ設定時に success ハンドラを生成しないこと（`AC-07`）— 未実装
-- [-] `TestBootstrap_Phase2_SlackAdded`: `setupNotifyHandlers` が期待件数の Slack ハンドラを返すこと（`AC-06`, `AC-34`, `AC-36`）— 未実装
-- [-] `TestBootstrap_Phase2_ValidationFail_Abort`: URL 検証失敗でエラーを返すこと（`AC-35`）— 未実装
-- [-] `TestBootstrap_DryRunFlag`: `--dry-run` フラグが `SlackHandlerOptions.IsDryRun` に伝播されること（`AC-40`）— 未実装
-- [-] `TestBootstrap_DryRun_NoURLs`: URL 未設定 + `--dry-run` で両ハンドラが DebugLogger 出力すること（`AC-38`）— 未実装
+- [x] `TestBootstrap_Phase1_NoSlackHandler`: `setupPhase1Logging` がローカルハンドラのみ設定すること（`AC-33`）
+- [x] `TestBootstrap_ErrorOnly_NoSuccessHandler`: error webhook のみ設定時に success ハンドラを生成しないこと（`AC-07`）
+- [x] `TestBootstrap_Phase2_SlackAdded`: `setupNotifyHandlers` が期待件数の Slack ハンドラを返すこと（`AC-06`, `AC-34`, `AC-36`）
+- [x] `TestBootstrap_Phase2_ValidationFail_Abort`: URL 検証失敗でエラーを返すこと（`AC-35`）
+- [x] `TestBootstrap_DryRunFlag`: `--dry-run` フラグが `SlackHandlerOptions.IsDryRun` に伝播されること（`AC-40`）
+- [x] `TestBootstrap_DryRun_NoURLs`: URL 未設定 + `--dry-run` で両ハンドラが DebugLogger 出力すること（`AC-38`）
 
 **推定工数**: 0.75 日
 
@@ -472,7 +471,7 @@
 - [x] `make fmt` を実行して全 Go ファイルをフォーマットする
 - [x] `make test` を実行して全テストが通ること
 - [x] `make lint` を実行してエラーがないこと
-- [x] `make deadcode` を実行して未使用の関数がないこと
+- [-] `make deadcode` を実行して未使用の関数がないこと（`cmd/tlsrpt-digest` がまだハンドラ helper（`LogAlert` 等）と `Flush` を呼び出していないため `internal/notify` の一部関数が unreachable と報告される。タスク `0050`（IMAP→Notify 配線）で解消する。）
 
 **成功基準**: 変更済みドキュメントと実装計画に対応するコードベース全体が formatter / test / lint / deadcode を通過する。
 
@@ -545,10 +544,10 @@
 ### Phase 4
 - [x] Step 4-1: スパイハンドラ（`internal/notify/testutil/`）
 - [x] Step 4-2: 逐次送信確認（`AC-20m`）
-- [-] Step 4-3: 二段階起動フロー（`AC-33`〜`AC-36`, `AC-40`）— 実装済みだが `main_test.go` 未作成、タスク `0050` で完成予定
+- [x] Step 4-3: 二段階起動フロー（`AC-33`〜`AC-36`, `AC-40`）
 - [-] Step 4-4: 統合テスト（Step 2-3/3-1 のハンドラテストに統合済み）
 - [x] Step 4-5: セキュリティテスト
-- [x] Step 4-6: 最終確認（make fmt / test / lint / deadcode 通過）
+- [-] Step 4-6: 最終確認（`make deadcode` はタスク `0050` 配線完了まで未達）
 
 ---
 

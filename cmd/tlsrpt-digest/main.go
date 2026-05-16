@@ -50,9 +50,11 @@ func main() {
 }
 
 // setupPhase1Logging initialises console-only logging (Phase 1: before TOML).
-func setupPhase1Logging() {
+// It returns the handler so tests can verify Phase 1 contains no Slack handler.
+func setupPhase1Logging() slog.Handler {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	slog.SetDefault(slog.New(h))
+	return h
 }
 
 // setupNotifyHandlers validates URLs and creates SlackHandler instances for

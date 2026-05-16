@@ -21,12 +21,8 @@ func ValidateEnvCombination(successURL, errorURL string) error {
 	return nil
 }
 
-// ValidateWebhookURL verifies that webhookURL uses HTTPS and that its hostname
+// validateWebhookURL verifies that webhookURL uses HTTPS and that its hostname
 // matches allowedHost (case-insensitive, port-stripped comparison).
-func ValidateWebhookURL(webhookURL, allowedHost string) error {
-	return validateWebhookURL(webhookURL, allowedHost)
-}
-
 func validateWebhookURL(webhookURL, allowedHost string) error {
 	if webhookURL == "" {
 		return &WebhookValidationError{Msg: "webhook URL must not be empty"}
@@ -55,12 +51,8 @@ func validateWebhookURL(webhookURL, allowedHost string) error {
 	return nil
 }
 
-// ValidateBothURLs checks that successURL and errorURL use the same hostname.
+// validateBothURLs checks that successURL and errorURL use the same hostname.
 // It is called by BuildHandlers after each individual URL passes validation.
-func ValidateBothURLs(successURL, errorURL, allowedHost string) error {
-	return validateBothURLs(successURL, errorURL, allowedHost)
-}
-
 func validateBothURLs(successURL, errorURL, allowedHost string) error {
 	if err := validateWebhookURL(successURL, allowedHost); err != nil {
 		return err

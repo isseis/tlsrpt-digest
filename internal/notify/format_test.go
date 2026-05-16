@@ -251,6 +251,8 @@ func TestFormatAlerts_NoPolicyFound(t *testing.T) {
 func TestFormatAlerts_PolicyTypeUnknown(t *testing.T) {
 	a := sampleAlert()
 	a.PolicyType = notify.PolicyTypeUnknown
-	raw := flushAlert(t, a)
-	assert.NotEmpty(t, raw)
+	body := string(flushAlert(t, a))
+	// The unknown placeholder must appear in the rendered message so operators
+	// can spot reports that omit a policy-type value.
+	assert.Contains(t, body, "(unknown)")
 }

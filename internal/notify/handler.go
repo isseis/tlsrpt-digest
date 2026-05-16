@@ -67,14 +67,19 @@ func (h *SlackHandler) Enabled(_ context.Context, level slog.Level) bool {
 	}
 }
 
+// IsDryRun reports whether this handler is in dry-run mode (Flush logs the
+// payload to DebugLogger instead of POSTing to Slack).
+func (h *SlackHandler) IsDryRun() bool { return h.opts.IsDryRun }
+
+// LevelMode returns the configured level filter mode for this handler.
+func (h *SlackHandler) LevelMode() LevelMode { return h.opts.LevelMode }
+
 // Handle buffers the record for later delivery by Flush().
 // It clones the record to avoid shared backing-store issues.
-// Although the slog contract guarantees Handle is only called when Enabled
-// returns true, we re-check here for robustness.
-func (h *SlackHandler) Handle(ctx context.Context, r slog.Record) error {
-	if !h.Enabled(ctx, r.Level) {
-		return nil
-	}
+// Per the slog.Handler contract, callers (typed helpers / *slog.Logger) are
+// responsible for checking Enabled before calling Handle, so no level filter
+// is applied here.
+func (h *SlackHandler) Handle(_ context.Context, r slog.Record) error {
 	clone := r.Clone()
 	h.mu.Lock()
 	h.buf = append(h.buf, clone)

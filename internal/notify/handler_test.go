@@ -107,25 +107,32 @@ func TestFlush_ErrorGoesToErrorWebhook(t *testing.T) {
 	assert.Equal(t, int32(1), errReqs.Load())
 }
 
+// TestFlush_InfoNotToErrorWebhook verifies AC-15: INFO-level events are never
+// delivered to the error webhook. Uses LogSummary (the canonical INFO entry
+// point) so the helper's Enabled check correctly filters the record out.
 func TestFlush_InfoNotToErrorWebhook(t *testing.T) {
-	_, errH, _, _ := newPairHandlers(t)
-	r := slog.NewRecord(time.Now(), slog.LevelInfo, "test", 0)
-	// INFO is not accepted by errH (LevelModeWarnAndAbove).
-	require.NoError(t, errH.Handle(context.Background(), r))
-	require.NoError(t, errH.Flush(context.Background()))
-	// Handle stored it but Enabled=false so Flush skips it... actually Handle
-	// doesn't check Enabled. Let's verify via direct Enabled check.
+	_, errH, _, errReqs := newPairHandlers(t)
 	assert.False(t, errH.Enabled(context.Background(), slog.LevelInfo))
+	require.NoError(t, notify.LogSummary(context.Background(), errH, notify.Summary{
+		Period: notify.DateRange{Start: time.Now(), End: time.Now()},
+	}))
+	require.NoError(t, errH.Flush(context.Background()))
+	assert.Equal(t, int32(0), errReqs.Load(), "INFO must not POST to error webhook")
 }
 
+// TestFlush_WarnNotToSuccessOnly verifies AC-16: WARN-level events are never
+// delivered to a success-only handler. Uses LogAlert (the canonical WARN entry
+// point) so the helper's Enabled check correctly filters the record out.
 func TestFlush_WarnNotToSuccessOnly(t *testing.T) {
 	success, _, successReqs, _ := newPairHandlers(t)
-	r := slog.NewRecord(time.Now(), slog.LevelWarn, "test", 0)
 	assert.False(t, success.Enabled(context.Background(), slog.LevelWarn))
-	require.NoError(t, success.Handle(context.Background(), r))
+	require.NoError(t, notify.LogAlert(context.Background(), success, notify.Alert{
+		OrganizationName: "example.com",
+		PolicyType:       notify.PolicyTypeSTS,
+		FailureCount:     1,
+	}))
 	require.NoError(t, success.Flush(context.Background()))
-	// success handler ignores WARN.
-	assert.Equal(t, int32(0), successReqs.Load())
+	assert.Equal(t, int32(0), successReqs.Load(), "WARN must not POST to success webhook")
 }
 
 func TestCLILogLevel_Independent(t *testing.T) {
