@@ -36,11 +36,16 @@ func TruncateText(s string, maxLen int) string {
 }
 
 func truncateText(s string, maxLen int) string {
+	suffixLen := len([]rune(truncSuffix))
+	if maxLen <= suffixLen {
+		// maxLen too small to fit even the suffix; return suffix truncated to maxLen.
+		return string([]rune(truncSuffix)[:maxLen])
+	}
 	if utf8.RuneCountInString(s) <= maxLen {
 		return s
 	}
 	runes := []rune(s)
-	return string(runes[:maxLen-len([]rune(truncSuffix))]) + truncSuffix
+	return string(runes[:maxLen-suffixLen]) + truncSuffix
 }
 
 // truncateMessage applies Slack field-length limits to m in place.

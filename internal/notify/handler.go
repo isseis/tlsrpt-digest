@@ -172,14 +172,22 @@ func buildMessages(records []slog.Record, runID string) []slackMessage {
 // DryRunNoURL mode: IsDryRun=true and both URLs empty — skips validation,
 // returns a single DebugLogger-only handler.
 func BuildHandlers(successURL, errorURL, allowedHost string, opts SlackHandlerOptions) ([]*SlackHandler, error) {
-	// DryRunNoURL mode.
+	// DryRunNoURL mode: create one handler per level tier so both INFO summaries
+	// and WARN/ERROR alerts are written to DebugLogger.
 	if opts.IsDryRun && successURL == "" && errorURL == "" {
-		opts.LevelMode = LevelModeWarnAndAbove
-		h, err := newDryRunHandler(opts)
+		successOpts := opts
+		successOpts.LevelMode = LevelModeExactInfo
+		hSuccess, err := newDryRunHandler(successOpts)
 		if err != nil {
 			return nil, err
 		}
-		return []*SlackHandler{h}, nil
+		errOpts := opts
+		errOpts.LevelMode = LevelModeWarnAndAbove
+		hErr, err := newDryRunHandler(errOpts)
+		if err != nil {
+			return nil, err
+		}
+		return []*SlackHandler{hSuccess, hErr}, nil
 	}
 
 	if err := ValidateEnvCombination(successURL, errorURL); err != nil {

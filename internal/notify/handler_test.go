@@ -188,8 +188,8 @@ func TestFlush_4xx_ImmediateError(t *testing.T) {
 	require.NoError(t, h.Handle(context.Background(), r))
 	flushErr := h.Flush(context.Background())
 	require.Error(t, flushErr)
-	var ce *notify.SlackClientError
-	assert.True(t, errors.As(flushErr, &ce))
+	_, ok := errors.AsType[*notify.SlackClientError](flushErr)
+	assert.True(t, ok)
 }
 
 func TestNewSlackHandler_URLValidation(t *testing.T) {
@@ -198,8 +198,8 @@ func TestNewSlackHandler_URLValidation(t *testing.T) {
 		AllowedHost: "hooks.slack.com",
 		RunID:       "test",
 	})
-	var ve *notify.WebhookValidationError
-	require.True(t, errors.As(err, &ve))
+	_, ok := errors.AsType[*notify.WebhookValidationError](err)
+	require.True(t, ok)
 }
 
 func TestHandle_ClonesRecord(t *testing.T) {

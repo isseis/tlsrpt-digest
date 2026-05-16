@@ -2,7 +2,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"log/slog"
 	"os"
@@ -17,7 +16,7 @@ func main() {
 	dryRun := flag.Bool("dry-run", false, "log notification payloads to stderr without sending HTTP requests")
 	flag.Parse()
 
-	localHandler := setupPhase1Logging()
+	setupPhase1Logging()
 	slog.Info("tlsrpt-digest starting", "dry_run", *dryRun)
 
 	runID := generateRunID()
@@ -36,7 +35,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := setupPhase2Slack(localHandler, successURL, errorURL, cfg, runID, *dryRun); err != nil {
+	// Build notification handlers (Phase 2: after TOML).
+	// SlackHandlers are intentionally NOT wired into slog.Default() — ordinary
+	// application log calls must not enter the notification buffer. Callers use
+	// the typed helpers LogAlert/LogSystemError/LogSummary and then call
+	// Flush() explicitly at the end of each processing run (task 0050).
+	_, err = setupNotifyHandlers(successURL, errorURL, cfg, runID, *dryRun)
+	if err != nil {
 		slog.Error("failed to initialise Slack handlers", "error", err)
 		os.Exit(1)
 	}
@@ -45,30 +50,28 @@ func main() {
 }
 
 // setupPhase1Logging initialises console-only logging (Phase 1: before TOML).
-func setupPhase1Logging() slog.Handler {
+func setupPhase1Logging() {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	slog.SetDefault(slog.New(h))
-	return h
 }
 
-// setupPhase2Slack validates URLs and rebuilds the default logger with Slack
-// handlers added (Phase 2: after TOML). No-op when both URLs are empty and
-// dry-run is false.
-func setupPhase2Slack(local slog.Handler, successURL, errorURL string, cfg *config.Config, runID string, dryRun bool) error {
+// setupNotifyHandlers validates URLs and creates SlackHandler instances for
+// use by the processing loop. The handlers are separate from slog.Default()
+// and must be used via the typed helpers (LogAlert, LogSystemError, LogSummary)
+// followed by an explicit Flush() call after each processing run.
+// Returns the handlers and any configuration error.
+func setupNotifyHandlers(successURL, errorURL string, cfg *config.Config, runID string, dryRun bool) ([]*notify.SlackHandler, error) {
+	// DebugLogger uses LevelDebug so that dry-run payloads written with
+	// DebugLogger.Debug(...) are not suppressed.
+	debugLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
 	opts := notify.SlackHandlerOptions{
 		RunID:         runID,
 		IsDryRun:      dryRun,
-		DebugLogger:   slog.New(local),
+		DebugLogger:   debugLogger,
 		BackoffConfig: notify.DefaultBackoffConfig,
 	}
-	handlers, err := notify.BuildHandlers(successURL, errorURL, cfg.Notify.Slack.AllowedHost, opts)
-	if err != nil {
-		return err
-	}
-	if len(handlers) > 0 {
-		slog.SetDefault(slog.New(newFanOutHandler(local, handlers)))
-	}
-	return nil
+	return notify.BuildHandlers(successURL, errorURL, cfg.Notify.Slack.AllowedHost, opts)
 }
 
 // loadConfig reads the TOML configuration from TLSRPT_CONFIG, or returns an
@@ -88,54 +91,4 @@ func loadConfig() (*config.Config, error) {
 // generateRunID returns a new ULID that is unique across all invocations.
 func generateRunID() string {
 	return ulid.Make().String()
-}
-
-// fanOutHandler distributes records to multiple slog.Handler implementations.
-// Each child handler's Enabled is checked before forwarding.
-type fanOutHandler struct {
-	handlers []slog.Handler
-}
-
-func newFanOutHandler(local slog.Handler, slack []*notify.SlackHandler) *fanOutHandler {
-	h := &fanOutHandler{handlers: []slog.Handler{local}}
-	for _, s := range slack {
-		h.handlers = append(h.handlers, s)
-	}
-	return h
-}
-
-func (f *fanOutHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	for _, h := range f.handlers {
-		if h.Enabled(ctx, level) {
-			return true
-		}
-	}
-	return false
-}
-
-func (f *fanOutHandler) Handle(ctx context.Context, r slog.Record) error {
-	for _, h := range f.handlers {
-		if h.Enabled(ctx, r.Level) {
-			if err := h.Handle(ctx, r.Clone()); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (f *fanOutHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	children := make([]slog.Handler, len(f.handlers))
-	for i, h := range f.handlers {
-		children[i] = h.WithAttrs(attrs)
-	}
-	return &fanOutHandler{handlers: children}
-}
-
-func (f *fanOutHandler) WithGroup(name string) slog.Handler {
-	children := make([]slog.Handler, len(f.handlers))
-	for i, h := range f.handlers {
-		children[i] = h.WithGroup(name)
-	}
-	return &fanOutHandler{handlers: children}
 }

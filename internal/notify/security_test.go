@@ -110,8 +110,8 @@ func TestFlushError_NoURLInErrorString(t *testing.T) {
 	assert.NotContains(t, flushErr.Error(), secretWebhookToken, "error message must not expose webhook token")
 
 	// Error chain must still carry typed errors.
-	var ce *notify.SlackClientError
-	assert.True(t, errors.As(flushErr, &ce))
+	_, ok := errors.AsType[*notify.SlackClientError](flushErr)
+	assert.True(t, ok)
 }
 
 func TestDebugWriterNotTriggerSlack(t *testing.T) {

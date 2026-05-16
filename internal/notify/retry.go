@@ -68,10 +68,13 @@ func postWithRetry(ctx context.Context, cfg postConfig, payload slackMessage) er
 
 	var lastErr error
 	cumulativeWait := time.Duration(0)
+	// retryAfterHandled is set when a Retry-After sleep was already performed for
+	// this attempt, so the next iteration skips the normal exponential backoff sleep.
+	retryAfterHandled := false
 
 loop:
 	for attempt := 0; attempt <= backoff.RetryCount; attempt++ {
-		if attempt > 0 {
+		if attempt > 0 && !retryAfterHandled {
 			wait := backoffDuration(backoff.Base, attempt-1)
 			if cumulativeWait+wait > maxCumulativeWait {
 				break loop
@@ -81,6 +84,7 @@ loop:
 			}
 			cumulativeWait += wait
 		}
+		retryAfterHandled = false
 
 		done, retryWait, err := doAttempt(ctx, client, cfg, body)
 		if done {
@@ -97,6 +101,7 @@ loop:
 				return sleepErr
 			}
 			cumulativeWait += retryWait
+			retryAfterHandled = true
 		}
 	}
 
@@ -169,14 +174,22 @@ func doPost(ctx context.Context, client *http.Client, webhookURL string, body []
 	}, nil
 }
 
+const maxBackoffShift = 30 // cap to prevent int overflow: 1<<30 ~= 1 billion
+
 // backoffDuration computes 2^attempt * base, capped at maxCumulativeWait.
 func backoffDuration(base time.Duration, attempt int) time.Duration {
+	if attempt > maxBackoffShift {
+		attempt = maxBackoffShift
+	}
 	d := base * (1 << attempt) //nolint:mnd
 	if d > maxCumulativeWait {
 		return maxCumulativeWait
 	}
 	return d
 }
+
+// maxRetryAfterSeconds caps Retry-After to prevent overflow in time.Duration arithmetic.
+const maxRetryAfterSeconds = int(maxCumulativeWait / time.Second)
 
 // parseRetryAfter parses the Retry-After header value (integer seconds only).
 // Returns 0 and false when the value is absent or unparseable.
@@ -187,6 +200,9 @@ func parseRetryAfter(header string) (time.Duration, bool) {
 	secs, err := strconv.Atoi(header)
 	if err != nil || secs < 0 {
 		return 0, false
+	}
+	if secs > maxRetryAfterSeconds {
+		secs = maxRetryAfterSeconds
 	}
 	return time.Duration(secs) * time.Second, true
 }

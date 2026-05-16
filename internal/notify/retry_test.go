@@ -144,8 +144,8 @@ func TestHTTPPost_RequestFailureRetry(t *testing.T) {
 	require.NoError(t, h.Handle(context.Background(), warnRecord("test")))
 	err := h.Flush(context.Background())
 	require.Error(t, err)
-	var se *notify.SlackServerError
-	assert.True(t, errors.As(err, &se))
+	_, ok := errors.AsType[*notify.SlackServerError](err)
+	assert.True(t, ok)
 }
 
 func TestHTTPPost_4xxImmediate(t *testing.T) {
@@ -159,8 +159,8 @@ func TestHTTPPost_4xxImmediate(t *testing.T) {
 	require.NoError(t, h.Handle(context.Background(), warnRecord("test")))
 	err := h.Flush(context.Background())
 	require.Error(t, err)
-	var ce *notify.SlackClientError
-	require.True(t, errors.As(err, &ce))
+	_, ok := errors.AsType[*notify.SlackClientError](err)
+	require.True(t, ok)
 	assert.Equal(t, int32(1), calls.Load(), "must not retry on non-retryable 4xx")
 }
 
@@ -175,8 +175,8 @@ func TestHTTPPost_AllRetriesExhausted(t *testing.T) {
 	require.NoError(t, h.Handle(context.Background(), warnRecord("test")))
 	err := h.Flush(context.Background())
 	require.Error(t, err)
-	var se *notify.SlackServerError
-	assert.True(t, errors.As(err, &se))
+	_, ok := errors.AsType[*notify.SlackServerError](err)
+	assert.True(t, ok)
 }
 
 func TestHTTPPost_ContextCancel(t *testing.T) {
@@ -228,8 +228,9 @@ func TestHTTPPost_RetryAfterCapped(t *testing.T) {
 	require.NoError(t, h.Handle(context.Background(), warnRecord("test")))
 	err := h.Flush(context.Background())
 	require.Error(t, err)
-	// Oversized Retry-After should be capped; only one attempt made.
-	assert.Equal(t, int32(1), calls.Load())
+	// Retry-After=9999 is capped to maxCumulativeWait (30s). One retry is
+	// allowed (0+30=30, not > 30), then 30+30=60 > 30 aborts. Exactly 2 requests.
+	assert.Equal(t, int32(2), calls.Load())
 }
 
 func TestHTTPPost_CumulativeWaitBoundary_ContinueAt29StopAt31(t *testing.T) {

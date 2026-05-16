@@ -411,12 +411,14 @@
 **対応 AC**: `AC-23`, `AC-33`, `AC-34`, `AC-35`, `AC-36`, `AC-38`, `AC-40`
 
 **テスト**: `cmd/tlsrpt-digest/main_test.go`（統合テスト）
-- [x] `TestBootstrap_Phase1_NoSlackHandler`: Phase 1 の補助関数が Slack ハンドラ 0 件を返すこと（`AC-33`）
-- [x] `TestBootstrap_ErrorOnly_NoSuccessHandler`: error webhook のみ設定時に success ハンドラを生成せず、INFO 通知が無効になること（`AC-07`）
-- [x] `TestBootstrap_Phase2_SlackAdded`: 両方設定時に Phase 2 の補助関数が期待件数の Slack ハンドラと `allowed_host` を用いた構成を返すこと（`AC-06`, `AC-34`, `AC-36`）
-- [x] `TestBootstrap_Phase2_ValidationFail_Abort`: URL 検証失敗で起動が中断されること（`AC-35`）
-- [x] `TestBootstrap_DryRunFlag`: `--dry-run` フラグが `SlackHandlerOptions.IsDryRun` に伝播されること（`AC-40`）
-- [x] `TestBootstrap_DryRun_NoURLs`: Webhook URL 未設定 + `--dry-run` でも DebugLogger に出力されること（`AC-38`）
+> **注**: `cmd/tlsrpt-digest/main_test.go` は未作成。bootstrap テストは `setupNotifyHandlers` のリファクタリング後にタスク `0050` と合わせて実装する。
+
+- [-] `TestBootstrap_Phase1_NoSlackHandler`: `setupPhase1Logging` がローカルハンドラのみ設定すること（`AC-33`）— 未実装
+- [-] `TestBootstrap_ErrorOnly_NoSuccessHandler`: error webhook のみ設定時に success ハンドラを生成しないこと（`AC-07`）— 未実装
+- [-] `TestBootstrap_Phase2_SlackAdded`: `setupNotifyHandlers` が期待件数の Slack ハンドラを返すこと（`AC-06`, `AC-34`, `AC-36`）— 未実装
+- [-] `TestBootstrap_Phase2_ValidationFail_Abort`: URL 検証失敗でエラーを返すこと（`AC-35`）— 未実装
+- [-] `TestBootstrap_DryRunFlag`: `--dry-run` フラグが `SlackHandlerOptions.IsDryRun` に伝播されること（`AC-40`）— 未実装
+- [-] `TestBootstrap_DryRun_NoURLs`: URL 未設定 + `--dry-run` で両ハンドラが DebugLogger 出力すること（`AC-38`）— 未実装
 
 **推定工数**: 0.75 日
 
@@ -543,7 +545,7 @@
 ### Phase 4
 - [x] Step 4-1: スパイハンドラ（`internal/notify/testutil/`）
 - [x] Step 4-2: 逐次送信確認（`AC-20m`）
-- [x] Step 4-3: 二段階起動フロー（`AC-33`〜`AC-36`, `AC-40`）
+- [-] Step 4-3: 二段階起動フロー（`AC-33`〜`AC-36`, `AC-40`）— 実装済みだが `main_test.go` 未作成、タスク `0050` で完成予定
 - [-] Step 4-4: 統合テスト（Step 2-3/3-1 のハンドラテストに統合済み）
 - [x] Step 4-5: セキュリティテスト
 - [x] Step 4-6: 最終確認（make fmt / test / lint / deadcode 通過）
