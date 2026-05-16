@@ -3,11 +3,11 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"flag"
 	"log/slog"
 	"os"
+
+	"github.com/oklog/ulid/v2"
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
@@ -85,14 +85,9 @@ func loadConfig() (*config.Config, error) {
 	return config.Load(data)
 }
 
-// generateRunID returns a cryptographically random 8-byte hex string.
+// generateRunID returns a new ULID that is unique across all invocations.
 func generateRunID() string {
-	const runIDBytes = 8
-	b := make([]byte, runIDBytes)
-	if _, err := rand.Read(b); err != nil {
-		return "unknown"
-	}
-	return hex.EncodeToString(b)
+	return ulid.Make().String()
 }
 
 // fanOutHandler distributes records to multiple slog.Handler implementations.

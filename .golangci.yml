@@ -70,6 +70,7 @@ linters:
             - github.com/isseis/tlsrpt-digest/internal/mailparse
             - github.com/isseis/tlsrpt-digest/internal/notify
             - github.com/isseis/tlsrpt-digest/internal/tlsrpt
+            - github.com/oklog/ulid/v2
             - github.com/emersion/go-imap
             - github.com/emersion/go-imap/client
 
