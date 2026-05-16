@@ -162,7 +162,8 @@ func extractSummary(r slog.Record) Summary {
 // formatAlerts builds a single aggregated slackMessage for TLS failure alerts.
 // No truncation is applied here; the caller (Flush) truncates before sending.
 func formatAlerts(alerts []Alert, runID string) slackMessage {
-	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, len(alerts))
+	orgCount := uniqueOrgCount(alerts)
+	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, orgCount)
 
 	var fields []slackField
 	for _, a := range alerts {
@@ -228,6 +229,15 @@ func formatSummary(s Summary, runID string) slackMessage {
 			},
 		},
 	}
+}
+
+// uniqueOrgCount returns the number of distinct OrganizationName values in alerts.
+func uniqueOrgCount(alerts []Alert) int {
+	seen := make(map[string]struct{}, len(alerts))
+	for _, a := range alerts {
+		seen[a.OrganizationName] = struct{}{}
+	}
+	return len(seen)
 }
 
 // policyTypeStr returns the string representation, substituting a placeholder for unknown.

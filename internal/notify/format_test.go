@@ -77,6 +77,27 @@ func TestFormatAlerts_TitleOrgCount(t *testing.T) {
 	assert.Contains(t, string(flushAlert(t, sampleAlert())), "1 organizations affected")
 }
 
+// TestFormatAlerts_TitleOrgCountDedup verifies that duplicate OrganizationName
+// values are counted only once in the title (AC-20e).
+func TestFormatAlerts_TitleOrgCountDedup(t *testing.T) {
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
+	defer cleanup()
+
+	// Two alerts for the same org with different policies.
+	for _, pt := range []notify.PolicyType{notify.PolicyTypeSTS, notify.PolicyTypeTLSA} {
+		require.NoError(t, notify.LogAlert(context.Background(), h, notify.Alert{
+			OrganizationName: "example.com",
+			PolicyType:       pt,
+			FailureCount:     1,
+		}))
+	}
+	require.NoError(t, h.Flush(context.Background()))
+
+	// One unique org, so title must say "1 organizations affected".
+	assert.Contains(t, string(recv), "1 organizations affected")
+}
+
 func TestFormatAlerts_Color(t *testing.T) {
 	body := string(flushAlert(t, sampleAlert()))
 	assert.Contains(t, body, "warning")
