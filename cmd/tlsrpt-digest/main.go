@@ -21,7 +21,7 @@ func main() {
 	setupPhase1Logging()
 	slog.Info("tlsrpt-digest starting", "dry_run", *dryRun)
 
-	runID := generateRunID()
+	runID := ulid.Make().String()
 
 	successURL := os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS")
 	errorURL := os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR")
