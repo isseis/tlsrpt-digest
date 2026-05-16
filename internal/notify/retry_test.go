@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -16,6 +17,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 // newTLSTestServer creates a TLS test server and returns it with a pre-configured client.
 func newTLSTestServer(t *testing.T, h http.Handler) (*httptest.Server, *http.Client) {
@@ -126,15 +133,17 @@ func TestHTTPPost_429WithoutRetryAfter(t *testing.T) {
 }
 
 func TestHTTPPost_RequestFailureRetry(t *testing.T) {
-	srv, client := newTLSTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	url := srv.URL + "/webhook"
-	srv.Close()
+	var calls atomic.Int32
+	client := &http.Client{
+		Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+			calls.Add(1)
+			return nil, &net.DNSError{IsTimeout: true, Err: "dial timeout", Name: "hooks.slack.com"}
+		}),
+	}
 
 	opts := notify.WithNoOpSleep(notify.SlackHandlerOptions{
-		WebhookURL:    config.Secret(url),
-		AllowedHost:   "127.0.0.1",
+		WebhookURL:    config.Secret("https://hooks.slack.com/services/retry"),
+		AllowedHost:   "hooks.slack.com",
 		RunID:         "test",
 		LevelMode:     notify.LevelModeWarnAndAbove,
 		HTTPClient:    client,
@@ -146,6 +155,7 @@ func TestHTTPPost_RequestFailureRetry(t *testing.T) {
 	require.Error(t, err)
 	_, ok := errors.AsType[*notify.SlackServerError](err)
 	assert.True(t, ok)
+	assert.Equal(t, int32(3), calls.Load(), "must attempt initial request + 2 retries")
 }
 
 func TestHTTPPost_4xxImmediate(t *testing.T) {

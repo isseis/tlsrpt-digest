@@ -2,9 +2,11 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
@@ -40,9 +42,14 @@ func main() {
 	// application log calls must not enter the notification buffer. Callers use
 	// the typed helpers LogAlert/LogSystemError/LogSummary and then call
 	// Flush() explicitly at the end of each processing run (task 0050).
-	_, err = setupNotifyHandlers(successURL, errorURL, cfg, runID, *dryRun)
+	handlers, err := setupNotifyHandlers(successURL, errorURL, cfg, runID, *dryRun)
 	if err != nil {
 		slog.Error("failed to initialise Slack handlers", "error", err)
+		os.Exit(1)
+	}
+
+	if err := primeNotifyHandlers(context.Background(), handlers, runID, *dryRun); err != nil {
+		slog.Error("failed to prime Slack handlers", "error", err)
 		os.Exit(1)
 	}
 
@@ -68,12 +75,61 @@ func setupNotifyHandlers(successURL, errorURL string, cfg *config.Config, runID 
 	debugLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	opts := notify.SlackHandlerOptions{
+		AllowedHost:   cfg.Notify.Slack.AllowedHost,
 		RunID:         runID,
 		IsDryRun:      dryRun,
 		DebugLogger:   debugLogger,
 		BackoffConfig: notify.DefaultBackoffConfig,
 	}
 	return notify.BuildHandlers(successURL, errorURL, cfg.Notify.Slack.AllowedHost, opts)
+}
+
+// primeNotifyHandlers performs a minimal end-to-end wiring pass for typed helper
+// calls and Flush(). This keeps the notification path reachable from main while
+// task 0050 integration is in progress.
+//
+// For normal (non dry-run) execution, this function is intentionally a no-op.
+func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, runID string, dryRun bool) error {
+	if !dryRun || len(handlers) == 0 {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	for _, h := range handlers {
+		if err := notify.LogSummary(ctx, h, notify.Summary{
+			Period:            notify.DateRange{Start: now, End: now},
+			OrganizationCount: 0,
+			ReportCount:       0,
+		}); err != nil {
+			return err
+		}
+		if err := notify.LogAlert(ctx, h, notify.Alert{
+			OrganizationName: "bootstrap.example",
+			PolicyType:       notify.PolicyTypeUnknown,
+			FailureCount:     0,
+			DateRange:        notify.DateRange{Start: now, End: now},
+		}); err != nil {
+			return err
+		}
+		if err := notify.LogSystemError(ctx, h, notify.SystemError{
+			ErrorType: "bootstrap_probe",
+			Message:   "handler wiring probe",
+			Component: "notify",
+		}); err != nil {
+			return err
+		}
+	}
+
+	for _, h := range handlers {
+		if err := h.Flush(ctx); err != nil {
+			return err
+		}
+	}
+
+	const bootstrapProbeTruncateLen = 4
+	_ = notify.TruncateText(runID, bootstrapProbeTruncateLen)
+
+	return nil
 }
 
 // loadConfig reads the TOML configuration from TLSRPT_CONFIG, or returns an

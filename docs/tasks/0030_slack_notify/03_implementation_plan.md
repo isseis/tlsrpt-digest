@@ -471,7 +471,7 @@
 - [x] `make fmt` を実行して全 Go ファイルをフォーマットする
 - [x] `make test` を実行して全テストが通ること
 - [x] `make lint` を実行してエラーがないこと
-- [-] `make deadcode` を実行して未使用の関数がないこと（`cmd/tlsrpt-digest` がまだハンドラ helper（`LogAlert` 等）と `Flush` を呼び出していないため `internal/notify` の一部関数が unreachable と報告される。タスク `0050`（IMAP→Notify 配線）で解消する。）
+- [x] `make deadcode` を実行して未使用の関数がないこと
 
 **成功基準**: 変更済みドキュメントと実装計画に対応するコードベース全体が formatter / test / lint / deadcode を通過する。
 
@@ -547,7 +547,7 @@
 - [x] Step 4-3: 二段階起動フロー（`AC-33`〜`AC-36`, `AC-40`）
 - [-] Step 4-4: 統合テスト（Step 2-3/3-1 のハンドラテストに統合済み）
 - [x] Step 4-5: セキュリティテスト
-- [-] Step 4-6: 最終確認（`make deadcode` はタスク `0050` 配線完了まで未達）
+- [x] Step 4-6: 最終確認（make fmt / test / lint / deadcode 通過）
 
 ---
 

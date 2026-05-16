@@ -38,22 +38,6 @@ func NewSlackHandler(opts SlackHandlerOptions) (*SlackHandler, error) {
 	return &SlackHandler{opts: opts}, nil
 }
 
-// newSlackHandlerInternal creates a SlackHandler without URL validation.
-// Used by BuildHandlers which has already validated URLs.
-func newSlackHandlerInternal(opts SlackHandlerOptions) (*SlackHandler, error) {
-	if opts.BackoffConfig.Base == 0 && opts.BackoffConfig.RetryCount == 0 {
-		opts.BackoffConfig = DefaultBackoffConfig
-	}
-	return &SlackHandler{opts: opts}, nil
-}
-
-// newDryRunHandler creates a dry-run handler that logs payloads to DebugLogger
-// without sending HTTP requests. Used by BuildHandlers DryRunNoURL mode.
-func newDryRunHandler(opts SlackHandlerOptions) (*SlackHandler, error) {
-	opts.IsDryRun = true
-	return newSlackHandlerInternal(opts)
-}
-
 // Enabled reports whether this handler accepts records at the given level.
 // The decision is based solely on LevelMode, independent of any CLI log-level setting.
 func (h *SlackHandler) Enabled(_ context.Context, level slog.Level) bool {
@@ -182,13 +166,13 @@ func BuildHandlers(successURL, errorURL, allowedHost string, opts SlackHandlerOp
 	if opts.IsDryRun && successURL == "" && errorURL == "" {
 		successOpts := opts
 		successOpts.LevelMode = LevelModeExactInfo
-		hSuccess, err := newDryRunHandler(successOpts)
+		hSuccess, err := NewSlackHandler(successOpts)
 		if err != nil {
 			return nil, err
 		}
 		errOpts := opts
 		errOpts.LevelMode = LevelModeWarnAndAbove
-		hErr, err := newDryRunHandler(errOpts)
+		hErr, err := NewSlackHandler(errOpts)
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +202,7 @@ func BuildHandlers(successURL, errorURL, allowedHost string, opts SlackHandlerOp
 		o := opts
 		o.WebhookURL = config.Secret(successURL)
 		o.LevelMode = LevelModeExactInfo
-		h, err := newSlackHandlerInternal(o)
+		h, err := NewSlackHandler(o)
 		if err != nil {
 			return nil, err
 		}
@@ -229,7 +213,7 @@ func BuildHandlers(successURL, errorURL, allowedHost string, opts SlackHandlerOp
 		o := opts
 		o.WebhookURL = config.Secret(errorURL)
 		o.LevelMode = LevelModeWarnAndAbove
-		h, err := newSlackHandlerInternal(o)
+		h, err := NewSlackHandler(o)
 		if err != nil {
 			return nil, err
 		}
