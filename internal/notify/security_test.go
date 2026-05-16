@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"sync/atomic"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const secretWebhookToken = "s3cr3t-token-must-not-appear"
+const sampleWebhookSuffix = "sample-webhook-segment"
 
 func TestSecretNotInMessage(t *testing.T) {
 	var recv []byte
@@ -29,7 +30,7 @@ func TestSecretNotInMessage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	webhookURL := srv.URL + "/" + secretWebhookToken + "/webhook"
+	webhookURL := srv.URL + "/" + sampleWebhookSuffix + "/webhook"
 	opts := notify.SlackHandlerOptions{
 		WebhookURL:    config.Secret(webhookURL),
 		AllowedHost:   "127.0.0.1",
@@ -49,7 +50,7 @@ func TestSecretNotInMessage(t *testing.T) {
 	require.NoError(t, h.Flush(context.Background()))
 
 	body := string(recv)
-	assert.NotContains(t, body, secretWebhookToken, "webhook token must not appear in Slack payload")
+	assert.NotContains(t, body, sampleWebhookSuffix, "webhook marker must not appear in Slack payload")
 }
 
 func TestWebhookURLNotLogged(t *testing.T) {
@@ -62,7 +63,7 @@ func TestWebhookURLNotLogged(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	webhookURL := srv.URL + "/" + secretWebhookToken + "/webhook"
+	webhookURL := srv.URL + "/" + sampleWebhookSuffix + "/webhook"
 	opts := notify.SlackHandlerOptions{
 		WebhookURL:    config.Secret(webhookURL),
 		AllowedHost:   "127.0.0.1",
@@ -82,7 +83,7 @@ func TestWebhookURLNotLogged(t *testing.T) {
 	}))
 	require.NoError(t, h.Flush(context.Background()))
 
-	assert.NotContains(t, buf.String(), secretWebhookToken, "webhook token must not appear in log output")
+	assert.NotContains(t, buf.String(), sampleWebhookSuffix, "webhook marker must not appear in log output")
 }
 
 func TestFlushError_NoURLInErrorString(t *testing.T) {
@@ -91,7 +92,7 @@ func TestFlushError_NoURLInErrorString(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	webhookURL := srv.URL + "/" + secretWebhookToken + "/webhook"
+	webhookURL := srv.URL + "/" + sampleWebhookSuffix + "/webhook"
 	opts := notify.SlackHandlerOptions{
 		WebhookURL:    config.Secret(webhookURL),
 		AllowedHost:   "127.0.0.1",
@@ -107,7 +108,7 @@ func TestFlushError_NoURLInErrorString(t *testing.T) {
 	require.NoError(t, h.Handle(context.Background(), r))
 	flushErr := h.Flush(context.Background())
 	require.Error(t, flushErr)
-	assert.NotContains(t, flushErr.Error(), secretWebhookToken, "error message must not expose webhook token")
+	assert.NotContains(t, flushErr.Error(), sampleWebhookSuffix, "error message must not expose webhook marker")
 
 	// Error chain must still carry typed errors.
 	_, ok := errors.AsType[*notify.SlackClientError](flushErr)
@@ -115,39 +116,42 @@ func TestFlushError_NoURLInErrorString(t *testing.T) {
 }
 
 func TestDebugWriterNotTriggerSlack(t *testing.T) {
-	// Writing to a Debug Logger (separate io.Writer path) must not invoke
-	// SlackHandler.Handle().
-	var slackHandleCalls int
-	spy := &countingHandler{count: &slackHandleCalls}
+	var slackCalls int32
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&slackCalls, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
 
-	debugWriter := slog.New(slog.NewTextHandler(io.Discard, nil))
-	_ = debugWriter // Use a normal logger as Debug Logger, not the spy.
+	h, err := notify.NewSlackHandler(notify.SlackHandlerOptions{
+		WebhookURL:    config.Secret(srv.URL + "/webhook"),
+		AllowedHost:   "127.0.0.1",
+		RunID:         "test",
+		LevelMode:     notify.LevelModeWarnAndAbove,
+		HTTPClient:    srv.Client(),
+		BackoffConfig: notify.DefaultBackoffConfig,
+	})
+	require.NoError(t, err)
+	assert.NotNil(t, h)
 
-	// The spy is a slog.Handler, not a SlackHandler. Write to it directly to
-	// simulate what a Debug Logger might do.
-	debugLogger := slog.New(spy)
+	debugLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	debugLogger.Info("debug info unrelated to Slack")
 
-	assert.Equal(t, 1, slackHandleCalls) // spy called once for the debug msg
-	// The spy is NOT connected to any Slack handler, so no Slack POST happens.
-	// This test verifies the separation by construction.
+	assert.Equal(t, int32(0), atomic.LoadInt32(&slackCalls), "writing to Debug Logger must not trigger Slack POSTs")
 }
 
-func TestPrivateLogger_NotExported(t *testing.T) {
-	// The internal slog.Logger used for Slack notifications must not be exported
-	// from the notify package.
-	notifyPkg := reflect.TypeOf(notify.SlackHandler{})
-	_ = notifyPkg // package exists
-	// Verify there is no exported *slog.Logger field in notify that callers
-	// could use as a write path.
+func TestSlackHandler_NoExportedLoggerField(t *testing.T) {
+	// SlackHandler should not expose an exported *slog.Logger field that could
+	// become a notification write path.
+	notifyType := reflect.TypeOf(notify.SlackHandler{})
 	var exported []string
-	for i := range notifyPkg.NumField() {
-		f := notifyPkg.Field(i)
+	for i := range notifyType.NumField() {
+		f := notifyType.Field(i)
 		if f.IsExported() && f.Type == reflect.TypeOf((*slog.Logger)(nil)) {
 			exported = append(exported, f.Name)
 		}
 	}
-	assert.Empty(t, exported, "no exported *slog.Logger field should exist in SlackHandler")
+	assert.Empty(t, exported)
 }
 
 func TestRedactionAlwaysEnabled(t *testing.T) {
@@ -165,19 +169,6 @@ func TestRedactionAlwaysEnabled(t *testing.T) {
 	}
 }
 
-// countingHandler is a test helper slog.Handler that counts Handle() calls.
-type countingHandler struct {
-	count *int
-}
-
-func (c *countingHandler) Enabled(_ context.Context, _ slog.Level) bool { return true }
-func (c *countingHandler) Handle(_ context.Context, _ slog.Record) error {
-	*c.count++
-	return nil
-}
-func (c *countingHandler) WithAttrs(_ []slog.Attr) slog.Handler { return c }
-func (c *countingHandler) WithGroup(_ string) slog.Handler      { return c }
-
 // Verify JSON shape doesn't contain webhook URL using the same helper as above.
 func TestSecretNotInMessage_JSONCheck(t *testing.T) {
 	var recv []byte
@@ -187,7 +178,7 @@ func TestSecretNotInMessage_JSONCheck(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	webhookURL := srv.URL + "/" + secretWebhookToken + "/webhook"
+	webhookURL := srv.URL + "/" + sampleWebhookSuffix + "/webhook"
 	opts := notify.SlackHandlerOptions{
 		WebhookURL:    config.Secret(webhookURL),
 		AllowedHost:   "127.0.0.1",
@@ -210,5 +201,5 @@ func TestSecretNotInMessage_JSONCheck(t *testing.T) {
 	var msg map[string]interface{}
 	require.NoError(t, json.Unmarshal(recv, &msg))
 	raw := string(recv)
-	assert.NotContains(t, raw, secretWebhookToken)
+	assert.NotContains(t, raw, sampleWebhookSuffix)
 }

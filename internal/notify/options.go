@@ -56,10 +56,10 @@ type SlackHandlerOptions struct {
 	// DebugLogger receives dry-run payloads and send-failure details.
 	// When nil, such output is silently discarded.
 	DebugLogger *slog.Logger
-	// HTTPClient is used for Slack API requests. When nil, a default client
-	// with a 5-second timeout is used. Injecting a custom client (e.g. with a
-	// test TLS server's certificate) does not bypass the per-request context
-	// deadline that enforces the 5-second limit.
+	// HTTPClient is used for Slack API requests. When nil, a default client is
+	// used. Injecting a custom client (e.g. with a test TLS server's
+	// certificate) does not bypass the per-request context deadline that
+	// enforces the 5-second limit.
 	HTTPClient *http.Client
 	// testReqTimeout overrides the per-request deadline; zero uses the default 5s.
 	// Set via WithRequestTimeout in test_helpers.go (//go:build test).

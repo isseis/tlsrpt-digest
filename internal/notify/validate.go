@@ -29,7 +29,7 @@ func validateWebhookURL(webhookURL, allowedHost string) error {
 	}
 	u, err := url.Parse(webhookURL)
 	if err != nil {
-		return &WebhookValidationError{Msg: fmt.Sprintf("invalid webhook URL: %v", err)}
+		return &WebhookValidationError{Msg: "invalid webhook URL format"}
 	}
 	if u.Scheme != "https" {
 		return &WebhookValidationError{

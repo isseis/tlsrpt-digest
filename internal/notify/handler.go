@@ -158,8 +158,9 @@ func buildMessages(records []slog.Record, runID string) []slackMessage {
 }
 
 // BuildHandlers validates URLs and returns 0–2 SlackHandler instances.
-// DryRunNoURL mode: IsDryRun=true and both URLs empty — skips validation,
-// returns a single DebugLogger-only handler.
+// DryRunNoURL mode: IsDryRun=true and both URLs empty — skips validation and
+// returns one INFO handler plus one WARN/ERROR handler for explicit typed
+// helper + Flush usage in the bootstrap layer.
 func BuildHandlers(successURL, errorURL, allowedHost string, opts SlackHandlerOptions) ([]*SlackHandler, error) {
 	// DryRunNoURL mode: create one handler per level tier so both INFO summaries
 	// and WARN/ERROR alerts are written to DebugLogger.

@@ -102,6 +102,7 @@ func TestHTTPPost_5xxRetry(t *testing.T) {
 
 func TestHTTPPost_429WithRetryAfter(t *testing.T) {
 	var calls atomic.Int32
+	var sleeps []time.Duration
 	srv, client := newTLSTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if calls.Add(1) == 1 {
 			w.Header().Set("Retry-After", "0")
@@ -111,10 +112,17 @@ func TestHTTPPost_429WithRetryAfter(t *testing.T) {
 		}
 	}))
 
-	h := mustNewHandler(t, retryOpts(srv.URL, client))
+	opts := retryOpts(srv.URL, client)
+	opts = notify.WithSleepFunc(opts, func(_ context.Context, d time.Duration) error {
+		sleeps = append(sleeps, d)
+		return nil
+	})
+
+	h := mustNewHandler(t, opts)
 	require.NoError(t, h.Handle(context.Background(), warnRecord("test")))
 	require.NoError(t, h.Flush(context.Background()))
 	assert.Equal(t, int32(2), calls.Load())
+	assert.Empty(t, sleeps, "Retry-After: 0 must retry immediately without exponential backoff")
 }
 
 func TestHTTPPost_429WithoutRetryAfter(t *testing.T) {
@@ -226,6 +234,7 @@ func TestHTTPPost_ResponseBodyClosed(t *testing.T) {
 
 func TestHTTPPost_RetryAfterCapped(t *testing.T) {
 	var calls atomic.Int32
+	var sleeps []time.Duration
 	srv, client := newTLSTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.Header().Set("Retry-After", "9999")
@@ -234,16 +243,21 @@ func TestHTTPPost_RetryAfterCapped(t *testing.T) {
 
 	opts := retryOpts(srv.URL, client)
 	opts.BackoffConfig.RetryCount = 3
+	opts = notify.WithSleepFunc(opts, func(_ context.Context, d time.Duration) error {
+		sleeps = append(sleeps, d)
+		return nil
+	})
 	h := mustNewHandler(t, opts)
 	require.NoError(t, h.Handle(context.Background(), warnRecord("test")))
 	err := h.Flush(context.Background())
 	require.Error(t, err)
-	// Retry-After=9999 is capped to maxCumulativeWait (30s). One retry is
-	// allowed (0+30=30, not > 30), then 30+30=60 > 30 aborts. Exactly 2 requests.
+	// Retry-After=9999 is capped to maxCumulativeWait (14s). One retry is
+	// allowed (0+14=14, not > 14), then 14+14=28 > 14 aborts. Exactly 2 requests.
 	assert.Equal(t, int32(2), calls.Load())
+	assert.Equal(t, []time.Duration{14 * time.Second}, sleeps)
 }
 
-func TestHTTPPost_CumulativeWaitBoundary_ContinueAt29StopAt31(t *testing.T) {
+func TestHTTPPost_CumulativeWaitBoundary_ContinueAt14StopBeyond14(t *testing.T) {
 	var calls atomic.Int32
 	srv, client := newTLSTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		switch calls.Add(1) {
@@ -282,12 +296,35 @@ func TestHTTPPost_CumulativeWaitBoundary_ContinueAt29StopAt31(t *testing.T) {
 	err := h.Flush(context.Background())
 	require.Error(t, err)
 
-	// First retry waits 29 seconds and continues to the second attempt.
-	assert.Equal(t, []time.Duration{29 * time.Second}, sleeps)
-	assert.Equal(t, 29*time.Second, cumulativeSleep)
-	// The second Retry-After would push cumulative wait to 31 seconds,
+	// First retry waits 14 seconds and continues to the second attempt.
+	assert.Equal(t, []time.Duration{14 * time.Second}, sleeps)
+	assert.Equal(t, 14*time.Second, cumulativeSleep)
+	// The second Retry-After would push cumulative wait beyond 14 seconds,
 	// so the retry loop stops before sleeping or making another request.
 	assert.Equal(t, int32(2), calls.Load())
+}
+
+func TestHTTPPost_LastAttemptRetryAfterDoesNotSleep(t *testing.T) {
+	var calls atomic.Int32
+	var sleeps []time.Duration
+	srv, client := newTLSTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Retry-After", "10")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+
+	opts := retryOpts(srv.URL, client)
+	opts.BackoffConfig.RetryCount = 0
+	opts = notify.WithSleepFunc(opts, func(_ context.Context, d time.Duration) error {
+		sleeps = append(sleeps, d)
+		return nil
+	})
+	h := mustNewHandler(t, opts)
+	require.NoError(t, h.Handle(context.Background(), warnRecord("test")))
+	err := h.Flush(context.Background())
+	require.Error(t, err)
+	assert.Equal(t, int32(1), calls.Load())
+	assert.Empty(t, sleeps, "final attempt must not sleep when no retry remains")
 }
 
 func TestHTTPPost_ExponentialBackoffBoundary_ContinueAt30StopBeyond30(t *testing.T) {

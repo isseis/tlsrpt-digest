@@ -180,7 +180,7 @@
 - [x] 各 HTTP リクエストに `context.WithTimeout(ctx, 5*time.Second)` でデッドラインを付与する（`http.Client.Timeout` ではなくコンテキストで制御することで、注入された `HTTPClient` の `Timeout` 設定に依存せず AC-27 を保証する）
 - [x] 5xx / 429 / リクエスト発行失敗をリトライ対象にする
 - [x] `Retry-After` ヘッダーがある場合はその値（秒単位の整数）を優先して待機し、ない場合は指数バックオフを使う。Slack は秒整数のみ返すが、パース失敗時はバックオフにフォールバックする（HTTP-date 形式は Slack では使用されないためスコープ外）
-- [x] 累積待機時間を追跡し、残り余裕（例: `30s - 既払い待機時間`）が次の待機に満たない場合は次のリトライを行わず即エラーにする。これにより `5s × 4 + 待機 ≤ 34s` の保証が維持される
+- [x] 累積待機時間を追跡し、残り余裕（例: `14s - 既払い待機時間`）が次の待機に満たない場合は次のリトライを行わず即エラーにする。これにより `5s × 4 + 待機 ≤ 34s` の保証が維持される
 - [x] 4xx（429 を除く）は即座に `SlackClientError` を返す
 - [x] `context` キャンセル時は待機を中断して `ctx.Err()` を返す
 - [x] 各レスポンスの `resp.Body.Close()` を確実に呼ぶ（リトライ前にもクローズしてコネクション再利用を保証する）
@@ -402,11 +402,11 @@
 - [x] TOML を読み込んで `notify.slack.allowed_host` を取得する
 - [x] Phase 2: エクスポートされた `notify.BuildHandlers(successURL, errorURL, allowedHost, opts)` を呼び、内部で `validateBothURLs`（AC-23）や各 URL の検証（`AC-21`〜`AC-26`）を行う。この関数は `0〜2` 個の `SlackHandler` を返す（`validateBothURLs` は unexported のままで `BuildHandlers` から呼ぶ）
 - [x] `--dry-run` + URL 未設定の場合: `BuildHandlers` に `IsDryRun=true` を渡したうえで空 URL も許容するモード（`DryRunNoURL`）で呼び出し、URL 検証をスキップして DebugLogger 専用ハンドラを生成する（AC-38「Webhook URL を設定せずに確認」の実現）
-- [x] Phase 2 の Slack ハンドラ追加は `slog.Logger` が不変であることを前提にロガー再構築で行う。ハンドラの fan-out は `cmd/tlsrpt-digest` 側の bootstrap 補助コードへ閉じ込め、`internal/notify` に新しい合成責務を追加しない
+- [x] Phase 2 の Slack ハンドラ追加は `setupNotifyHandlers()` の戻り値として `0〜2` 個の `SlackHandler` を返し、`cmd/tlsrpt-digest` 側で typed helper と `Flush()` を明示的に呼び出す。`internal/notify` に新しい合成責務は追加しない
 - [x] `--dry-run` フラグを CLI に追加し、`SlackHandlerOptions.IsDryRun` に渡す
 - [x] `runID` を `github.com/oklog/ulid/v2` の `ulid.Make().String()` で生成する（毎回 unique な ULID。プロセス再起動や複数同時実行でも衝突しない）
 
-**成功基準**: Phase 1 の補助関数は Slack ハンドラ 0 件でローカル出力のみを返す。Phase 2 後は `BuildHandlers` の結果を束ねたロガーへ再構築され、期待する Slack ハンドラ数と `allowed_host` 伝播をテストで確認できる。
+**成功基準**: Phase 1 の補助関数は Slack ハンドラ 0 件でローカル出力のみを返す。Phase 2 後は `BuildHandlers` の結果として期待する Slack ハンドラ数と `allowed_host` 伝播をテストで確認できる。
 
 **対応 AC**: `AC-23`, `AC-33`, `AC-34`, `AC-35`, `AC-36`, `AC-38`, `AC-40`
 
@@ -511,7 +511,7 @@
 | リスク | 影響度 | 対策 |
 |---|---|---|
 | `Retry-After` ヘッダーの解析誤り | 中 | Slack は秒整数のみ返す。パース失敗時はバックオフにフォールバック。RFC 7231 の HTTP-date 形式は Slack では使用されないためスコープ外 |
-| `Retry-After` の過大値で 34 秒上限を超える | 中 | `Retry-After` に上限（指数バックオフの最大値等）を設け、上限を超える値はキャップして使用する |
+| `Retry-After` の過大値で 34 秒上限を超える | 中 | `Retry-After` に上限（14 秒）を設け、上限を超える値はキャップして使用する |
 | `context` キャンセルと `time.After` の競合 | 中 | `select` で `ctx.Done()` と `time.After()` を同時に待機し、キャンセルを優先する |
 | `slog.Handler.WithAttrs`/`WithGroup` の不完全実装 | 低 | `SlackHandler` では通知ペイロードにのみ型付きヘルパー経由で書き込む設計のため、`nop` 実装で可。ただし `*slog.Logger.With()` 経由での利用は設計上禁止とし、コードレビューで確認する |
 | `slog.Logger` の不変性 | 中 | Phase 2 のハンドラ追加はロガー再構築で行い、fan-out は `cmd/tlsrpt-digest` 側の補助コードへ閉じ込める。既存の `*slog.Logger` インスタンスには Slack ハンドラが反映されないため、初期化後は `slog.Default()` を通じてロギングする |

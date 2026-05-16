@@ -8,17 +8,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
 
 const (
 	requestTimeout    = 5 * time.Second
-	maxCumulativeWait = 30 * time.Second
+	maxCumulativeWait = 14 * time.Second
 )
-
-// errRequestFailed is used when a network-level failure occurs during an HTTP request.
-var errRequestFailed = errors.New("request failed")
 
 // sleepFunc is the sleep abstraction injected in tests to avoid real waits.
 type sleepFunc func(ctx context.Context, d time.Duration) error
@@ -86,22 +84,28 @@ loop:
 		}
 		retryAfterHandled = false
 
-		done, retryWait, err := doAttempt(ctx, client, cfg, body)
+		done, retryWait, retryAfterSeen, err := doAttempt(ctx, client, cfg, body)
 		if done {
 			return err
 		}
 		if err != nil {
 			lastErr = err
 		}
-		if retryWait > 0 {
-			if cumulativeWait+retryWait > maxCumulativeWait {
+		if retryAfterSeen {
+			if attempt == backoff.RetryCount {
 				break loop
 			}
-			if sleepErr := sleep(ctx, retryWait); sleepErr != nil {
-				return sleepErr
+			if retryWait > 0 {
+				if cumulativeWait+retryWait > maxCumulativeWait {
+					break loop
+				}
+				if sleepErr := sleep(ctx, retryWait); sleepErr != nil {
+					return sleepErr
+				}
+				cumulativeWait += retryWait
 			}
-			cumulativeWait += retryWait
 			retryAfterHandled = true
+			continue
 		}
 	}
 
@@ -120,7 +124,11 @@ type postResult struct {
 // doAttempt performs one HTTP POST attempt and classifies the outcome.
 // Returns: done=true means stop the loop; err carries the result; retryWait>0
 // means sleep that long before the next attempt (Retry-After case).
-func doAttempt(ctx context.Context, client *http.Client, cfg postConfig, body []byte) (done bool, retryWait time.Duration, err error) {
+
+func doAttempt(ctx context.Context, client *http.Client, cfg postConfig, body []byte) (done bool, retryWait time.Duration, retryAfterSeen bool, err error) {
+	if err := ctx.Err(); err != nil {
+		return true, 0, false, err
+	}
 	timeout := cfg.reqTimeout
 	if timeout == 0 {
 		timeout = requestTimeout
@@ -131,12 +139,12 @@ func doAttempt(ctx context.Context, client *http.Client, cfg postConfig, body []
 
 	if postErr != nil {
 		// Network-level failure: signal retry with no extra wait.
-		return false, 0, &SlackServerError{StatusCode: 0, Cause: errRequestFailed}
+		return false, 0, false, &SlackServerError{StatusCode: 0, Cause: sanitizeRequestError(postErr)}
 	}
 
 	sc := result.statusCode
 	if sc >= 200 && sc < 300 {
-		return true, 0, nil
+		return true, 0, false, nil
 	}
 
 	switch {
@@ -144,13 +152,23 @@ func doAttempt(ctx context.Context, client *http.Client, cfg postConfig, body []
 		if sc == http.StatusTooManyRequests {
 			if d, ok := parseRetryAfter(result.retryAfter); ok {
 				// Signal caller to sleep d before next attempt.
-				return false, d, &SlackServerError{StatusCode: sc}
+				return false, d, true, &SlackServerError{StatusCode: sc}
 			}
 		}
-		return false, 0, &SlackServerError{StatusCode: sc}
+		return false, 0, false, &SlackServerError{StatusCode: sc}
 	default:
-		return true, 0, &SlackClientError{StatusCode: sc}
+		return true, 0, false, &SlackClientError{StatusCode: sc}
 	}
+}
+
+// sanitizeRequestError hides webhook URLs from request errors while preserving
+// the underlying cause for debugging.
+func sanitizeRequestError(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return fmt.Errorf("%s [redacted]: %w", urlErr.Op, urlErr.Err)
+	}
+	return err
 }
 
 // doPost sends a single HTTP POST request and returns status code and headers.
