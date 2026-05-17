@@ -49,7 +49,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := primeNotifyHandlers(context.Background(), handlers, runID, *dryRun); err != nil {
+	if err := primeNotifyHandlers(context.Background(), handlers, *dryRun); err != nil {
 		slog.Error("failed to prime Slack handlers", "error", err)
 		os.Exit(1)
 	}
@@ -96,7 +96,7 @@ func setupNotifyHandlers(successURL, errorURL string, cfg *config.Config, runID 
 // task 0050 integration is in progress.
 //
 // For normal (non dry-run) execution, this function is intentionally a no-op.
-func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, runID string, dryRun bool) error {
+func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, dryRun bool) error {
 	if !dryRun || len(handlers) == 0 {
 		return nil
 	}
@@ -132,9 +132,6 @@ func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, r
 			return err
 		}
 	}
-
-	const bootstrapProbeTruncateLen = 4
-	_ = notify.TruncateText(runID, bootstrapProbeTruncateLen)
 
 	return nil
 }
