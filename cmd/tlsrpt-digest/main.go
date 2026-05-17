@@ -16,6 +16,7 @@ import (
 
 func main() {
 	dryRun := flag.Bool("dry-run", false, "log notification payloads to stderr without sending HTTP requests")
+	configPath := flag.String("config", "", "path to TOML configuration file")
 	flag.Parse()
 
 	setupPhase1Logging()
@@ -31,7 +32,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg, err := loadConfig()
+	cfg, err := loadConfig(*configPath)
 	if err != nil {
 		slog.Error("failed to load configuration", "error", err)
 		os.Exit(1)
@@ -132,21 +133,15 @@ func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, r
 	return nil
 }
 
-// loadConfig reads the TOML configuration from TLSRPT_CONFIG, or returns an
-// empty Config when the variable is unset.
-func loadConfig() (*config.Config, error) {
-	path := os.Getenv("TLSRPT_CONFIG")
+// loadConfig reads the TOML configuration from path, or returns an empty
+// Config when path is empty.
+func loadConfig(path string) (*config.Config, error) {
 	if path == "" {
 		return &config.Config{}, nil
 	}
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is an operator-supplied env var
+	data, err := os.ReadFile(path) //nolint:gosec // G304: path is an operator-supplied flag
 	if err != nil {
 		return nil, err
 	}
 	return config.Load(data)
-}
-
-// generateRunID returns a new ULID that is unique across all invocations.
-func generateRunID() string {
-	return ulid.Make().String()
 }

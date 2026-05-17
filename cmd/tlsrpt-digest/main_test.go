@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -110,4 +112,25 @@ func TestBootstrap_DryRun_NoURLs(t *testing.T) {
 
 	gotModes := []notify.LevelMode{handlers[0].LevelMode(), handlers[1].LevelMode()}
 	assert.ElementsMatch(t, []notify.LevelMode{notify.LevelModeExactInfo, notify.LevelModeWarnAndAbove}, gotModes)
+}
+
+func TestLoadConfig_EmptyPath(t *testing.T) {
+	cfg, err := loadConfig("")
+	require.NoError(t, err)
+	assert.Equal(t, &config.Config{}, cfg)
+}
+
+func TestLoadConfig_ValidFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	require.NoError(t, os.WriteFile(path, []byte("[notify.slack]\nallowed_host = \"hooks.slack.com\"\n"), 0o600))
+
+	cfg, err := loadConfig(path)
+	require.NoError(t, err)
+	assert.Equal(t, "hooks.slack.com", cfg.Notify.Slack.AllowedHost)
+}
+
+func TestLoadConfig_NonexistentFile(t *testing.T) {
+	_, err := loadConfig("/nonexistent/path/config.toml")
+	require.Error(t, err)
 }
