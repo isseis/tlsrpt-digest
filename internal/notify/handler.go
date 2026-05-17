@@ -133,12 +133,11 @@ func (h *SlackHandler) send(ctx context.Context, records []slog.Record) error {
 
 // logDryRun writes all formatted payloads to DebugLogger without sending.
 func (h *SlackHandler) logDryRun(records []slog.Record) {
-	msgs := buildMessages(records, h.opts.RunID, h.opts.DebugLogger)
 	if h.opts.DebugLogger == nil {
 		return
 	}
-	for i := range msgs {
-		if raw, err := json.Marshal(msgs[i]); err == nil {
+	for _, msg := range buildMessages(records, h.opts.RunID, h.opts.DebugLogger) {
+		if raw, err := json.Marshal(msg); err == nil {
 			h.opts.DebugLogger.Debug("[dry-run] slack notification would send", "payload", string(raw))
 		}
 	}
