@@ -5,17 +5,21 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"net/url"
-	"strings"
+	"regexp"
 
 	"github.com/pelletier/go-toml/v2"
 )
 
-// Sentinel errors for allowed_host format validation.
-var (
-	ErrAllowedHostWhitespace = errors.New("notify.slack.allowed_host must not have leading/trailing whitespace")
-	ErrAllowedHostScheme     = errors.New("notify.slack.allowed_host must not contain a scheme")
-	ErrAllowedHostPort       = errors.New("notify.slack.allowed_host must not contain a port number")
+// ErrInvalidAllowedHost is returned when notify.slack.allowed_host is not a
+// plain RFC 1123 hostname (no scheme, port number, or surrounding whitespace).
+var ErrInvalidAllowedHost = errors.New("notify.slack.allowed_host must be a plain hostname without scheme, port, or whitespace")
+
+// reValidHostname matches a valid RFC 1123 hostname: one or more dot-separated
+// labels, each of 1–63 characters consisting of ASCII letters, digits, and
+// hyphens, not starting or ending with a hyphen.
+var reValidHostname = regexp.MustCompile(
+	`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?` +
+		`(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$`,
 )
 
 // NotifySlackConfig holds the Slack notification configuration loaded from TOML.
@@ -56,27 +60,14 @@ func (c *Config) validate() error {
 	return validateAllowedHost(c.Notify.Slack.AllowedHost)
 }
 
-// validateAllowedHost returns an error if host is non-empty but has an invalid
-// format (scheme prefix, port suffix, or surrounding whitespace).
+// validateAllowedHost returns an error if host is non-empty but does not match
+// the RFC 1123 hostname pattern. Empty string is allowed (Slack disabled).
 func validateAllowedHost(host string) error {
 	if host == "" {
 		return nil
 	}
-	if host != strings.TrimSpace(host) {
-		return fmt.Errorf("config: %w: %q", ErrAllowedHostWhitespace, host)
-	}
-	if strings.Contains(host, "://") {
-		return fmt.Errorf("config: %w: %q", ErrAllowedHostScheme, host)
-	}
-	// Reject port numbers by checking that the value parses as a pure hostname.
-	// Wrapping in "//" allows url.Parse to treat it as a host.
-	u, err := url.Parse("//" + host)
-	if err != nil || u.Host != host {
-		return fmt.Errorf("config: %w: %q", ErrAllowedHostPort, host)
-	}
-	if u.Hostname() != host {
-		// Host contains a port (u.Hostname() strips it).
-		return fmt.Errorf("config: %w: %q", ErrAllowedHostPort, host)
+	if !reValidHostname.MatchString(host) {
+		return fmt.Errorf("config: %w: %q", ErrInvalidAllowedHost, host)
 	}
 	return nil
 }
