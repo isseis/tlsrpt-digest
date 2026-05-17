@@ -104,7 +104,7 @@ func (h *SlackHandler) Flush(ctx context.Context) error {
 // send formats buffered records and delivers each message to the webhook sequentially.
 // For each message: format (full) → log to DebugLogger (untruncated) → truncate → POST.
 func (h *SlackHandler) send(ctx context.Context, records []slog.Record) error {
-	msgs := buildMessages(records, h.opts.RunID, h.opts.DebugLogger)
+	msgs := formatRecords(records, h.opts.RunID, h.opts.DebugLogger)
 	cfg := postConfig{
 		client:     h.opts.HTTPClient,
 		backoff:    h.opts.BackoffConfig,
@@ -136,7 +136,7 @@ func (h *SlackHandler) logDryRun(records []slog.Record) {
 	if h.opts.DebugLogger == nil {
 		return
 	}
-	for _, msg := range buildMessages(records, h.opts.RunID, h.opts.DebugLogger) {
+	for _, msg := range formatRecords(records, h.opts.RunID, h.opts.DebugLogger) {
 		if raw, err := json.Marshal(msg); err == nil {
 			h.opts.DebugLogger.Debug("[dry-run] slack notification would send", "payload", string(raw))
 		}
@@ -149,12 +149,6 @@ func stripURLFromError(err error) error {
 		return nil
 	}
 	return fmt.Errorf("delivery error (webhook URL redacted): %w", err)
-}
-
-// buildMessages converts buffered slog.Records into one or more slackMessages.
-// debugLogger receives warnings for unexpected attr keys; nil silences them.
-func buildMessages(records []slog.Record, runID string, debugLogger *slog.Logger) []slackMessage {
-	return formatRecords(records, runID, debugLogger)
 }
 
 // BuildHandlers validates URLs and returns 0–2 SlackHandler instances.
