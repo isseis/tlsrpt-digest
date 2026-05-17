@@ -162,9 +162,12 @@ func buildMessages(records []slog.Record, runID string, debugLogger *slog.Logger
 // returns one INFO handler plus one WARN/ERROR handler for explicit typed
 // helper + Flush usage in the bootstrap layer.
 func BuildHandlers(successURL, errorURL, allowedHost string, opts SlackHandlerOptions) ([]*SlackHandler, error) {
-	// DryRunNoURL mode: create one handler per level tier so both INFO summaries
-	// and WARN/ERROR alerts are written to DebugLogger.
-	if opts.IsDryRun && successURL == "" && errorURL == "" {
+	// No URLs: Slack is disabled unless dry-run, which creates debug-only handlers
+	// (one per level tier) that log payloads to DebugLogger without HTTP POSTing.
+	if successURL == "" && errorURL == "" {
+		if !opts.IsDryRun {
+			return nil, nil
+		}
 		successOpts := opts
 		successOpts.LevelMode = LevelModeExactInfo
 		hSuccess, err := NewSlackHandler(successOpts)
@@ -180,18 +183,16 @@ func BuildHandlers(successURL, errorURL, allowedHost string, opts SlackHandlerOp
 		return []*SlackHandler{hSuccess, hErr}, nil
 	}
 
+	// One or both URLs set: validate combination then each URL.
 	if err := ValidateEnvCombination(successURL, errorURL); err != nil {
 		return nil, err
 	}
-	if successURL == "" && errorURL == "" {
-		return nil, nil
-	}
-
 	if successURL != "" && errorURL != "" {
 		if err := validateBothURLs(successURL, errorURL, allowedHost); err != nil {
 			return nil, err
 		}
-	} else if errorURL != "" {
+	} else {
+		// errorURL only — success-only was rejected above by ValidateEnvCombination.
 		if err := validateWebhookURL(errorURL, allowedHost); err != nil {
 			return nil, err
 		}
