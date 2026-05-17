@@ -25,8 +25,8 @@ func (s *SpyHandler) Enabled(_ context.Context, _ slog.Level) bool { return true
 // Handle clones the record and appends it to Records.
 func (s *SpyHandler) Handle(_ context.Context, r slog.Record) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.Records = append(s.Records, r.Clone())
-	s.mu.Unlock()
 	return nil
 }
 
@@ -39,10 +39,9 @@ func (s *SpyHandler) WithGroup(_ string) slog.Handler { return s }
 // Flush records the call and returns FlushErr.
 func (s *SpyHandler) Flush(_ context.Context) error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.FlushCalled = true
-	err := s.FlushErr
-	s.mu.Unlock()
-	return err
+	return s.FlushErr
 }
 
 // RecordsCopy returns a snapshot of all received records under the mutex.
