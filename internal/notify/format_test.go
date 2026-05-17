@@ -277,3 +277,43 @@ func TestFormatAlerts_PolicyTypeUnknown(t *testing.T) {
 	// can spot reports that omit a policy-type value.
 	assert.Contains(t, body, "(unknown)")
 }
+
+// TestExtract_UnknownAttrKeyLogged verifies that an attr key not recognised by
+// the extract functions produces a Warn entry in the DebugLogger.
+// This catches helper/format mismatches early (e.g. a key renamed in LogAlert
+// but not updated in extractAlert).
+func TestExtract_UnknownAttrKeyLogged(t *testing.T) {
+	var debugBuf strings.Builder
+	debugLogger := slog.New(slog.NewTextHandler(&debugBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	var recv []byte
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recv, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	opts := notify.SlackHandlerOptions{
+		WebhookURL:    config.Secret(srv.URL + "/webhook"),
+		AllowedHost:   "127.0.0.1",
+		RunID:         "run-unk",
+		LevelMode:     notify.LevelModeWarnAndAbove,
+		HTTPClient:    srv.Client(),
+		BackoffConfig: notify.DefaultBackoffConfig,
+		DebugLogger:   debugLogger,
+	}
+	h, err := notify.NewSlackHandler(opts)
+	require.NoError(t, err)
+
+	// Inject a record with an attr key that extractAlert does not recognise.
+	r := slog.NewRecord(time.Now(), slog.LevelWarn, "tls_failure_alert", 0)
+	r.AddAttrs(slog.String("unexpected_field", "some_value"))
+	require.NoError(t, h.Handle(context.Background(), r))
+	require.NoError(t, h.Flush(context.Background()))
+
+	require.NotEmpty(t, recv, "record should still produce a Slack payload")
+	assert.Contains(t, debugBuf.String(), "unexpected_field",
+		"DebugLogger should warn about the unknown attr key")
+	assert.NotContains(t, debugBuf.String(), "some_value",
+		"DebugLogger must not log the attr value")
+}

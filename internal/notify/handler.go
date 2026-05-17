@@ -104,7 +104,7 @@ func (h *SlackHandler) Flush(ctx context.Context) error {
 // send formats buffered records and delivers each message to the webhook sequentially.
 // For each message: format (full) → log to DebugLogger (untruncated) → truncate → POST.
 func (h *SlackHandler) send(ctx context.Context, records []slog.Record) error {
-	msgs := buildMessages(records, h.opts.RunID)
+	msgs := buildMessages(records, h.opts.RunID, h.opts.DebugLogger)
 	cfg := postConfig{
 		client:     h.opts.HTTPClient,
 		backoff:    h.opts.BackoffConfig,
@@ -133,7 +133,7 @@ func (h *SlackHandler) send(ctx context.Context, records []slog.Record) error {
 
 // logDryRun writes all formatted payloads to DebugLogger without sending.
 func (h *SlackHandler) logDryRun(records []slog.Record) {
-	msgs := buildMessages(records, h.opts.RunID)
+	msgs := buildMessages(records, h.opts.RunID, h.opts.DebugLogger)
 	if h.opts.DebugLogger == nil {
 		return
 	}
@@ -153,8 +153,9 @@ func stripURLFromError(err error) error {
 }
 
 // buildMessages converts buffered slog.Records into one or more slackMessages.
-func buildMessages(records []slog.Record, runID string) []slackMessage {
-	return formatRecords(records, runID)
+// debugLogger receives warnings for unexpected attr keys; nil silences them.
+func buildMessages(records []slog.Record, runID string, debugLogger *slog.Logger) []slackMessage {
+	return formatRecords(records, runID, debugLogger)
 }
 
 // BuildHandlers validates URLs and returns 0–2 SlackHandler instances.

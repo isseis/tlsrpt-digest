@@ -60,7 +60,8 @@ func truncateMessage(m *slackMessage) {
 // TLS failures are aggregated into a single message; system errors become
 // individual messages; summaries produce one message. The messages are ordered:
 // TLS-failure aggregate (if any), system errors (one each), summary (if any).
-func formatRecords(records []slog.Record, runID string) []slackMessage {
+// debugLogger receives warnings for unexpected attr keys; nil silences them.
+func formatRecords(records []slog.Record, runID string, debugLogger *slog.Logger) []slackMessage {
 	var alerts []Alert
 	var sysErrors []SystemError
 	var summaries []Summary
@@ -69,11 +70,11 @@ func formatRecords(records []slog.Record, runID string) []slackMessage {
 		r := records[i]
 		switch {
 		case r.Level >= slog.LevelError:
-			sysErrors = append(sysErrors, extractSystemError(r))
+			sysErrors = append(sysErrors, extractSystemError(r, debugLogger))
 		case r.Level == slog.LevelWarn:
-			alerts = append(alerts, extractAlert(r))
+			alerts = append(alerts, extractAlert(r, debugLogger))
 		default:
-			summaries = append(summaries, extractSummary(r))
+			summaries = append(summaries, extractSummary(r, debugLogger))
 		}
 	}
 
@@ -90,8 +91,17 @@ func formatRecords(records []slog.Record, runID string) []slackMessage {
 	return msgs
 }
 
+// warnUnknownKey logs a warning when an unexpected attr key is encountered.
+// Only the key name is logged; the value is omitted to avoid leaking sensitive data.
+func warnUnknownKey(debugLogger *slog.Logger, key, recordMsg string) {
+	if debugLogger != nil {
+		debugLogger.Warn("unexpected attr key in notification record",
+			"key", key, "record_message", recordMsg)
+	}
+}
+
 // extractAlert reads Alert fields from slog.Attrs stored by LogAlert.
-func extractAlert(r slog.Record) Alert {
+func extractAlert(r slog.Record, debugLogger *slog.Logger) Alert {
 	var a Alert
 	r.Attrs(func(attr slog.Attr) bool {
 		switch attr.Key {
@@ -109,6 +119,8 @@ func extractAlert(r slog.Record) Alert {
 			if t, ok := attr.Value.Any().(time.Time); ok {
 				a.DateRange.End = t
 			}
+		default:
+			warnUnknownKey(debugLogger, attr.Key, r.Message)
 		}
 		return true
 	})
@@ -116,7 +128,7 @@ func extractAlert(r slog.Record) Alert {
 }
 
 // extractSystemError reads SystemError fields from slog.Attrs stored by LogSystemError.
-func extractSystemError(r slog.Record) SystemError {
+func extractSystemError(r slog.Record, debugLogger *slog.Logger) SystemError {
 	var e SystemError
 	e.ErrorType = r.Message
 	r.Attrs(func(attr slog.Attr) bool {
@@ -125,6 +137,8 @@ func extractSystemError(r slog.Record) SystemError {
 			e.Message = attr.Value.String()
 		case "component":
 			e.Component = attr.Value.String()
+		default:
+			warnUnknownKey(debugLogger, attr.Key, r.Message)
 		}
 		return true
 	})
@@ -132,7 +146,7 @@ func extractSystemError(r slog.Record) SystemError {
 }
 
 // extractSummary reads Summary fields from slog.Attrs stored by LogSummary.
-func extractSummary(r slog.Record) Summary {
+func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 	var s Summary
 	r.Attrs(func(attr slog.Attr) bool {
 		switch attr.Key {
@@ -148,6 +162,8 @@ func extractSummary(r slog.Record) Summary {
 			if t, ok := attr.Value.Any().(time.Time); ok {
 				s.Period.End = t
 			}
+		default:
+			warnUnknownKey(debugLogger, attr.Key, r.Message)
 		}
 		return true
 	})
