@@ -3,7 +3,7 @@ package notify
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log/slog"
 	"sync"
 
@@ -121,6 +121,9 @@ func (h *SlackHandler) send(ctx context.Context, records []slog.Record) error {
 		reqTimeout: h.opts.testReqTimeout,
 		sleep:      h.opts.testSleepFunc,
 	}
+	// Attempt all messages even if one fails so a partial batch is not silently
+	// dropped (the buffer was already cleared before send was called).
+	var errs []error
 	for i := range msgs {
 		msg := msgs[i]
 		if h.opts.DebugLogger != nil {
@@ -133,10 +136,10 @@ func (h *SlackHandler) send(ctx context.Context, records []slog.Record) error {
 			if h.opts.DebugLogger != nil {
 				h.opts.DebugLogger.Error("slack notification failed", "masked_url", cfg.maskedURL, "error", err)
 			}
-			return fmt.Errorf("notify: send failed: %w", stripURLFromError(err))
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // logDryRun writes all formatted payloads to DebugLogger without sending.
@@ -149,14 +152,6 @@ func (h *SlackHandler) logDryRun(records []slog.Record) {
 			h.opts.DebugLogger.Debug("[dry-run] slack notification would send", "payload", string(raw))
 		}
 	}
-}
-
-// stripURLFromError wraps err with a message that does not expose the webhook URL.
-func stripURLFromError(err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("delivery error (webhook URL redacted): %w", err)
 }
 
 // BuildHandlers validates URLs and returns 0–2 SlackHandler instances.

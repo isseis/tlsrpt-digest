@@ -89,8 +89,8 @@ func formatRecords(records []slog.Record, runID string, debugLogger *slog.Logger
 	for _, e := range sysErrors {
 		msgs = append(msgs, formatSystemError(e, runID))
 	}
-	if len(summaries) > 0 {
-		msgs = append(msgs, formatSummary(summaries[0], runID))
+	for _, s := range summaries {
+		msgs = append(msgs, formatSummary(s, runID))
 	}
 	return msgs
 }

@@ -188,7 +188,8 @@ func doPost(ctx context.Context, client *http.Client, webhookURL string, body []
 	if err != nil {
 		return postResult{}, err
 	}
-	_, _ = io.Copy(io.Discard, resp.Body)
+	const maxResponseRead = 1 << 20 // 1 MiB — bound reads to prevent resource exhaustion
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxResponseRead))
 	_ = resp.Body.Close()
 	return postResult{
 		statusCode: resp.StatusCode,
