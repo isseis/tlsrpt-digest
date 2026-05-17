@@ -32,6 +32,11 @@ func NewSlackHandler(opts SlackHandlerOptions) (*SlackHandler, error) {
 			return nil, err
 		}
 	}
+	if opts.BackoffConfig.Base < 0 || opts.BackoffConfig.RetryCount < 0 {
+		return nil, &WebhookValidationError{
+			Msg: "BackoffConfig.Base and RetryCount must not be negative",
+		}
+	}
 	if opts.BackoffConfig.Base == 0 && opts.BackoffConfig.RetryCount == 0 {
 		opts.BackoffConfig = DefaultBackoffConfig
 	}
@@ -103,6 +108,9 @@ func (h *SlackHandler) Flush(ctx context.Context) error {
 
 // send formats buffered records and delivers each message to the webhook sequentially.
 // For each message: format (full) → log to DebugLogger (untruncated) → truncate → POST.
+// The pre-send Debug log satisfies AC-20d: callers that need file-level full-text
+// recording configure DebugLogger with slog.LevelDebug; production callers use
+// slog.LevelWarn so the payload dump does not appear on stderr.
 func (h *SlackHandler) send(ctx context.Context, records []slog.Record) error {
 	msgs := formatRecords(records, h.opts.RunID, h.opts.DebugLogger)
 	cfg := postConfig{

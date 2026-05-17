@@ -138,7 +138,11 @@ func doAttempt(ctx context.Context, client *http.Client, cfg postConfig, body []
 	cancel()
 
 	if postErr != nil {
-		// Network-level failure: signal retry with no extra wait.
+		// If the parent context was cancelled or expired during the request,
+		// surface that directly rather than wrapping it as a Slack server error.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return true, 0, false, ctxErr
+		}
 		return false, 0, false, &SlackServerError{StatusCode: 0, Cause: sanitizeRequestError(postErr)}
 	}
 

@@ -71,9 +71,15 @@ func setupPhase1Logging() slog.Handler {
 // followed by an explicit Flush() call after each processing run.
 // Returns the handlers and any configuration error.
 func setupNotifyHandlers(successURL, errorURL string, cfg *config.Config, runID string, dryRun bool) ([]*notify.SlackHandler, error) {
-	// DebugLogger uses LevelDebug so that dry-run payloads written with
-	// DebugLogger.Debug(...) are not suppressed.
-	debugLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	// In dry-run mode use LevelDebug so payload dumps appear on stderr.
+	// In normal mode use LevelWarn so Debug-level payload logs are suppressed
+	// (they would otherwise duplicate notification content into service logs)
+	// while send-failure errors and unexpected-key warnings remain visible.
+	debugLevel := slog.LevelWarn
+	if dryRun {
+		debugLevel = slog.LevelDebug
+	}
+	debugLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: debugLevel}))
 
 	opts := notify.SlackHandlerOptions{
 		AllowedHost:   cfg.Notify.Slack.AllowedHost,

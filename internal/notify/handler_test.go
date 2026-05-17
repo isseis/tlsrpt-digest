@@ -262,14 +262,21 @@ func TestFlush_Concurrent(t *testing.T) {
 	// No race condition (run with -race) and no panic.
 }
 
+// TestFlush_RecordsDuringFlushPreserved verifies the snapshot strategy:
+// a record buffered by Handle() while Flush() is actively sending must not
+// be dropped — it must appear in the next Flush() call.
 func TestFlush_RecordsDuringFlushPreserved(t *testing.T) {
-	var mu sync.Mutex
-	var bodies []string
+	var requestCount atomic.Int32
+	firstReady := make(chan struct{})   // closed when first HTTP request arrives
+	unblockFirst := make(chan struct{}) // closed to let first request complete
+
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		mu.Lock()
-		bodies = append(bodies, string(b))
-		mu.Unlock()
+		n := requestCount.Add(1)
+		_, _ = io.ReadAll(r.Body)
+		if n == 1 {
+			close(firstReady)
+			<-unblockFirst // block until the test has called Handle() for record 2
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -285,19 +292,25 @@ func TestFlush_RecordsDuringFlushPreserved(t *testing.T) {
 	h, err := notify.NewSlackHandler(opts)
 	require.NoError(t, err)
 
-	// First record buffered before Flush.
+	// Buffer first record then start Flush in the background.
 	r1 := slog.NewRecord(time.Now(), slog.LevelWarn, "first", 0)
 	require.NoError(t, h.Handle(context.Background(), r1))
-	require.NoError(t, h.Flush(context.Background()))
 
-	// Second record buffered after first Flush.
+	flushDone := make(chan error, 1)
+	go func() { flushDone <- h.Flush(context.Background()) }()
+
+	// Wait until Flush's HTTP request is in flight, then buffer a second record.
+	<-firstReady
 	r2 := slog.NewRecord(time.Now(), slog.LevelWarn, "second", 0)
 	require.NoError(t, h.Handle(context.Background(), r2))
-	require.NoError(t, h.Flush(context.Background()))
 
-	mu.Lock()
-	defer mu.Unlock()
-	require.Len(t, bodies, 2)
+	// Unblock the first HTTP response and wait for Flush to return.
+	close(unblockFirst)
+	require.NoError(t, <-flushDone)
+
+	// The second record must survive and be delivered by the next Flush.
+	require.NoError(t, h.Flush(context.Background()))
+	assert.Equal(t, int32(2), requestCount.Load(), "second record must be sent in the second Flush")
 }
 
 func TestFlush_ClearsBufferAfterSend(t *testing.T) {

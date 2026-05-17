@@ -102,7 +102,7 @@
 **対応 AC**: `AC-37`（dry-run フラグ）, `AC-18`（PolicyType 定数）
 
 **テスト**:
-- [x] `internal/notify/types_test.go::TestPolicyType_Constants`: `PolicyTypeSTS`、`PolicyTypeTLSA`、`PolicyTypeNoPolicyFound`、`PolicyTypeUnknown` の値が RFC 8460 仕様に一致すること
+- [-] `internal/notify/types_test.go::TestPolicyType_Constants` — 削除済み（constants asserting their own values; trivial）。`PolicyType` 定数の正確さは `TestFormatAlerts_NoPolicyFound`・`TestFormatAlerts_PolicyTypeUnknown`（format_test.go）でカバー
 - [x] `internal/notify/options_test.go::TestSlackHandlerOptions_DryRun`: `IsDryRun` フィールドが option として保持されること（`AC-37`）
 
 **推定工数**: 0.5 日
@@ -123,7 +123,7 @@
   - スキームが `https` 以外 → エラー
   - ホスト名が `allowedHost` と不一致 → エラー（ポート除去、大小文字無視の完全一致）
   - `allowedHost` が空かつ URL あり → エラー
-- [x] `validateBothURLs(successURL, errorURL, allowedHost string) error` を実装する（両 URL のホスト名一致確認）
+- [-] `validateBothURLs` — 削除済み。両 URL が同一 `allowedHost` に一致することで推移律によりホスト一致が保証されるため、個別 `validateWebhookURL` 呼び出しで十分
 
 **成功基準**: 各パターンの入力に対して期待通りのエラー型が返る。
 
@@ -134,7 +134,7 @@
 - [x] `TestValidateWebhookURL_SameURLAllowed`: success / error が同一 URL でも許容されること（`AC-10`）
 - [x] `TestValidateWebhookURL_HTTPScheme`: `http://` がエラーになること（`AC-21`）
 - [x] `TestValidateWebhookURL_HostMismatch`: `allowed_host` と異なるホスト名がエラーになること（`AC-22`）
-- [x] `TestValidateWebhookURL_BothURLsDifferentHost`: success / error で異なるホスト名がエラーになること（`AC-23`）
+- [x] `TestBuildHandlers_DifferentHosts`（旧 `TestValidateWebhookURL_BothURLsDifferentHost`）: success / error で異なるホスト名がエラーになること（`AC-23`）
 - [x] `TestValidateWebhookURL_PortStripped`: ポート番号付き URL でもホスト照合できること（`AC-24`）
 - [x] `TestValidateWebhookURL_CaseInsensitive`: ホスト名の大文字小文字を無視して照合すること（`AC-24`）
 - [x] `TestValidateWebhookURL_NoAllowedHost`: `allowed_host` が空で URL がある場合にエラーになること（`AC-25`）

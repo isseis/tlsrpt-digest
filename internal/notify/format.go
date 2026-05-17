@@ -30,7 +30,11 @@ const (
 
 // TruncateText cuts s to at most maxLen runes. If truncation occurs, the result
 // ends with "..." and its total rune count is exactly maxLen.
+// Returns "" for maxLen <= 0.
 func TruncateText(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
 	suffixLen := len([]rune(truncSuffix))
 	if maxLen <= suffixLen {
 		// maxLen too small to fit even the suffix; return suffix truncated to maxLen.
