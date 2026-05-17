@@ -50,25 +50,3 @@ func validateWebhookURL(webhookURL, allowedHost string) error {
 	}
 	return nil
 }
-
-// validateBothURLs checks that successURL and errorURL use the same hostname.
-// It is called by BuildHandlers after each individual URL passes validation.
-func validateBothURLs(successURL, errorURL, allowedHost string) error {
-	if err := validateWebhookURL(successURL, allowedHost); err != nil {
-		return err
-	}
-	if err := validateWebhookURL(errorURL, allowedHost); err != nil {
-		return err
-	}
-	su, _ := url.Parse(successURL)
-	eu, _ := url.Parse(errorURL)
-	if !strings.EqualFold(su.Hostname(), eu.Hostname()) {
-		return &WebhookValidationError{
-			Msg: fmt.Sprintf(
-				"success and error webhook URLs must use the same host; got %q and %q",
-				su.Hostname(), eu.Hostname(),
-			),
-		}
-	}
-	return nil
-}

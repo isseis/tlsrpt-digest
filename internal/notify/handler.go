@@ -177,16 +177,18 @@ func BuildHandlers(successURL, errorURL, allowedHost string, opts SlackHandlerOp
 		return []*SlackHandler{hSuccess, hErr}, nil
 	}
 
-	// One or both URLs set: validate combination then each URL.
+	// One or both URLs set: validate combination then each URL individually.
+	// Both URLs matching allowedHost transitively guarantees they share the same
+	// hostname, so no separate cross-host check is needed.
 	if err := ValidateEnvCombination(successURL, errorURL); err != nil {
 		return nil, err
 	}
-	if successURL != "" && errorURL != "" {
-		if err := validateBothURLs(successURL, errorURL, allowedHost); err != nil {
+	if successURL != "" {
+		if err := validateWebhookURL(successURL, allowedHost); err != nil {
 			return nil, err
 		}
-	} else {
-		// errorURL only — success-only was rejected above by ValidateEnvCombination.
+	}
+	if errorURL != "" {
 		if err := validateWebhookURL(errorURL, allowedHost); err != nil {
 			return nil, err
 		}

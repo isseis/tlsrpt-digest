@@ -79,14 +79,11 @@ func TestValidateWebhookURL_BothEmpty(t *testing.T) {
 	require.NoError(t, ValidateEnvCombination("", ""))
 }
 
-// TestValidateBothURLs_HostMismatch verifies AC-23 end-to-end: when success and
-// error URLs resolve to different hostnames, BuildHandlers returns a
-// WebhookValidationError.
-//
-// Note that individual host validation (AC-22) already enforces this since
-// both URLs must match allowed_host; this test guards the entry path used by
-// the bootstrap code.
-func TestValidateBothURLs_HostMismatch(t *testing.T) {
+// TestBuildHandlers_DifferentHosts verifies AC-23: when success and error URLs
+// have different hostnames, BuildHandlers returns a WebhookValidationError.
+// Individual host validation (AC-22) enforces this transitively — both URLs
+// must match allowed_host, so mismatched hosts guarantee one will fail.
+func TestBuildHandlers_DifferentHosts(t *testing.T) {
 	_, err := BuildHandlers(
 		"https://hooks.slack.com/services/success",
 		"https://other.slack.com/services/error",
@@ -96,10 +93,4 @@ func TestValidateBothURLs_HostMismatch(t *testing.T) {
 	require.Error(t, err)
 	_, ok := errors.AsType[*WebhookValidationError](err)
 	require.True(t, ok)
-}
-
-// TestValidateBothURLs_SameHostOK is the positive counterpart: two URLs that
-// share the allowed host pass without error.
-func TestValidateBothURLs_SameHostOK(t *testing.T) {
-	require.NoError(t, validateBothURLs(testSuccessURL, testErrorURL, testAllowedHost))
 }
