@@ -18,7 +18,7 @@
 
 各パッケージ（imap、tlsrpt、notify、store）が実装されたのち、それらを組み合わせて動作させるエントリポイントが必要である。このタスクでは `cmd/tlsrpt-digest` を実装し、アプリケーション全体の制御フローを担う。
 
-スケジューリング（ポーリング間隔・週次サマリのタイミング）は外部スケジューラー（systemd timer または cron）に委ねる。プログラム自体は起動・処理・終了の one-shot 実行とする。この方針により：
+スケジューリング（ポーリング間隔・定期サマリのタイミング）は外部スケジューラー（systemd timer または cron）に委ねる。プログラム自体は起動・処理・終了の one-shot 実行とする。この方針により：
 
 - プログラムの実装をシンプルに保てる（内部ループ・タイマー管理が不要）
 - 実行タイミングの管理が OS 標準の仕組みに集約される
@@ -39,7 +39,7 @@
 - コマンドライン引数のパース（設定ファイルパスの指定）
 - 設定ファイルの読み込みと各コンポーネントの初期化
 - `fetch` サブコマンド：IMAP ポーリング・即時アラート送信・ストア保存の1サイクル実行
-- `summary` サブコマンド：週次サマリの生成・送信
+- `summary` サブコマンド：定期サマリの生成・送信
 
 ### 対象外（Out of Scope）
 
@@ -63,13 +63,14 @@
 
 **受け入れ条件（Acceptance Criteria）**:
 
-- **`AC-01`**: `fetch`、`summary`、`reprocess` のいずれかのサブコマンドを受け付ける
+- **`AC-01`**: `fetch`、`summary`、`reprocess`、`gc` のいずれかのサブコマンドを受け付ける
 - **`AC-02`**: サブコマンドを省略または不正な値を指定した場合、使い方を表示してエラー終了する
 - **`AC-03`**: `-config <path>` フラグで設定ファイルパスを指定できる（全サブコマンド共通）
 - **`AC-04`**: 設定ファイルパスを省略した場合、デフォルトパス（例：`./config.toml`）を使用する
 - **`AC-05`**: `fetch` サブコマンドは `--since <duration>` フラグを受け付ける（例：`--since 30d`）
 - **`AC-06`**: `--since` は設定ファイルの `imap.fetch_days` を上書きする。指定しない場合は設定値（デフォルト 14 日）を使用する
-- **`AC-07`**: `--since` の duration は日単位（`d`）または週単位（`w`）で指定できる（例：`30d`、`4w`）。Go の `time.ParseDuration` は `d`/`w` をサポートしないため、カスタムパーサーを実装する
+- **`AC-07`**: `--since` の duration は日単位（`d`）または週単位（`w`）で指定できる（例：`30d`、`4w`）。Go の `time.ParseDuration` は `d`/`w` をサポートしないため、カスタムパーサーを実装する。本パーサーは `fetch --since` / `summary --since` / `gc --before` で共用する
+- **`AC-07a`**: `summary` サブコマンドは `--since <duration>` フラグを受け付ける（`AC-07` の共通パーサーを使用）。設定ファイルの集計期間設定を上書きする。`--since` を省略した場合は設定値（TOML キー名はタスク 0060 / `02_architecture.md` で確定、既定値は 7 日を想定）を使用する
 
 ### F-002: コンポーネントの初期化
 
@@ -147,13 +148,25 @@ IMAP サーバーからメールを取得し、レポートを処理・保存す
 
 ### F-005: `summary` サブコマンドの処理フロー
 
-ストアに蓄積されたレポートを集計し、週次サマリを送信する。
+ストアに蓄積されたレポートを集計し、定期サマリを送信する。集計対象期間は `--since` フラグまたは設定ファイルの集計期間設定で指定する（`AC-07a` を参照）。
 
 **受け入れ条件（Acceptance Criteria）**:
 
-- **`AC-27`**: ストアから過去 7 日分のレポートを取得して集計する
-- **`AC-28`**: 集計結果を週次サマリとして Slack に送信する（INFO レベル）
+- **`AC-27`**: `--since <duration>` または設定値で指定された期間（実行時刻からその期間遡った範囲）のレポートをストアから取得して集計する
+- **`AC-28`**: 集計結果を定期サマリとして Slack に送信する（INFO レベル）。送信メッセージには集計対象期間（開始・終了日時）を含める
 - **`AC-29`**: 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
+
+### F-006: `gc` サブコマンドの処理フロー
+
+ストアに蓄積された古いレポートレコードを削除し、累積件数を抑制する。`.eml` ファイルは対象外（`.eml` の保持期間管理は将来の拡張）。
+
+**受け入れ条件（Acceptance Criteria）**:
+
+- **`AC-30`**: `gc` サブコマンドは `--before <duration>` フラグを受け付ける（日単位 `d` または週単位 `w`、`fetch` の `--since` と同じカスタムパーサーを共用する）
+- **`AC-31`**: `--before` を省略した場合、設定ファイルの保持期間設定（TOML キー名と既定値はタスク 0060 / `02_architecture.md` で確定）を使用する。設定値もない場合はエラー終了する
+- **`AC-32`**: `internal/store` の `DeleteReportsBefore(time.Now().Add(-before))` を呼び出して該当レコードを削除する
+- **`AC-33`**: 削除件数を INFO レベルで構造化ログに出力する（Slack への定期通知は行わない。失敗時のみ ERROR ログ → Slack 通知）
+- **`AC-34`**: 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
 
 ---
 
@@ -214,21 +227,47 @@ WantedBy=timers.target
 ```ini
 # /etc/systemd/system/tlsrpt-digest-summary.service
 [Unit]
-Description=tlsrpt-digest weekly summary (one-shot)
+Description=tlsrpt-digest periodic summary (one-shot)
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml
+# --since の値（または設定ファイルの集計期間）はタイマーの送信頻度と整合させる。
+# 下のタイマー例は毎週月曜のため --since 7d 相当。日次運用なら --since 1d。
+ExecStart=/usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml --since 7d
 EnvironmentFile=/etc/tlsrpt-digest/secrets.env
 ```
 
 ```ini
 # /etc/systemd/system/tlsrpt-digest-summary.timer
 [Unit]
-Description=Run tlsrpt-digest weekly summary every Monday morning
+Description=Run tlsrpt-digest periodic summary every Monday morning
 
 [Timer]
 OnCalendar=Mon 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```ini
+# /etc/systemd/system/tlsrpt-digest-gc.service
+[Unit]
+Description=tlsrpt-digest record GC (one-shot)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tlsrpt-digest gc -config /etc/tlsrpt-digest/config.toml --before 30d
+EnvironmentFile=/etc/tlsrpt-digest/secrets.env
+```
+
+```ini
+# /etc/systemd/system/tlsrpt-digest-gc.timer
+[Unit]
+Description=Run tlsrpt-digest GC daily
+
+[Timer]
+OnCalendar=daily
 Persistent=true
 
 [Install]
@@ -240,6 +279,7 @@ WantedBy=timers.target
 ```bash
 systemctl enable --now tlsrpt-digest-fetch.timer
 systemctl enable --now tlsrpt-digest-summary.timer
+systemctl enable --now tlsrpt-digest-gc.timer
 ```
 
 ### 6.2 crontab を使う場合
@@ -250,8 +290,11 @@ systemctl enable --now tlsrpt-digest-summary.timer
 # 毎時0分に IMAP メール取得
 0 * * * *  root  . /etc/tlsrpt-digest/secrets.env && /usr/local/bin/tlsrpt-digest fetch -config /etc/tlsrpt-digest/config.toml
 
-# 毎週月曜9時に週次サマリ
+# 毎週月曜9時に定期サマリ
 0 9 * * 1  root  . /etc/tlsrpt-digest/secrets.env && /usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml
+
+# 毎日3時に古いレコードを削除（30 日以前）
+0 3 * * *  root  . /etc/tlsrpt-digest/secrets.env && /usr/local/bin/tlsrpt-digest gc -config /etc/tlsrpt-digest/config.toml --before 30d
 ```
 
 ---
@@ -270,8 +313,17 @@ systemctl enable --now tlsrpt-digest-summary.timer
   - 1 件エラー時の継続動作テスト
   - 重複実行しても結果が変わらないこと（冪等性）
 - `summary` 処理フローのテスト（`FakeStore`・スパイハンドラ を使用）
+  - `--since` 指定時に対応する期間のレポートが取得され集計されること
+  - `--since` 未指定 + 設定値ありで設定値が使われること
+  - 集計対象期間（開始・終了日時）がメッセージに含まれること
 - `reprocess` 処理フローのテスト（`testdata/` の実際の `.eml` を canned データとして使用）
   - `--notify` なしでアラートが送信されないこと
+  - 重複実行しても結果が変わらないこと（冪等性）
+- `gc` 処理フローのテスト（`FakeStore`・スパイハンドラ を使用）
+  - `--before` 指定時に `DeleteReportsBefore(now - before)` が呼ばれること
+  - `--before` 未指定 + 設定値ありで設定値が使われること
+  - `--before` 未指定 + 設定値なしでエラー終了すること
+  - 削除件数が INFO ログに出力されること
   - 重複実行しても結果が変わらないこと（冪等性）
 - エラー終了時の終了コードテスト
 
