@@ -30,12 +30,7 @@ const (
 
 // TruncateText cuts s to at most maxLen runes. If truncation occurs, the result
 // ends with "..." and its total rune count is exactly maxLen.
-// Exported for use in tests.
 func TruncateText(s string, maxLen int) string {
-	return truncateText(s, maxLen)
-}
-
-func truncateText(s string, maxLen int) string {
 	suffixLen := len([]rune(truncSuffix))
 	if maxLen <= suffixLen {
 		// maxLen too small to fit even the suffix; return suffix truncated to maxLen.
@@ -51,10 +46,10 @@ func truncateText(s string, maxLen int) string {
 // truncateMessage applies Slack field-length limits to m in place.
 // This must be called after DebugLogger logging so the debug output is untruncated.
 func truncateMessage(m *slackMessage) {
-	m.Text = truncateText(m.Text, maxTextRunes)
+	m.Text = TruncateText(m.Text, maxTextRunes)
 	for i := range m.Attachments {
 		for j := range m.Attachments[i].Fields {
-			m.Attachments[i].Fields[j].Value = truncateText(
+			m.Attachments[i].Fields[j].Value = TruncateText(
 				m.Attachments[i].Fields[j].Value, maxFieldRunes,
 			)
 		}
