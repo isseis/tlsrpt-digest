@@ -75,7 +75,7 @@ func formatRecords(records []slog.Record, runID string, debugLogger *slog.Logger
 		switch {
 		case r.Level >= slog.LevelError:
 			sysErrors = append(sysErrors, extractSystemError(r, debugLogger))
-		case r.Level == slog.LevelWarn:
+		case r.Level >= slog.LevelWarn:
 			alerts = append(alerts, extractAlert(r, debugLogger))
 		default:
 			summaries = append(summaries, extractSummary(r, debugLogger))
@@ -174,33 +174,48 @@ func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 	return s
 }
 
+// maxAlertFieldsPerAttachment caps alert fields per Slack attachment.
+// Slack Incoming Webhooks allow at most 10 fields per attachment; one slot is
+// reserved for the Run ID field appended to the last attachment.
+const maxAlertFieldsPerAttachment = 9
+
 // formatAlerts builds a single aggregated slackMessage for TLS failure alerts.
+// Alerts are chunked across multiple attachments (≤9 alert fields each) to
+// stay within Slack's 10-field-per-attachment limit.
 // No truncation is applied here; the caller (Flush) truncates before sending.
 func formatAlerts(alerts []Alert, runID string) slackMessage {
 	orgCount := uniqueOrgCount(alerts)
 	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, orgCount)
 
-	var fields []slackField
-	for _, a := range alerts {
-		fields = append(fields, slackField{
-			Title: "Organization / Policy / Failures / Period",
-			Value: fmt.Sprintf("%s | %s | %d | %s – %s",
-				a.OrganizationName,
-				policyTypeStr(a.PolicyType),
-				a.FailureCount,
-				a.DateRange.Start.Format(time.DateOnly),
-				a.DateRange.End.Format(time.DateOnly),
-			),
-			Short: false,
-		})
+	var attachments []slackAttachment
+	for i := 0; i < len(alerts); i += maxAlertFieldsPerAttachment {
+		end := min(i+maxAlertFieldsPerAttachment, len(alerts))
+		chunk := alerts[i:end]
+
+		var fields []slackField
+		for _, a := range chunk {
+			fields = append(fields, slackField{
+				Title: "Organization / Policy / Failures / Period",
+				Value: fmt.Sprintf("%s | %s | %d | %s – %s",
+					a.OrganizationName,
+					policyTypeStr(a.PolicyType),
+					a.FailureCount,
+					a.DateRange.Start.Format(time.DateOnly),
+					a.DateRange.End.Format(time.DateOnly),
+				),
+				Short: false,
+			})
+		}
+		if end == len(alerts) {
+			// Append Run ID only to the last attachment.
+			fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: true})
+		}
+		attachments = append(attachments, slackAttachment{Color: colorWarning, Fields: fields})
 	}
-	fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: true})
 
 	return slackMessage{
-		Text: title,
-		Attachments: []slackAttachment{
-			{Color: colorWarning, Fields: fields},
-		},
+		Text:        title,
+		Attachments: attachments,
 	}
 }
 

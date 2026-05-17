@@ -61,8 +61,7 @@ func retryOpts(serverURL string, client *http.Client) notify.SlackHandlerOptions
 }
 
 func TestHTTPPost_Timeout(t *testing.T) {
-	// Server sleeps, which causes the per-request timeout to fire.
-	// We close client connections before srv.Close to avoid the cleanup hang.
+	// Server sleeps until the per-request context deadline fires.
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Drain the request body so the server can close connections cleanly.
 		_, _ = io.Copy(io.Discard, r.Body)

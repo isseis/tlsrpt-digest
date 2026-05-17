@@ -168,8 +168,7 @@ func doAttempt(ctx context.Context, client *http.Client, cfg postConfig, body []
 // sanitizeRequestError hides webhook URLs from request errors while preserving
 // the underlying cause for debugging.
 func sanitizeRequestError(err error) error {
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok {
 		return fmt.Errorf("%s [redacted]: %w", urlErr.Op, urlErr.Err)
 	}
 	return err

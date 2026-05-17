@@ -126,7 +126,7 @@ func (h *SlackHandler) send(ctx context.Context, records []slog.Record) error {
 	var errs []error
 	for i := range msgs {
 		msg := msgs[i]
-		if h.opts.DebugLogger != nil {
+		if h.opts.DebugLogger != nil && h.opts.DebugLogger.Enabled(ctx, slog.LevelDebug) {
 			if raw, err := json.Marshal(msg); err == nil {
 				h.opts.DebugLogger.Debug("slack notification payload", "payload", string(raw))
 			}

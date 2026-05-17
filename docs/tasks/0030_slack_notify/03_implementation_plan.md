@@ -400,7 +400,7 @@
 - [x] Phase 1: TOML 読み込み前にローカルハンドラ（`slog.NewTextHandler(os.Stderr, ...)` 等）を初期化する（Slack ハンドラ含まない）。`slog.SetDefault(slog.New(localHandler))` で設定する
 - [x] 環境変数から `successURL`、`errorURL` を読み込み `notify.ValidateEnvCombination` を呼ぶ（`ValidateEnvCombination` は `internal/notify` でエクスポートする）
 - [x] TOML を読み込んで `notify.slack.allowed_host` を取得する
-- [x] Phase 2: エクスポートされた `notify.BuildHandlers(successURL, errorURL, allowedHost, opts)` を呼び、内部で `validateBothURLs`（AC-23）や各 URL の検証（`AC-21`〜`AC-26`）を行う。この関数は `0〜2` 個の `SlackHandler` を返す（`validateBothURLs` は unexported のままで `BuildHandlers` から呼ぶ）
+- [x] Phase 2: エクスポートされた `notify.BuildHandlers(successURL, errorURL, allowedHost, opts)` を呼び、各 URL を `validateWebhookURL` で個別に検証（`AC-21`〜`AC-26`）。両 URL が同一 `allowedHost` に一致することで推移律によりホスト一致（AC-23）も保証される。この関数は `0〜2` 個の `SlackHandler` を返す
 - [x] `--dry-run` + URL 未設定の場合: `BuildHandlers` に `IsDryRun=true` を渡したうえで空 URL も許容するモード（`DryRunNoURL`）で呼び出し、URL 検証をスキップして DebugLogger 専用ハンドラを生成する（AC-38「Webhook URL を設定せずに確認」の実現）
 - [x] Phase 2 の Slack ハンドラ追加は `setupNotifyHandlers()` の戻り値として `0〜2` 個の `SlackHandler` を返し、`cmd/tlsrpt-digest` 側で typed helper と `Flush()` を明示的に呼び出す。`internal/notify` に新しい合成責務は追加しない
 - [x] `--dry-run` フラグを CLI に追加し、`SlackHandlerOptions.IsDryRun` に渡す
@@ -453,7 +453,7 @@
 - [x] `TestWebhookURLNotLogged`: `SlackHandler` を使用するログ出力に Webhook URL の実値が現れないこと（`slog` ログ出力先を検査）
 - [x] `TestFlushError_NoURLInErrorString`: 送信失敗時に `Flush()` が返すエラー文字列に Webhook URL の実値が含まれないこと（`url.Error` 等のラップによる漏洩を防ぐ）
 - [x] `TestDebugWriterNotTriggerSlack`: Debug Logger への書き込みが `SlackHandler.Handle()` を起動しないこと
-- [x] `TestPrivateLogger_NotExported`: `internal/notify` パッケージが通知用 `*slog.Logger` をエクスポートしていないこと（シンボル検査）
+- [x] `TestSlackHandler_NoExportedLoggerField`（旧称 `TestPrivateLogger_NotExported`）: `SlackHandler` 型にエクスポートされた `*slog.Logger` フィールドが存在しないことを reflect で検査
 - [x] `TestRedactionAlwaysEnabled`: 通知ハンドラ側に redaction を無効化する option / code path が存在しないこと
 
 **成功基準**: Webhook URL や secret 相当値が通知 JSON と通知経路へ混入せず、redaction を無効化する迂回経路も存在しない。
