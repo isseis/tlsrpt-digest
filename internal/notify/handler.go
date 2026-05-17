@@ -83,16 +83,27 @@ func (h *SlackHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
 // WithGroup returns h unchanged (same rationale as WithAttrs).
 func (h *SlackHandler) WithGroup(_ string) slog.Handler { return h }
 
+// takeSnapshot atomically retrieves and clears the buffer for Flush() to process.
+// Releasing the lock before the HTTP send allows Handle() to continue buffering
+// records during the in-flight request.
+func (h *SlackHandler) takeSnapshot() []slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	snapshot := h.buf
+	h.buf = nil
+	return snapshot
+}
+
 // Flush formats and sends all buffered records.
 // It uses a snapshot strategy: records buffered during an in-flight Flush are
 // preserved for the next call rather than dropped.
 // Flush always clears its snapshot regardless of send errors.
 func (h *SlackHandler) Flush(ctx context.Context) error {
-	// Snapshot and clear under lock so Handle() can continue unblocked.
-	h.mu.Lock()
-	snapshot := h.buf
-	h.buf = nil
-	h.mu.Unlock()
+	// takeSnapshot atomically retrieves and clears the buffer for Flush() to process.
+	// Releasing the lock before the send allows Handle() to continue buffering
+	// records during the in-flight HTTP request.
+	snapshot := h.takeSnapshot()
 
 	if len(snapshot) == 0 {
 		return nil
