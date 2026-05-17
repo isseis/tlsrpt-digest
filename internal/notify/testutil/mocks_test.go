@@ -17,14 +17,15 @@ func TestSpyHandler_RecordsHandle(t *testing.T) {
 	var spy notifytestutil.SpyHandler
 	r := slog.NewRecord(time.Now(), slog.LevelWarn, "test", 0)
 	require.NoError(t, spy.Handle(context.Background(), r))
-	assert.Len(t, spy.Records, 1)
-	assert.Equal(t, slog.LevelWarn, spy.Records[0].Level)
+	records := spy.RecordsCopy()
+	assert.Len(t, records, 1)
+	assert.Equal(t, slog.LevelWarn, records[0].Level)
 }
 
 func TestSpyHandler_FlushCalled(t *testing.T) {
 	var spy notifytestutil.SpyHandler
 	require.NoError(t, spy.Flush(context.Background()))
-	assert.True(t, spy.FlushCalled)
+	assert.True(t, spy.WasFlushCalled())
 }
 
 func TestSpyHandler_RecordClone(t *testing.T) {
@@ -32,7 +33,6 @@ func TestSpyHandler_RecordClone(t *testing.T) {
 	var spy notifytestutil.SpyHandler
 	r := slog.NewRecord(time.Now(), slog.LevelWarn, "original", 0)
 	require.NoError(t, spy.Handle(context.Background(), r))
-	// The stored message should still be "original" regardless of what the
-	// caller does with r after the call.
-	assert.Equal(t, "original", spy.Records[0].Message)
+	// Use RecordsCopy to read under the mutex.
+	assert.Equal(t, "original", spy.RecordsCopy()[0].Message)
 }

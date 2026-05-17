@@ -6,11 +6,14 @@ package notifytestutil
 import (
 	"context"
 	"log/slog"
+	"sync"
 )
 
 // SpyHandler implements slog.Handler and records received slog.Records.
 // It also satisfies an interface compatible with notify.Flusher.
+// All methods are safe for concurrent use.
 type SpyHandler struct {
+	mu          sync.Mutex
 	Records     []slog.Record
 	FlushCalled bool
 	FlushErr    error
@@ -21,7 +24,9 @@ func (s *SpyHandler) Enabled(_ context.Context, _ slog.Level) bool { return true
 
 // Handle clones the record and appends it to Records.
 func (s *SpyHandler) Handle(_ context.Context, r slog.Record) error {
+	s.mu.Lock()
 	s.Records = append(s.Records, r.Clone())
+	s.mu.Unlock()
 	return nil
 }
 
@@ -33,8 +38,28 @@ func (s *SpyHandler) WithGroup(_ string) slog.Handler { return s }
 
 // Flush records the call and returns FlushErr.
 func (s *SpyHandler) Flush(_ context.Context) error {
+	s.mu.Lock()
 	s.FlushCalled = true
-	return s.FlushErr
+	err := s.FlushErr
+	s.mu.Unlock()
+	return err
+}
+
+// RecordsCopy returns a snapshot of all received records under the mutex.
+// Use this instead of reading Records directly in concurrent tests.
+func (s *SpyHandler) RecordsCopy() []slog.Record {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]slog.Record, len(s.Records))
+	copy(out, s.Records)
+	return out
+}
+
+// WasFlushCalled reports whether Flush was called.
+func (s *SpyHandler) WasFlushCalled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.FlushCalled
 }
 
 // Compile-time check that SpyHandler satisfies slog.Handler.
