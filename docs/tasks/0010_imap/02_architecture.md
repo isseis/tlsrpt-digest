@@ -214,7 +214,8 @@ type MailFetcher interface {
     // IMAP SEARCH SINCE は日付単位。since の時刻部分は切り捨てるため、
     // 同一日内の重複実行では同じ UID セットが返される。
     // 呼び出し元はローカルの保存済みファイルと照合して未取得のもののみを
-    // Download する責務を持つ。UIDValidity の変化の検出は internal/store の責務。
+    // Download する責務を持つ。UIDValidity の保存・取得は internal/store、
+    // 前回値との比較・変化検出および変化時の対応はエントリポイント（cmd/tlsrpt-digest）の責務。
     FetchMeta(ctx context.Context, since time.Time) (FetchMetaResult, error)
 
     // Download は指定 UID のメール本文を取得する。BODY.PEEK[] を用いて
