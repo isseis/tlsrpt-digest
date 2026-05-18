@@ -17,7 +17,7 @@
 ### 1.1 設計原則
 
 - **責務分離の維持**: `internal/store` は永続化に専念し、IMAP 通信（`internal/imap`）、添付解析（`internal/mailparse`）、TLSRPT デコード（`internal/tlsrpt`）、通知送信（`internal/notify`）を再実装しない
-- **fail-safe な永続化**: JSON/sentinel/`.eml` はアトミック書き込み（temp + rename）を前提とし、クラッシュ時の破損・部分状態を最小化する
+- **fail-safe な永続化**: JSON/sentinel/`.eml` はアトミック更新を前提とし、クラッシュ時の破損・部分状態を最小化する
 - **運用可能性優先**: `UIDVALIDITY` と `recovery_required` は sentinel に集約し、復旧判断はエントリポイント（0070）に委譲する
 - **GC の決定可能性**: `.eml` 本体やディレクトリ全走査に依存せず、`emails` インデックスで削除判定・最終パス再構築を行う
 - **読み取り専用経路の明確化**: `summary` 用に read-only open モードを設け、ロック無しで安全に参照できる設計にする
@@ -64,7 +64,7 @@ flowchart LR
 | F-002（AC-07〜AC-10） | 3.1 `SaveReport`/`SaveReports`/`SaveEmailMetas`、6.2 保存フロー |
 | F-003（AC-11〜AC-13） | 3.1 `GetReportsSince`、6.3 参照フロー |
 | F-004（AC-14〜AC-19） | 3.1 `SaveEmail`、6.2 保存フロー |
-| F-005（AC-20〜AC-22） | 3.1 `LoadEmails`、6.4 reprocess 読み込みフロー |
+| F-005（AC-20〜AC-22） | 3.1 `LoadEmails`、4.1 個別読み込み失敗の集約方針、6.4 reprocess 読み込みフロー |
 | F-006（AC-23〜AC-24） | 3.1 `SaveUIDValidity`/`LoadUIDValidity`、6.5 UIDVALIDITY フロー |
 | F-007a（AC-25〜AC-28a） | 3.1 `DeleteReportsBefore`、6.6 GC レポート削除フロー |
 | F-007b（AC-29〜AC-32a） | 3.1 `DeleteEmailsBefore`、6.7 GC `.eml` 削除フロー |
@@ -121,6 +121,23 @@ graph TB
     class SVC,RT,ERR enhanced
 ```
 
+**Legend**
+
+```mermaid
+flowchart LR
+    classDef data fill:#e6f7ff,stroke:#1f77b4,stroke-width:1px,color:#0b3d91;
+    classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
+    classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
+
+    D[("永続データ")]
+    P["既存コンポーネント"]
+    E["変更対象コンポーネント"]
+
+    class D data
+    class P process
+    class E enhanced
+```
+
 ### 2.2 コンポーネント配置と再利用方針
 
 - `internal/store` は `tlsrpt.Report` の保存先として機能するが、TLSRPT の検証・解釈ロジックは持たない
@@ -138,18 +155,18 @@ sequenceDiagram
     participant DF as "tlsrpt.json"
     participant EF as "emails/"
 
-    EP->>ST: "Open(rootDir, mode, imapIdentity)"
+    EP->>ST: "ストアを開く"
     alt "mode = read-write"
-        ST->>SF: "create/validate sentinel"
-        ST->>DF: "create if missing"
-        ST->>EF: "create dirs if missing"
+        ST->>SF: "sentinel を整合性確認し必要なら初期化"
+        ST->>DF: "保存領域を初期化"
+        ST->>EF: "メール保管領域を初期化"
     else "mode = read-only"
-        ST->>SF: "read if exists"
-        ST->>DF: "read if exists"
+        ST->>SF: "既存状態のみ参照"
+        ST->>DF: "既存状態のみ参照"
     end
-    EP->>ST: "SaveEmail / SaveEmailMetas / SaveReports"
-    ST->>EF: "atomic .eml write"
-    ST->>DF: "atomic JSON write"
+    EP->>ST: "保存 API を呼び出す"
+    ST->>EF: "メール原本を更新"
+    ST->>DF: "レポート集合とインデックスを更新"
 ```
 
 ---
@@ -158,22 +175,10 @@ sequenceDiagram
 
 ### 3.1 インターフェース・型定義（高レベル）
 
+`OpenMode` の公開値は `OpenReadWrite` と `OpenReadOnly` の 2 つを想定する。
+
 ```go
-package store
-
-import (
-    "net/mail"
-    "time"
-
-    "github.com/isseis/tlsrpt-digest/internal/tlsrpt"
-)
-
 type OpenMode int
-
-const (
-    OpenReadWrite OpenMode = iota
-    OpenReadOnly
-)
 
 type IMAPIdentity struct {
     Host    string
@@ -232,13 +237,18 @@ type Store interface {
 | `internal/store/store.go` | `Store` 実装エントリ、open モード切替、公開 API の集約 | 新規 |
 | `internal/store/types.go` | 永続化対象の内部モデル（report/email/sentinel）定義 | 新規 |
 | `internal/store/errors.go` | 公開エラー型・分類（不整合/IO/検証） | 新規 |
-| `internal/store/sentinel.go` | sentinel の read-modify-write、IMAP 識別子整合性検証 | 新規 |
+| `internal/store/sentinel.go` | sentinel 状態管理、IMAP 識別子整合性検証 | 新規 |
 | `internal/store/reports.go` | `SaveReport(s)`/`GetReportsSince`/`DeleteReportsBefore` | 新規 |
 | `internal/store/emails.go` | `SaveEmail`/`SaveEmailMetas`/`LoadEmails`/`DeleteEmailsBefore` | 新規 |
 | `internal/store/recovery.go` | `SaveRecoveryRequired`/`LoadRecoveryRequired`/`ClearRecoveryRequired`/`ApplyRecovery` | 新規 |
-| `internal/store/atomicfile.go` | temp + rename の共通 I/O ヘルパ（0600 強制） | 新規 |
+| `internal/store/atomicfile.go` | アトミック更新の共通 I/O ヘルパ | 新規 |
 | `internal/store/permission.go` | 新規作成ファイル/ディレクトリの権限適用と緩い権限の WARN 判定 | 新規 |
+| `internal/store/store_test.go` | open モード、read-only 空状態、初期化の統合検証 | 新規 |
+| `internal/store/reports_test.go` | レポート保存・取得・GC の検証 | 新規 |
+| `internal/store/emails_test.go` | `.eml` 保存・読み込み・GC と部分失敗継続の検証 | 新規 |
+| `internal/store/recovery_test.go` | UIDVALIDITY と recovery 状態 API の検証 | 新規 |
 | `cmd/tlsrpt-digest/main.go` | store open モード選択（read-only/read-write）の利用側調整 | 変更 |
+| `cmd/tlsrpt-digest/main_test.go` | エントリポイントからの store 利用シナリオ検証 | 変更 |
 
 ---
 
@@ -248,15 +258,11 @@ type Store interface {
 
 - **分類可能な型付きエラー**を公開し、呼び出し側が `errors.Is`/`errors.AsType` で分岐可能にする
 - **メッセージに運用診断情報**（期待値・実値・対象パス）を含める
-- **バッチ処理の部分失敗**（`.eml` 個別削除失敗）は `errors.Join` で集約して返す
+- **バッチ処理の部分失敗**（`.eml` 個別読み込み失敗・個別削除失敗）は `errors.Join` で集約して返す
 
 ### 4.2 エラー型（高レベル定義）
 
 ```go
-package store
-
-import "time"
-
 type ErrStoreIdentityMismatch struct {
     RootDir         string
     ExpectedHost    string
@@ -281,13 +287,17 @@ type ErrInvalidEmailPath struct {
     Path string
 }
 
+type ErrLoadEmailFailed struct {
+    Path string
+}
+
 type ErrRecoveryStateNotFound struct{}
 
 type ErrDeleteEmailFailed struct {
-    Path      string
-    UID       uint32
+    Path        string
+    UID         uint32
     UIDValidity uint32
-    SavedAt   time.Time
+    SavedAt     time.Time
 }
 ```
 
@@ -296,6 +306,7 @@ type ErrDeleteEmailFailed struct {
 - `store: identity mismatch: root_dir=... expected=host:port/mailbox actual=...`
 - `store: unsupported schema version: file=... version=...`
 - `store: atomic write failed: file=... op=...`
+- `store: load email failed: path=...`
 
 ---
 
@@ -304,13 +315,14 @@ type ErrDeleteEmailFailed struct {
 ### 5.1 適用範囲
 
 - 本タスクは通知先（Webhook URL など）の取り扱いを直接持たないため、通知先検証ガイドの追加適用は **N/A**
+- `internal/store` は通知メッセージや通知先設定を受け取らないため、`notification_security.md` が要求する「デバッグ経路と通知経路の分離」を侵害しない
 - ただし、ローカル保存データ（`.eml`・JSON・sentinel）の機密性/完全性は本タスクの主要対象
 
 ### 5.2 セキュリティ設計
 
 - **機密性**: 作成ファイル `0600`、作成ディレクトリ `0700` を強制
-- **完全性**: すべての更新をアトミック書き込みで実施し、破損・部分更新を抑止
-- **一貫性**: `ApplyRecovery` で `uid_validity` 更新と `recovery_required` 消去を単一 read-modify-write に統合
+- **完全性**: すべての更新をアトミック更新で実施し、破損・部分更新を抑止
+- **一貫性**: `ApplyRecovery` は `uid_validity` 更新と `recovery_required` 消去を一体の状態遷移として扱う
 - **可観測性**: 既存の緩いパーミッションは自動修正せず WARN を出し、運用者判断を尊重
 
 ### 5.3 脅威モデル
@@ -322,13 +334,26 @@ flowchart TD
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
     classDef problem fill:#ffe6e6,stroke:#d62728,stroke-width:2px,color:#7b0000;
 
-    T1["Threat: クラッシュ中断で JSON/sentinel 破損"] --> C1["Control: temp + rename のアトミック更新"]
-    T2["Threat: `.eml` の無制限蓄積<br>遠未来 report_end_date / parse 失敗"] --> C2["Control: saved_at ベース強制削除<br>DeleteEmailsBefore(savedAtCutoff)"]
-    T3["Threat: UIDVALIDITY 変化後の不整合継続"] --> C3["Control: recovery_required 永続化<br>ApplyRecovery で原子的に解消"]
+    T1["Threat: クラッシュ中断で JSON/sentinel 破損"] --> C1["Control: アトミック更新"]
+    T2["Threat: `.eml` の無制限蓄積<br>遠未来 report_end_date / parse 失敗"] --> C2["Control: saved_at ベース強制削除"]
+    T3["Threat: UIDVALIDITY 変化後の不整合継続"] --> C3["Control: recovery_required 永続化<br>復旧時に一体で解消"]
     T4["Threat: 緩いファイル権限による情報露出"] --> C4["Control: 新規 0600/0700 強制 + WARN 監視"]
 
     class C1,C2,C3,C4 enhanced
     class T1,T2,T3,T4 problem
+```
+
+**Legend**
+
+```mermaid
+flowchart LR
+    classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
+    classDef problem fill:#ffe6e6,stroke:#d62728,stroke-width:2px,color:#7b0000;
+
+    T["脅威"] --> C["対策"]
+
+    class T problem
+    class C enhanced
 ```
 
 ---
@@ -355,12 +380,12 @@ sequenceDiagram
     participant EF as "emails/"
     participant DF as "tlsrpt.json"
 
-    EP->>ST: "SaveEmail(uid, uidvalidity, sent_at, saved_at, raw)"
-    ST->>EF: "atomic write .eml"
-    EP->>ST: "SaveEmailMetas(all local .eml metas)"
-    ST->>DF: "upsert email index (idempotent)"
-    EP->>ST: "SaveReports([{report, uid, uidvalidity}, ...])"
-    ST->>DF: "upsert reports + max(report_end_date) update"
+    EP->>ST: "メール原本を保存する"
+    ST->>EF: "`.eml` 保管領域を更新する"
+    EP->>ST: "メールメタデータを反映する"
+    ST->>DF: "メールインデックスを更新する"
+    EP->>ST: "レポート群を保存する"
+    ST->>DF: "レポート集合と関連インデックスを更新する"
 ```
 
 ### 6.3 summary 参照フロー（F-003）
@@ -371,10 +396,10 @@ sequenceDiagram
     participant ST as "store(read-only)"
     participant DF as "tlsrpt.json"
 
-    EP->>ST: "Open(..., OpenReadOnly)"
-    EP->>ST: "GetReportsSince(since)"
-    ST->>DF: "read reports"
-    ST-->>EP: "date-range.end-datetime >= since のみ返却"
+    EP->>ST: "read-only でストアを開く"
+    EP->>ST: "指定期間のレポートを要求する"
+    ST->>DF: "保存済みレポート集合を参照する"
+    ST-->>EP: "期間条件に合うレポート群を返す"
 ```
 
 ### 6.4 reprocess 読み込みフロー（F-005/F-002）
@@ -386,12 +411,18 @@ sequenceDiagram
     participant EF as "emails/"
     participant DF as "tlsrpt.json"
 
-    EP->>ST: "LoadEmails()"
-    ST->>EF: "recursive scan {uidvalidity}/{YYYYMM}/{uid}.eml"
-    ST-->>EP: "LoadedEmail[]"
-    EP->>ST: "SaveEmailMetas(all loaded metas)"
-    EP->>ST: "SaveReports(parsed reports with uid info)"
-    ST->>DF: "index/report atomic update"
+    EP->>ST: "保存済みメールを読み込む"
+    ST->>EF: "管理下の `.eml` を列挙する"
+    loop "各 `.eml`"
+        alt "読み込み成功"
+            ST-->>EP: "LoadedEmail を追加する"
+        else "読み込み失敗"
+            ST-->>EP: "エラーを集約しつつ継続する"
+        end
+    end
+    EP->>ST: "読めたメールのメタデータを再反映する"
+    EP->>ST: "抽出できたレポート群を再保存する"
+    ST->>DF: "レポート集合とインデックスを更新する"
 ```
 
 ### 6.5 UIDVALIDITY 永続化フロー（F-006）
@@ -402,38 +433,44 @@ sequenceDiagram
     participant ST as "store"
     participant SF as "sentinel"
 
-    EP->>ST: "LoadUIDValidity()"
-    ST->>SF: "read uid_validity"
-    ST-->>EP: "(v, found)"
-    EP->>ST: "SaveUIDValidity(v)"
-    ST->>SF: "atomic update uid_validity"
+    EP->>ST: "保存済み UIDVALIDITY を参照する"
+    ST->>SF: "sentinel を参照する"
+    ST-->>EP: "UIDVALIDITY の有無を返す"
+    EP->>ST: "UIDVALIDITY を更新する"
+    ST->>SF: "sentinel 状態を更新する"
 ```
 
 ### 6.6 レポート GC フロー（F-007a）
 
 ```mermaid
 flowchart TD
-    Start(["DeleteReportsBefore(cutoff)"]) --> Read["Load current reports"]
-    Read --> Filter["Keep reports where end-datetime >= cutoff"]
-    Filter --> Write["atomic rewrite tlsrpt.json"]
-    Write --> Done(["return deleted count"])
+    Start(["レポート GC を開始する"]) --> Read["保存済みレポート集合を参照する"]
+    Read --> Filter["保持対象と削除対象を分離する"]
+    Filter --> Write["レポート集合を更新する"]
+    Write --> Done(["削除件数を返す"])
 ```
+
+削除対象は `date-range.end-datetime` が `cutoff` より前のレポートで判定する。
 
 ### 6.7 `.eml` GC フロー（F-007b）
 
 ```mermaid
 flowchart TD
-    Start(["DeleteEmailsBefore(reportCutoff, savedAtCutoff)"]) --> Eval["Evaluate each email index entry"]
-    Eval --> Cond1{"report_end_date != null<br>&& report_end_date < reportCutoff"}
-    Eval --> Cond2{"savedAtCutoff != zero<br>&& saved_at < savedAtCutoff"}
+    Start(["`.eml` GC を開始する"]) --> Eval["メールインデックスを評価する"]
+    Eval --> Cond1{"通常削除条件に合致するか"}
+    Eval --> Cond2{"強制削除条件に合致するか"}
     Cond1 -->|"Yes"| Del
     Cond2 -->|"Yes"| Del
-    Cond1 -->|"No"| Keep["Keep"]
+    Cond1 -->|"No"| Keep["保持する"]
     Cond2 -->|"No"| Keep
-    Del["Delete target .eml files"] --> Update["Remove corresponding index entries"]
-    Update --> Write["atomic rewrite tlsrpt.json"]
-    Write --> End(["return deleted count / joined errors"])
+    Del["対象 `.eml` を削除する"] --> Update["成功した削除だけをインデックスへ反映する"]
+    Update --> Write["インデックスを更新する"]
+    Write --> End(["成功件数と集約エラーを返す"])
 ```
+
+- 通常削除条件は、`report_end_date` を持つメールのうち `reportCutoff` より前のものを対象にする。
+- 強制削除条件は、`savedAtCutoff` が設定された場合に `saved_at` がそれより前のものを対象にする。
+- 個別削除でファイル I/O エラーが起きても全体は継続し、成功した削除だけをインデックスへ反映する。
 
 ### 6.8 recovery 適用フロー（F-008）
 
@@ -443,11 +480,11 @@ sequenceDiagram
     participant ST as "store"
     participant SF as "sentinel"
 
-    EP->>ST: "LoadRecoveryRequired()"
-    ST-->>EP: "(prev, curr, detectedAt, found)"
-    EP->>ST: "ApplyRecovery(newUIDValidity=curr)"
-    ST->>SF: "single atomic read-modify-write"
-    Note over ST,SF: "uid_validity update + recovery_required remove"
+    EP->>ST: "復旧待ち状態を参照する"
+    ST-->>EP: "復旧に必要な UIDVALIDITY 情報を返す"
+    EP->>ST: "復旧状態を適用する"
+    ST->>SF: "sentinel 状態を一体で更新する"
+    Note over ST,SF: "uid_validity 更新と recovery_required 消去を同一の状態遷移として扱う"
 ```
 
 ---
@@ -459,7 +496,7 @@ sequenceDiagram
 - F-001: 初期化（作成/冪等/read-only で非作成）
 - F-002/F-004: `SaveEmail`・`SaveEmailMetas`・`SaveReports` の冪等性と同時更新整合
 - F-003: `GetReportsSince` の `date-range.end-datetime >= since` フィルタ
-- F-005: `LoadEmails` の UID/UIDVALIDITY/`SentAt` 逆算とフォールバック
+- F-005: `LoadEmails` の UID/UIDVALIDITY/`SentAt` 逆算、フォールバック、個別失敗継続
 - F-006/F-008: UIDVALIDITY/recovery 状態 API のラウンドトリップと `ApplyRecovery` 原子性
 - F-007a/F-007b: GC 境界値、削除 0 件、再実行冪等、`errors.Join` 集約
 
