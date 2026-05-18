@@ -109,7 +109,7 @@ IMAP サーバーからメールを取得し、レポートを処理・保存す
 
 **ステップ1.5: UIDVALIDITY 変化検出**
 
-ステップ0で recovery-required 状態が未解決でないことを確認できた場合にのみ、取得済みメタ情報の `UIDVALIDITY` を検証する。`UID` はメールボックス内で `UIDVALIDITY` が同一である間のみ安定であり、変化した場合はサーバー側で UID が再割り当てされている可能性がある。ローカルの `.eml` ファイル名は UID を含むため、UIDVALIDITY が変化すると既存ファイルと UID の対応が無効になり得る。さらに、旧メールボックス由来のレポートがユーザーの意図に反して定期サマリへ継続混入することを防ぐため、UIDVALIDITY 変化時は fail closed とし、オペレータが明示的に復旧を完了するまで自動処理を再開しない。
+ステップ0で `recovery-required` 状態が未解決でないことを確認できた場合にのみ、取得済みメタ情報の `UIDVALIDITY` を検証する。`UID` はメールボックス内で `UIDVALIDITY` が同一である間のみ安定であり、変化した場合はサーバー側で `UID` が再割り当てされている可能性がある。ローカルの `.eml` ファイル名は `UID` を含むため、`UIDVALIDITY` が変化すると既存ファイルと `UID` の対応が無効になり得る。さらに、旧メールボックス由来のレポートがユーザーの意図に反して定期サマリへ継続混入することを防ぐため、`UIDVALIDITY` 変化時は fail closed とし、オペレータが明示的に復旧を完了するまで自動処理を再開しない。
 
 **受け入れ条件（Acceptance Criteria）**:
 
@@ -159,7 +159,7 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 
 **受け入れ条件（Acceptance Criteria）**:
 
-- `AC-21a`: `reprocess` はストア初期化完了後、`.eml` 読み込みの前に `internal/store` の `LoadRecoveryRequired()`（0040 F-008 AC-34）で recovery-required 状態を確認する。`found = true` の場合は処理を一切行わず、`recover` サブコマンドの実行を案内して終了コード 1 で終了する（未解決の UIDVALIDITY 変化下で store への書き込みを行うと、旧 epoch のデータと新 epoch のデータが混在する可能性があるため、保守的に停止する）
+- `AC-21a`: `reprocess` はストア初期化完了後、`.eml` 読み込みの前に `internal/store` の `LoadRecoveryRequired()`（0040 F-008 AC-34）で `recovery-required` 状態を確認する。`found = true` の場合は処理を一切行わず、`recover` サブコマンドの実行を案内して終了コード 1 で終了する（未解決の `UIDVALIDITY` 変化下で store への書き込みを行うと、旧 epoch のデータと新 epoch のデータが混在する可能性があるため、保守的に停止する）
 - `AC-22`: `LoadEmails`（0040 F-005）でストアの `{root_dir}/emails/` 以下の `.eml` ファイルを再帰的に列挙・読み込み、TLSRPT レポートをパースする（LoadEmails は常に `{root_dir}/emails/` 起点で動作する）
 - `AC-23`: パース成功したレポートをバッチ保存メソッドで UPSERT する（0040 F-002 AC-08a）。同時に、`AC-23a` で先に登録済みの対応メールインデックスエントリの `report_end_date` も更新される（0040 AC-08b）
 - `AC-23a`: `LoadEmails` で得た全エントリの `{uid, uidvalidity, sent_at, saved_at}` を `SaveEmailMetas` でバッチ登録する（0040 AC-08c）。`reprocess` ではこの登録を `AC-23`（レポート UPSERT）より前に実行し、未登録エントリでも `report_end_date` を更新可能にする。既登録エントリは変更されず（0040 AC-08d）、過去 fetch サイクルで未登録だった孤立 `.eml` を救済する効果も持つ
@@ -190,7 +190,7 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 - `AC-31`: `--before` を省略した場合、設定ファイルの保持期間設定（設定キー名は仮称。タスク 0060 / `02_architecture.md` で確定。現在の仮称: `store.retention_days`、デフォルトあり）を使用する（タスク 0060 AC-16 参照）
 - `AC-32`: `internal/store` の `DeleteReportsBefore(time.Now().Add(-before))` を呼び出して JSON レポートレコードを削除する
 - `AC-32a`: `gc` サブコマンドは `--max-email-age <duration>` フラグを受け付ける（日/週単位、`--before` と同じパーサを共用）。省略した場合は設定ファイルのメール最大保持期間設定（設定キー名は仮称。タスク 0060 / `02_architecture.md` で確定。現在の仮称: `store.max_email_age_days`、デフォルトあり、0060 AC-17 参照）を使用する
-- `AC-32b`: `internal/store` の `DeleteEmailsBefore(reportCutoff, savedAtCutoff)` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する。`reportCutoff` は `time.Now().Add(-before)`、`savedAtCutoff` は解決済みの maxEmailAge（CLI フラグまたは設定値）を用いて `time.Now().Add(-maxEmailAge)` として計算する。通常の設定では maxEmailAge は 1 日以上（0060 AC-10a）なので savedAtCutoff は非ゼロとなるが、store API は ゼロ値（`time.Time{}`）を受け入れた場合は saved_at ベースの強制削除を無効化するセマンティクスを持つ（0040 AC-29 参照）
+- `AC-32b`: `internal/store` の `DeleteEmailsBefore(reportCutoff, savedAtCutoff)` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する。`reportCutoff` は `time.Now().Add(-before)`、`savedAtCutoff` は解決済みの `maxEmailAge`（CLI フラグまたは設定値）を用いて `time.Now().Add(-maxEmailAge)` として計算する。通常の設定では `maxEmailAge` は 1 日以上（0060 AC-10a）なので `savedAtCutoff` は非ゼロとなるが、store API はゼロ値（`time.Time{}`）を受け入れた場合は `saved_at` ベースの強制削除を無効化するセマンティクスを持つ（0040 AC-29 参照）
 - `AC-33`: JSON レコードおよび `.eml` ファイルそれぞれの削除件数を INFO レベルで構造化ログに出力する（Slack への定期通知は行わない。失敗時のみ ERROR ログ → Slack 通知）
 - `AC-34`: 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
 
