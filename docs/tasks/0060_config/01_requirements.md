@@ -74,8 +74,8 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - `AC-09`: `imap.fetch_days` が 1 未満の場合はエラーを返す
 - `AC-10`: `imap.tls_ca_cert` が設定されている場合、指定パスのファイルが存在しかつ PEM 形式の証明書として読み込めることを確認する。読み込めない場合はエラーを返す
 - `AC-10a`: 定期サマリ集計期間・レポート保持期間・メール最大保持期間（仮称 `summary.window_days`・`store.retention_days`・`store.max_email_age_days`、AC-15〜17 参照）はいずれも 1 以上の整数であること。0 以下または非整数の場合はエラーを返す
-- `AC-10b`: `store.retention_days > store.max_email_age_days` の場合は WARN ログを出力する（エラーにはしない）。この設定では `.eml` がレポート JSON より先に削除されるため、`reprocess` による復元が一部不可能になる可能性がある旨を警告する
-- `AC-10c`: `imap.fetch_days >= store.retention_days` の場合は WARN ログを出力する（エラーにはしない）。フェッチ対象期間がレポート保持期間以上の場合、GC で削除済みのレポートを再処理する可能性がある旨を警告する
+- `AC-10b`: 仮称 `store.retention_days`（正式キー名は `02_architecture.md` で確定）> 仮称 `store.max_email_age_days` の場合は WARN ログを出力する（エラーにはしない）。この設定では `.eml` がレポート JSON より先に削除されるため、`reprocess` による復元が一部不可能になる可能性がある旨を警告する
+- `AC-10c`: `imap.fetch_days` >= 仮称 `store.retention_days`（正式キー名は `02_architecture.md` で確定）の場合は WARN ログを出力する（エラーにはしない）。フェッチ対象期間がレポート保持期間以上の場合、GC で削除済みのレポートを再処理する可能性がある旨を警告する
 - `AC-10d`: `store.root_dir` に相対パスが指定された場合、設定読み込み時のカレントディレクトリを基準に絶対パスへ正規化する。正規化後のパスは INFO ログに出力する（systemd timer 経由実行などで CWD が `/` になる環境での意図しない参照先を防ぐ）。`filepath.Abs` 等で正規化する
 
 ### F-003: デフォルト値の適用
