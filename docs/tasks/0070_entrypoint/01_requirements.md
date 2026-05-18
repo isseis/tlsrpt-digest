@@ -83,7 +83,7 @@
 - **`AC-08`**: 設定読み込みに失敗した場合、エラーメッセージを出力して終了コード 1 で終了する
 - **`AC-09`**: ストアの初期化に失敗した場合、エラーメッセージを出力して終了コード 1 で終了する
 - **`AC-10`**: `fetch` サブコマンドで IMAP 接続に失敗した場合、エラーメッセージを出力して終了コード 1 で終了する
-- **`AC-10a`**: `fetch`・`gc`・`recover`・`reprocess` の各サブコマンドは以下の順序で初期化を行う：(1) 設定ファイルを読み込む、(2) `{root_dir}` が存在しない場合のみ `mkdir -p {root_dir}` を実行する（初回実行でロックファイルの親ディレクトリが存在しない問題を回避するための最小限の操作。sentinel 検証や JSON 作成等の完全な初期化はロック取得後に行う）、(3) `{root_dir}/.tlsrpt-digest-store.lock` を `flock(2)` の排他ロック（`LOCK_EX | LOCK_NB`）で取得する。取得できない場合は前回の実行が完了していないことを示す ERROR レベルのメッセージを標準エラー出力に出力して終了コード 1 で終了する（ロック取得は Slack ハンドラ初期化より前のため Slack 通知は行わない）、(4) ストアの完全な初期化（sentinel 検証・JSON 作成等、0040 F-001 参照）を行う
+- **`AC-10a`**: `fetch`・`gc`・`recover`・`reprocess` の各サブコマンドは以下の順序で初期化を行う：(1) 設定ファイルを読み込む、(2) `{root_dir}` が存在しない場合のみ `os.MkdirAll({root_dir}, 0700)` を実行する（初回実行でロックファイルの親ディレクトリが存在しない問題を回避するための最小限の操作。sentinel 検証や JSON 作成等の完全な初期化はロック取得後に行う）、(3) `{root_dir}/.tlsrpt-digest-store.lock` を `0600` で作成し `flock(2)` の排他ロック（`LOCK_EX | LOCK_NB`）で取得する。取得できない場合は前回の実行が完了していないことを示す ERROR レベルのメッセージを標準エラー出力に出力して終了コード 1 で終了する（ロック取得は Slack ハンドラ初期化より前のため Slack 通知は行わない）、(4) ストアの完全な初期化（sentinel 検証・JSON 作成等、0040 F-001 参照）を行う
 - **`AC-10b`**: 取得したロックはプロセス終了時に OS によって自動解放される。明示的な unlock 処理は不要
 - **`AC-10c`**: `summary` はストア JSON を読み取るのみであり書き込み×書き込みの競合は発生しないため、ロック取得を行わない
 
@@ -173,8 +173,8 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 - **`AC-30`**: `gc` サブコマンドは `--before <duration>` フラグを受け付ける（日単位 `d` または週単位 `w`、`fetch` の `--since` と同じカスタムパーサーを共用する）
 - **`AC-31`**: `--before` を省略した場合、設定ファイルの保持期間設定（`store.retention_days`、デフォルトあり）を使用する（タスク 0060 AC-16 参照）
 - **`AC-32`**: `internal/store` の `DeleteReportsBefore(time.Now().Add(-before))` を呼び出して JSON レポートレコードを削除する
-- **`AC-32a`**: `gc` サブコマンドは `--max-email-age <duration>` フラグを受け付ける（日/週単位、`--before` と同じパーサーを共用）。省略時はデフォルト値（TOML キー名と既定値は `02_architecture.md` で確定）を使用する
-- **`AC-32b`**: `internal/store` の `DeleteEmailsBefore(reportCutoff, savedAtCutoff)` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する。`reportCutoff` は `time.Now().Add(-before)`、`savedAtCutoff` は `--max-email-age` が指定された場合は `time.Now().Add(-maxEmailAge)`、指定されない場合はゼロ値（`time.Time{}`）を渡す（ゼロ値渡しにより `saved_at` ベースの強制削除が無効化される）
+- **`AC-32a`**: `gc` サブコマンドは `--max-email-age <duration>` フラグを受け付ける（日/週単位、`--before` と同じパーサーを共用）。省略した場合は設定ファイルの `store.max_email_age_days`（デフォルトあり、0060 AC-17 参照）を使用する
+- **`AC-32b`**: `internal/store` の `DeleteEmailsBefore(reportCutoff, savedAtCutoff)` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する。`reportCutoff` は `time.Now().Add(-before)`、`savedAtCutoff` は解決済みの maxEmailAge（CLI フラグまたは設定値）を用いて `time.Now().Add(-maxEmailAge)` として計算する。設定値は常に 1 日以上（0060 AC-10a）であるためゼロ値になることはない
 - **`AC-33`**: JSON レコードおよび `.eml` ファイルそれぞれの削除件数を INFO レベルで構造化ログに出力する（Slack への定期通知は行わない。失敗時のみ ERROR ログ → Slack 通知）
 - **`AC-34`**: 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
 

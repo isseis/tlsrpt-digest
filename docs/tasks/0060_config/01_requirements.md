@@ -75,6 +75,7 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - `AC-10`: `imap.tls_ca_cert` が設定されている場合、指定パスのファイルが存在しかつ PEM 形式の証明書として読み込めることを確認する。読み込めない場合はエラーを返す
 - `AC-10a`: 定期サマリ集計期間・レポート保持期間・メール最大保持期間（仮称 `summary.window_days`・`store.retention_days`・`store.max_email_age_days`、AC-15〜17 参照）はいずれも 1 以上の整数であること。0 以下または非整数の場合はエラーを返す
 - `AC-10b`: `store.retention_days > store.max_email_age_days` の場合は WARN ログを出力する（エラーにはしない）。この設定では `.eml` がレポート JSON より先に削除されるため、`reprocess` による復元が一部不可能になる可能性がある旨を警告する
+- `AC-10c`: `imap.fetch_days >= store.retention_days` の場合は WARN ログを出力する（エラーにはしない）。フェッチ対象期間がレポート保持期間以上の場合、GC で削除済みのレポートを再処理する可能性がある旨を警告する
 
 ### F-003: デフォルト値の適用
 
@@ -121,3 +122,7 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - デフォルト値適用のテスト（`imap.tls_ca_cert` 未設定でシステム CA が使われること）
 - `imap.tls_ca_cert` に存在しないパスや不正なファイルを指定した場合のエラーテスト
 - 不正 TOML（文法エラー）のエラーテスト
+- 集計期間・保持期間・メール最大保持期間に 0 以下を指定した場合にエラーを返すこと（AC-10a）
+- `store.retention_days > store.max_email_age_days` の場合に WARN ログが出力されること（AC-10b）
+- `imap.fetch_days >= store.retention_days` の場合に WARN ログが出力されること（AC-10c）
+- デフォルト値適用のテスト（`summary.window_days`・`store.retention_days`・`store.max_email_age_days` 未設定で各デフォルト値が適用されること）
