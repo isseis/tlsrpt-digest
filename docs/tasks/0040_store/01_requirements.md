@@ -197,7 +197,8 @@ UIDVALIDITY 変化検出時にエントリポイント（タスク 0070）が記
 
 - `AC-33`: `SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time) error` で `recovery_required` フィールドを sentinel にアトミックに書き込む。`detectedAt` を呼び出し側から受け取ることでユニットテスト時に時刻を固定できる
 - `AC-34`: `LoadRecoveryRequired() (prev, curr uint32, detectedAt time.Time, found bool, err error)` で recovery-required 状態を取得できる。フィールドが存在しない場合は `found = false`
-- `AC-35`: `ClearRecoveryRequired() error` で `recovery_required` フィールドを sentinel から除去する（`recover` サブコマンドの復旧完了時に呼ぶ）
+- `AC-35`: `ClearRecoveryRequired() error` で `recovery_required` フィールドを sentinel から除去する（単独で使用するケースは将来の拡張用。通常の復旧フローでは AC-36 を使用する）
+- `AC-36`: `ApplyRecovery(newUIDValidity uint32) error` で `uid_validity` を `newUIDValidity` に更新し、`recovery_required` フィールドを除去する操作を **1 回のアトミックな read-modify-write** で実行する。`SaveUIDValidity` と `ClearRecoveryRequired` を別々に呼ぶと、その間のクラッシュで「uid_validity は更新済みだが recovery_required はまだ残っている」という不整合状態が生じるため、この 2 つを組み合わせる操作は必ず本メソッドを使用する（`recover --mode keep-old` から呼ばれる）
 
 ---
 
@@ -244,7 +245,7 @@ UIDVALIDITY 変化検出時にエントリポイント（タスク 0070）が記
   - `SaveReport` / バッチ保存メソッド / `GetReportsSince`（F-002・F-003）
   - `SaveEmailMetas`（バッチインデックス登録）/ `SaveEmail` / `LoadEmails`（F-002 AC-08c・F-004・F-005）
   - `SaveUIDValidity(v uint32)` / `LoadUIDValidity()`（F-006、sentinel に保存）
-  - `SaveRecoveryRequired` / `LoadRecoveryRequired` / `ClearRecoveryRequired`（F-008、sentinel に保存）
+  - `SaveRecoveryRequired` / `LoadRecoveryRequired` / `ClearRecoveryRequired` / `ApplyRecovery`（F-008、sentinel に保存。複数フィールド更新が必要な `recover --mode keep-old` には `ApplyRecovery` を使用する）
   - `DeleteReportsBefore`（F-007a）
   - `DeleteEmailsBefore`（F-007b）
   - 初期化用メソッド（F-001 相当。コンストラクタで担う設計も可）。初期化は IMAP 識別子（host・port・mailbox）を引数として受け取り、sentinel を管理する
