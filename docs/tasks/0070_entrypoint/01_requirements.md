@@ -103,7 +103,7 @@ IMAP サーバーからメールを取得し、レポートを処理・保存す
 
 **受け入れ条件（Acceptance Criteria）**:
 
-- **`AC-11a`**: `internal/store` の `LoadUIDValidity(mailbox)` で前回値を取得し、ステップ1で取得した現在値と比較する
+- **`AC-11a`**: `internal/store` の `LoadUIDValidity()` で前回値を取得し、ステップ1で取得した現在値と比較する
 - **`AC-11b`**: 前回値が未保存（初回実行）または現在値と一致する場合、通常のステップ2（整合性チェック）へ進む
 - **`AC-11c`**: 前回値と現在値が異なる場合、ERROR レベルでログを出力する（Slack 通知あり）。期待値・現在値・メールボックス識別子を含む永続的な recovery-required 状態を記録し、当該 fetch サイクルではステップ2・ステップ3へ進まず終了コード 1 で終了する
 - **`AC-11d`**: recovery-required 状態が未解決の間、以降の `fetch` サブコマンドはメール取得・整合性チェック・ダウンロード・SEEN 更新を一切行わず、`recover` サブコマンドの実行を案内して終了コード 1 で終了する
@@ -138,7 +138,7 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 - **`AC-18`**: レポートをストアに UPSERT する。このとき、当該メールのインデックスエントリの `report_end_date` を更新する（0040 F-002 AC-05b 参照）。パース失敗メールは `report_end_date` が null のまま残るが、`saved_at` による最大保持期間（`--max-email-age`）で強制削除される
 - **`AC-19`**: UNSEEN だったメールの処理完了後、SEEN マークを付与する（既に SEEN のメールは変更しない）
 - **`AC-20`**: 1 件のメール処理失敗が他のメール処理に影響しない
-- **`AC-11e`**: ステップ3の全メール処理が正常に完了した後、ステップ1で取得した現在の `UIDVALIDITY` を `internal/store` の `SaveUIDValidity(mailbox, v)` で保存する（次回実行時の比較に使用）。正常完了前に保存しないことで、未解決の UIDVALIDITY 変化が以後の `fetch` / `summary` で確実に検出される
+- **`AC-11e`**: ステップ3の全メール処理が正常に完了した後、ステップ1で取得した現在の `UIDVALIDITY` を `internal/store` の `SaveUIDValidity(v)` で sentinel に保存する（次回実行時の比較に使用）。正常完了前に保存しないことで、未解決の UIDVALIDITY 変化が以後の `fetch` / `summary` で確実に検出される
 - **`AC-21`**: 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
 
 ### F-004: `reprocess` サブコマンドの処理フロー
