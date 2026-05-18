@@ -426,7 +426,7 @@ UIDVALIDITY 変化を検出した場合、`fetch` と `summary` は fail closed 
 - エラー終了時の終了コードテスト
 
 - duration フラグ（共通パーサー）のバリデーションテスト（AC-07b）
-  - `0d`・`-1d`・`-1w` を渡した場合にエラーで終了すること（`fetch --since`・`gc --before`・`gc --max-email-age` のそれぞれで検証）
+  - `0d`・`-1d`・`-1w` を渡した場合にエラーで終了すること（`fetch --since`・`summary --since`・`gc --before`・`gc --max-email-age` のそれぞれで検証）
   - 不正単位（例：`30h`、`abc`）を渡した場合にエラーで終了すること
   - 正常値（例：`7d`・`4w`）は受け付けること
 
