@@ -42,7 +42,7 @@ flowchart TD
     class STORE newpkg
 ```
 
-矢印 `A --> B` は「A が B を使う（A は B に依存する）」を表す。
+矢印 `A --> B` は「A から B へデータが渡される・書き込まれる」を表す。
 
 **Legend**
 
@@ -248,7 +248,7 @@ func SaveReport(s Store, input ReportInput) error {
 | `internal/store/types.go` | 永続化対象の内部モデル（report/email/sentinel）定義 | 新規 |
 | `internal/store/errors.go` | 公開エラー型・分類（不整合/IO/検証） | 新規 |
 | `internal/store/sentinel.go` | sentinel 状態管理、IMAP 識別子整合性検証 | 新規 |
-| `internal/store/reports.go` | `SaveReports`/`GetReportsSince`/`DeleteReportsBefore`（`SaveReport` はパッケージレベル関数） | 新規 |
+| `internal/store/reports.go` | `SaveReport`/`SaveReports`/`GetReportsSince`/`DeleteReportsBefore` | 新規 |
 | `internal/store/emails.go` | `SaveEmail`/`SaveEmailMetas`/`LoadEmails`/`DeleteEmailsBefore` | 新規 |
 | `internal/store/recovery.go` | `SaveRecoveryRequired`/`LoadRecoveryRequired`/`ClearRecoveryRequired`/`ApplyRecovery` | 新規 |
 | `internal/store/atomicfile.go` | アトミック更新の共通 I/O ヘルパ | 新規 |
@@ -548,7 +548,7 @@ sequenceDiagram
 
 ### Phase 2: レポート・インデックス API
 
-1. `SaveReports`/`GetReportsSince`（`SaveReport` はパッケージレベルのユーティリティ関数）
+1. `SaveReport`/`SaveReports`/`GetReportsSince`
 2. `SaveEmailMetas` と `report_end_date` 最大値更新
 3. `SaveEmail`（10 桁 UID ファイル名）
 
