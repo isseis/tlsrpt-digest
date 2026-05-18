@@ -73,6 +73,8 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - `AC-08`: Slack Webhook URL は環境変数（`TLSRPT_SLACK_WEBHOOK_URL_SUCCESS`・`TLSRPT_SLACK_WEBHOOK_URL_ERROR`）で管理するため、設定ファイルには `notify.slack.allowed_host` のみを記載する。「少なくとも1つの通知手段が設定されているか」の検証は `internal/notify` パッケージが担い、`internal/config` は `notify.slack.allowed_host` の形式チェック（ポート番号・スキームを含まない完全修飾ホスト名）のみを行う
 - `AC-09`: `imap.fetch_days` が 1 未満の場合はエラーを返す
 - `AC-10`: `imap.tls_ca_cert` が設定されている場合、指定パスのファイルが存在しかつ PEM 形式の証明書として読み込めることを確認する。読み込めない場合はエラーを返す
+- `AC-10a`: 定期サマリ集計期間・レポート保持期間・メール最大保持期間（仮称 `summary.window_days`・`store.retention_days`・`store.max_email_age_days`、AC-15〜17 参照）はいずれも 1 以上の整数であること。0 以下または非整数の場合はエラーを返す
+- `AC-10b`: `store.retention_days > store.max_email_age_days` の場合は WARN ログを出力する（エラーにはしない）。この設定では `.eml` がレポート JSON より先に削除されるため、`reprocess` による復元が一部不可能になる可能性がある旨を警告する
 
 ### F-003: デフォルト値の適用
 
