@@ -42,6 +42,8 @@ flowchart TD
     class STORE newpkg
 ```
 
+矢印 `A --> B` は「A が B を使う（A は B に依存する）」を表す。
+
 **Legend**
 
 ```mermaid
@@ -105,12 +107,10 @@ graph TB
     EDIR[("emails/")]
 
     MAIN --> SVC
-    IMAP --> MAIN
-    TLSRPT --> MAIN
-    NOTIFY --> MAIN
+    MAIN --> IMAP
+    MAIN --> TLSRPT
+    MAIN --> NOTIFY
 
-    SVC --> RT
-    SVC --> ERR
     SVC --> ROOT
     ROOT --> JSON
     ROOT --> SENT
@@ -122,6 +122,8 @@ graph TB
 ```
 
 **Legend**
+
+矢印 `A --> B` は「A が B を使う（A は B に依存する）」を表す。
 
 ```mermaid
 flowchart LR
