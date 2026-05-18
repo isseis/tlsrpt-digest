@@ -12,6 +12,28 @@
 
 ---
 
+## 用語集
+
+本文書で使用する主要な用語を定義する。
+
+| 用語 | 説明 |
+|---|---|
+| **UID**（IMAP UID） | IMAP サーバーがメールボックス内の各メッセージに割り当てる一意の整数識別子（`uint32`）。RFC 3501 で定義。**Linux のユーザー ID（UID）とは別物**。同一 `UIDVALIDITY` エポック内でのみ一意性が保証される |
+| **UIDVALIDITY** | メールボックスに紐付く `uint32` 値。この値が変化した場合、サーバーは UID を再割り当てしており、以前の UID が別メッセージを指している可能性がある（メールボックスの再作成・移行等で発生） |
+| **SEEN フラグ** | IMAP のメッセージフラグ。本システムでは「全処理（通知・保存）が完了した」ことを示す完了マーカーとして使用する |
+| **TLSRPT** | TLS Reporting（RFC 8460）。SMTP サーバーが TLS 接続の成否を報告するための仕様。レポートは `.json.gz` 形式の添付ファイルとしてメールで送付される |
+| **report-id** | RFC 8460 で定義された TLSRPT レポートの一意識別子。本システムでは UPSERT のキーとして使用する |
+| **date-range** | TLSRPT レポートが対象とするデータ収集期間。`start-datetime` と `end-datetime` を持つ |
+| **root_dir** | 本パッケージが管理するストレージルートディレクトリ。すべての派生パス（データファイル・メール保存ディレクトリ・sentinel）はここから自動導出される |
+| **sentinel** | `{root_dir}/.tlsrpt-digest-meta.json`。IMAP サーバー識別子・`UIDVALIDITY`・`recovery-required` 状態などを保持し、起動時に整合性を検証するメタファイル |
+| **recovery-required** | `UIDVALIDITY` の変化を検出してオペレータの手動復旧を待っている状態。sentinel に記録される。この状態が解消されるまで `fetch` / `summary` は停止する |
+| **GC（Garbage Collection）** | 蓄積したレポートレコードや `.eml` ファイルを定期的に削除してストレージを抑制する操作 |
+| **sent_at** | IMAP ENVELOPE の `Date:` ヘッダーから取得したメールの送信日時。受信日時（IMAP INTERNALDATE）ではない。`{YYYYMM}` ディレクトリ名の導出に使用する |
+| **saved_at** | `.eml` ファイルをローカルに保存した日時（wall-clock）。`sent_at` が取得できない場合のフォールバックや GC の最大保持期間判定にも使用する |
+| **report_end_date** | メールインデックスエントリに記録する TLSRPT レポートの `date-range.end-datetime` の最大値。GC の通常削除判定に使用する。パース失敗メールでは `null` |
+
+---
+
 ## 1. 背景と目的
 
 ### 1.1 背景
