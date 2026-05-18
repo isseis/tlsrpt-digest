@@ -69,7 +69,7 @@ flowchart LR
 | F-007a（AC-25〜AC-28a） | 3.1 `DeleteReportsBefore`、6.6 GC レポート削除フロー |
 | F-007b（AC-29〜AC-32a） | 3.1 `DeleteEmailsBefore`、6.7 GC `.eml` 削除フロー |
 | F-008（AC-33〜AC-36） | 3.1 recovery API、6.8 復旧適用フロー |
-| 非機能要件（AC-37〜AC-39 ほか） | 5. セキュリティ、4. エラー設計、7. テスト戦略 |
+| 非機能要件（AC-37〜AC-39 ほか） | 5. セキュリティ、4. エラー設計、6.9 並行実行境界、7. テスト戦略 |
 
 ---
 
@@ -160,13 +160,14 @@ sequenceDiagram
         ST->>SF: "sentinel を整合性確認し必要なら初期化"
         ST->>DF: "保存領域を初期化"
         ST->>EF: "メール保管領域を初期化"
+        EP->>ST: "保存 API を呼び出す"
+        ST->>EF: "メール原本を更新"
+        ST->>DF: "レポート集合とインデックスを更新"
     else "mode = read-only"
         ST->>SF: "既存状態のみ参照"
         ST->>DF: "既存状態のみ参照"
+        EP->>ST: "参照 API のみを呼び出す"
     end
-    EP->>ST: "保存 API を呼び出す"
-    ST->>EF: "メール原本を更新"
-    ST->>DF: "レポート集合とインデックスを更新"
 ```
 
 ---
@@ -486,6 +487,12 @@ sequenceDiagram
     ST->>SF: "sentinel 状態を一体で更新する"
     Note over ST,SF: "uid_validity 更新と recovery_required 消去を同一の状態遷移として扱う"
 ```
+
+### 6.9 並行実行境界（非機能要件）
+
+- 読み取り系（`summary`）と書き込み系（`fetch`/`gc`/`reprocess`/`recover`）の同時実行では、アトミック更新により読み取り側が部分更新状態を観測しないことを前提とする。
+- 書き込み系どうしの同時実行に対する競合解決（排他制御・更新順制御）は `internal/store` の責務外とし、エントリポイント側のプロセスロックで防止する。
+- `OpenReadOnly` は参照 API 専用として扱い、更新 API を同一フローで使用しない。
 
 ---
 
