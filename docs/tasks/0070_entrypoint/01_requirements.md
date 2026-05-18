@@ -171,8 +171,9 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 
 - **`AC-30`**: `gc` サブコマンドは `--before <duration>` フラグを受け付ける（日単位 `d` または週単位 `w`、`fetch` の `--since` と同じカスタムパーサーを共用する）
 - **`AC-31`**: `--before` を省略した場合、設定ファイルの保持期間設定（TOML キー名と既定値はタスク 0060 / `02_architecture.md` で確定）を使用する。設定値もない場合はエラー終了する
-- **`AC-32`**: `internal/store` の `DeleteReportsBefore(time.Now().Add(-before))` を呼び出して該当レコードを削除する
-- **`AC-33`**: 削除件数を INFO レベルで構造化ログに出力する（Slack への定期通知は行わない。失敗時のみ ERROR ログ → Slack 通知）
+- **`AC-32`**: `internal/store` の `DeleteReportsBefore(time.Now().Add(-before))` を呼び出して JSON レポートレコードを削除する
+- **`AC-32a`**: `internal/store` の `DeleteEmailsBefore(time.Now().Add(-before))` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する（`--before` の値は `AC-32` と共通）
+- **`AC-33`**: JSON レコードおよび `.eml` ファイルそれぞれの削除件数を INFO レベルで構造化ログに出力する（Slack への定期通知は行わない。失敗時のみ ERROR ログ → Slack 通知）
 - **`AC-34`**: 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
 
 ### F-007: `recover` サブコマンドの処理フロー
