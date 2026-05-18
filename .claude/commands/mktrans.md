@@ -84,10 +84,24 @@ Apply these changes to the English file. Do not touch sections that are not in t
 If any terms were used during translation that are not in the glossary, add them to `docs/translation_glossary.md`.
 Skip this step if no new terms were introduced.
 
+## Review the Translation
+
+Read the translated output end to end before committing.
+
+**Accuracy checklist:**
+- [ ] No content from the Japanese source is missing in the translation.
+- [ ] No content was added that is not present in the Japanese source.
+- [ ] All technical terms match the glossary.
+
+**Readability checklist (translated output):**
+- [ ] Sentences that are grammatically correct but awkward are rephrased for natural phrasing in the target language without changing the meaning.
+- [ ] Terminology is used consistently throughout the translation; the same concept always uses the same term.
+- [ ] Sentence structure follows the target language's conventions rather than mirroring the source language syntax literally.
+
 ## Commit
 
 Commit in the following order:
-1. Commit the English file only (do not include glossary changes).
+1. Commit the translated file only (do not include glossary changes).
 2. If the glossary was updated, commit that as a separate commit.
 
 (No need to wait for user confirmation before committing.)
