@@ -39,7 +39,7 @@ flowchart TD
 
     class SENTINEL,JSON,EML data
     class IMAP,TLSRPT,EP process
-    class STORE enhanced
+    class STORE newpkg
 ```
 
 **Legend**
@@ -48,12 +48,12 @@ flowchart TD
 flowchart LR
     classDef data fill:#e6f7ff,stroke:#1f77b4,stroke-width:1px,color:#0b3d91;
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
-    classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
+    classDef newpkg fill:#f3e8ff,stroke:#7c3aed,stroke-width:2px,color:#4c1d95;
 
-    D[("永続データ")] --> P["既存コンポーネント"] --> E["本タスクで設計するコンポーネント"]
+    D[("永続データ")] --> P["既存コンポーネント"] --> N["本タスクで新規追加するパッケージ"]
     class D data
     class P process
-    class E enhanced
+    class N newpkg
 ```
 
 ### 1.3 要件反映トレーサビリティ
@@ -297,7 +297,9 @@ type ErrLoadEmailFailed struct {
     Path string
 }
 
-type ErrRecoveryStateNotFound struct{}
+// ErrRecoveryStateNotFound は定義しない。
+// AC-34 の通り LoadRecoveryRequired は missing 状態を found=false で返し、
+// エラーとして扱わない。
 
 type ErrDeleteEmailFailed struct {
     Path        string
@@ -371,10 +373,15 @@ flowchart LR
 ```mermaid
 flowchart TD
     Start(["Open Store"]) --> Mode{"OpenMode"}
-    Mode -->|"ReadWrite"| RW["root_dir / emails / tlsrpt.json / sentinel を作成・検証"]
-    Mode -->|"ReadOnly"| RO["既存ファイルを読むのみ<br>未存在は空状態扱い"]
-    RW --> End(["Store ready"])
-    RO --> End
+    Mode -->|"ReadWrite"| RW["root_dir / emails / tlsrpt.json / sentinel を作成"]
+    RW --> ValidateRW["sentinel 存在 → IMAP identity を検証<br>不一致なら error を返す"]
+    ValidateRW --> End(["Store ready"])
+
+    Mode -->|"ReadOnly<br>(summary 用)"| SentinelExists{"sentinel<br>が存在するか？"}
+    SentinelExists -->|"存在する"| ValidateRO["IMAP identity を検証<br>不一致なら error を返す<br>（AC-06）"]
+    SentinelExists -->|"存在しない"| EmptyState["空状態として扱う<br>（AC-04a）"]
+    ValidateRO --> End
+    EmptyState --> End
 ```
 
 ### 6.2 fetch 保存フロー（F-002/F-004）
