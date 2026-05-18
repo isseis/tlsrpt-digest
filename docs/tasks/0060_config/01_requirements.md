@@ -76,6 +76,7 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - `AC-10a`: 定期サマリ集計期間・レポート保持期間・メール最大保持期間（仮称 `summary.window_days`・`store.retention_days`・`store.max_email_age_days`、AC-15〜17 参照）はいずれも 1 以上の整数であること。0 以下または非整数の場合はエラーを返す
 - `AC-10b`: `store.retention_days > store.max_email_age_days` の場合は WARN ログを出力する（エラーにはしない）。この設定では `.eml` がレポート JSON より先に削除されるため、`reprocess` による復元が一部不可能になる可能性がある旨を警告する
 - `AC-10c`: `imap.fetch_days >= store.retention_days` の場合は WARN ログを出力する（エラーにはしない）。フェッチ対象期間がレポート保持期間以上の場合、GC で削除済みのレポートを再処理する可能性がある旨を警告する
+- `AC-10d`: `store.root_dir` に相対パスが指定された場合、設定読み込み時のカレントディレクトリを基準に絶対パスへ正規化する。正規化後のパスは INFO ログに出力する（systemd timer 経由実行などで CWD が `/` になる環境での意図しない参照先を防ぐ）。`filepath.Abs` 等で正規化する
 
 ### F-003: デフォルト値の適用
 
@@ -85,7 +86,7 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 
 - `AC-11`: IMAP メールボックス名が未設定の場合、デフォルト値（`"INBOX"`）が適用される。TLSRPT レポートをサーバ側フィルタで専用フォルダ（例：`tls-reports`）に振り分けている場合は明示的に指定する
 - `AC-12`: `imap.fetch_days` が未設定の場合、デフォルト値（`14`）が適用される
-- `AC-13`: ストレージルートディレクトリ（`store.root_dir`）が未設定の場合、デフォルト値（例：`"./store"`）が適用される。データファイルパス（`{root_dir}/tlsrpt.json`）およびメール保存ディレクトリ（`{root_dir}/emails/`）はプログラムが自動的に導出するため、個別に設定することはできない
+- `AC-13`: ストレージルートディレクトリ（`store.root_dir`）が未設定の場合、デフォルト値（例：`"./store"`）が適用される。データファイルパス（`{root_dir}/tlsrpt.json`）およびメール保存ディレクトリ（`{root_dir}/emails/`）はプログラムが自動的に導出するため、個別に設定することはできない。なお、相対パスは `AC-10d` により絶対パスへ正規化される
 - `AC-14`: `imap.tls_ca_cert` が未設定の場合、OS のシステム CA バンドルを使用する（デフォルト動作）
 - `AC-15`: 定期サマリの集計期間（TOML キー名は `02_architecture.md` で確定、仮称 `summary.window_days`）が未設定の場合、デフォルト値（`7` 日）が適用される。`summary` サブコマンドの `--since` フラグで上書き可能
 - `AC-16`: レポートレコードの保持期間（TOML キー名は `02_architecture.md` で確定、仮称 `store.retention_days`）が未設定の場合、デフォルト値（例：`30` 日）が適用される。`gc` サブコマンドの `--before` フラグで上書き可能
@@ -125,4 +126,5 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - 集計期間・保持期間・メール最大保持期間に 0 以下を指定した場合にエラーを返すこと（AC-10a）
 - `store.retention_days > store.max_email_age_days` の場合に WARN ログが出力されること（AC-10b）
 - `imap.fetch_days >= store.retention_days` の場合に WARN ログが出力されること（AC-10c）
+- `store.root_dir` に相対パスを指定した場合、絶対パスに正規化され INFO ログに出力されること（AC-10d）
 - デフォルト値適用のテスト（`summary.window_days`・`store.retention_days`・`store.max_email_age_days` 未設定で各デフォルト値が適用されること）

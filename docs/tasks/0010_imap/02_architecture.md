@@ -194,7 +194,7 @@ type Config struct {
 type MessageMeta struct {
     UID       uint32
     Size      uint32    // RFC822.SIZE（サーバー側バイト数）
-    Date      time.Time // メール受信日時（ENVELOPE の Date フィールド）
+    Date      time.Time // メール送信日時（ENVELOPE の Date フィールド、RFC 2822 Date ヘッダー由来）。受信日時ではないことに注意。SentAt として 0040 store の sent_at に対応する
     Seen      bool
     MessageID string
 }
