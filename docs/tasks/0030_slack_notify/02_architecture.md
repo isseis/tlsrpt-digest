@@ -36,7 +36,7 @@ flowchart LR
     IMAP[("IMAP<br>Mailbox")] --> Fetch["One-shot Execution"]
     Fetch --> Parse["TLSRPT Parse"]
     Parse -->|"failure > 0"| Alert["LogAlert()"]
-    Parse -->|"failure = 0"| SummarySrc["Weekly Summary<br>(task 0050)"]
+    Parse -->|"failure = 0"| SummarySrc["Periodic Summary<br>(task 0050)"]
     Fetch -->|"system error"| SysErr["LogSystemError()"]
     SummarySrc -->|"summary event"| Summary["LogSummary()"]
     Alert --> Notifier["SlackHandler<br>(buffer)"]
