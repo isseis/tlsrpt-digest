@@ -171,9 +171,9 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 **受け入れ条件（Acceptance Criteria）**:
 
 - **`AC-30`**: `gc` サブコマンドは `--before <duration>` フラグを受け付ける（日単位 `d` または週単位 `w`、`fetch` の `--since` と同じカスタムパーサーを共用する）
-- **`AC-31`**: `--before` を省略した場合、設定ファイルの保持期間設定（設定キー名は仅称。タスク 0060 / `02_architecture.md` で確定。現在の仅称: `store.retention_days`、デフォルトあり）を使用する（タスク 0060 AC-16 参照）
+- **`AC-31`**: `--before` を省略した場合、設定ファイルの保持期間設定（設定キー名は仮称。タスク 0060 / `02_architecture.md` で確定。現在の仮称: `store.retention_days`、デフォルトあり）を使用する（タスク 0060 AC-16 参照）
 - **`AC-32`**: `internal/store` の `DeleteReportsBefore(time.Now().Add(-before))` を呼び出して JSON レポートレコードを削除する
-- **`AC-32a`**: `gc` サブコマンドは `--max-email-age <duration>` フラグを受け付ける（日/週単位、`--before` と同じパーサを共用）。省略した場合は設定ファイルのメール最大保持期間設定（設定キー名は仅称。タスク 0060 / `02_architecture.md` で確定。現在の仅称: `store.max_email_age_days`、デフォルトあり、0060 AC-17 参照）を使用する
+- **`AC-32a`**: `gc` サブコマンドは `--max-email-age <duration>` フラグを受け付ける（日/週単位、`--before` と同じパーサを共用）。省略した場合は設定ファイルのメール最大保持期間設定（設定キー名は仮称。タスク 0060 / `02_architecture.md` で確定。現在の仮称: `store.max_email_age_days`、デフォルトあり、0060 AC-17 参照）を使用する
 - **`AC-32b`**: `internal/store` の `DeleteEmailsBefore(reportCutoff, savedAtCutoff)` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する。`reportCutoff` は `time.Now().Add(-before)`、`savedAtCutoff` は解決済みの maxEmailAge（CLI フラグまたは設定値）を用いて `time.Now().Add(-maxEmailAge)` として計算する。設定値は常に 1 日以上（0060 AC-10a）であるためゼロ値になることはない
 - **`AC-33`**: JSON レコードおよび `.eml` ファイルそれぞれの削除件数を INFO レベルで構造化ログに出力する（Slack への定期通知は行わない。失敗時のみ ERROR ログ → Slack 通知）
 - **`AC-34`**: 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
