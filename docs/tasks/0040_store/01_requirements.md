@@ -289,7 +289,7 @@ UIDVALIDITY 変化検出時にエントリポイント（タスク 0070）が記
 
 - `version`: スキーマバージョン整数。互換性のない変更時にインクリメントする。読み込み時に未知のバージョンを検出した場合はエラーを返す
 - `reports`: 保存済みレポートの配列。要素のフィールド構成は `tlsrpt.Report` に準拠する（具体的なフィールドの過不足は `02_architecture.md` で確定）
-- `emails`: メールインデックス。`SaveEmail` 時に `{uid, uidvalidity, saved_at}` で作成し、`SaveReports` 時に `report_end_date` を更新する。`DeleteEmailsBefore` 時に除去する。`report_end_date` が null のエントリはパース失敗メールを示す。`saved_at` によりパース失敗・遠未来 `report_end_date` に対する最大保持期間での強制削除が可能
+- `emails`: メールインデックス。fetch サイクル完了後に `SaveEmailMetas` で `{uid, uidvalidity, saved_at}` エントリをバッチ登録し、バッチ保存メソッド（`SaveReports`）が `report_end_date` を更新する。`DeleteEmailsBefore` 時に除去する。`report_end_date` が null のエントリはパース失敗メールを示す。`saved_at` によりパース失敗・遠未来 `report_end_date` に対する最大保持期間での強制削除が可能
 
 ### 6.3 ストレージレイアウト
 
@@ -329,7 +329,7 @@ UIDVALIDITY 変化検出時にエントリポイント（タスク 0070）が記
 - `SaveUIDValidity` / `LoadUIDValidity` のラウンドトリップテスト（未保存時に `found=false` が返ること、再保存で上書きされること）
 - `DeleteReportsBefore` のテスト（境界値、削除 0 件、冪等性、削除後の `GetReportsSince` 結果整合性）
 - `DeleteEmailsBefore` のテスト（インデックス参照による `.eml` 削除、`.eml` 既消失時の冪等性、インデックスとファイル削除の整合性）
-- `SaveEmail` によるメールインデックスへの記録テスト（同一 UID 再保存時のインデックス不変）
+- `SaveEmailMetas` によるバッチインデックス登録テスト（複数エントリの一括登録・既存エントリへの冪等動作）
 - 未知の `version` を持つデータファイル読み込み時にエラーが返ることのテスト
 - 想定累積上限（1 万件）規模での `GetReportsSince` および `DeleteReportsBefore` の性能テスト
 
