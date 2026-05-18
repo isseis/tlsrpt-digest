@@ -127,4 +127,4 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - `store.retention_days > store.max_email_age_days` の場合に WARN ログが出力されること（AC-10b）
 - `imap.fetch_days >= store.retention_days` の場合に WARN ログが出力されること（AC-10c）
 - `store.root_dir` に相対パスを指定した場合、絶対パスに正規化され INFO ログに出力されること（AC-10d）
-- デフォルト値適用のテスト（`summary.window_days`・`store.retention_days`・`store.max_email_age_days` 未設定で各デフォルト値が適用されること）
+- デフォルト値適用のテスト（集計期間設定・保持期間設定・メール最大保持期間設定が未設定で各デフォルト値が適用されること。キー名は仮称であり、最終確定はタスク 0060 の `02_architecture.md` に従う）
