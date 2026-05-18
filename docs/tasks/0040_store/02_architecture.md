@@ -417,15 +417,17 @@ sequenceDiagram
     participant EF as "emails/"
     participant DF as "tlsrpt.json"
 
-    EP->>ST: "保存済みメールを読み込む"
+    EP->>ST: "LoadEmails() を呼び出す"
     ST->>EF: "管理下の `.eml` を列挙する"
-    loop "各 `.eml`"
+    Note over ST,EF: "store 内部でループ処理（ネットワーク不要、ローカル I/O のみ）"
+    loop "各 `.eml`（store 内部）"
         alt "読み込み成功"
-            ST-->>EP: "LoadedEmail を追加する"
+            ST->>ST: "LoadedEmail を結果スライスに追加"
         else "読み込み失敗"
-            ST-->>EP: "エラーを集約しつつ継続する"
+            ST->>ST: "エラーを集約しつつ継続"
         end
     end
+    ST-->>EP: "[]LoadedEmail（成功分）, error（集約済み失敗）"
     EP->>ST: "読めたメールのメタデータを再反映する"
     EP->>ST: "抽出できたレポート群を再保存する"
     ST->>DF: "レポート集合とインデックスを更新する"
