@@ -214,7 +214,6 @@ type LoadedEmail struct {
 func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error)
 
 type Store interface {
-    SaveReport(input ReportInput) error
     SaveReports(inputs []ReportInput) error
     SaveEmailMetas(metas []EmailMeta) error
     GetReportsSince(since time.Time) ([]tlsrpt.Report, error)
@@ -233,10 +232,13 @@ type Store interface {
     DeleteReportsBefore(cutoff time.Time) (deleted int, err error)
     DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (deleted int, err error)
 }
-```
 
-`SaveReport` は `SaveReports` の単体版であり、同じ `ReportInput` を受け取る。
-レポートの保存に加え、`ReportInput` の `{uid, uidvalidity}` に対応する `emails` インデックスの `report_end_date` を更新する点も `SaveReports` と同じである（どちらを使っても動作に差がない）。
+// SaveReport はインターフェース外のパッケージレベルユーティリティ関数。
+// SaveReports の単体版として提供し、Store を実装しなくてよい。
+func SaveReport(s Store, input ReportInput) error {
+    return s.SaveReports([]ReportInput{input})
+}
+```
 
 ### 3.2 コンポーネント責務（新規・変更ファイル）
 
@@ -246,7 +248,7 @@ type Store interface {
 | `internal/store/types.go` | 永続化対象の内部モデル（report/email/sentinel）定義 | 新規 |
 | `internal/store/errors.go` | 公開エラー型・分類（不整合/IO/検証） | 新規 |
 | `internal/store/sentinel.go` | sentinel 状態管理、IMAP 識別子整合性検証 | 新規 |
-| `internal/store/reports.go` | `SaveReport`/`SaveReports`/`GetReportsSince`/`DeleteReportsBefore` | 新規 |
+| `internal/store/reports.go` | `SaveReports`/`GetReportsSince`/`DeleteReportsBefore`（`SaveReport` はパッケージレベル関数） | 新規 |
 | `internal/store/emails.go` | `SaveEmail`/`SaveEmailMetas`/`LoadEmails`/`DeleteEmailsBefore` | 新規 |
 | `internal/store/recovery.go` | `SaveRecoveryRequired`/`LoadRecoveryRequired`/`ClearRecoveryRequired`/`ApplyRecovery` | 新規 |
 | `internal/store/atomicfile.go` | アトミック更新の共通 I/O ヘルパ | 新規 |
@@ -546,7 +548,7 @@ sequenceDiagram
 
 ### Phase 2: レポート・インデックス API
 
-1. `SaveReport`/`SaveReports`/`GetReportsSince`
+1. `SaveReports`/`GetReportsSince`（`SaveReport` はパッケージレベルのユーティリティ関数）
 2. `SaveEmailMetas` と `report_end_date` 最大値更新
 3. `SaveEmail`（10 桁 UID ファイル名）
 
