@@ -26,7 +26,7 @@
 | **date-range** | TLSRPT レポートが対象とするデータ収集期間。`start-datetime` と `end-datetime` を持つ |
 | **root_dir** | 本パッケージが管理するストレージルートディレクトリ。すべての派生パス（データファイル・メール保存ディレクトリ・sentinel）はここから自動導出される |
 | **sentinel** | `{root_dir}/.tlsrpt-digest-meta.json`。IMAP サーバー識別子・`UIDVALIDITY`・`recovery-required` 状態などを保持し、起動時に整合性を検証するメタファイル |
-| **recovery-required** | `UIDVALIDITY` の変化を検出してオペレータの手動復旧を待っている状態。sentinel に記録される。この状態が解消されるまで `fetch` / `summary` は停止する |
+| **recovery-required** | `UIDVALIDITY` の変化を検出してオペレータの手動復旧を待っている状態。sentinel に記録される。この状態が解消されるまで、整合性が確定したストア状態を前提とするコマンド（`fetch` / `summary` / `reprocess` / `gc` など）は fail closed で停止する |
 | **GC（Garbage Collection）** | 蓄積したレポートレコードや `.eml` ファイルを定期的に削除してストレージを抑制する操作 |
 | **sent_at** | IMAP ENVELOPE の `Date:` ヘッダーから取得したメールの送信日時。受信日時（IMAP INTERNALDATE）ではない。`{YYYYMM}` ディレクトリ名の導出に使用する |
 | **saved_at** | `.eml` ファイルをローカルに保存した日時（wall-clock）。`sent_at` が取得できない場合のフォールバックや GC の最大保持期間判定にも使用する |
