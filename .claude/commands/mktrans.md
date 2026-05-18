@@ -94,9 +94,8 @@ Read the translated output end to end before committing.
 - [ ] All technical terms match the glossary.
 
 **Readability checklist (translated output):**
-- [ ] Sentences that are grammatically correct but awkward are rephrased for natural phrasing in the target language without changing the meaning.
+- [ ] Sentences that are grammatically correct but awkward are rephrased for more natural phrasing without changing the meaning or omitting any content.
 - [ ] Terminology is used consistently throughout the translation; the same concept always uses the same term.
-- [ ] Sentence structure follows the target language's conventions rather than mirroring the source language syntax literally.
 
 ## Commit
 
