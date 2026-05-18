@@ -152,7 +152,7 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 - `AC-18a`: 全メール処理（AC-16〜AC-18）が完了した後、Slack バッファの `Flush()` を呼び出す（0030 `SlackHandler.Flush(ctx)` に相当）。Flush が成功した場合のみ AC-19 の SEEN 付与へ進む。Flush が失敗した場合は SEEN を付与せず終了コード 1 で終了する。この順序により、**通知は必ず SEEN 付与より前に配送が確認され**、クラッシュや Flush 失敗時は次回 `fetch` で再処理・再通知される（at-least-once 保証の実装上の要）
 - `AC-19`: UNSEEN だったメールの処理完了後（AC-18a の Flush 成功後）、SEEN マークを付与する（既に SEEN のメールは変更しない）
 - `AC-20`: 1 件のメール処理失敗が他のメール処理に影響しない
-- `AC-20a`: ステップ3の全メール処理が正常に完了した後、ステップ1で取得した現在の `UIDVALIDITY` を `internal/store` の `SaveUIDValidity(v)` で sentinel に保存する（次回実行時の比較に使用）。正常完了前に保存しないことで、未解決の UIDVALIDITY 変化が以後の `fetch` / `summary` で確実に検出される
+- `AC-20a`: ステップ3の全メール処理が正常に完了した後、ステップ1で取得した現在の `UIDVALIDITY` を `internal/store` の `SaveUIDValidity(v)` で sentinel に保存する（次回実行時の比較に使用）。なお、初回実行（`found=false`）の場合は AC-11b がステップ2に入る前に既に保存済みであるため、本ステップでの保存は冪等となる。「途中でのスキップ禁止」の制約は `found=true` の通常実行に適用され、AC-11b の初回保存とは競合しない
 - `AC-21`: 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
 
 ### F-004: `reprocess` サブコマンドの処理フロー
