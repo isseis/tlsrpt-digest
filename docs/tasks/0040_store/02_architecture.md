@@ -209,8 +209,10 @@ type LoadedEmail struct {
     Path        string
 }
 
+func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error)
+
 type Store interface {
-    SaveReport(report tlsrpt.Report) error
+    SaveReport(input ReportInput) error
     SaveReports(inputs []ReportInput) error
     SaveEmailMetas(metas []EmailMeta) error
     GetReportsSince(since time.Time) ([]tlsrpt.Report, error)
@@ -231,6 +233,9 @@ type Store interface {
 }
 ```
 
+`SaveReport` は単体保存 API だが、`SaveReports` と同じ `ReportInput` を受け取り、
+`{uid, uidvalidity}` に紐づくインデックス更新セマンティクスとの差異を作らない。
+
 ### 3.2 コンポーネント責務（新規・変更ファイル）
 
 | ファイル | 役割 | 変更種別 |
@@ -239,7 +244,7 @@ type Store interface {
 | `internal/store/types.go` | 永続化対象の内部モデル（report/email/sentinel）定義 | 新規 |
 | `internal/store/errors.go` | 公開エラー型・分類（不整合/IO/検証） | 新規 |
 | `internal/store/sentinel.go` | sentinel 状態管理、IMAP 識別子整合性検証 | 新規 |
-| `internal/store/reports.go` | `SaveReport(s)`/`GetReportsSince`/`DeleteReportsBefore` | 新規 |
+| `internal/store/reports.go` | `SaveReport`/`SaveReports`/`GetReportsSince`/`DeleteReportsBefore` | 新規 |
 | `internal/store/emails.go` | `SaveEmail`/`SaveEmailMetas`/`LoadEmails`/`DeleteEmailsBefore` | 新規 |
 | `internal/store/recovery.go` | `SaveRecoveryRequired`/`LoadRecoveryRequired`/`ClearRecoveryRequired`/`ApplyRecovery` | 新規 |
 | `internal/store/atomicfile.go` | アトミック更新の共通 I/O ヘルパ | 新規 |
@@ -458,12 +463,9 @@ flowchart TD
 ```mermaid
 flowchart TD
     Start([".eml GC を開始する"]) --> Eval["メールインデックスを評価する"]
-    Eval --> Cond1{"通常削除条件に合致するか"}
-    Eval --> Cond2{"強制削除条件に合致するか"}
-    Cond1 -->|"Yes"| Del
-    Cond2 -->|"Yes"| Del
-    Cond1 -->|"No"| Keep["保持する"]
-    Cond2 -->|"No"| Keep
+    Eval --> Cond{"通常削除条件 または 強制削除条件に合致するか"}
+    Cond -->|"Yes"| Del
+    Cond -->|"No"| Keep["保持する"]
     Del["対象 `.eml` を削除する"] --> Update["成功した削除だけをインデックスへ反映する"]
     Update --> Write["インデックスを更新する"]
     Write --> End(["成功件数と集約エラーを返す"])
@@ -471,7 +473,8 @@ flowchart TD
 
 - 通常削除条件は、`report_end_date` を持つメールのうち `reportCutoff` より前のものを対象にする。
 - 強制削除条件は、`savedAtCutoff` が設定された場合に `saved_at` がそれより前のものを対象にする。
-- 個別削除でファイル I/O エラーが起きても全体は継続し、成功した削除だけをインデックスへ反映する。
+- `.eml` が既に存在しない場合は非エラーとして扱い、対象インデックスは除去する（冪等動作）。
+- 個別削除でファイル I/O エラーが起きても全体は継続し、失敗エントリのインデックスは残して再実行可能にする。
 
 ### 6.8 recovery 適用フロー（F-008）
 
@@ -503,7 +506,7 @@ sequenceDiagram
 - F-001: 初期化（作成/冪等/read-only で非作成）
 - F-002/F-004: `SaveEmail`・`SaveEmailMetas`・`SaveReports` の冪等性と同時更新整合
 - F-003: `GetReportsSince` の `date-range.end-datetime >= since` フィルタ
-- F-005: `LoadEmails` の UID/UIDVALIDITY/`SentAt` 逆算、フォールバック、個別失敗継続
+- F-005: `LoadEmails` の UID/UIDVALIDITY のパス由来抽出、`SentAt` のヘッダー由来取得とフォールバック、個別失敗継続
 - F-006/F-008: UIDVALIDITY/recovery 状態 API のラウンドトリップと `ApplyRecovery` 原子性
 - F-007a/F-007b: GC 境界値、削除 0 件、再実行冪等、`errors.Join` 集約
 
