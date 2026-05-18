@@ -88,7 +88,7 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - `AC-12`: `imap.fetch_days` が未設定の場合、デフォルト値（`14`）が適用される
 - `AC-13`: ストレージルートディレクトリ（`store.root_dir`）が未設定の場合、デフォルト値（例：`"./store"`）が適用される。データファイルパス（`{root_dir}/tlsrpt.json`）およびメール保存ディレクトリ（`{root_dir}/emails/`）はプログラムが自動的に導出するため、個別に設定することはできない。なお、相対パスは `AC-10d` により絶対パスへ正規化される
 - `AC-14`: `imap.tls_ca_cert` が未設定の場合、OS のシステム CA バンドルを使用する（デフォルト動作）
-- `AC-15`: 定期サマリの集計期間（TOML キー名は `02_architecture.md` で確定、仮称 `summary.window_days`）が未設定の場合、デフォルト値（`7` 日）が適用される。`summary` サブコマンドの `--since` フラグで上書き可能
+- `AC-15`: 定期サマリの集計期間（TOML キー名は `02_architecture.md` で確定、仮称 `summary.window_days`）が未設定の場合、デフォルト値（例：`7` 日）が適用される。`summary` サブコマンドの `--since` フラグで上書き可能
 - `AC-16`: レポートレコードの保持期間（TOML キー名は `02_architecture.md` で確定、仮称 `store.retention_days`）が未設定の場合、デフォルト値（例：`30` 日）が適用される。`gc` サブコマンドの `--before` フラグで上書き可能
 - `AC-17`: メール最大保持期間（TOML キー名は `02_architecture.md` で確定、仮称 `store.max_email_age_days`）が未設定の場合、デフォルト値（例：`30` 日）が適用される。`gc` サブコマンドの `--max-email-age` フラグで上書き可能
 
