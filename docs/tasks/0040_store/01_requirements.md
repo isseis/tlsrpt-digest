@@ -39,6 +39,7 @@ failure のないレポートは即時通知ではなく、定期サマリとし
 - レポートデータの保存（`SaveReport`）
 - 指定期間のレポート取得（`GetReportsSince`）
 - 指定日時より古いレポートレコードの削除（`DeleteReportsBefore`、累積件数の抑制用）
+- 指定日時より古い `.eml` ファイルの削除（`DeleteEmailsBefore`、ストレージ抑制用）
 - `.eml` ファイルへのメール本文保存（`SaveEmail`）
 - `.eml` ファイルからのメール本文読み込み（`LoadEmails`、reprocess 用）
 

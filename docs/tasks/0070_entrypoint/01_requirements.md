@@ -171,7 +171,7 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 **受け入れ条件（Acceptance Criteria）**:
 
 - **`AC-30`**: `gc` サブコマンドは `--before <duration>` フラグを受け付ける（日単位 `d` または週単位 `w`、`fetch` の `--since` と同じカスタムパーサーを共用する）
-- **`AC-31`**: `--before` を省略した場合、設定ファイルの保持期間設定（TOML キー名と既定値はタスク 0060 / `02_architecture.md` で確定）を使用する。設定値もない場合はエラー終了する
+- **`AC-31`**: `--before` を省略した場合、設定ファイルの保持期間設定（`store.retention_days`、デフォルトあり）を使用する（タスク 0060 AC-16 参照）
 - **`AC-32`**: `internal/store` の `DeleteReportsBefore(time.Now().Add(-before))` を呼び出して JSON レポートレコードを削除する
 - **`AC-32a`**: `gc` サブコマンドは `--max-email-age <duration>` フラグを受け付ける（日/週単位、`--before` と同じパーサーを共用）。省略時はデフォルト値（TOML キー名と既定値は `02_architecture.md` で確定）を使用する
 - **`AC-32b`**: `internal/store` の `DeleteEmailsBefore(reportCutoff, savedAtCutoff)` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する。`reportCutoff` は `time.Now().Add(-before)`、`savedAtCutoff` は `--max-email-age` が指定された場合は `time.Now().Add(-maxEmailAge)`、指定されない場合はゼロ値（`time.Time{}`）を渡す（ゼロ値渡しにより `saved_at` ベースの強制削除が無効化される）
@@ -381,10 +381,11 @@ UIDVALIDITY 変化を検出した場合、`fetch` と `summary` は fail closed 
   - `--notify` なしでアラートが送信されないこと
   - 重複実行しても結果が変わらないこと（冪等性）
 - `gc` 処理フローのテスト（`FakeStore`・スパイハンドラ を使用）
-  - `--before` 指定時に `DeleteReportsBefore(now - before)` が呼ばれること
-  - `--before` 未指定 + 設定値ありで設定値が使われること
-  - `--before` 未指定 + 設定値なしでエラー終了すること
-  - 削除件数が INFO ログに出力されること
+  - `--before` 指定時に `DeleteReportsBefore` が正しいカットオフ時刻で呼ばれること
+  - `--before` 未指定で設定値（デフォルト）が使われること
+  - `--max-email-age` 指定時に `DeleteEmailsBefore(reportCutoff, savedAtCutoff)` が正しいカットオフ時刻で呼ばれること
+  - `--max-email-age` 未指定時に `savedAtCutoff` にゼロ値が渡され `.eml` 強制削除が行われないこと
+  - JSON レコードおよび `.eml` それぞれの削除件数が INFO ログに出力されること
   - 重複実行しても結果が変わらないこと（冪等性）
 - `recover` 処理フローのテスト
   - `keep-old` で UIDVALIDITY が更新され、既存レポートと `.eml` が保持されること
