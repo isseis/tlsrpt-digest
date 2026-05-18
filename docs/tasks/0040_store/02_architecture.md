@@ -235,8 +235,8 @@ type Store interface {
 }
 ```
 
-`SaveReport` は単体保存 API だが、`SaveReports` と同じ `ReportInput` を受け取り、
-`{uid, uidvalidity}` に紐づくインデックス更新セマンティクスとの差異を作らない。
+`SaveReport` は `SaveReports` の単体版であり、同じ `ReportInput` を受け取る。
+レポートの保存に加え、`ReportInput` の `{uid, uidvalidity}` に対応する `emails` インデックスの `report_end_date` を更新する点も `SaveReports` と同じである（どちらを使っても動作に差がない）。
 
 ### 3.2 コンポーネント責務（新規・変更ファイル）
 
