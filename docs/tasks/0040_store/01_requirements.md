@@ -66,7 +66,7 @@ failure のないレポートは即時通知ではなく、定期サマリとし
 - メール保存ディレクトリ：`{root_dir}/emails/`
 - sentinel メタファイル：`{root_dir}/.tlsrpt-digest-meta.json`
 
-`root_dir` を単一の設定キーにすることで、データファイルとメール保存ディレクトリが常に同じルートを共有し、片方だけを誤指定することが構造的に不可能になる。sentinel を `root_dir` 直下に置くことで、データファイルとメール保存ディレクトリの両方を単一の identity チェックで保護できる（JSON データファイルへの `imap_identity` 埋め込みは不要）。
+`root_dir` 配下のすべてのパスはプログラムが自動的に導出するため、設定ミスによるパスの不整合が発生しない。`root_dir` 直下に配置した sentinel（`.tlsrpt-digest-meta.json`）には IMAP サーバー識別子が記録され、データファイルと `.eml` ファイルの両方に対して「このストアがどのメールボックスのものか」を起動時に検証できる。
 
 **受け入れ条件（Acceptance Criteria）**:
 
