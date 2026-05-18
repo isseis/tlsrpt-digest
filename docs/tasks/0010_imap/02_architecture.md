@@ -215,8 +215,8 @@ type MailFetcher interface {
     // 同一日内の重複実行では同じ UID セットが返される。
     // 呼び出し元はローカルの保存済みファイルと照合して未取得のもののみを
     // Download する責務を持つ。UIDValidity の保存・取得は internal/store、
-    // 前回値との比較・変化検出および変化時の対応（fail closed で停止し
-    // 手動復旧 recover サブコマンドを要求）はエントリポイント（cmd/tlsrpt-digest）の責務。
+    // 前回値との比較・変化検出および変化時の対応（fail closed で停止し、
+    // 手動復旧 `recover` サブコマンドを要求）はエントリポイント（`cmd/tlsrpt-digest`）の責務。
     FetchMeta(ctx context.Context, since time.Time) (FetchMetaResult, error)
 
     // Download は指定 UID のメール本文を取得する。BODY.PEEK[] を用いて
