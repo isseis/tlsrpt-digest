@@ -40,11 +40,11 @@ This document provides a detailed reference for the package structure in this co
 
 #### Notification (planned)
 
-- **`notify/`**: Defines the `Notifier` interface and implements immediate alert and weekly summary delivery via Slack Incoming Webhook. Supports separate channels for INFO and WARN/ERROR severity. Webhook URLs are managed as environment variables.
+- **`notify/`**: Defines the `Notifier` interface and implements immediate alert and periodic summary delivery via Slack Incoming Webhook. Supports separate channels for INFO and WARN/ERROR severity. Webhook URLs are managed as environment variables.
 
 #### Data Persistence (planned)
 
-- **`store/`**: Persists processed report data as JSON files (for weekly summary generation). Saves raw incoming mail as `.eml` files (for problem analysis, reprocessing, and test fixtures).
+- **`store/`**: Persists processed report data as JSON files (for periodic summary generation). Saves raw incoming mail as `.eml` files (for problem analysis, reprocessing, and test fixtures).
 
 #### Shared Types
 

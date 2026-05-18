@@ -131,7 +131,7 @@ sequenceDiagram
                 alt HasFailure() == true
                     CMD->>CMD: 即時アラート処理（別パッケージ）
                 else HasFailure() == false
-                    CMD->>CMD: 週次サマリー蓄積（別パッケージ）
+                    CMD->>CMD: 定期サマリ蓄積（別パッケージ）
                 end
             end
         else other filename

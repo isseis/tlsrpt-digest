@@ -8,7 +8,7 @@ SMTP TLS Reporting (RFC 8460, commonly known as TLSRPT) is a specification by wh
 
 ### Why Automated Processing is Needed
 
-TLSRPT reports arrive in large volumes every day, making manual review impractical. What matters is the presence or absence of `failure_session_count` (the number of TLS connection failures). When failures are detected, administrators must be notified promptly. Routine reports with no issues are accumulated and reported as a weekly summary, minimizing management overhead.
+TLSRPT reports arrive in large volumes every day, making manual review impractical. What matters is the presence or absence of `failure_session_count` (the number of TLS connection failures). When failures are detected, administrators must be notified promptly. Routine reports with no issues are accumulated and reported as a periodic summary, minimizing management overhead.
 
 ### Project Purpose
 
@@ -17,7 +17,7 @@ tlsrpt-digest automates the following:
 1. Fetching report emails by connecting to an IMAP mailbox
 2. Parsing the attached JSON and evaluating failure_session_count
 3. Sending immediate alerts when failures are detected
-4. Accumulating data on normal days and sending weekly summary notifications
+4. Accumulating data on normal days and sending periodic summary notifications
 
 ---
 
@@ -32,7 +32,7 @@ flowchart TD
     E{"failure_session_count > 0?"}
     F["Send immediate alert<br>internal/notify"]
     G[("Stored reports / .eml<br>internal/store")]
-    H["Generate and send weekly summary<br>internal/notify"]
+    H["Generate and send periodic summary<br>internal/notify"]
 
     A --> B
     B --> C
@@ -51,7 +51,7 @@ The program runs as a one-shot process and exits after completing its work. Peri
 flowchart LR
     S["External scheduler<br>systemd timer / cron"]
     Poll["fetch subcommand<br>Fetch and process messages"]
-    Summary["summary subcommand<br>Send weekly summary"]
+    Summary["summary subcommand<br>Send periodic summary"]
 
     S -->|"Periodic execution (e.g. hourly)"| Poll
     S -->|"Periodic execution (e.g. every Monday)"| Summary
@@ -68,8 +68,8 @@ tlsrpt-digest/
 ├── internal/
 │   ├── imap/                 # IMAP connection, metadata fetch (all in window), selective download, marking as read
 │   ├── tlsrpt/               # RFC 8460 JSON parsing, failure detection
-│   ├── notify/               # Slack / email notification (immediate alerts and weekly summaries)
-│   └── store/                # Report persistence (.json / .eml), data management for weekly summaries
+│   ├── notify/               # Slack / email notification (immediate alerts and periodic summaries)
+│   └── store/                # Report persistence (.json / .eml), data management for periodic summaries
 ├── testdata/                 # Real test data (.eml, .json.gz)
 └── docs/                     # Documentation
 ```
@@ -80,8 +80,8 @@ tlsrpt-digest/
 |---|---|
 | `internal/imap` | Connecting to the IMAP server, fetching metadata for all messages in the lookback window, selectively downloading messages, marking as read after processing |
 | `internal/tlsrpt` | Extracting .json.gz attachments, parsing RFC 8460 JSON, evaluating failure_session_count |
-| `internal/notify` | Sending notifications via Slack Webhook / email (both immediate alerts and weekly summaries) |
-| `internal/store` | Saving and loading .eml files, persisting report data as JSON, aggregation for weekly summaries |
+| `internal/notify` | Sending notifications via Slack Webhook / email (both immediate alerts and periodic summaries) |
+| `internal/store` | Saving and loading .eml files, persisting report data as JSON, aggregation for periodic summaries |
 | `cmd/tlsrpt-digest` | Loading configuration files, initializing each package, running subcommands (fetch / summary / reprocess) |
 
 ---
@@ -105,7 +105,7 @@ By defining interfaces such as `MailFetcher` and implementing notifications as a
 
 ### Adopting File-Based Storage for Data Accumulation
 
-Report data must be accumulated for the weekly summary. The project uses JSON files for aggregated report data and stores original emails as `.eml` files so it can operate without an external database server while preserving inputs for reprocessing.
+Report data must be accumulated for the periodic summary. The project uses JSON files for aggregated report data and stores original emails as `.eml` files so it can operate without an external database server while preserving inputs for reprocessing.
 
 ---
 

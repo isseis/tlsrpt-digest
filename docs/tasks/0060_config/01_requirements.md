@@ -73,6 +73,10 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - `AC-08`: Slack Webhook URL は環境変数（`TLSRPT_SLACK_WEBHOOK_URL_SUCCESS`・`TLSRPT_SLACK_WEBHOOK_URL_ERROR`）で管理するため、設定ファイルには `notify.slack.allowed_host` のみを記載する。「少なくとも1つの通知手段が設定されているか」の検証は `internal/notify` パッケージが担い、`internal/config` は `notify.slack.allowed_host` の形式チェック（ポート番号・スキームを含まない完全修飾ホスト名）のみを行う
 - `AC-09`: `imap.fetch_days` が 1 未満の場合はエラーを返す
 - `AC-10`: `imap.tls_ca_cert` が設定されている場合、指定パスのファイルが存在しかつ PEM 形式の証明書として読み込めることを確認する。読み込めない場合はエラーを返す
+- `AC-10a`: 定期サマリ集計期間・レポート保持期間・メール最大保持期間（仮称 `summary.window_days`・`store.retention_days`・`store.max_email_age_days`、AC-15〜17 参照）はいずれも 1 以上の整数であること。0 以下または非整数の場合はエラーを返す
+- `AC-10b`: 仮称 `store.retention_days`（正式キー名は `02_architecture.md` で確定）> 仮称 `store.max_email_age_days` の場合は WARN ログを出力する（エラーにはしない）。この設定では `.eml` がレポート JSON より先に削除されるため、`reprocess` による復元が一部不可能になる可能性がある旨を警告する
+- `AC-10c`: `imap.fetch_days` >= 仮称 `store.retention_days`（正式キー名は `02_architecture.md` で確定）の場合は WARN ログを出力する（エラーにはしない）。フェッチ対象期間がレポート保持期間以上の場合、GC で削除済みのレポートを再処理する可能性がある旨を警告する
+- `AC-10d`: `store.root_dir` に相対パスが指定された場合、設定読み込み時のカレントディレクトリを基準に絶対パスへ正規化する。正規化後のパスは INFO ログに出力する（systemd timer 経由実行などで CWD が `/` になる環境での意図しない参照先を防ぐ）。`filepath.Abs` 等で正規化する
 
 ### F-003: デフォルト値の適用
 
@@ -82,9 +86,11 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 
 - `AC-11`: IMAP メールボックス名が未設定の場合、デフォルト値（`"INBOX"`）が適用される。TLSRPT レポートをサーバ側フィルタで専用フォルダ（例：`tls-reports`）に振り分けている場合は明示的に指定する
 - `AC-12`: `imap.fetch_days` が未設定の場合、デフォルト値（`14`）が適用される
-- `AC-13`: データファイルパスが未設定の場合、デフォルト値（例：`"./tlsrpt.json"`）が適用される
-- `AC-14`: メール保存ディレクトリが未設定の場合、デフォルト値（例：`"./emails"`）が適用される
-- `AC-15`: `imap.tls_ca_cert` が未設定の場合、OS のシステム CA バンドルを使用する（デフォルト動作）
+- `AC-13`: ストレージルートディレクトリ（`store.root_dir`）が未設定の場合、デフォルト値（例：`"./store"`）が適用される。データファイルパス（`{root_dir}/tlsrpt.json`）およびメール保存ディレクトリ（`{root_dir}/emails/`）はプログラムが自動的に導出するため、個別に設定することはできない。なお、相対パスは `AC-10d` により絶対パスへ正規化される
+- `AC-14`: `imap.tls_ca_cert` が未設定の場合、OS のシステム CA バンドルを使用する（デフォルト動作）
+- `AC-15`: 定期サマリの集計期間（TOML キー名は `02_architecture.md` で確定、仮称 `summary.window_days`）が未設定の場合、デフォルト値（例：`7` 日）が適用される。`summary` サブコマンドの `--since` フラグで上書き可能
+- `AC-16`: レポートレコードの保持期間（TOML キー名は `02_architecture.md` で確定、仮称 `store.retention_days`）が未設定の場合、デフォルト値（例：`30` 日）が適用される。`gc` サブコマンドの `--before` フラグで上書き可能
+- `AC-17`: メール最大保持期間（TOML キー名は `02_architecture.md` で確定、仮称 `store.max_email_age_days`）が未設定の場合、デフォルト値（例：`30` 日）が適用される。`gc` サブコマンドの `--max-email-age` フラグで上書き可能
 
 ---
 
@@ -117,3 +123,8 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - デフォルト値適用のテスト（`imap.tls_ca_cert` 未設定でシステム CA が使われること）
 - `imap.tls_ca_cert` に存在しないパスや不正なファイルを指定した場合のエラーテスト
 - 不正 TOML（文法エラー）のエラーテスト
+- 集計期間・保持期間・メール最大保持期間に 0 以下を指定した場合にエラーを返すこと（AC-10a）
+- 保持期間設定がメール最大保持期間設定を上回る場合に WARN ログが出力されること（AC-10b）
+- フェッチ日数設定（`imap.fetch_days`）が保持期間設定以上の場合に WARN ログが出力されること（AC-10c）
+- `store.root_dir` に相対パスを指定した場合、絶対パスに正規化され INFO ログに出力されること（AC-10d）
+- デフォルト値適用のテスト（集計期間設定・保持期間設定・メール最大保持期間設定が未設定で各デフォルト値が適用されること。キー名は仮称であり、最終確定はタスク 0060 の `02_architecture.md` に従う）
