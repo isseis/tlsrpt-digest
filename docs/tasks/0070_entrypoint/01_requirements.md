@@ -408,6 +408,7 @@ UIDVALIDITY 変化を検出した場合、`fetch` と `summary` は fail closed 
   - recovery-required 状態が残っている間は集計・送信せず終了すること
   - 集計対象期間（開始・終了日時）がメッセージに含まれること
 - `reprocess` 処理フローのテスト（`testdata/` の実際の `.eml` を canned データとして使用）
+  - `LoadRecoveryRequired()` が `found=true` を返す場合、`LoadEmails` もストアへの書き込みも行わず終了コード 1 で終了すること（AC-21a）
   - `--notify` なしでアラートが送信されないこと
   - 重複実行しても結果が変わらないこと（冪等性）
 - `gc` 処理フローのテスト（`FakeStore`・スパイハンドラ を使用）
