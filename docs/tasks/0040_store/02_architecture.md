@@ -456,7 +456,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    Start(["`.eml` GC を開始する"]) --> Eval["メールインデックスを評価する"]
+    Start([".eml GC を開始する"]) --> Eval["メールインデックスを評価する"]
     Eval --> Cond1{"通常削除条件に合致するか"}
     Eval --> Cond2{"強制削除条件に合致するか"}
     Cond1 -->|"Yes"| Del
