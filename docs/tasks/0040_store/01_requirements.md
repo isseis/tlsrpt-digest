@@ -191,7 +191,7 @@ UIDVALIDITY 変化検出時にエントリポイント（タスク 0070）が記
 
 **受け入れ条件（Acceptance Criteria）**:
 
-- `AC-33`: `SaveRecoveryRequired(prev, curr uint32) error` で `recovery_required` フィールドを sentinel にアトミックに書き込む
+- `AC-33`: `SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time) error` で `recovery_required` フィールドを sentinel にアトミックに書き込む。`detectedAt` を呼び出し側から受け取ることでユニットテスト時に時刻を固定できる
 - `AC-34`: `LoadRecoveryRequired() (prev, curr uint32, detectedAt time.Time, found bool, err error)` で recovery-required 状態を取得できる。フィールドが存在しない場合は `found = false`
 - `AC-35`: `ClearRecoveryRequired() error` で `recovery_required` フィールドを sentinel から除去する（`recover` サブコマンドの復旧完了時に呼ぶ）
 
