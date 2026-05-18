@@ -28,7 +28,7 @@
 flowchart TD
     classDef data fill:#e6f7ff,stroke:#1f77b4,stroke-width:1px,color:#0b3d91;
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
-    classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
+    classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
 
     IMAP["internal/imap<br>FetchMetaResult"] --> EP["cmd/tlsrpt-digest<br>fetch/reprocess/gc/recover"]
     TLSRPT["internal/tlsrpt<br>Report"] --> EP
@@ -48,7 +48,7 @@ flowchart TD
 flowchart LR
     classDef data fill:#e6f7ff,stroke:#1f77b4,stroke-width:1px,color:#0b3d91;
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
-    classDef newpkg fill:#f3e8ff,stroke:#7c3aed,stroke-width:2px,color:#4c1d95;
+    classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
 
     D[("永続データ")] --> P["既存コンポーネント"] --> N["本タスクで新規追加するパッケージ"]
     class D data
@@ -81,7 +81,7 @@ flowchart LR
 graph TB
     classDef data fill:#e6f7ff,stroke:#1f77b4,stroke-width:1px,color:#0b3d91;
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
-    classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
+    classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
 
     subgraph cmd_pkg ["cmd/tlsrpt-digest/ (既存・変更予定)"]
         MAIN["main.go<br>サブコマンド制御"]
@@ -118,7 +118,7 @@ graph TB
 
     class ROOT,JSON,SENT,EDIR data
     class MAIN,IMAP,TLSRPT,NOTIFY process
-    class SVC,RT,ERR enhanced
+    class SVC,RT,ERR newpkg
 ```
 
 **Legend**
@@ -127,15 +127,15 @@ graph TB
 flowchart LR
     classDef data fill:#e6f7ff,stroke:#1f77b4,stroke-width:1px,color:#0b3d91;
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
-    classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
+    classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
 
     D[("永続データ")]
     P["既存コンポーネント"]
-    E["変更対象コンポーネント"]
+    N["新規パッケージ・型"]
 
     class D data
     class P process
-    class E enhanced
+    class N newpkg
 ```
 
 ### 2.2 コンポーネント配置と再利用方針
