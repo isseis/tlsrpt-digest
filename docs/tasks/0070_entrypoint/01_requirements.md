@@ -83,7 +83,7 @@
 - **`AC-08`**: 設定読み込みに失敗した場合、エラーメッセージを出力して終了コード 1 で終了する
 - **`AC-09`**: ストアの初期化に失敗した場合、エラーメッセージを出力して終了コード 1 で終了する
 - **`AC-10`**: `fetch` サブコマンドで IMAP 接続に失敗した場合、エラーメッセージを出力して終了コード 1 で終了する
-- **`AC-10a`**: `fetch`・`gc`・`recover`・`reprocess` の各サブコマンドは起動直後にストアデータディレクトリのロックファイル（`<data_dir>/.tlsrpt-digest-store.lock`）を `flock(2)` の排他ロック（`LOCK_EX | LOCK_NB`）で取得する。`reprocess` もストアへの書き込みを行うため（0040 store の書き込み×書き込み競合の防止として）ロック取得が必要である。取得できない場合は前回の実行が完了していないことを示す ERROR レベルのログを出力し（Slack 通知あり）、終了コード 1 で終了する（スケジュールされた処理が実行できなかったことを障害として扱い、オペレータに気づかせる）
+- **`AC-10a`**: `fetch`・`gc`・`recover`・`reprocess` の各サブコマンドは設定ファイル読み込みの直後に `{root_dir}/.tlsrpt-digest-store.lock` を `flock(2)` の排他ロック（`LOCK_EX | LOCK_NB`）で取得する。`reprocess` もストアへの書き込みを行うため（0040 store の書き込み×書き込み競合の防止として）ロック取得が必要である。取得できない場合は前回の実行が完了していないことを示す ERROR レベルのメッセージを標準エラー出力に出力して終了コード 1 で終了する。なお、ロック取得は Slack ハンドラ初期化より前に行うため、Slack 通知は行わない
 - **`AC-10b`**: 取得したロックはプロセス終了時に OS によって自動解放される。明示的な unlock 処理は不要
 - **`AC-10c`**: `summary` はストア JSON を読み取るのみであり書き込み×書き込みの競合は発生しないため、ロック取得を行わない
 
@@ -174,7 +174,7 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 - **`AC-31`**: `--before` を省略した場合、設定ファイルの保持期間設定（TOML キー名と既定値はタスク 0060 / `02_architecture.md` で確定）を使用する。設定値もない場合はエラー終了する
 - **`AC-32`**: `internal/store` の `DeleteReportsBefore(time.Now().Add(-before))` を呼び出して JSON レポートレコードを削除する
 - **`AC-32a`**: `gc` サブコマンドは `--max-email-age <duration>` フラグを受け付ける（日/週単位、`--before` と同じパーサーを共用）。省略時はデフォルト値（TOML キー名と既定値は `02_architecture.md` で確定）を使用する
-- **`AC-32b`**: `internal/store` の `DeleteEmailsBefore(cutoff, maxAge)` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する。`cutoff` は `time.Now().Add(-before)`（`--before` 値）、`maxAge` は `--max-email-age` 値を使用する。`report_end_date < cutoff` または `saved_at + maxAge < 現在時刻` のいずれかを満たすファイルが削除される
+- **`AC-32b`**: `internal/store` の `DeleteEmailsBefore(reportCutoff, savedAtCutoff)` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する。`reportCutoff` は `time.Now().Add(-before)`、`savedAtCutoff` は `--max-email-age` が指定された場合は `time.Now().Add(-maxEmailAge)`、指定されない場合はゼロ値（`time.Time{}`）を渡す（ゼロ値渡しにより `saved_at` ベースの強制削除が無効化される）
 - **`AC-33`**: JSON レコードおよび `.eml` ファイルそれぞれの削除件数を INFO レベルで構造化ログに出力する（Slack への定期通知は行わない。失敗時のみ ERROR ログ → Slack 通知）
 - **`AC-34`**: 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
 
