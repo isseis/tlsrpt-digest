@@ -52,7 +52,9 @@ flowchart LR
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
     classDef newpkg fill:#ffe8f5,stroke:#d946ef,stroke-width:2px,color:#701a75;
 
-    D[("永続データ")] --> P["既存コンポーネント"] --> N["本タスクで新規追加するパッケージ"]
+    D[("永続データ")]
+    P["既存コンポーネント"]
+    N["本タスクで新規追加するパッケージ"]
     class D data
     class P process
     class N newpkg
@@ -63,7 +65,7 @@ flowchart LR
 | 要件 | 主な設計反映箇所 |
 |---|---|
 | F-001（AC-01〜AC-06） | 2.1 全体構成、6.1 初期化フロー、3.1 Open モード定義 |
-| F-002（AC-07〜AC-10） | 3.1 `SaveReport`/`SaveReports`/`SaveEmailMetas`、6.2 保存フロー |
+| F-002（AC-07〜AC-10） | 3.1 `SaveReports`/`SaveEmailMetas`（`SaveReport` はパッケージレベル関数）、6.2 保存フロー |
 | F-003（AC-11〜AC-13） | 3.1 `GetReportsSince`、6.3 参照フロー |
 | F-004（AC-14〜AC-19） | 3.1 `SaveEmail`、6.2 保存フロー |
 | F-005（AC-20〜AC-22） | 3.1 `LoadEmails`、4.1 個別読み込み失敗の集約方針、6.4 reprocess 読み込みフロー |
@@ -91,7 +93,7 @@ graph TB
 
     subgraph store_pkg ["internal/store/ (新規)"]
         SVC["Store 実装<br>JSON/sentinel/.eml 永続化"]
-        RT["read-only open<br>read-write open"]
+        RT["OpenMode 定義<br>(OpenReadWrite / OpenReadOnly)"]
         ERR["store エラー型"]
     end
 
@@ -233,8 +235,8 @@ type Store interface {
     DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (deleted int, err error)
 }
 
-// SaveReport はインターフェース外のパッケージレベルユーティリティ関数。
-// SaveReports の単体版として提供し、Store を実装しなくてよい。
+// SaveReport は Store インターフェース外のパッケージレベルユーティリティ関数。
+// SaveReports の単体版として提供する。Store の実装（FakeStore 等）には追加不要。
 func SaveReport(s Store, input ReportInput) error {
     return s.SaveReports([]ReportInput{input})
 }
@@ -248,7 +250,7 @@ func SaveReport(s Store, input ReportInput) error {
 | `internal/store/types.go` | 永続化対象の内部モデル（report/email/sentinel）定義 | 新規 |
 | `internal/store/errors.go` | 公開エラー型・分類（不整合/IO/検証） | 新規 |
 | `internal/store/sentinel.go` | sentinel 状態管理、IMAP 識別子整合性検証 | 新規 |
-| `internal/store/reports.go` | `SaveReport`/`SaveReports`/`GetReportsSince`/`DeleteReportsBefore` | 新規 |
+| `internal/store/reports.go` | `SaveReports`/`GetReportsSince`/`DeleteReportsBefore`、ユーティリティ関数 `SaveReport` | 新規 |
 | `internal/store/emails.go` | `SaveEmail`/`SaveEmailMetas`/`LoadEmails`/`DeleteEmailsBefore` | 新規 |
 | `internal/store/recovery.go` | `SaveRecoveryRequired`/`LoadRecoveryRequired`/`ClearRecoveryRequired`/`ApplyRecovery` | 新規 |
 | `internal/store/atomicfile.go` | アトミック更新の共通 I/O ヘルパ | 新規 |
@@ -377,9 +379,13 @@ flowchart LR
 ```mermaid
 flowchart TD
     Start(["Open Store"]) --> Mode{"OpenMode"}
-    Mode -->|"ReadWrite"| RW["root_dir / emails / tlsrpt.json / sentinel を作成"]
-    RW --> ValidateRW["sentinel 存在 → IMAP identity を検証<br>不一致なら error を返す"]
-    ValidateRW --> End(["Store ready"])
+    Mode -->|"ReadWrite"| RW["root_dir / emails / tlsrpt.json を<br>存在しない場合のみ作成する"]
+    RW --> SentinelExistsRW{"sentinel<br>が存在するか？"}
+    SentinelExistsRW -->|"存在しない"| CreateSentinel["sentinel を新規作成する<br>（AC-05）"]
+    SentinelExistsRW -->|"存在する"| ValidateRW{"IMAP identity<br>が一致するか？"}
+    ValidateRW -->|"一致する"| End
+    ValidateRW -->|"不一致"| ErrRW(["error を返す<br>（AC-06）"])
+    CreateSentinel --> End
 
     Mode -->|"ReadOnly<br>(summary 用)"| SentinelExists{"sentinel<br>が存在するか？"}
     SentinelExists -->|"存在する"| ValidateRO["IMAP identity を検証<br>不一致なら error を返す<br>（AC-06）"]
@@ -439,8 +445,8 @@ sequenceDiagram
         end
     end
     ST-->>EP: "[]LoadedEmail（成功分）, error（集約済み失敗）"
-    EP->>ST: "読めたメールのメタデータを再反映する"
-    EP->>ST: "抽出できたレポート群を再保存する"
+    EP->>ST: "SaveEmailMetas() でメールメタデータを再反映する"
+    EP->>ST: "SaveReports() で抽出できたレポート群を再保存する"
     ST->>DF: "レポート集合とインデックスを更新する"
 ```
 
@@ -548,7 +554,7 @@ sequenceDiagram
 
 ### Phase 2: レポート・インデックス API
 
-1. `SaveReport`/`SaveReports`/`GetReportsSince`
+1. `SaveReports`/`GetReportsSince`（`SaveReport` ユーティリティ関数は自動導出）
 2. `SaveEmailMetas` と `report_end_date` 最大値更新
 3. `SaveEmail`（10 桁 UID ファイル名）
 
