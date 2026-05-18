@@ -135,7 +135,7 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 - **`AC-16`**: 各メールの添付 `.json.gz` をパースする
 - **`AC-16a`**: パースに失敗した場合、ERROR レベルでログを出力し Slack 通知する（`.eml` はディスクに残し手動確認対象とする。IMAP フィルタ設定ミスやメールボックス汚染の可能性がある）。当該メールの以降の処理（AC-17〜AC-19）はスキップし、次のメールの処理を継続する
 - **`AC-17`**: UNSEEN だったメールで `failure_session_count > 0` の場合、即時アラートを送信する（WARN レベル）
-- **`AC-18`**: レポートをストアに UPSERT する。このとき、当該メールの `{uid, uidvalidity, report_end_date}` をメールインデックスにも記録する（0040 F-002 AC-05b 参照）。パース失敗メールはインデックスに登録されず `DeleteEmailsBefore` の GC 対象外となる（`.eml` は手動確認後に削除する）
+- **`AC-18`**: レポートをストアに UPSERT する。このとき、当該メールのインデックスエントリの `report_end_date` を更新する（0040 F-002 AC-05b 参照）。パース失敗メールは `report_end_date` が null のまま残るが、`saved_at` による最大保持期間（`--max-email-age`）で強制削除される
 - **`AC-19`**: UNSEEN だったメールの処理完了後、SEEN マークを付与する（既に SEEN のメールは変更しない）
 - **`AC-20`**: 1 件のメール処理失敗が他のメール処理に影響しない
 - **`AC-11e`**: ステップ3の全メール処理が正常に完了した後、ステップ1で取得した現在の `UIDVALIDITY` を `internal/store` の `SaveUIDValidity(mailbox, v)` で保存する（次回実行時の比較に使用）。正常完了前に保存しないことで、未解決の UIDVALIDITY 変化が以後の `fetch` / `summary` で確実に検出される
@@ -173,7 +173,8 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 - **`AC-30`**: `gc` サブコマンドは `--before <duration>` フラグを受け付ける（日単位 `d` または週単位 `w`、`fetch` の `--since` と同じカスタムパーサーを共用する）
 - **`AC-31`**: `--before` を省略した場合、設定ファイルの保持期間設定（TOML キー名と既定値はタスク 0060 / `02_architecture.md` で確定）を使用する。設定値もない場合はエラー終了する
 - **`AC-32`**: `internal/store` の `DeleteReportsBefore(time.Now().Add(-before))` を呼び出して JSON レポートレコードを削除する
-- **`AC-32a`**: `internal/store` の `DeleteEmailsBefore(time.Now().Add(-before))` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する（`--before` の値は `AC-32` と共通）
+- **`AC-32a`**: `gc` サブコマンドは `--max-email-age <duration>` フラグを受け付ける（日/週単位、`--before` と同じパーサーを共用）。省略時はデフォルト値（TOML キー名と既定値は `02_architecture.md` で確定）を使用する
+- **`AC-32b`**: `internal/store` の `DeleteEmailsBefore(cutoff, maxAge)` を呼び出してメールインデックスおよび対応する `.eml` ファイルを削除する。`cutoff` は `time.Now().Add(-before)`（`--before` 値）、`maxAge` は `--max-email-age` 値を使用する。`report_end_date < cutoff` または `saved_at + maxAge < 現在時刻` のいずれかを満たすファイルが削除される
 - **`AC-33`**: JSON レコードおよび `.eml` ファイルそれぞれの削除件数を INFO レベルで構造化ログに出力する（Slack への定期通知は行わない。失敗時のみ ERROR ログ → Slack 通知）
 - **`AC-34`**: 正常終了の場合は終了コード 0、エラー終了の場合は終了コード 1 で終了する
 
