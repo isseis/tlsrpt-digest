@@ -253,7 +253,7 @@
   - 作業内容:
     - `main.go` にサブコマンドに応じた open モード選択ロジックを追加する（`fetch`/`gc`/`reprocess`/`recover` は `OpenReadWrite`、`summary` は `OpenReadOnly`）
     - `main_test.go` に `FakeStore` を使ったエントリポイントからの store 利用シナリオを追加する
-  - 完了判定: `go test ./cmd/tlsrpt-digest/...` がすべて通ること
+  - 完了判定: `go test -tags test ./cmd/tlsrpt-digest/...` がすべて通ること
 
 - [ ] **4.3** 最終品質チェック
   - 作業内容:
@@ -390,7 +390,7 @@
 - 実装: `internal/store/emails.go`（SaveEmailMetas）
 
 **AC-09**（書き込みがアトミックに行われる）
-- テスト: `internal/store/reports_test.go` および `internal/store/emails_test.go` 各 Atomic テスト
+- テスト: `internal/store/reports_test.go::TestSaveReports_AtomicWrite`、`internal/store/emails_test.go::TestSaveEmailMetas_AtomicWrite`
 - 実装: `internal/store/atomicfile.go`
 
 **AC-10**（保存失敗時にエラーが返る）
@@ -462,7 +462,7 @@
 - 実装: `internal/store/reports.go`
 
 **AC-27**（削除後の書き込みもアトミック rename で行う）
-- テスト: AC-25 のテストで一時ファイルが残らないことを合わせて確認
+- テスト: `internal/store/reports_test.go::TestDeleteReportsBefore_AtomicWrite`
 - 実装: `internal/store/reports.go` / `internal/store/atomicfile.go`
 
 **AC-28**（削除が冪等に動作する）
@@ -510,11 +510,11 @@
 - 実装: `internal/store/recovery.go`（ApplyRecovery）
 
 **AC-37**（本パッケージが作成するすべてのファイルが `0600`）
-- テスト: `internal/store/store_test.go::TestOpen_FilePermissions`（および各 API テスト内）
+- テスト: `internal/store/store_test.go::TestOpen_FilePermissions`
 - 実装: `internal/store/atomicfile.go` / `internal/store/emails.go`
 
 **AC-38**（本パッケージが作成するすべてのディレクトリが `0700`）
-- テスト: `internal/store/store_test.go::TestOpen_DirPermissions`（および各 API テスト内）
+- テスト: `internal/store/store_test.go::TestOpen_DirPermissions`
 - 実装: `internal/store/permission.go` / `internal/store/store.go` / `internal/store/emails.go`
 
 **AC-39**（緩いパーミッションへの WARN 出力・自動修正なし）
