@@ -91,7 +91,7 @@
 
 ### Phase 2: レポート・インデックス API
 
-- [ ] **2.1** レポート保存・取得 API の実装
+- [x] **2.1** レポート保存・取得 API の実装
   - ファイル: `internal/store/reports.go`
   - 作業内容:
     - `tlsrpt.json` の読み込みとスキーマバージョン検証を実装する
@@ -102,7 +102,7 @@
     - `GetReportsSince(since time.Time) ([]tlsrpt.Report, error)` を実装する：`DateRange.EndDatetime >= since` でフィルタし、対象がない場合は空スライスを返す（`AC-11`・`AC-12`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **2.2** レポート API のテスト実装
+- [x] **2.2** レポート API のテスト実装
   - ファイル: `internal/store/reports_test.go`
   - 作業内容:
     - `SaveReport` → `GetReportsSince` のラウンドトリップで全フィールド（`failure-details`・`policy-string`・`mx-host` 含む）が一致すること（`AC-07`・`AC-13`）
@@ -115,7 +115,7 @@
     - 書き込み失敗時にエラーが返ること（`AC-10`）
   - 完了判定: `go test ./internal/store/...` がすべて通ること
 
-- [ ] **2.3** メール保存 API の実装
+- [x] **2.3** メール保存 API の実装
   - ファイル: `internal/store/emails.go`（SaveEmail・SaveEmailMetas 部分）
   - 作業内容:
     - `SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time, rawEML []byte) error` を実装する：
@@ -129,7 +129,7 @@
       - アトミック rename で書き戻す（`AC-09`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **2.4** メール保存 API のテスト実装
+- [x] **2.4** メール保存 API のテスト実装
   - ファイル: `internal/store/emails_test.go`（保存部分）
   - 作業内容:
     - `SaveEmail` 後に `{root_dir}/emails/{uidvalidity}/{YYYYMM}/0000000123.eml` が `mail.ReadMessage` でパース可能な状態で作成されること（`AC-14`・`AC-15`・`AC-16`）
@@ -198,6 +198,7 @@
       - ファイル削除を先に行い、その後インデックスをアトミック更新する（`AC-30`）
       - `.eml` が既に存在しない場合は非エラーとして扱い、インデックスエントリを除去して継続する（`AC-31`）
       - 個別削除で I/O エラーが発生しても全体を継続し、`errors.Join` で集約したエラーと成功件数を返す（`AC-32a`）
+      - `savedAtCutoff` が非ゼロの場合、インデックスベース削除の完了後に `emails/{uidvalidity}/{YYYYMM}` ディレクトリを走査し、`YYYYMM < savedAtCutoff の年月` のディレクトリを `os.RemoveAll` で削除する。エラーは WARN ログに記録して継続する（`AC-32b`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
 - [ ] **3.6** `.eml` GC のテスト実装
@@ -210,6 +211,8 @@
     - ファイルが既に存在しないエントリを対象とした場合に冪等動作すること（`AC-31`）
     - 削除 0 件で `err = nil` が返ること（`AC-32`）
     - 削除不能ファイルが混在するとき、成功件数と集約エラーが返り、失敗エントリのインデックスが残ること（`AC-32a`）
+    - `savedAtCutoff` が非ゼロのとき、カットオフ年月より前の `{uidvalidity}/{YYYYMM}` ディレクトリが丸ごと削除され、インデックス外の孤立 `.eml` も除去されること（`AC-32b`）
+    - `savedAtCutoff` がゼロ値のときディレクトリスイープが実行されないこと（`AC-32b`）
   - 完了判定: `go test ./internal/store/...` がすべて通ること
 
 - [ ] **3.7** UIDVALIDITY および recovery API の実装
