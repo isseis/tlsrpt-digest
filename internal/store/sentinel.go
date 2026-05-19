@@ -23,6 +23,8 @@ func sentinelPath(rootDir string) string {
 // Returns (nil, found=false, err!=nil) on other errors.
 func loadSentinel(rootDir string) (*internalSentinelFile, bool, error) {
 	path := sentinelPath(rootDir)
+	// G304: The path is constructed from rootDir, which is an application-controlled
+	// directory path set during store initialization — not user-supplied input.
 	data, err := os.ReadFile(path) //nolint:gosec
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, false, nil

@@ -2,9 +2,14 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
+
+// ErrReadOnly is returned when a write operation is attempted on a store
+// opened in read-only mode.
+var ErrReadOnly = errors.New("store: cannot write in read-only mode")
 
 // ErrStoreIdentityMismatch is returned when the sentinel's IMAP identity
 // does not match the expected identity provided to Open.

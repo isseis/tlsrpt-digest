@@ -54,8 +54,6 @@ func ensureDirExists(dirPath string) error {
 }
 
 // checkFilePermissions logs a warning if a file has less restrictive permissions than 0600.
-// Currently unused in Phase 1 but will be called in later phases during permission validation.
-//nolint:unused
 func checkFilePermissions(filePath string) error {
 	info, err := os.Stat(filePath)
 	if err != nil {

@@ -258,6 +258,7 @@ func TestAtomicWriteFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify file exists and has correct content
+	// G304: targetPath is constructed from t.TempDir(), which is always a safe test directory.
 	content, err := os.ReadFile(targetPath) //nolint:gosec
 	require.NoError(t, err)
 	assert.Equal(t, testData, content)
@@ -282,6 +283,7 @@ func TestAtomicWriteFile_Overwrite(t *testing.T) {
 	err = atomicWriteFile(targetPath, []byte("second"))
 	require.NoError(t, err)
 
+	// G304: targetPath is constructed from t.TempDir(), which is always a safe test directory.
 	content, err := os.ReadFile(targetPath) //nolint:gosec
 	require.NoError(t, err)
 	assert.Equal(t, []byte("second"), content)

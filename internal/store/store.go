@@ -2,12 +2,17 @@
 package store
 
 import (
+	"errors"
 	"fmt"
-	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/isseis/tlsrpt-digest/internal/tlsrpt"
 )
+
+// errNotImplemented is a placeholder error for stub methods that will be
+// implemented in later phases (Phase 2 and Phase 3).
+var errNotImplemented = errors.New("store: not implemented")
 
 // Store represents the persistence layer for TLSRPT reports and emails.
 // All operations are assumed to be called from a single writer (ensured by external scheduler).
@@ -38,8 +43,6 @@ type Store interface {
 	// Creates emails/{uidvalidity}/{YYYYMM}/ directories as needed.
 	// Implements AC-14..AC-18 per 03_implementation_plan.md.
 	SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time, rawEML []byte) error
-
-	// SaveEmailMetas (already declared above)
 
 	// LoadEmails retrieves all saved emails with index entries.
 	// Partial failures (individual .eml parse failures) are aggregated via errors.Join.
@@ -154,10 +157,9 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 		}
 	}
 
-	// Check permissions on root directory (if it exists and is not read-only)
-	if !readOnly {
-		_, _ = os.Stat(rootDir)
-		// Permission warnings are logged by checkFilePermissions if called
+	// Check permissions on existing sentinel file and warn if loose.
+	if sentinelExists {
+		_ = checkFilePermissions(sentinelPath(rootDir))
 	}
 
 	store := &storeImpl{
@@ -173,119 +175,119 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 	return store, nil
 }
 
-// Helper function to get emails directory path
+// emailsPath returns the path to the emails directory within rootDir.
 func emailsPath(rootDir string) string {
-	return fmt.Sprintf("%s/emails", rootDir)
+	return filepath.Join(rootDir, "emails")
 }
 
-// Helper function to get data file path
+// dataFilePath returns the path to the JSON data file within rootDir.
 func dataFilePath(rootDir string) string {
-	return fmt.Sprintf("%s/tlsrpt.json", rootDir)
+	return filepath.Join(rootDir, "tlsrpt.json")
 }
 
 // SaveReports implements Store.SaveReports.
 // TODO: Phase 2 implementation
 func (s *storeImpl) SaveReports(_ []ReportInput) error {
 	if s.readOnly {
-		return fmt.Errorf("store: cannot write in read-only mode") //nolint:err113
+		return ErrReadOnly
 	}
-	return fmt.Errorf("not implemented") //nolint:err113
+	return errNotImplemented
 }
 
 // SaveEmailMetas implements Store.SaveEmailMetas.
 // TODO: Phase 2 implementation
 func (s *storeImpl) SaveEmailMetas(_ []EmailMeta) error {
 	if s.readOnly {
-		return fmt.Errorf("store: cannot write in read-only mode") //nolint:err113
+		return ErrReadOnly
 	}
-	return fmt.Errorf("not implemented") //nolint:err113
+	return errNotImplemented
 }
 
 // GetReportsSince implements Store.GetReportsSince.
 // TODO: Phase 2 implementation
 func (s *storeImpl) GetReportsSince(_ time.Time) ([]tlsrpt.Report, error) {
-	return nil, fmt.Errorf("not implemented") //nolint:err113
+	return nil, errNotImplemented
 }
 
 // SaveEmail implements Store.SaveEmail.
 // TODO: Phase 2 implementation
 func (s *storeImpl) SaveEmail(_, _ uint32, _, _ time.Time, _ []byte) error {
 	if s.readOnly {
-		return fmt.Errorf("store: cannot write in read-only mode") //nolint:err113
+		return ErrReadOnly
 	}
-	return fmt.Errorf("not implemented") //nolint:err113
+	return errNotImplemented
 }
 
 // LoadEmails implements Store.LoadEmails.
 // TODO: Phase 3 implementation
 func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
-	return nil, fmt.Errorf("not implemented") //nolint:err113
+	return nil, errNotImplemented
 }
 
 // SaveUIDValidity implements Store.SaveUIDValidity.
 // TODO: Phase 3 implementation
 func (s *storeImpl) SaveUIDValidity(_ uint32) error {
 	if s.readOnly {
-		return fmt.Errorf("store: cannot write in read-only mode") //nolint:err113
+		return ErrReadOnly
 	}
-	return fmt.Errorf("not implemented") //nolint:err113
+	return errNotImplemented
 }
 
 // LoadUIDValidity implements Store.LoadUIDValidity.
 // TODO: Phase 3 implementation
 func (s *storeImpl) LoadUIDValidity() (v uint32, found bool, err error) {
-	return 0, false, fmt.Errorf("not implemented") //nolint:err113
+	return 0, false, errNotImplemented
 }
 
 // SaveRecoveryRequired implements Store.SaveRecoveryRequired.
 // TODO: Phase 3 implementation
 func (s *storeImpl) SaveRecoveryRequired(_, _ uint32, _ time.Time) error {
 	if s.readOnly {
-		return fmt.Errorf("store: cannot write in read-only mode") //nolint:err113
+		return ErrReadOnly
 	}
-	return fmt.Errorf("not implemented") //nolint:err113
+	return errNotImplemented
 }
 
 // LoadRecoveryRequired implements Store.LoadRecoveryRequired.
 // TODO: Phase 3 implementation
 func (s *storeImpl) LoadRecoveryRequired() (prev, curr uint32, detectedAt time.Time, found bool, err error) {
-	return 0, 0, time.Time{}, false, fmt.Errorf("not implemented") //nolint:err113
+	return 0, 0, time.Time{}, false, errNotImplemented
 }
 
 // ClearRecoveryRequired implements Store.ClearRecoveryRequired.
 // TODO: Phase 3 implementation
 func (s *storeImpl) ClearRecoveryRequired() error {
 	if s.readOnly {
-		return fmt.Errorf("store: cannot write in read-only mode") //nolint:err113
+		return ErrReadOnly
 	}
-	return fmt.Errorf("not implemented") //nolint:err113
+	return errNotImplemented
 }
 
 // ApplyRecovery implements Store.ApplyRecovery.
 // TODO: Phase 3 implementation
 func (s *storeImpl) ApplyRecovery(_ uint32) error {
 	if s.readOnly {
-		return fmt.Errorf("store: cannot write in read-only mode") //nolint:err113
+		return ErrReadOnly
 	}
-	return fmt.Errorf("not implemented") //nolint:err113
+	return errNotImplemented
 }
 
 // DeleteReportsBefore implements Store.DeleteReportsBefore.
 // TODO: Phase 3 implementation
 func (s *storeImpl) DeleteReportsBefore(_ time.Time) (deleted int, err error) {
 	if s.readOnly {
-		return 0, fmt.Errorf("store: cannot write in read-only mode") //nolint:err113
+		return 0, ErrReadOnly
 	}
-	return 0, fmt.Errorf("not implemented") //nolint:err113
+	return 0, errNotImplemented
 }
 
 // DeleteEmailsBefore implements Store.DeleteEmailsBefore.
 // TODO: Phase 3 implementation
 func (s *storeImpl) DeleteEmailsBefore(_, _ time.Time) (deleted int, err error) {
 	if s.readOnly {
-		return 0, fmt.Errorf("store: cannot write in read-only mode") //nolint:err113
+		return 0, ErrReadOnly
 	}
-	return 0, fmt.Errorf("not implemented") //nolint:err113
+	return 0, errNotImplemented
 }
 
 // SaveReport is a package-level utility function that saves a single report.
