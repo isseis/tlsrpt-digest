@@ -306,7 +306,8 @@ func TestAtomicWriteFile_Overwrite(t *testing.T) {
 	assert.Equal(t, []byte("second"), content)
 }
 
-// TestErrStoreIdentityMismatch_Error tests error message format.
+// TestErrStoreIdentityMismatch_Error verifies that ErrStoreIdentityMismatch.Error()
+// includes the expected host, the actual host, and the root directory path.
 func TestErrStoreIdentityMismatch_Error(t *testing.T) {
 	err := &ErrStoreIdentityMismatch{
 		RootDir:         "/data/store",
@@ -317,35 +318,31 @@ func TestErrStoreIdentityMismatch_Error(t *testing.T) {
 		ActualPort:      993,
 		ActualMailbox:   "INBOX",
 	}
-
-	msg := err.Error()
-	assert.Contains(t, msg, "identity mismatch")
-	assert.Contains(t, msg, "expected.com")
-	assert.Contains(t, msg, "actual.com")
+	assert.ErrorContains(t, err, "expected.com")
+	assert.ErrorContains(t, err, "actual.com")
+	assert.ErrorContains(t, err, "/data/store")
 }
 
-// TestErrUnsupportedSchemaVersion_Error tests error message format.
+// TestErrUnsupportedSchemaVersion_Error verifies that ErrUnsupportedSchemaVersion.Error()
+// includes the file path and the unsupported version number.
 func TestErrUnsupportedSchemaVersion_Error(t *testing.T) {
 	err := &ErrUnsupportedSchemaVersion{
 		File:    "/data/store/.tlsrpt-digest-meta.json",
 		Version: 999,
 	}
-
-	msg := err.Error()
-	assert.Contains(t, msg, "unsupported schema version")
-	assert.Contains(t, msg, "999")
+	assert.ErrorContains(t, err, "/data/store/.tlsrpt-digest-meta.json")
+	assert.ErrorContains(t, err, "999")
 }
 
-// TestErrAtomicWriteFailed_Error tests error message format.
+// TestErrAtomicWriteFailed_Error verifies that ErrAtomicWriteFailed.Error()
+// includes the target file path and the failed operation name.
 func TestErrAtomicWriteFailed_Error(t *testing.T) {
 	err := &ErrAtomicWriteFailed{
 		File: "/data/store/tlsrpt.json",
 		Op:   "rename",
 	}
-
-	msg := err.Error()
-	assert.Contains(t, msg, "atomic write failed")
-	assert.Contains(t, msg, "rename")
+	assert.ErrorContains(t, err, "/data/store/tlsrpt.json")
+	assert.ErrorContains(t, err, "rename")
 }
 
 // TestSentinelPath tests sentinel path construction.
