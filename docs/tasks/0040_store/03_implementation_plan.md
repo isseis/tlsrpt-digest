@@ -81,7 +81,7 @@
     - 2 回目の `Open` で既存データが失われないこと（``AC-04``）
     - `OpenReadOnly` でファイルが新規作成されず、`GetReportsSince` が空スライスを返すこと（``AC-04a``）
     - sentinel 新規作成で IMAP識別子と `initialized_at` が記録されること（``AC-05``）
-    - 異なる IMAP識別子で `Open` すると `ErrStoreIdentityMismatch` が返り、エラーメッセージに期待値・実値・`root_dir` が含まれること（``AC-06``、`errors.Is` で型を検証）
+    - 異なる IMAP識別子で `Open` すると `ErrStoreIdentityMismatch` が返り、エラーメッセージに期待値・実値・`root_dir` が含まれること（`AC-06`、`errors.AsType` で型を検証）
     - 未知 `format_version` を持つ sentinel 読み込み時にエラーが返ること
     - 作成ファイルのパーミッションが `0600`、作成ディレクトリのパーミッションが `0700` であること（``AC-37``・``AC-38``）
     - 緩いパーミッションのディレクトリを事前作成して `Open` すると `slog.Warn` が出力され、パーミッションが変更されないこと（``AC-39``）
@@ -363,7 +363,7 @@
 `AC-06`（sentinel IMAP識別子不一致でエラーが返る）
 - テスト: `internal/store/store_test.go::TestOpen_SentinelIdentityMismatch`
 - 実装: `internal/store/sentinel.go`（initSentinel）
-- 検証方法: `errors.Is` で `ErrStoreIdentityMismatch` の型を確認し、エラーメッセージに期待値・実値・`root_dir` が含まれることを確認
+- 検証方法: `errors.AsType[*ErrStoreIdentityMismatch]` で型を確認し、エラーメッセージに期待値・実値・`root_dir` が含まれることを確認
 
 `AC-07`（`tlsrpt.Report` の全フィールドを保存する）
 - テスト: `internal/store/reports_test.go::TestSaveReports_AllFieldsPreserved`
