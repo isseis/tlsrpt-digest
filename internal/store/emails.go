@@ -293,6 +293,16 @@ func (s *storeImpl) DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (d
 		deleted++
 	}
 
+	// Skip the write when nothing changed: no entries deleted and no per-file
+	// errors accumulated. An unnecessary write could itself fail and return an
+	// error on an otherwise empty run, violating AC-32.
+	if deleted == 0 && len(deleteErrs) == 0 {
+		if !savedAtCutoff.IsZero() {
+			s.sweepOrphanedEmailDirs(savedAtCutoff, surviving)
+		}
+		return 0, nil
+	}
+
 	// Write updated index atomically.
 	df.Emails = surviving
 	if saveErr := s.saveDataFile(df); saveErr != nil {

@@ -6,14 +6,13 @@ import (
 	"time"
 )
 
-// SaveUIDValidity implements Store.SaveUIDValidity.
-func (s *storeImpl) SaveUIDValidity(v uint32) error {
-	if s.readOnly {
-		return ErrReadOnly
-	}
+// loadOrInitSentinelForWrite loads the sentinel for modification.
+// If the sentinel file does not exist, it returns a freshly initialised
+// sentinel so callers can modify and persist it without a separate nil check.
+func (s *storeImpl) loadOrInitSentinelForWrite() (*internalSentinelFile, error) {
 	sentinel, _, err := loadSentinel(s.rootDir)
 	if err != nil {
-		return fmt.Errorf("SaveUIDValidity: load sentinel: %w", err)
+		return nil, err
 	}
 	if sentinel == nil {
 		sentinel = &internalSentinelFile{
@@ -23,6 +22,18 @@ func (s *storeImpl) SaveUIDValidity(v uint32) error {
 			IMAPMailbox:   s.identity.Mailbox,
 			InitializedAt: time.Now().UTC(),
 		}
+	}
+	return sentinel, nil
+}
+
+// SaveUIDValidity implements Store.SaveUIDValidity.
+func (s *storeImpl) SaveUIDValidity(v uint32) error {
+	if s.readOnly {
+		return ErrReadOnly
+	}
+	sentinel, err := s.loadOrInitSentinelForWrite()
+	if err != nil {
+		return fmt.Errorf("SaveUIDValidity: load sentinel: %w", err)
 	}
 	sentinel.UIDValidity = &v
 	if err := saveSentinel(s.rootDir, sentinel); err != nil {
@@ -49,18 +60,9 @@ func (s *storeImpl) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time
 	if s.readOnly {
 		return ErrReadOnly
 	}
-	sentinel, _, err := loadSentinel(s.rootDir)
+	sentinel, err := s.loadOrInitSentinelForWrite()
 	if err != nil {
 		return fmt.Errorf("SaveRecoveryRequired: load sentinel: %w", err)
-	}
-	if sentinel == nil {
-		sentinel = &internalSentinelFile{
-			FormatVersion: SentinelFormatVersion,
-			IMAPHost:      s.identity.Host,
-			IMAPPort:      s.identity.Port,
-			IMAPMailbox:   s.identity.Mailbox,
-			InitializedAt: time.Now().UTC(),
-		}
 	}
 	sentinel.RecoveryRequired = &internalRecoveryState{
 		PrevUIDValidity: prev,
@@ -112,18 +114,9 @@ func (s *storeImpl) ApplyRecovery(newUIDValidity uint32) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
-	sentinel, _, err := loadSentinel(s.rootDir)
+	sentinel, err := s.loadOrInitSentinelForWrite()
 	if err != nil {
 		return fmt.Errorf("ApplyRecovery: load sentinel: %w", err)
-	}
-	if sentinel == nil {
-		sentinel = &internalSentinelFile{
-			FormatVersion: SentinelFormatVersion,
-			IMAPHost:      s.identity.Host,
-			IMAPPort:      s.identity.Port,
-			IMAPMailbox:   s.identity.Mailbox,
-			InitializedAt: time.Now().UTC(),
-		}
 	}
 	sentinel.UIDValidity = &newUIDValidity
 	sentinel.RecoveryRequired = nil
