@@ -16,12 +16,14 @@ import (
 	"github.com/isseis/tlsrpt-digest/internal/tlsrpt"
 )
 
-type emailKey struct {
+// EmailKey is the map key for the Emails index: (UID, UIDValidity) pair.
+type EmailKey struct {
 	UID         uint32
 	UIDValidity uint32
 }
 
-type fakeEmailEntry struct {
+// FakeEmailEntry holds the in-memory state for a single email in FakeStore.
+type FakeEmailEntry struct {
 	UID           uint32
 	UIDValidity   uint32
 	SentAt        time.Time
@@ -46,15 +48,15 @@ type FakeStore struct {
 	UIDValidity *uint32
 	// Recovery holds the current recovery_required state; nil means no recovery.
 	Recovery *FakeRecovery
-
-	emails map[emailKey]*fakeEmailEntry
+	// Emails maps (UID, UIDValidity) to the stored email entry.
+	Emails map[EmailKey]*FakeEmailEntry
 }
 
 // NewFakeStore returns an empty FakeStore ready for use.
 func NewFakeStore() *FakeStore {
 	return &FakeStore{
 		Reports: make(map[string]tlsrpt.Report),
-		emails:  make(map[emailKey]*fakeEmailEntry),
+		Emails:  make(map[EmailKey]*FakeEmailEntry),
 	}
 }
 
@@ -63,14 +65,14 @@ func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
 	for _, input := range inputs {
 		f.Reports[input.Report.ReportID] = input.Report
 
-		key := emailKey{input.UID, input.UIDValidity}
-		if _, ok := f.emails[key]; !ok {
-			f.emails[key] = &fakeEmailEntry{UID: input.UID, UIDValidity: input.UIDValidity}
+		key := EmailKey{input.UID, input.UIDValidity}
+		if _, ok := f.Emails[key]; !ok {
+			f.Emails[key] = &FakeEmailEntry{UID: input.UID, UIDValidity: input.UIDValidity}
 		}
 		end := input.Report.DateRange.EndDatetime
-		if f.emails[key].ReportEndDate == nil || end.After(*f.emails[key].ReportEndDate) {
+		if f.Emails[key].ReportEndDate == nil || end.After(*f.Emails[key].ReportEndDate) {
 			endCopy := end
-			f.emails[key].ReportEndDate = &endCopy
+			f.Emails[key].ReportEndDate = &endCopy
 		}
 	}
 	return nil
@@ -84,8 +86,8 @@ func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
 			sentAt = meta.SavedAt
 		}
 
-		key := emailKey{meta.UID, meta.UIDValidity}
-		if existing, ok := f.emails[key]; ok {
+		key := EmailKey{meta.UID, meta.UIDValidity}
+		if existing, ok := f.Emails[key]; ok {
 			// Fill in SentAt/SavedAt only for placeholder entries (created by SaveReports
 			// before SaveEmailMetas ran, so RawEML == nil).
 			if existing.RawEML == nil {
@@ -98,7 +100,7 @@ func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
 			}
 			continue
 		}
-		f.emails[key] = &fakeEmailEntry{
+		f.Emails[key] = &FakeEmailEntry{
 			UID:         meta.UID,
 			UIDValidity: meta.UIDValidity,
 			SentAt:      sentAt,
@@ -121,27 +123,27 @@ func (f *FakeStore) GetReportsSince(since time.Time) ([]tlsrpt.Report, error) {
 
 // SaveEmail implements store.Store.
 func (f *FakeStore) SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time, rawEML []byte) error {
-	key := emailKey{uid, uidValidity}
-	if existing, ok := f.emails[key]; ok && existing.RawEML != nil {
+	key := EmailKey{uid, uidValidity}
+	if existing, ok := f.Emails[key]; ok && existing.RawEML != nil {
 		return nil // idempotent
 	}
-	if _, ok := f.emails[key]; !ok {
-		f.emails[key] = &fakeEmailEntry{UID: uid, UIDValidity: uidValidity}
+	if _, ok := f.Emails[key]; !ok {
+		f.Emails[key] = &FakeEmailEntry{UID: uid, UIDValidity: uidValidity}
 	}
-	f.emails[key].SentAt = sentAt
-	f.emails[key].SavedAt = savedAt
+	f.Emails[key].SentAt = sentAt
+	f.Emails[key].SavedAt = savedAt
 	rawCopy := make([]byte, len(rawEML))
 	copy(rawCopy, rawEML)
-	f.emails[key].RawEML = rawCopy
+	f.Emails[key].RawEML = rawCopy
 	return nil
 }
 
 // LoadEmails implements store.Store.
 func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
-	result := make([]store.LoadedEmail, 0, len(f.emails))
+	result := make([]store.LoadedEmail, 0, len(f.Emails))
 	var errs []error
 
-	for _, entry := range f.emails {
+	for _, entry := range f.Emails {
 		if entry.RawEML == nil {
 			continue
 		}
@@ -238,7 +240,7 @@ func (f *FakeStore) DeleteReportsBefore(cutoff time.Time) (int, error) {
 // DeleteEmailsBefore implements store.Store.
 func (f *FakeStore) DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (int, error) {
 	deleted := 0
-	for key, entry := range f.emails {
+	for key, entry := range f.Emails {
 		shouldDelete := false
 		if entry.ReportEndDate != nil && entry.ReportEndDate.Before(reportCutoff) {
 			shouldDelete = true
@@ -247,7 +249,7 @@ func (f *FakeStore) DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (i
 			shouldDelete = true
 		}
 		if shouldDelete {
-			delete(f.emails, key)
+			delete(f.Emails, key)
 			deleted++
 		}
 	}
