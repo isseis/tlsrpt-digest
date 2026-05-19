@@ -122,7 +122,7 @@ func (s *storeImpl) GetReportsSince(since time.Time) ([]tlsrpt.Report, error) {
 		return nil, fmt.Errorf("GetReportsSince: load data file: %w", err)
 	}
 
-	result := []tlsrpt.Report{}
+	result := make([]tlsrpt.Report, 0, len(df.Reports))
 	for _, r := range df.Reports {
 		// Include reports whose end-datetime is not before since (i.e., >= since).
 		if !r.DateRange.EndDatetime.Before(since) {
