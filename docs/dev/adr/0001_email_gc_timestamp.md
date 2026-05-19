@@ -79,6 +79,8 @@ GC 判定を `report_end_date < reportCutoff`（外部制御）と `saved_at < s
 - メールインデックスに `report_end_date` を持たない
 - ディレクトリ名と GC 基準日時の直接比較は行わず、GC 後に空になった `{uidvalidity}/{YYYYMM}` および `{uidvalidity}` ディレクトリを削除する
 
+GC 基準に `INTERNALDATE` ではなく `SavedAt` を採用する理由：GC の目的は「本システムがファイルを保持し始めてから N 日後に削除する」という保持期間の管理であり、これはローカル制御の値（`SavedAt`：本システムがダウンロードした日時）で計測するのが自然である。`INTERNALDATE` は IMAP サーバーが設定する外部値（信頼性：中）であり、サーバーの時計のずれや意図的な設定によって保持期間が意図せず変化するリスクがある。
+
 真に孤立した `.eml` ファイル（インデックスに存在しないファイル）の清掃は `reprocess` サブコマンドが全 `.eml` を再帰走査するため、ディレクトリスイープがなくても自然に回収される。
 
 ### 選択肢 D: `internal/tlsrpt.Parse()` に date-range バリデーションを追加する
