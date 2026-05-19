@@ -16,10 +16,9 @@
 
 ### 1.1 設計原則
 
-- **信頼できる日時のみを GC 判定に使う**: `.eml` の GC 基準をローカル制御の `saved_at` に一本化し、送信側が設定する `report_end_date` への依存を排除する
+- **信頼できる日時のみを使う**: GC 判定は `saved_at`（ローカル制御）に、パス決定は `INTERNALDATE`（IMAP サーバー制御）に一本化し、送信側が設定する値への依存を排除する
 - **責務の分離を維持する**: `SaveReports` はレポートレコードの永続化に専念し、メールインデックスを変更しない
-- **削除コードを減らす**: `sweepOrphanedEmailDirs` を廃止することで、`sent_at` と `saved_at` の月差異に起因するディレクトリ誤削除のリスクを根本から除去する
-- **後方互換性を保つ**: `encoding/json` の標準動作（未知フィールドは無視）により、既存の `tlsrpt.json` はマイグレーションなしに読み込める
+- **削除コードを減らす**: `sweepOrphanedEmailDirs` を廃止することで、日時の月差異に起因するディレクトリ誤削除のリスクを根本から除去する
 
 ### 1.2 変更前後の概念モデル
 
@@ -70,7 +69,7 @@ flowchart TD
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
 
     SR["SaveReports"] -->|"レポートのみ更新"| RPT[("レポートレコード")]
-    DEB["DeleteEmailsBefore<br>(savedAtCutoff)"] -->|"読む"| IDX[("メールインデックス<br>uid / uidvalidity<br>sent_at / saved_at")]
+    DEB["DeleteEmailsBefore<br>(savedAtCutoff)"] -->|"読む"| IDX[("メールインデックス<br>uid / uidvalidity<br>internal_date / saved_at")]
     DEB -->|"条件: saved_at < savedAtCutoff"| DEL["削除<br>（ローカル制御のみ）"]
 
     class RPT,IDX data
@@ -111,9 +110,13 @@ graph TB
 
     subgraph store_pkg ["internal/store/ （変更）"]
         IFACE["store.go<br>Store インターフェース"]
-        TYPES["types.go<br>internalEmailIndexEntry"]
+        TYPES["types.go<br>EmailMeta / LoadedEmail<br>internalEmailIndexEntry"]
         RPT["reports.go<br>SaveReports"]
-        EML["emails.go<br>DeleteEmailsBefore"]
+        EML["emails.go<br>SaveEmail / SaveEmailMetas<br>DeleteEmailsBefore"]
+    end
+
+    subgraph testutil_pkg ["internal/store/testutil/ （変更）"]
+        MOCK["mocks.go<br>FakeStore / FakeEmailEntry"]
     end
 
     subgraph data_pkg ["ストレージ"]
@@ -127,12 +130,14 @@ graph TB
     EML --> JSON
     EML --> EMLF
     TYPES -.->|"定義"| JSON
+    MOCK -.->|"実装"| IFACE
 
     class IFACE,TYPES,RPT,EML enhanced
+    class MOCK enhanced
     class JSON,EMLF data
 ```
 
-矢印 `A --> B` は「A が B を使う・書き込む」を表す。破線 `A -.-> B` は「A が B の構造を定義する」を表す。
+矢印 `A --> B` は「A が B を使う・書き込む」を表す。破線 `A -.-> B` は「A が B の構造を定義・実装する」を表す。
 
 **Legend**
 
@@ -152,12 +157,13 @@ flowchart LR
 
 | ファイル | 変更種別 | 変更内容 |
 |---|---|---|
-| `internal/store/store.go` | 変更 | `Store` インターフェースの `DeleteEmailsBefore` シグネチャを更新、ドキュメントコメントを修正 |
-| `internal/store/types.go` | 変更 | `internalEmailIndexEntry` から `ReportEndDate` フィールドを削除 |
-| `internal/store/reports.go` | 変更 | `SaveReports` からメールインデックス更新ロジック（`report_end_date` 更新・プレースホルダー作成）を削除。`SaveEmailMetas` の「プレースホルダー救済」ロジックも不要となるため合わせて削除 |
-| `internal/store/emails.go` | 変更 | `DeleteEmailsBefore` のシグネチャ変更と削除ロジック簡略化、`sweepOrphanedEmailDirs` を削除 |
+| `internal/store/store.go` | 変更 | `Store` インターフェースの `SaveEmail`・`DeleteEmailsBefore` シグネチャ更新、ドキュメントコメント修正 |
+| `internal/store/types.go` | 変更 | `EmailMeta.SentAt` → `InternalDate`、`LoadedEmail.SentAt` 削除、`internalEmailIndexEntry.SentAt` → `InternalDate`（JSON: `internal_date`）、`ReportEndDate` 削除 |
+| `internal/store/reports.go` | 変更 | `SaveReports` からメールインデックス更新ロジック（`report_end_date` 更新・プレースホルダー作成）を削除 |
+| `internal/store/emails.go` | 変更 | `SaveEmail` のシグネチャ変更（`sentAt` → `internalDate`）、`SaveEmailMetas` のプレースホルダー補填ロジック削除、`DeleteEmailsBefore` のシグネチャ変更と削除ロジック簡略化、`sweepOrphanedEmailDirs` を削除して空ディレクトリ削除を追加 |
 | `internal/store/emails_test.go` | 変更 | 新シグネチャ対応・テスト追加・不要テスト削除 |
 | `internal/store/reports_test.go` | 変更 | `SaveReports` がメールインデックスを変更しないことの確認テスト追加・不要テスト削除 |
+| `internal/store/testutil/mocks.go` | 変更 | `FakeEmailEntry.SentAt` → `InternalDate`、`FakeStore.SaveEmail` のシグネチャ変更 |
 
 ### 2.3 データフロー
 
@@ -170,10 +176,10 @@ sequenceDiagram
     participant EF as "emails/"
     participant DF as "tlsrpt.json"
 
-    EP->>ST: "SaveEmail()"
-    ST->>EF: ".eml を保存"
+    EP->>ST: "SaveEmail(uid, uidValidity, internalDate, savedAt, rawEML)"
+    ST->>EF: ".eml を {internalDate.YYYYMM}/ に保存"
     EP->>ST: "SaveEmailMetas()"
-    ST->>DF: "メールインデックスを更新<br>（uid / uidvalidity / sent_at / saved_at のみ）"
+    ST->>DF: "メールインデックスを更新<br>（uid / uidvalidity / internal_date / saved_at のみ）"
     EP->>ST: "SaveReports()"
     ST->>DF: "レポートレコードのみ更新<br>（メールインデックスは変更しない）"
 ```
@@ -191,13 +197,14 @@ sequenceDiagram
     ST->>DF: "メールインデックスを読み込む"
     loop "各インデックスエントリ"
         alt "saved_at != zero && saved_at < savedAtCutoff"
-            ST->>EF: ".eml を削除"
+            ST->>EF: ".eml を削除（パスは internal_date から再構築）"
             Note over ST,EF: "I/O エラーは集約して継続"
         else "削除対象外"
             Note over ST: "エントリを保持"
         end
     end
     ST->>DF: "インデックスをアトミック更新"
+    ST->>EF: "空になった {uidvalidity}/{YYYYMM} および {uidvalidity} ディレクトリを削除"
     ST-->>EP: "deleted, err"
 ```
 
@@ -210,6 +217,11 @@ sequenceDiagram
 ```go
 type Store interface {
     // ...（他のメソッドは変更なし）
+
+    // SaveEmail は .eml ファイルを保存する。
+    // パスは internalDate（IMAP INTERNALDATE）から決定する（AC-18・AC-19）。
+    // internalDate がゼロ値の場合は savedAt にフォールバックして slog.Warn を出力する。
+    SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error
 
     // SaveReports はレポートレコードのみを保存する。
     // メールインデックスは更新しない（AC-09）。
@@ -224,34 +236,71 @@ type Store interface {
 
 ### 3.2 データ型の変更
 
-`internalEmailIndexEntry` から `ReportEndDate` フィールドを削除する。
+#### `EmailMeta` および `LoadedEmail`（公開 API）
+
+```go
+// 変更前
+type EmailMeta struct {
+    UID         uint32
+    UIDValidity uint32
+    SentAt      time.Time // 削除
+    SavedAt     time.Time
+}
+
+type LoadedEmail struct {
+    Message     *mail.Message
+    UID         uint32
+    UIDValidity uint32
+    SentAt      time.Time // 削除（Date: ヘッダーは Message.Header.Get("Date") で参照可能）
+    SavedAt     time.Time
+    Path        string
+}
+
+// 変更後
+type EmailMeta struct {
+    UID          uint32
+    UIDValidity  uint32
+    InternalDate time.Time // 追加（IMAP INTERNALDATE）
+    SavedAt      time.Time
+}
+
+type LoadedEmail struct {
+    Message     *mail.Message
+    UID         uint32
+    UIDValidity uint32
+    SavedAt     time.Time
+    Path        string
+}
+```
+
+#### `internalEmailIndexEntry`（内部型）
 
 ```go
 // 変更前
 type internalEmailIndexEntry struct {
     UID           uint32     `json:"uid"`
     UIDValidity   uint32     `json:"uidvalidity"`
-    SentAt        time.Time  `json:"sent_at"`
+    SentAt        time.Time  `json:"sent_at"`      // 削除
     SavedAt       time.Time  `json:"saved_at"`
     ReportEndDate *time.Time `json:"report_end_date"` // 削除
 }
 
 // 変更後
 type internalEmailIndexEntry struct {
-    UID         uint32    `json:"uid"`
-    UIDValidity uint32    `json:"uidvalidity"`
-    SentAt      time.Time `json:"sent_at"`
-    SavedAt     time.Time `json:"saved_at"`
+    UID          uint32    `json:"uid"`
+    UIDValidity  uint32    `json:"uidvalidity"`
+    InternalDate time.Time `json:"internal_date"` // 追加
+    SavedAt      time.Time `json:"saved_at"`
 }
 ```
 
-### 3.3 後方互換性の設計
+### 3.3 既存 JSON ファイルとの互換性
 
-既存の `tlsrpt.json` に `report_end_date` フィールドが存在しても、`encoding/json` の `Unmarshal` は未知フィールドをデフォルトで無視するため、読み込みエラーは発生しない。`DataFileVersion` は変更しない（AC-11）。
+本システムは開発中のため後方互換は考慮しない。既存の `tlsrpt.json` に `sent_at` や `report_end_date` が含まれていても `encoding/json` の標準動作（未知フィールドは無視）により読み込みエラーは発生しない。`InternalDate` がゼロ値のエントリは `SaveEmail` のフォールバック規則と同様に `SavedAt` をパス決定に使用する。`DataFileVersion` は変更しない（AC-11）。
 
-### 3.4 SaveEmailMetas の変更
+### 3.4 `SaveEmailMetas` の変更
 
-`SaveReports` がプレースホルダーエントリ（SentAt / SavedAt がゼロの最小エントリ）を作成しなくなるため、`SaveEmailMetas` にある「ゼロ値フィールドを埋める救済ロジック」も不要となる。`SaveEmailMetas` は「同一 `{uid, uidvalidity}` が既に存在する場合は何もしない」という純粋な冪等挿入のみに簡略化する。この変更は 0040 の既存 AC-08d（冪等動作）と整合する。
+`SaveReports` がプレースホルダーエントリを作成しなくなるため、`SaveEmailMetas` にある「ゼロ値フィールドを埋める救済ロジック」も不要となる。`SaveEmailMetas` は「同一 `{uid, uidvalidity}` が既に存在する場合は何もしない」という純粋な冪等挿入のみに簡略化する（AC-14）。
 
 ---
 
@@ -264,6 +313,8 @@ type internalEmailIndexEntry struct {
 | `.eml` の個別削除に I/O エラー | エントリをインデックスに残し、`errors.Join` で集約して継続（AC-05） |
 | インデックスの保存失敗 | 失敗前の削除件数を返し、保存エラーを集約して返す（AC-07） |
 | `saved_at` がゼロのエントリ | 削除対象外として扱い、インデックスに保持（AC-03） |
+| `internalDate` がゼロ値（`SaveEmail`・パス再構築） | `savedAt` にフォールバックして `slog.Warn` を出力（AC-19） |
+| 空ディレクトリ削除の失敗 | `slog.Warn` を出力して継続し、戻り値エラーには含めない（AC-13） |
 
 既存の `ErrDeleteEmailFailed` 型は変更なしで継続使用する。
 
@@ -276,7 +327,7 @@ type internalEmailIndexEntry struct {
 セキュリティ上の主な改善点は以下のとおりである。
 
 - 送信側が設定する `report_end_date` を GC 判定から排除することで、遠未来日付による `.eml` の無制限蓄積攻撃のベクターを閉じる
-- GC 基準がローカル制御の `saved_at` のみになることで、攻撃者が GC を無効化するための手段が 1 つ減る
+- `SentAt`（送信側制御）をパス決定から排除し、`INTERNALDATE`（サーバー制御）に置き換えることで、パス操作の攻撃ベクターも排除する
 
 ---
 
@@ -296,7 +347,7 @@ flowchart TD
     Placeholder -->|"Yes"| Keep["保持（AC-03）"]
     Placeholder -->|"No"| Cond{"saved_at < savedAtCutoff？"}
     Cond -->|"No"| Keep
-    Cond -->|"Yes"| DelFile["ファイルを削除 (AC-06)"]
+    Cond -->|"Yes"| DelFile["ファイルを削除 (AC-06)<br>パスは internal_date から再構築"]
     DelFile --> IOErr{"I/O エラー？"}
     IOErr -->|"Yes"| KeepEntry["エントリを保持<br>エラーを集約 (AC-05)"]
     IOErr -->|"No"| RemoveEntry["エントリを除去<br>（ファイル不在も同様 AC-04）"]
@@ -308,9 +359,10 @@ flowchart TD
     Loop --> Save["インデックスをアトミック更新 (AC-06)"]
     Save --> SaveErr{"保存失敗？"}
     SaveErr -->|"Yes"| RetErr(["deleted, errors.Join(deleteErrs, saveErr) を返す (AC-07)"])
-    SaveErr -->|"No"| RetOK(["deleted, errors.Join(deleteErrs) を返す"])
+    SaveErr -->|"No"| Sweep["空ディレクトリを削除 (AC-13)<br>失敗は slog.Warn のみ"]
+    Sweep --> RetOK(["deleted, errors.Join(deleteErrs) を返す"])
 
-    class DelFile,RemoveEntry,Save enhanced
+    class DelFile,RemoveEntry,Save,Sweep enhanced
 ```
 
 ---
@@ -321,15 +373,19 @@ flowchart TD
 
 | 対象 | 検証内容 |
 |---|---|
+| `SaveEmail`（新シグネチャ） | `internalDate` から正しい `{YYYYMM}` パスが生成されること（AC-19） |
+| | `internalDate` がゼロ値のとき `savedAt` にフォールバックして WARN が出力されること（AC-19） |
 | `DeleteEmailsBefore`（新シグネチャ） | `savedAtCutoff` がゼロ → 削除なし（AC-02） |
 | | `saved_at < savedAtCutoff` → ファイルとインデックスエントリを削除（AC-03, AC-06） |
 | | `saved_at` がゼロのエントリ → 削除対象外（AC-03） |
 | | ファイル不在 → 冪等動作（AC-04） |
 | | I/O エラー混在 → 成功件数と集約エラーを返す（AC-05） |
 | | インデックス更新失敗 → 削除済み件数とエラーを返す（AC-07） |
+| | GC 後に空になったディレクトリが削除されること（AC-13） |
+| | ディレクトリ削除失敗でもエラーを返さないこと（AC-13） |
 | `SaveReports` | メールインデックスを変更しないこと（AC-09） |
 | `internalEmailIndexEntry` | `report_end_date` フィールドを持つ既存 JSON を読み込んでもエラーにならないこと（AC-10） |
-| `SaveEmailMetas` | 既存エントリへの冪等挿入動作（ゼロ値救済ロジック削除後）|
+| `SaveEmailMetas` | 既存エントリへの冪等挿入動作（AC-14） |
 
 ### 7.2 統合テスト
 
@@ -344,6 +400,15 @@ flowchart TD
 
 ## 8. 実装優先度
 
+### Phase 0: 前提条件の変更（F-000）
+
+1. `EmailMeta.SentAt` → `InternalDate`、`LoadedEmail.SentAt` 削除（`types.go`）
+2. `internalEmailIndexEntry.SentAt` → `InternalDate`（`types.go`）
+3. `Store.SaveEmail` シグネチャ変更（`store.go`）
+4. `SaveEmail` 実装のパス決定ロジック変更（`emails.go`）
+5. `FakeEmailEntry.SentAt` → `InternalDate`、`FakeStore.SaveEmail` シグネチャ変更（`testutil/mocks.go`）
+6. 関連テストの更新
+
 ### Phase 1: 型とインターフェースの変更
 
 1. `internalEmailIndexEntry` から `ReportEndDate` を削除（`types.go`）
@@ -354,7 +419,7 @@ flowchart TD
 1. `SaveReports` からメールインデックス更新ロジックを削除（`reports.go`）
 2. `SaveEmailMetas` のプレースホルダー救済ロジックを削除（`emails.go`）
 3. `DeleteEmailsBefore` を新シグネチャ・新ロジックに変更（`emails.go`）
-4. `sweepOrphanedEmailDirs` を削除（`emails.go`）
+4. `sweepOrphanedEmailDirs` を削除し、空ディレクトリ削除に置き換え（`emails.go`）
 
 ### Phase 3: テストの更新と確認
 

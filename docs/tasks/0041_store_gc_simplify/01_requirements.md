@@ -41,6 +41,7 @@
 
 ### 対象範囲（In Scope）
 
+- `SentAt` の廃止と `INTERNALDATE`（`InternalDate` フィールド）への置き換え（F-000）
 - `DeleteEmailsBefore` の引数・削除ロジックの簡略化
 - メールインデックスから `report_end_date` フィールドを削除
 - `SaveReports` からメールインデックス更新ブロック全体（`report_end_date` 更新およびプレースホルダー作成）を削除
@@ -56,12 +57,25 @@
 
 ### 影響を受けるコンポーネント
 
-- **直接変更**：`internal/store/`
+- **直接変更**：`internal/store/`、`internal/store/testutil/mocks.go`
 - **間接的影響**：`cmd/tlsrpt-digest/`（`DeleteEmailsBefore` シグネチャ変更の呼び出し側）
 
 ---
 
 ## 3. 機能要件
+
+### F-000: `SentAt` の廃止と `INTERNALDATE` への置き換え（本タスクの前提）
+
+`.eml` のパス決定に用いる日時を、送信側制御の `SentAt`（`Date:` ヘッダー）からサーバー制御の `INTERNALDATE` に置き換え、`SentAt` をシステムから廃止する。`INTERNALDATE` は RFC 3501 必須フィールドであり常に存在するため、フォールバック不要で安定したパスを提供する（ADR-0001 セクション 4.2）。
+
+**受け入れ条件**：
+
+- `AC-15`: `EmailMeta` の `SentAt` フィールドを削除し、`InternalDate time.Time` を追加する
+- `AC-16`: `LoadedEmail` の `SentAt` フィールドを削除する（送信日時が必要な場合は `LoadedEmail.Message.Header.Get("Date")` で参照可能）
+- `AC-17`: `internalEmailIndexEntry` の `SentAt`（JSON: `sent_at`）を削除し、`InternalDate time.Time`（JSON: `internal_date`）を追加する
+- `AC-18`: `Store.SaveEmail` のシグネチャを `SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error` に変更する
+- `AC-19`: `.eml` のパス（`{YYYYMM}`）の決定に `InternalDate` を使用する。`InternalDate` がゼロ値の場合は `SavedAt` にフォールバックして `slog.Warn` を出力する（ロバストネス原則）
+- `AC-20`: `FakeEmailEntry` の `SentAt` を削除し `InternalDate` を追加する。`FakeStore.SaveEmail` のシグネチャを同様に更新する
 
 ### F-001: `DeleteEmailsBefore` の簡略化
 
@@ -110,6 +124,8 @@
 
 ## 5. テスト方針
 
+- `InternalDate` を用いたパス決定の確認（AC-19）
+- `InternalDate` がゼロ値のとき `SavedAt` にフォールバックして WARN ログが出力されることの確認（AC-19）
 - `DeleteEmailsBefore` の新シグネチャでの正常系・境界値・エラー系テスト（AC-01〜AC-07）
 - `saved_at` がゼロのプレースホルダーエントリが削除されないことの確認（AC-03）
 - ファイルが既に存在しない場合も成功カウントに含まれることの確認（AC-04・AC-07）
