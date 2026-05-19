@@ -94,8 +94,12 @@ Read the translated output end to end before committing.
 - [ ] All technical terms match the glossary.
 
 **Readability checklist (translated output):**
-- [ ] Sentences that are grammatically correct but awkward are rephrased for more natural phrasing without changing the meaning or omitting any content.
-- [ ] Terminology is used consistently throughout the translation; the same concept always uses the same term.
+
+The translation principles (Accuracy over fluency, Structural consistency) take precedence. The following checks apply only within those constraints: do not restructure sentences, reorder clauses, or rephrase in ways that would diverge from the Japanese source structure.
+
+- [ ] Word choices that are technically correct but unnecessarily obscure are replaced with clearer equivalents that carry the same meaning and preserve the source structure.
+- [ ] Terminology is used consistently throughout the translation; the same concept always uses the same English term.
+- [ ] Sentence structure follows target-language conventions where the source structure permits it; literal carry-overs from Japanese syntax that produce unnatural English are corrected as long as doing so does not alter meaning or structure.
 
 ## Commit
 
