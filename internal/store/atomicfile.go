@@ -72,15 +72,15 @@ func atomicWriteFile(targetPath string, data []byte) error {
 		)
 		return nil
 	}
+	defer func() { _ = dirFd.Close() }() // Best effort; read-only fd unlikely to fail on close
+
 	if syncErr := dirFd.Sync(); syncErr != nil {
-		_ = dirFd.Close()
 		slog.Warn("atomicWriteFile: fsync parent dir failed; crash durability not guaranteed",
 			slog.String("target", targetPath),
 			slog.Any("error", syncErr),
 		)
 		return nil
 	}
-	_ = dirFd.Close() // Best effort; read-only fd unlikely to fail on close
 
 	return nil
 }

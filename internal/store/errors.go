@@ -98,7 +98,7 @@ type ErrDeleteEmailFailed struct {
 func (e *ErrDeleteEmailFailed) Error() string {
 	return fmt.Sprintf(
 		"store: delete email failed: path=%s uid=%d uidvalidity=%d saved_at=%s: %v",
-		e.Path, e.UID, e.UIDValidity, e.SavedAt.Format("2006-01-02T15:04:05Z07:00"), e.Err,
+		e.Path, e.UID, e.UIDValidity, e.SavedAt.Format(time.RFC3339), e.Err,
 	)
 }
 
