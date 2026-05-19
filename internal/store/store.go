@@ -144,7 +144,7 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 			return nil, fmt.Errorf("Open: ensure emails dir: %w", err)
 		}
 
-		// Initialize the data file with empty content if it does not exist (AC-03).
+		// Initialize the data file with empty content if it does not exist.
 		if err := initDataFile(rootDir); err != nil {
 			return nil, fmt.Errorf("Open: init data file: %w", err)
 		}
@@ -209,7 +209,6 @@ func dataFilePath(rootDir string) string {
 }
 
 // initDataFile creates tlsrpt.json with an empty record set if it does not already exist.
-// This satisfies AC-03 (data file initialization on first open in read-write mode).
 func initDataFile(rootDir string) error {
 	path := dataFilePath(rootDir)
 	if _, err := os.Stat(path); err == nil {

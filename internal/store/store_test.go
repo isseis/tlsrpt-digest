@@ -11,8 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestOpen_ReadWriteMode_CreatesDirectories tests AC-01, AC-03, AC-04, AC-05.
-// Verifies that Open with OpenReadWrite mode creates root_dir, emails/, tlsrpt.json, and sentinel.
+// TestOpen_ReadWriteMode_CreatesDirectories verifies that Open in read-write mode creates
+// root_dir and emails/ with mode 0700, initializes tlsrpt.json with an empty record set,
+// and creates the sentinel file (.tlsrpt-digest-meta.json) recording the IMAP identity.
 func TestOpen_ReadWriteMode_CreatesDirectories(t *testing.T) {
 	rootDir := t.TempDir()
 	identity := IMAPIdentity{
@@ -36,7 +37,7 @@ func TestOpen_ReadWriteMode_CreatesDirectories(t *testing.T) {
 	require.NoError(t, err, "emails directory should exist")
 	require.True(t, info.IsDir(), "emails path should be a directory")
 
-	// Verify tlsrpt.json exists with empty record set (AC-03).
+	// Verify tlsrpt.json exists and contains an empty record set.
 	dataPath := filepath.Join(rootDir, "tlsrpt.json")
 	_, err = os.Stat(dataPath)
 	require.NoError(t, err, "tlsrpt.json should exist after first open")
@@ -51,8 +52,8 @@ func TestOpen_ReadWriteMode_CreatesDirectories(t *testing.T) {
 	assert.Equal(t, []any{}, got["emails"], "emails should be empty array")
 }
 
-// TestOpen_ReadOnlyMode_NoCreation tests AC-02.
-// Verifies that Open with OpenReadOnly mode does not create directories if they don't exist.
+// TestOpen_ReadOnlyMode_NoCreation verifies that Open in read-only mode does not create
+// any directories or files, even when root_dir does not exist.
 func TestOpen_ReadOnlyMode_NoCreation(t *testing.T) {
 	rootDir := t.TempDir()
 	nonexistentRoot := filepath.Join(rootDir, "nonexistent")
@@ -71,8 +72,9 @@ func TestOpen_ReadOnlyMode_NoCreation(t *testing.T) {
 	require.True(t, os.IsNotExist(err), "root directory should not be created in read-only mode")
 }
 
-// TestOpen_IdentityVerification tests AC-06.
-// Verifies that Open with mismatched identity returns ErrStoreIdentityMismatch.
+// TestOpen_IdentityMismatch_Returns_Error verifies that reopening a store with a different
+// IMAP identity (host, port, or mailbox) returns ErrStoreIdentityMismatch containing both
+// the expected and actual identifiers.
 func TestOpen_IdentityMismatch_Returns_Error(t *testing.T) {
 	rootDir := t.TempDir()
 	identity1 := IMAPIdentity{
@@ -101,8 +103,8 @@ func TestOpen_IdentityMismatch_Returns_Error(t *testing.T) {
 	assert.Equal(t, identity2.Host, mismatchErr.ExpectedHost)
 }
 
-// TestOpen_ReadOnlyMode_ReadEmptyStore tests AC-02.
-// Verifies that read-only open on non-existent store doesn't error and returns valid Store.
+// TestOpen_ReadOnlyMode_EmptyStore verifies that read-only open on a non-existent store
+// succeeds without error, returns a valid Store, and marks the store as read-only.
 func TestOpen_ReadOnlyMode_EmptyStore(t *testing.T) {
 	rootDir := t.TempDir()
 	nonexistentRoot := filepath.Join(rootDir, "nonexistent")
@@ -121,8 +123,8 @@ func TestOpen_ReadOnlyMode_EmptyStore(t *testing.T) {
 	assert.True(t, impl.readOnly, "store should be read-only")
 }
 
-// TestOpen_MultipleOpens_SameIdentity tests AC-04, AC-06.
-// Verifies that opening the same store twice with same identity succeeds.
+// TestOpen_MultipleOpens_SameIdentity verifies that opening an already-initialized store
+// with the same IMAP identity succeeds and leaves the existing data intact.
 func TestOpen_MultipleOpens_SameIdentity(t *testing.T) {
 	rootDir := t.TempDir()
 	identity := IMAPIdentity{
@@ -141,8 +143,8 @@ func TestOpen_MultipleOpens_SameIdentity(t *testing.T) {
 	require.NotNil(t, store2)
 }
 
-// TestOpen_FilePermissions tests AC-37.
-// Verifies that sentinel and emails directory are created with secure permissions.
+// TestOpen_FilePermissions verifies that the sentinel file is created with 0600 permissions
+// and the emails directory is created with 0700 permissions.
 func TestOpen_FilePermissions(t *testing.T) {
 	rootDir := t.TempDir()
 	identity := IMAPIdentity{
@@ -170,8 +172,8 @@ func TestOpen_FilePermissions(t *testing.T) {
 		"emails directory should have secure permissions")
 }
 
-// TestOpen_DirPermissions tests AC-38.
-// Verifies that MkdirAll respects 0700 for newly created intermediate directories.
+// TestOpen_DirPermissions_NestedCreate verifies that all intermediate directories created
+// by Open (including deeply nested ones) are given 0700 permissions.
 func TestOpen_DirPermissions_NestedCreate(t *testing.T) {
 	rootDir := t.TempDir()
 	nestedRoot := filepath.Join(rootDir, "a", "b", "c")
@@ -195,8 +197,9 @@ func TestOpen_DirPermissions_NestedCreate(t *testing.T) {
 	}
 }
 
-// TestOpen_SentinelSchema tests AC-01, AC-03.
-// Verifies that sentinel is created with correct schema and identity.
+// TestOpen_SentinelSchema verifies that the sentinel file created on first open contains
+// the correct format version, IMAP identity fields, and a non-zero initialization timestamp,
+// with uid_validity and recovery_required initially absent.
 func TestOpen_SentinelSchema(t *testing.T) {
 	rootDir := t.TempDir()
 	identity := IMAPIdentity{
@@ -254,8 +257,8 @@ func TestOpen_UnsupportedSchemaVersion(t *testing.T) {
 	assert.Equal(t, 999, schemaErr.Version)
 }
 
-// TestOpen_ModeConstants tests AC-01, AC-02.
-// Verifies that OpenReadWrite and OpenReadOnly constants are defined correctly.
+// TestOpen_ModeConstants verifies that OpenReadWrite and OpenReadOnly constants
+// have the expected distinct numeric values.
 func TestOpen_ModeConstants(t *testing.T) {
 	assert.Equal(t, OpenMode(0), OpenReadWrite, "OpenReadWrite should be 0")
 	assert.Equal(t, OpenMode(1), OpenReadOnly, "OpenReadOnly should be 1")
