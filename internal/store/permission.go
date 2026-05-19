@@ -31,8 +31,9 @@ func ensureDirExists(dirPath string) error {
 		if !info.IsDir() {
 			return fmt.Errorf("ensureDirExists: %w", errPathIsNotDir)
 		}
-		// Warn if permissions are less restrictive than 0700
-		if info.Mode().Perm() != dirPerm {
+		// Warn only if bits outside the allowed 0700 mask are set (i.e., looser permissions).
+		// Stricter permissions (e.g., 0500) are silently accepted.
+		if info.Mode().Perm()&^dirPerm != 0 {
 			slog.Warn("ensureDirExists: directory has loose permissions, consider running chmod 0700",
 				slog.String("path", dirPath),
 				slog.String("current_mode", fmt.Sprintf("%04o", info.Mode().Perm())),
@@ -66,7 +67,9 @@ func checkFilePermissions(filePath string) {
 		return
 	}
 
-	if info.Mode().Perm() != filePerm {
+	// Warn only if bits outside the allowed 0600 mask are set (i.e., looser permissions).
+	// Stricter permissions (e.g., 0400) are silently accepted.
+	if info.Mode().Perm()&^filePerm != 0 {
 		slog.Warn("checkFilePermissions: file has loose permissions, consider running chmod 0600",
 			slog.String("path", filePath),
 			slog.String("current_mode", fmt.Sprintf("%04o", info.Mode().Perm())),

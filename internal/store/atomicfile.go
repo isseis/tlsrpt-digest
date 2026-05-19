@@ -2,6 +2,7 @@
 package store
 
 import (
+	"log/slog"
 	"os"
 	"path/filepath"
 )
@@ -9,7 +10,11 @@ import (
 // atomicWriteFile writes data to a file atomically by writing to a temporary file
 // and then renaming it to the target path. The file is created with mode 0600.
 // The operation is atomic within the same filesystem (guaranteed by rename).
-// The parent directory is fsynced after the rename to ensure durability on crash.
+//
+// After the rename succeeds the parent directory is fsynced on a best-effort
+// basis. If the fsync fails the function still returns nil because the write
+// itself has already been applied; only the crash-durability guarantee is
+// weakened. A warning is logged in that case.
 func atomicWriteFile(targetPath string, data []byte) error {
 	dir := filepath.Dir(targetPath)
 
@@ -23,8 +28,9 @@ func atomicWriteFile(targetPath string, data []byte) error {
 		_ = os.Remove(tmpPath) // Best effort cleanup; ignore error
 	}()
 
-	// Set file permissions to 0600 before writing any data
-	if err := os.Chmod(tmpPath, filePerm); err != nil {
+	// Set file permissions to 0600 using the open file descriptor to avoid a
+	// TOCTOU race between path-based Chmod and the open tmpFile.
+	if err := tmpFile.Chmod(filePerm); err != nil {
 		_ = tmpFile.Close()
 		return &ErrAtomicWriteFailed{File: targetPath, Op: "chmod", Err: err}
 	}
@@ -51,22 +57,30 @@ func atomicWriteFile(targetPath string, data []byte) error {
 		return &ErrAtomicWriteFailed{File: targetPath, Op: "rename", Err: err}
 	}
 
-	// Fsync the parent directory so the rename survives a crash.
-	// Without this, the directory entry update may be lost even if the file
-	// contents were synced (rename(2) atomicity does not imply durability).
+	// Fsync the parent directory to make the rename durable across a crash.
+	// This is best-effort: the file is already in place after the rename, so
+	// failure here does not mean the write was lost — only that crash-durability
+	// is not guaranteed. We log a warning and return nil so callers are not
+	// misled into thinking the write failed.
 	// G304: dir is derived from targetPath (an application-controlled path),
 	// not from user input.
 	dirFd, err := os.Open(dir) //nolint:gosec
 	if err != nil {
-		return &ErrAtomicWriteFailed{File: targetPath, Op: "open_dir_for_fsync", Err: err}
+		slog.Warn("atomicWriteFile: could not open parent dir for fsync; crash durability not guaranteed",
+			slog.String("target", targetPath),
+			slog.Any("error", err),
+		)
+		return nil
 	}
 	if syncErr := dirFd.Sync(); syncErr != nil {
 		_ = dirFd.Close()
-		return &ErrAtomicWriteFailed{File: targetPath, Op: "fsync_dir", Err: syncErr}
+		slog.Warn("atomicWriteFile: fsync parent dir failed; crash durability not guaranteed",
+			slog.String("target", targetPath),
+			slog.Any("error", syncErr),
+		)
+		return nil
 	}
-	if err := dirFd.Close(); err != nil {
-		return &ErrAtomicWriteFailed{File: targetPath, Op: "close_dir", Err: err}
-	}
+	_ = dirFd.Close() // Best effort; read-only fd unlikely to fail on close
 
 	return nil
 }
