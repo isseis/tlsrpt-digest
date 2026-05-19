@@ -79,13 +79,13 @@
 
 ### F-001: `DeleteEmailsBefore` の簡略化
 
-`.eml` の GC 基準を `saved_at < savedAtCutoff` のみとする。`report_end_date` による通常削除を廃止する。
+`.eml` の GC 基準を `internal_date < cutoff` のみとする。`report_end_date` による削除を廃止する。
 
 **受け入れ条件**：
 
-- `AC-01`: シグネチャを `DeleteEmailsBefore(savedAtCutoff time.Time) (deleted int, err error)` に変更する（`reportCutoff` パラメータを削除）
-- `AC-02`: `savedAtCutoff` がゼロ値の場合、削除を行わず `deleted = 0`、`err = nil` を返す
-- `AC-03`: `saved_at != zero && saved_at < savedAtCutoff` を満たすエントリの `.eml` ファイルを削除し、インデックスエントリを除去する。`saved_at` がゼロのエントリ（`SaveEmailMetas` 未実行のプレースホルダー）は削除対象外とする
+- `AC-01`: シグネチャを `DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)` とする（`reportCutoff` および `savedAtCutoff` パラメータを削除し、`internal_date` と比較する）
+- `AC-02`: `cutoff` がゼロ値の場合、削除を行わず `deleted = 0`、`err = nil` を返す
+- `AC-03`: `internal_date != zero && internal_date < cutoff` を満たすエントリの `.eml` ファイルを削除し、インデックスエントリを除去する。`internal_date` がゼロのエントリは削除対象外とする
 - `AC-04`: 削除対象の `.eml` が既に存在しない場合は非エラーとして扱い、インデックスエントリを除去して処理を継続する（冪等動作）
 - `AC-05`: 個別の `.eml` 削除で I/O エラーが発生しても全体を中断せず、成功件数と `errors.Join` で集約したエラーを返す
 - `AC-06`: ファイル削除を先に行い、その後インデックスをアトミック更新する（クラッシュ時の孤立 `.eml` を次回実行で自己回復可能にするため）
@@ -127,7 +127,7 @@
 - `InternalDate` を用いたパス決定の確認（AC-19）
 - `InternalDate` がゼロ値のとき `SavedAt` にフォールバックして WARN ログが出力されることの確認（AC-19）
 - `DeleteEmailsBefore` の新シグネチャでの正常系・境界値・エラー系テスト（AC-01〜AC-07）
-- `saved_at` がゼロのプレースホルダーエントリが削除されないことの確認（AC-03）
+- `internal_date` がゼロのエントリが削除されないことの確認（AC-03）
 - ファイルが既に存在しない場合も成功カウントに含まれることの確認（AC-04・AC-07）
 - `SaveReports` 呼び出し後にメールインデックスが更新されないことの確認（AC-09）
 - `SaveEmailMetas` が既存エントリを補填しないことの確認（AC-14）
