@@ -143,7 +143,7 @@ func (s *storeImpl) DeleteReportsBefore(cutoff time.Time) (deleted int, err erro
 		return 0, fmt.Errorf("DeleteReportsBefore: load data file: %w", loadErr)
 	}
 
-	surviving := make([]tlsrpt.Report, 0, len(df.Reports))
+	surviving := df.Reports[:0] // reuse backing array; write index <= read index
 	for _, r := range df.Reports {
 		if r.DateRange.EndDatetime.Before(cutoff) {
 			deleted++

@@ -397,6 +397,9 @@ func TestDeleteReportsBefore_AtomicWrite(t *testing.T) {
 
 // TestDeleteReportsBefore_Performance verifies that 10 000-record operations complete in < 1s.
 func TestDeleteReportsBefore_Performance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping performance test in short mode")
+	}
 	s, _ := openTestStore(t)
 
 	cutoff := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)

@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -121,17 +120,6 @@ func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
 	}
 
 	return s.saveDataFile(df)
-}
-
-// ctimeOf returns the inode change time (ctime) of the file at path.
-// Returns an error if the syscall fails; callers should treat a failure as a
-// file I/O error and not substitute an artificial timestamp.
-func ctimeOf(path string) (time.Time, error) {
-	var stat syscall.Stat_t
-	if err := syscall.Stat(path, &stat); err != nil {
-		return time.Time{}, fmt.Errorf("ctimeOf: stat %s: %w", path, err)
-	}
-	return time.Unix(stat.Ctim.Sec, stat.Ctim.Nsec).UTC(), nil
 }
 
 // LoadEmails implements Store.LoadEmails.
@@ -250,7 +238,7 @@ func (s *storeImpl) DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (d
 	}
 
 	var deleteErrs []error
-	surviving := df.Emails[:0:0] // preserve nil-ness of backing array by starting fresh
+	surviving := df.Emails[:0] // reuse backing array; in-place filtering is safe (write index <= read index)
 
 	for _, entry := range df.Emails {
 		shouldDelete := false
@@ -308,22 +296,49 @@ func (s *storeImpl) DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (d
 	// Write updated index atomically.
 	df.Emails = surviving
 	if saveErr := s.saveDataFile(df); saveErr != nil {
-		return 0, fmt.Errorf("DeleteEmailsBefore: save data file: %w", saveErr)
+		// Physical file deletions already succeeded; return the real count so the
+		// caller knows the on-disk state. Wrap the save error together with any
+		// per-file errors that were already collected.
+		deleteErrs = append(deleteErrs, fmt.Errorf("DeleteEmailsBefore: save data file: %w", saveErr))
+		return deleted, errors.Join(deleteErrs...)
 	}
 
 	// AC-32b: directory sweep for orphaned .eml files when savedAtCutoff is set.
+	// Pass the surviving index so the sweep skips directories still referenced.
 	if !savedAtCutoff.IsZero() {
-		s.sweepOrphanedEmailDirs(savedAtCutoff)
+		s.sweepOrphanedEmailDirs(savedAtCutoff, surviving)
 	}
 
 	return deleted, errors.Join(deleteErrs...)
 }
 
 // sweepOrphanedEmailDirs removes {uidvalidity}/{YYYYMM} directories whose YYYYMM
-// is strictly before savedAtCutoff's year-month. Errors are logged and ignored.
-func (s *storeImpl) sweepOrphanedEmailDirs(savedAtCutoff time.Time) {
+// is strictly before savedAtCutoff's year-month, but only when no surviving index
+// entry still maps a file into that directory. This prevents deleting files whose
+// SentAt falls in an older month but whose SavedAt is still within the retention
+// window (i.e. they were intentionally kept by the index-based pass). Errors are
+// logged and do not propagate to the caller.
+func (s *storeImpl) sweepOrphanedEmailDirs(savedAtCutoff time.Time, survivingEmails []internalEmailIndexEntry) {
 	cutoffYYYYMM := savedAtCutoff.UTC().Format("200601")
 	emailsDir := s.emailsDirPath
+
+	// Build a set of "uidvalidity/yyyymm" directory keys still referenced by
+	// surviving index entries so we can skip them during the sweep.
+	type dirKey struct{ uv, mm string }
+	referenced := make(map[dirKey]struct{}, len(survivingEmails))
+	for _, entry := range survivingEmails {
+		dateForPath := entry.SentAt
+		if dateForPath.IsZero() {
+			dateForPath = entry.SavedAt
+		}
+		if dateForPath.IsZero() {
+			continue
+		}
+		referenced[dirKey{
+			fmt.Sprintf("%d", entry.UIDValidity),
+			dateForPath.UTC().Format("200601"),
+		}] = struct{}{}
+	}
 
 	// Walk one level deep for uidvalidity dirs, then one more for YYYYMM dirs.
 	uvEntries, err := os.ReadDir(emailsDir)
@@ -348,12 +363,17 @@ func (s *storeImpl) sweepOrphanedEmailDirs(savedAtCutoff time.Time) {
 				continue
 			}
 			yyyymm := mmEntry.Name()
-			if yyyymm < cutoffYYYYMM {
-				dirToRemove := filepath.Join(uvDir, yyyymm)
-				if rmErr := os.RemoveAll(dirToRemove); rmErr != nil {
-					slog.Warn("sweepOrphanedEmailDirs: remove dir failed",
-						slog.String("dir", dirToRemove), slog.Any("error", rmErr))
-				}
+			if yyyymm >= cutoffYYYYMM {
+				continue
+			}
+			// Skip directories that still have surviving index entries referencing them.
+			if _, ok := referenced[dirKey{uvEntry.Name(), yyyymm}]; ok {
+				continue
+			}
+			dirToRemove := filepath.Join(uvDir, yyyymm)
+			if rmErr := os.RemoveAll(dirToRemove); rmErr != nil {
+				slog.Warn("sweepOrphanedEmailDirs: remove dir failed",
+					slog.String("dir", dirToRemove), slog.Any("error", rmErr))
 			}
 		}
 	}

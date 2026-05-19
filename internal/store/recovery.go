@@ -21,6 +21,7 @@ func (s *storeImpl) SaveUIDValidity(v uint32) error {
 			IMAPHost:      s.identity.Host,
 			IMAPPort:      s.identity.Port,
 			IMAPMailbox:   s.identity.Mailbox,
+			InitializedAt: time.Now().UTC(),
 		}
 	}
 	sentinel.UIDValidity = &v
@@ -58,6 +59,7 @@ func (s *storeImpl) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time
 			IMAPHost:      s.identity.Host,
 			IMAPPort:      s.identity.Port,
 			IMAPMailbox:   s.identity.Mailbox,
+			InitializedAt: time.Now().UTC(),
 		}
 	}
 	sentinel.RecoveryRequired = &internalRecoveryState{
@@ -120,6 +122,7 @@ func (s *storeImpl) ApplyRecovery(newUIDValidity uint32) error {
 			IMAPHost:      s.identity.Host,
 			IMAPPort:      s.identity.Port,
 			IMAPMailbox:   s.identity.Mailbox,
+			InitializedAt: time.Now().UTC(),
 		}
 	}
 	sentinel.UIDValidity = &newUIDValidity
