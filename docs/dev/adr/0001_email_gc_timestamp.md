@@ -4,7 +4,7 @@
 |---|---|
 | 番号 | ADR-0001 |
 | ステータス | 採択 |
-| 決定日 | 2026-05-19 |
+| 決定日 | 2026-05-20 |
 | 関連タスク | 0040_store, 0041_store_gc_simplify |
 
 ---
@@ -13,7 +13,7 @@
 
 ### システムにおける `.eml` GC の位置づけ
 
-本システムは IMAP メールボックスから TLSRPT レポートメールを取得し、メール原本を `.eml` ファイルとして `{root_dir}/emails/{uidvalidity}/{YYYYMM}/{padded_uid}.eml` に保存する。`{YYYYMM}` は古いファイルを日付単位で手動削除しやすくするための構造であり、当初はメールの送信日時（`SentAt`、`Date:` ヘッダー由来）から導出していた。本 ADR のセクション 4.2 の決定により `INTERNALDATE` に変更される。
+本システムは IMAP メールボックスから TLSRPT レポートメールを取得し、メール原本を `.eml` ファイルとして `{root_dir}/emails/{uidvalidity}/{YYYYMM}/{padded_uid}.eml` に保存する。`{YYYYMM}` は IMAP サーバーが設定する受信日時（`INTERNALDATE`）から導出し、古いファイルを日付単位で手動削除しやすくするための構造である。
 
 `DeleteEmailsBefore` は保持期間を超えた `.eml` ファイルを定期 GC する。GC の判定基準として、システム内には以下の 4 種類の日時が存在する。
 
