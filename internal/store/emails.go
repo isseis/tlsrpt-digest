@@ -2,11 +2,16 @@
 package store
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
+	"net/mail"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -118,16 +123,268 @@ func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
 }
 
 // LoadEmails implements Store.LoadEmails.
-// TODO: Phase 3 implementation
 func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
-	return nil, errNotImplemented
+	emailsDir := s.emailsDirPath
+	if _, err := os.Stat(emailsDir); os.IsNotExist(err) {
+		return []LoadedEmail{}, nil
+	}
+
+	var result []LoadedEmail
+	var errs []error
+
+	walkErr := filepath.WalkDir(emailsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: err})
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".eml" {
+			return nil
+		}
+
+		relPath, relErr := filepath.Rel(emailsDir, path)
+		if relErr != nil {
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: relErr})
+			return nil
+		}
+
+		// Parse {uidvalidity}/{YYYYMM}/{padded_uid}.eml — exactly 3 components.
+		const emailPathComponents = 3
+		parts := strings.Split(relPath, string(filepath.Separator))
+		if len(parts) != emailPathComponents {
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: &ErrInvalidEmailPath{Path: relPath}})
+			return nil
+		}
+
+		uidValidityU64, parseErr := strconv.ParseUint(parts[0], 10, 32)
+		if parseErr != nil {
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: &ErrInvalidEmailPath{Path: relPath}})
+			return nil
+		}
+		uidValidity := uint32(uidValidityU64)
+
+		uidStr := strings.TrimSuffix(parts[2], ".eml")
+		uidU64, parseErr := strconv.ParseUint(uidStr, 10, 32)
+		if parseErr != nil {
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: &ErrInvalidEmailPath{Path: relPath}})
+			return nil
+		}
+		uid := uint32(uidU64)
+
+		data, readErr := os.ReadFile(path) //nolint:gosec
+		if readErr != nil {
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: readErr})
+			return nil
+		}
+
+		msg, parseErr := mail.ReadMessage(bytes.NewReader(data))
+		if parseErr != nil {
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: parseErr})
+			return nil
+		}
+
+		savedAt, ctimeErr := ctimeOf(path)
+		if ctimeErr != nil {
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: ctimeErr})
+			return nil
+		}
+		sentAt := savedAt
+		if dateStr := msg.Header.Get("Date"); dateStr != "" {
+			if t, dateErr := mail.ParseDate(dateStr); dateErr == nil {
+				sentAt = t.UTC()
+			} else {
+				slog.Warn("LoadEmails: failed to parse Date header, falling back to ctime",
+					slog.String("path", relPath),
+					slog.Any("error", dateErr),
+				)
+			}
+		} else {
+			slog.Warn("LoadEmails: Date header missing, falling back to ctime",
+				slog.String("path", relPath),
+			)
+		}
+
+		result = append(result, LoadedEmail{
+			Message:     msg,
+			UID:         uid,
+			UIDValidity: uidValidity,
+			SentAt:      sentAt,
+			SavedAt:     savedAt,
+			Path:        relPath,
+		})
+		return nil
+	})
+	if walkErr != nil {
+		errs = append(errs, walkErr)
+	}
+
+	if result == nil {
+		result = []LoadedEmail{}
+	}
+	return result, errors.Join(errs...)
 }
 
 // DeleteEmailsBefore implements Store.DeleteEmailsBefore.
-// TODO: Phase 3 implementation
-func (s *storeImpl) DeleteEmailsBefore(_, _ time.Time) (deleted int, err error) {
+func (s *storeImpl) DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (deleted int, err error) {
 	if s.readOnly {
 		return 0, ErrReadOnly
 	}
-	return 0, errNotImplemented
+
+	df, loadErr := s.loadDataFile()
+	if loadErr != nil {
+		return 0, fmt.Errorf("DeleteEmailsBefore: load data file: %w", loadErr)
+	}
+
+	var deleteErrs []error
+	surviving := df.Emails[:0] // reuse backing array; in-place filtering is safe (write index <= read index)
+
+	for _, entry := range df.Emails {
+		shouldDelete := false
+
+		// Normal deletion: report_end_date != null && report_end_date < reportCutoff
+		if entry.ReportEndDate != nil && entry.ReportEndDate.Before(reportCutoff) {
+			shouldDelete = true
+		}
+
+		// Forced deletion: savedAtCutoff != zero && saved_at < savedAtCutoff.
+		// Guard against zero SavedAt: a placeholder created by SaveReports before
+		// SaveEmailMetas has run has zero SavedAt. time.Time{}.Before(any cutoff) is
+		// always true, which would incorrectly mark placeholder entries for deletion and
+		// then drop the index entry when the fabricated path produces ENOENT, leaving the
+		// real .eml orphaned.
+		if !savedAtCutoff.IsZero() && !entry.SavedAt.IsZero() && entry.SavedAt.Before(savedAtCutoff) {
+			shouldDelete = true
+		}
+
+		if !shouldDelete {
+			surviving = append(surviving, entry)
+			continue
+		}
+
+		// Reconstruct the .eml path. Use SentAt; fall back to SavedAt when SentAt is
+		// zero, consistent with SaveEmail. If both are zero this is a placeholder entry
+		// (SaveEmailMetas has not run yet) — skip GC since the correct path is unknown.
+		dateForPath := entry.SentAt
+		if dateForPath.IsZero() {
+			dateForPath = entry.SavedAt
+		}
+		if dateForPath.IsZero() {
+			surviving = append(surviving, entry)
+			continue
+		}
+
+		// Delete the .eml file first (file deletion before index update per AC-30).
+		emlPath := buildEmailPath(s.rootDir, entry.UID, entry.UIDValidity, dateForPath)
+		if rmErr := os.Remove(emlPath); rmErr != nil && !os.IsNotExist(rmErr) {
+			// File I/O error: keep index entry, aggregate error, continue (AC-32a).
+			deleteErrs = append(deleteErrs, &ErrDeleteEmailFailed{
+				Path:        emlPath,
+				UID:         entry.UID,
+				UIDValidity: entry.UIDValidity,
+				SavedAt:     entry.SavedAt,
+				Err:         rmErr,
+			})
+			surviving = append(surviving, entry)
+			continue
+		}
+		// File deleted (or already absent — AC-31); remove the index entry.
+		deleted++
+	}
+
+	// Skip the write when nothing changed: no entries deleted and no per-file
+	// errors accumulated. An unnecessary write could itself fail and return an
+	// error on an otherwise empty run, violating AC-32.
+	if deleted == 0 && len(deleteErrs) == 0 {
+		if !savedAtCutoff.IsZero() {
+			s.sweepOrphanedEmailDirs(savedAtCutoff, surviving)
+		}
+		return 0, nil
+	}
+
+	// Write updated index atomically.
+	df.Emails = surviving
+	if saveErr := s.saveDataFile(df); saveErr != nil {
+		// Physical file deletions already succeeded; return the real count so the
+		// caller knows the on-disk state. Wrap the save error together with any
+		// per-file errors that were already collected.
+		deleteErrs = append(deleteErrs, fmt.Errorf("DeleteEmailsBefore: save data file: %w", saveErr))
+		return deleted, errors.Join(deleteErrs...)
+	}
+
+	// AC-32b: directory sweep for orphaned .eml files when savedAtCutoff is set.
+	// Pass the surviving index so the sweep skips directories still referenced.
+	if !savedAtCutoff.IsZero() {
+		s.sweepOrphanedEmailDirs(savedAtCutoff, surviving)
+	}
+
+	return deleted, errors.Join(deleteErrs...)
+}
+
+// sweepOrphanedEmailDirs removes {uidvalidity}/{YYYYMM} directories whose YYYYMM
+// is strictly before savedAtCutoff's year-month, but only when no surviving index
+// entry still maps a file into that directory. This prevents deleting files whose
+// SentAt falls in an older month but whose SavedAt is still within the retention
+// window (i.e. they were intentionally kept by the index-based pass). Errors are
+// logged and do not propagate to the caller.
+func (s *storeImpl) sweepOrphanedEmailDirs(savedAtCutoff time.Time, survivingEmails []internalEmailIndexEntry) {
+	cutoffYYYYMM := savedAtCutoff.UTC().Format("200601")
+	emailsDir := s.emailsDirPath
+
+	// Build a set of "uidvalidity/yyyymm" directory keys still referenced by
+	// surviving index entries so we can skip them during the sweep.
+	type dirKey struct{ uv, mm string }
+	referenced := make(map[dirKey]struct{}, len(survivingEmails))
+	for _, entry := range survivingEmails {
+		dateForPath := entry.SentAt
+		if dateForPath.IsZero() {
+			dateForPath = entry.SavedAt
+		}
+		if dateForPath.IsZero() {
+			continue
+		}
+		referenced[dirKey{
+			fmt.Sprintf("%d", entry.UIDValidity),
+			dateForPath.UTC().Format("200601"),
+		}] = struct{}{}
+	}
+
+	// Walk one level deep for uidvalidity dirs, then one more for YYYYMM dirs.
+	uvEntries, err := os.ReadDir(emailsDir)
+	if err != nil {
+		slog.Warn("sweepOrphanedEmailDirs: read emails dir failed", slog.Any("error", err))
+		return
+	}
+
+	for _, uvEntry := range uvEntries {
+		if !uvEntry.IsDir() {
+			continue
+		}
+		uvDir := filepath.Join(emailsDir, uvEntry.Name())
+		mmEntries, err := os.ReadDir(uvDir)
+		if err != nil {
+			slog.Warn("sweepOrphanedEmailDirs: read uidvalidity dir failed",
+				slog.String("dir", uvDir), slog.Any("error", err))
+			continue
+		}
+		for _, mmEntry := range mmEntries {
+			if !mmEntry.IsDir() {
+				continue
+			}
+			yyyymm := mmEntry.Name()
+			if yyyymm >= cutoffYYYYMM {
+				continue
+			}
+			// Skip directories that still have surviving index entries referencing them.
+			if _, ok := referenced[dirKey{uvEntry.Name(), yyyymm}]; ok {
+				continue
+			}
+			dirToRemove := filepath.Join(uvDir, yyyymm)
+			if rmErr := os.RemoveAll(dirToRemove); rmErr != nil {
+				slog.Warn("sweepOrphanedEmailDirs: remove dir failed",
+					slog.String("dir", dirToRemove), slog.Any("error", rmErr))
+			}
+		}
+	}
 }

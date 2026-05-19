@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -355,4 +356,40 @@ func TestSentinelPath(t *testing.T) {
 // TestOpenMode_Constants tests OpenMode constants are distinct.
 func TestOpenMode_Constants(t *testing.T) {
 	assert.NotEqual(t, OpenReadWrite, OpenReadOnly)
+}
+
+// TestOpen_WarnOnLaxDataFilePermissions verifies that Open emits a WARN when
+// tlsrpt.json already exists with permissions broader than 0600 (AC-39).
+func TestOpen_WarnOnLaxDataFilePermissions(t *testing.T) {
+	spy := setDefaultSlogSpy(t)
+	rootDir := t.TempDir()
+	identity := IMAPIdentity{Host: "imap.example.com", Port: 993, Mailbox: "INBOX"}
+
+	// Create the store once so all files are initialised.
+	_, err := Open(rootDir, identity, OpenReadWrite)
+	require.NoError(t, err)
+
+	// Loosen the data file permissions to 0644.
+	dataPath := filepath.Join(rootDir, "tlsrpt.json")
+	require.NoError(t, os.Chmod(dataPath, 0o644)) //nolint:gosec
+
+	// Re-open; expect a WARN about the loose permission.
+	spy.records = nil
+	_, err = Open(rootDir, identity, OpenReadWrite)
+	require.NoError(t, err)
+
+	warnFound := false
+	for _, r := range spy.records {
+		if r.Level == slog.LevelWarn {
+			warnFound = true
+			break
+		}
+	}
+	assert.True(t, warnFound, "Open should emit a WARN for tlsrpt.json with permissions broader than 0600")
+
+	// Verify the permission was NOT auto-corrected.
+	info, err := os.Stat(dataPath)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(),
+		"Open must not auto-correct loose permissions on the data file (AC-39)")
 }

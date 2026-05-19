@@ -3,6 +3,7 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -309,4 +310,122 @@ func loadDataFileFromPath(rootDir string) (*internalDataFile, error) {
 		dataPath: dataFilePath(rootDir),
 	}
 	return impl.loadDataFile()
+}
+
+// --- DeleteReportsBefore tests (Phase 3) ---
+
+// TestDeleteReportsBefore_BoundaryValues verifies the cutoff boundary:
+// end-datetime < cutoff is deleted; end-datetime == cutoff or > cutoff is kept.
+func TestDeleteReportsBefore_BoundaryValues(t *testing.T) {
+	s, _ := openTestStore(t)
+
+	cutoff := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	before := cutoff.Add(-time.Nanosecond)
+	after := cutoff.Add(time.Nanosecond)
+
+	inputs := []ReportInput{
+		{Report: makeFullReport("before", before), UID: 1, UIDValidity: 10},
+		{Report: makeFullReport("equal", cutoff), UID: 2, UIDValidity: 10},
+		{Report: makeFullReport("after", after), UID: 3, UIDValidity: 10},
+	}
+	require.NoError(t, s.SaveReports(inputs))
+
+	deleted, err := s.DeleteReportsBefore(cutoff)
+	require.NoError(t, err)
+	assert.Equal(t, 1, deleted)
+
+	remaining, err := s.GetReportsSince(time.Time{})
+	require.NoError(t, err)
+	ids := make(map[string]bool)
+	for _, r := range remaining {
+		ids[r.ReportID] = true
+	}
+	assert.False(t, ids["before"], "report before cutoff should be deleted")
+	assert.True(t, ids["equal"], "report at cutoff should be kept")
+	assert.True(t, ids["after"], "report after cutoff should be kept")
+}
+
+// TestDeleteReportsBefore_ZeroDeleted verifies that deleting 0 records returns deleted=0, err=nil.
+func TestDeleteReportsBefore_ZeroDeleted(t *testing.T) {
+	s, _ := openTestStore(t)
+
+	deleted, err := s.DeleteReportsBefore(time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 0, deleted)
+}
+
+// TestDeleteReportsBefore_Idempotent verifies that calling DeleteReportsBefore twice
+// with the same cutoff gives 0 on the second call.
+func TestDeleteReportsBefore_Idempotent(t *testing.T) {
+	s, _ := openTestStore(t)
+
+	cutoff := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	before := cutoff.Add(-time.Hour)
+	require.NoError(t, SaveReport(s, ReportInput{Report: makeFullReport("r1", before), UID: 1, UIDValidity: 10}))
+
+	deleted1, err := s.DeleteReportsBefore(cutoff)
+	require.NoError(t, err)
+	assert.Equal(t, 1, deleted1)
+
+	deleted2, err := s.DeleteReportsBefore(cutoff)
+	require.NoError(t, err)
+	assert.Equal(t, 0, deleted2)
+}
+
+// TestDeleteReportsBefore_AtomicWrite verifies that no temporary files remain after deletion.
+func TestDeleteReportsBefore_AtomicWrite(t *testing.T) {
+	s, rootDir := openTestStore(t)
+
+	cutoff := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, SaveReport(s, ReportInput{
+		Report:      makeFullReport("r1", cutoff.Add(-time.Hour)),
+		UID:         1,
+		UIDValidity: 10,
+	}))
+
+	_, err := s.DeleteReportsBefore(cutoff)
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(rootDir)
+	require.NoError(t, err)
+	for _, e := range entries {
+		name := e.Name()
+		assert.False(t, len(name) > 4 && name[:4] == ".tmp",
+			"no temp files should remain after DeleteReportsBefore, found: %s", name)
+	}
+}
+
+// TestDeleteReportsBefore_Performance verifies that 10 000-record operations complete in < 1s.
+func TestDeleteReportsBefore_Performance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping performance test in short mode")
+	}
+	s, _ := openTestStore(t)
+
+	cutoff := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+	const n = 10000
+	inputs := make([]ReportInput, n)
+	for i := range inputs {
+		endDate := cutoff.Add(time.Duration(i-n/2) * time.Hour)
+		r := tlsrpt.Report{
+			ReportID:         fmt.Sprintf("perf-%d", i),
+			OrganizationName: "perf.example.com",
+			DateRange: tlsrpt.DateRange{
+				StartDatetime: endDate.Add(-24 * time.Hour),
+				EndDatetime:   endDate,
+			},
+		}
+		inputs[i] = ReportInput{Report: r, UID: uint32(i + 1), UIDValidity: 10} //nolint:gosec
+	}
+	require.NoError(t, s.SaveReports(inputs))
+
+	start := time.Now()
+	_, err := s.GetReportsSince(cutoff)
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), time.Second, "GetReportsSince should complete within 1s for 10k records")
+
+	start = time.Now()
+	_, err = s.DeleteReportsBefore(cutoff)
+	require.NoError(t, err)
+	assert.Less(t, time.Since(start), time.Second, "DeleteReportsBefore should complete within 1s for 10k records")
 }
