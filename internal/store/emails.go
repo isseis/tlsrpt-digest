@@ -72,27 +72,45 @@ func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
 		return fmt.Errorf("SaveEmailMetas: load data file: %w", err)
 	}
 
-	// Build a set of already-known {uid, uidvalidity} pairs for O(1) lookup.
-	type emailKey struct {
-		UID         uint32
-		UIDValidity uint32
-	}
-	existing := make(map[emailKey]bool, len(df.Emails))
-	for _, entry := range df.Emails {
-		existing[emailKey{entry.UID, entry.UIDValidity}] = true
+	// Build an index of existing entries for O(1) lookup by {uid, uidvalidity}.
+	// Maps to the slice position so we can update in-place.
+	existing := make(map[emailKey]int, len(df.Emails))
+	for i, entry := range df.Emails {
+		existing[emailKey{entry.UID, entry.UIDValidity}] = i
 	}
 
-	// Append only new entries; leave existing entries untouched (idempotent).
+	// For each meta: update existing minimal entries (those with zero SentAt/SavedAt
+	// created by SaveReports), or append a new entry if none exists.
 	for _, meta := range metas {
+		// Normalize zero SentAt: fall back to SavedAt with a WARN log, consistent
+		// with the SaveEmail fallback behaviour.
+		sentAt := meta.SentAt
+		if sentAt.IsZero() {
+			slog.Warn("SaveEmailMetas: SentAt is zero, falling back to SavedAt",
+				slog.Uint64("uid", uint64(meta.UID)),
+				slog.Uint64("uidvalidity", uint64(meta.UIDValidity)),
+			)
+			sentAt = meta.SavedAt
+		}
+
 		key := emailKey{meta.UID, meta.UIDValidity}
-		if !existing[key] {
+		if i, ok := existing[key]; ok {
+			// Update SentAt/SavedAt only if the entry is a minimal placeholder
+			// (zero values written by SaveReports before SaveEmailMetas ran).
+			if df.Emails[i].SentAt.IsZero() {
+				df.Emails[i].SentAt = sentAt
+			}
+			if df.Emails[i].SavedAt.IsZero() {
+				df.Emails[i].SavedAt = meta.SavedAt
+			}
+		} else {
 			df.Emails = append(df.Emails, internalEmailIndexEntry{
 				UID:         meta.UID,
 				UIDValidity: meta.UIDValidity,
-				SentAt:      meta.SentAt,
+				SentAt:      sentAt,
 				SavedAt:     meta.SavedAt,
 			})
-			existing[key] = true
+			existing[key] = len(df.Emails) - 1
 		}
 	}
 

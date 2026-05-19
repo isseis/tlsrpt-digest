@@ -303,6 +303,73 @@ func TestSaveEmailMetas_OrphanRescue(t *testing.T) {
 	assert.Len(t, df.Emails, 2, "orphaned email should be rescued on next SaveEmailMetas call")
 }
 
+// TestSaveEmailMetas_MinimalEntryRescue verifies that when SaveReports creates a minimal
+// index entry (with zero SentAt/SavedAt and only ReportEndDate set), a subsequent call to
+// SaveEmailMetas fills in the missing SentAt/SavedAt without resetting ReportEndDate.
+func TestSaveEmailMetas_MinimalEntryRescue(t *testing.T) {
+	s, rootDir := openTestStore(t)
+
+	sentAt := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	savedAt := sentAt.Add(time.Minute)
+	endDate := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+
+	// SaveReports first: creates a minimal index entry with zero SentAt/SavedAt.
+	require.NoError(t, SaveReport(s, ReportInput{
+		Report:      makeFullReport("r1", endDate),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+
+	// Verify the minimal entry was created.
+	df, err := loadDataFileFromPath(rootDir)
+	require.NoError(t, err)
+	require.Len(t, df.Emails, 1)
+	assert.True(t, df.Emails[0].SentAt.IsZero(), "minimal entry should have zero SentAt")
+	assert.True(t, df.Emails[0].SavedAt.IsZero(), "minimal entry should have zero SavedAt")
+	require.NotNil(t, df.Emails[0].ReportEndDate)
+
+	// SaveEmailMetas: should fill in SentAt/SavedAt and preserve ReportEndDate.
+	require.NoError(t, s.SaveEmailMetas([]EmailMeta{
+		{UID: 1, UIDValidity: 100, SentAt: sentAt, SavedAt: savedAt},
+	}))
+
+	df, err = loadDataFileFromPath(rootDir)
+	require.NoError(t, err)
+	require.Len(t, df.Emails, 1)
+	entry := df.Emails[0]
+	assert.True(t, entry.SentAt.Equal(sentAt), "SentAt should be filled in by SaveEmailMetas")
+	assert.True(t, entry.SavedAt.Equal(savedAt), "SavedAt should be filled in by SaveEmailMetas")
+	require.NotNil(t, entry.ReportEndDate, "ReportEndDate must not be reset")
+	assert.True(t, entry.ReportEndDate.Equal(endDate), "ReportEndDate should be preserved")
+}
+
+// TestSaveEmailMetas_ZeroSentAtNormalization verifies that when SaveEmailMetas receives
+// a meta with zero SentAt, it falls back to SavedAt and emits a WARN log.
+func TestSaveEmailMetas_ZeroSentAtNormalization(t *testing.T) {
+	spy := setDefaultSlogSpy(t)
+	s, rootDir := openTestStore(t)
+
+	savedAt := time.Date(2025, 8, 15, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, s.SaveEmailMetas([]EmailMeta{
+		{UID: 5, UIDValidity: 200, SentAt: time.Time{}, SavedAt: savedAt},
+	}))
+
+	df, err := loadDataFileFromPath(rootDir)
+	require.NoError(t, err)
+	require.Len(t, df.Emails, 1)
+	assert.True(t, df.Emails[0].SentAt.Equal(savedAt),
+		"zero SentAt should be normalized to SavedAt in the index entry")
+
+	warnFound := false
+	for _, r := range spy.records {
+		if r.Level == slog.LevelWarn {
+			warnFound = true
+			break
+		}
+	}
+	assert.True(t, warnFound, "a WARN log should be emitted when SentAt is zero")
+}
+
 // TestSaveEmailMetas_AtomicWrite verifies that no temp files remain after SaveEmailMetas.
 func TestSaveEmailMetas_AtomicWrite(t *testing.T) {
 	s, rootDir := openTestStore(t)

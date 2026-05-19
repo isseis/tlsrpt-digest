@@ -63,26 +63,21 @@ func (s *storeImpl) SaveReports(inputs []ReportInput) error {
 		return fmt.Errorf("SaveReports: load data file: %w", err)
 	}
 
-	// UPSERT reports by report-id.
+	// UPSERT reports by report-id using a map for O(N) lookup.
+	reportIdx := make(map[string]int, len(df.Reports))
+	for i, r := range df.Reports {
+		reportIdx[r.ReportID] = i
+	}
 	for _, input := range inputs {
-		upserted := false
-		for i, existing := range df.Reports {
-			if existing.ReportID == input.Report.ReportID {
-				df.Reports[i] = input.Report
-				upserted = true
-				break
-			}
-		}
-		if !upserted {
+		if i, ok := reportIdx[input.Report.ReportID]; ok {
+			df.Reports[i] = input.Report
+		} else {
 			df.Reports = append(df.Reports, input.Report)
+			reportIdx[input.Report.ReportID] = len(df.Reports) - 1
 		}
 	}
 
 	// Compute the maximum EndDatetime per {uid, uidvalidity} across the current batch.
-	type emailKey struct {
-		UID         uint32
-		UIDValidity uint32
-	}
 	maxEndDate := make(map[emailKey]time.Time)
 	for _, input := range inputs {
 		key := emailKey{UID: input.UID, UIDValidity: input.UIDValidity}
@@ -91,29 +86,29 @@ func (s *storeImpl) SaveReports(inputs []ReportInput) error {
 		}
 	}
 
-	// Update the report_end_date for each email index entry in the batch.
-	// If the entry does not yet exist, create a minimal one so that the
-	// report_end_date is not lost when SaveEmailMetas is called afterwards.
+	// Update the report_end_date for each email index entry in the batch using
+	// a map for O(N) lookup. If the entry does not yet exist, create a minimal
+	// placeholder so that the report_end_date is not lost when SaveEmailMetas
+	// is called afterwards (SaveEmailMetas will fill in the SentAt/SavedAt fields).
+	emailIdx := make(map[emailKey]int, len(df.Emails))
+	for i, entry := range df.Emails {
+		emailIdx[emailKey{entry.UID, entry.UIDValidity}] = i
+	}
 	for key, maxDate := range maxEndDate {
 		maxDateCopy := maxDate
-		found := false
-		for i, entry := range df.Emails {
-			if entry.UID == key.UID && entry.UIDValidity == key.UIDValidity {
-				// Only advance the date (conservative GC semantics).
-				if df.Emails[i].ReportEndDate == nil || maxDateCopy.After(*df.Emails[i].ReportEndDate) {
-					df.Emails[i].ReportEndDate = &maxDateCopy
-				}
-				found = true
-				break
+		if i, ok := emailIdx[key]; ok {
+			// Only advance the date (conservative GC semantics).
+			if df.Emails[i].ReportEndDate == nil || maxDateCopy.After(*df.Emails[i].ReportEndDate) {
+				df.Emails[i].ReportEndDate = &maxDateCopy
 			}
-		}
-		if !found {
+		} else {
 			// Create a minimal index entry; sent_at/saved_at will be filled by SaveEmailMetas.
 			df.Emails = append(df.Emails, internalEmailIndexEntry{
 				UID:           key.UID,
 				UIDValidity:   key.UIDValidity,
 				ReportEndDate: &maxDateCopy,
 			})
+			emailIdx[key] = len(df.Emails) - 1
 		}
 	}
 

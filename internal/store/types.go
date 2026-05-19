@@ -92,3 +92,10 @@ const SentinelFormatVersion = 1
 
 // DataFileVersion is the current tlsrpt.json format version.
 const DataFileVersion = 1
+
+// emailKey is an internal composite key used to identify an email by its
+// IMAP UID and UIDVALIDITY.
+type emailKey struct {
+	UID         uint32
+	UIDValidity uint32
+}
