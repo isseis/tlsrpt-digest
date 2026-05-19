@@ -27,7 +27,7 @@
 
 ### Phase 1: 基盤 I/O と open モード
 
-- [ ] **1.1** 型定義の作成
+- [x] **1.1** 型定義の作成
   - ファイル: `internal/store/types.go`
   - 作業内容:
     - `OpenMode` 型と `OpenReadWrite`・`OpenReadOnly` 定数を定義する
@@ -36,12 +36,12 @@
     - sentinel 内部モデル（format_version・IMAP識別子・initialized_at・uid_validity・recovery_required）を定義する
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **1.2** エラー型の定義
+- [x] **1.2** エラー型の定義
   - ファイル: `internal/store/errors.go`
   - 作業内容: `02_architecture.md` Section 4.2 の各エラー型（`ErrStoreIdentityMismatch`・`ErrUnsupportedSchemaVersion`・`ErrAtomicWriteFailed`・`ErrInvalidEmailPath`・`ErrLoadEmailFailed`・`ErrDeleteEmailFailed`）に `Error()` メソッドを実装する。`ErrStoreIdentityMismatch.Error()` は期待値・実値・`root_dir` を含むメッセージを返す
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **1.3** アトミック書き込みヘルパーの実装
+- [x] **1.3** アトミック書き込みヘルパーの実装
   - ファイル: `internal/store/atomicfile.go`
   - 作業内容:
     - 同ディレクトリ内の一時ファイルに書き込み後に `rename` する内部ヘルパー関数を実装する
@@ -49,21 +49,21 @@
     - write/sync/rename のいずれかで失敗した場合は一時ファイルを削除してエラーを返す
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **1.4** パーミッション管理ヘルパーの実装
+- [x] **1.4** パーミッション管理ヘルパーの実装
   - ファイル: `internal/store/permission.go`
   - 作業内容:
     - `0700` パーミッションでディレクトリを作成する内部ラッパーを実装する
     - 既存ファイル/ディレクトリのパーミッションが指定値より緩い場合に `slog.Warn` を出力する関数を実装する（自動修正は行わない）
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **1.5** sentinel 管理の実装
+- [x] **1.5** sentinel 管理の実装
   - ファイル: `internal/store/sentinel.go`
   - 作業内容:
     - `loadSentinel`（ファイルが存在しない場合はゼロ値を返す）・`saveSentinel`（1.3 のアトミックヘルパーを使用）を実装する
     - `initSentinel`：sentinel が存在しない場合は IMAP識別子・`initialized_at` を記録して新規作成し、存在する場合は IMAP識別子を検証して不一致なら `ErrStoreIdentityMismatch` を返す（``AC-05``・``AC-06``）
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **1.6** `Store` インターフェースと `Open` 関数の実装
+- [x] **1.6** `Store` インターフェースと `Open` 関数の実装
   - ファイル: `internal/store/store.go`
   - 作業内容:
     - `Store` インターフェースを `02_architecture.md` Section 3.1 のシグネチャどおりに定義する
@@ -74,7 +74,7 @@
     - パッケージレベルユーティリティ関数 `SaveReport(s Store, input ReportInput) error` を実装する
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **1.7** Phase 1 のテスト実装
+- [x] **1.7** Phase 1 のテスト実装
   - ファイル: `internal/store/store_test.go`
   - 作業内容:
     - `OpenReadWrite` で `root_dir`・`emails/`・`tlsrpt.json` が作成されること（``AC-01``〜``AC-03``）
