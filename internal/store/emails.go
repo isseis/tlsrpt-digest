@@ -124,13 +124,14 @@ func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
 }
 
 // ctimeOf returns the inode change time (ctime) of the file at path.
-// Falls back to time.Now() on error.
-func ctimeOf(path string) time.Time {
+// Returns an error if the syscall fails; callers should treat a failure as a
+// file I/O error and not substitute an artificial timestamp.
+func ctimeOf(path string) (time.Time, error) {
 	var stat syscall.Stat_t
 	if err := syscall.Stat(path, &stat); err != nil {
-		return time.Now().UTC()
+		return time.Time{}, fmt.Errorf("ctimeOf: stat %s: %w", path, err)
 	}
-	return time.Unix(stat.Ctim.Sec, stat.Ctim.Nsec).UTC()
+	return time.Unix(stat.Ctim.Sec, stat.Ctim.Nsec).UTC(), nil
 }
 
 // LoadEmails implements Store.LoadEmails.
@@ -196,7 +197,11 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 			return nil
 		}
 
-		savedAt := ctimeOf(path)
+		savedAt, ctimeErr := ctimeOf(path)
+		if ctimeErr != nil {
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: ctimeErr})
+			return nil
+		}
 		sentAt := savedAt
 		if dateStr := msg.Header.Get("Date"); dateStr != "" {
 			if t, dateErr := mail.ParseDate(dateStr); dateErr == nil {
@@ -255,8 +260,13 @@ func (s *storeImpl) DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (d
 			shouldDelete = true
 		}
 
-		// Forced deletion: savedAtCutoff != zero && saved_at < savedAtCutoff
-		if !savedAtCutoff.IsZero() && entry.SavedAt.Before(savedAtCutoff) {
+		// Forced deletion: savedAtCutoff != zero && saved_at < savedAtCutoff.
+		// Guard against zero SavedAt: a placeholder created by SaveReports before
+		// SaveEmailMetas has run has zero SavedAt. time.Time{}.Before(any cutoff) is
+		// always true, which would incorrectly mark placeholder entries for deletion and
+		// then drop the index entry when the fabricated path produces ENOENT, leaving the
+		// real .eml orphaned.
+		if !savedAtCutoff.IsZero() && !entry.SavedAt.IsZero() && entry.SavedAt.Before(savedAtCutoff) {
 			shouldDelete = true
 		}
 
@@ -265,8 +275,20 @@ func (s *storeImpl) DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (d
 			continue
 		}
 
+		// Reconstruct the .eml path. Use SentAt; fall back to SavedAt when SentAt is
+		// zero, consistent with SaveEmail. If both are zero this is a placeholder entry
+		// (SaveEmailMetas has not run yet) — skip GC since the correct path is unknown.
+		dateForPath := entry.SentAt
+		if dateForPath.IsZero() {
+			dateForPath = entry.SavedAt
+		}
+		if dateForPath.IsZero() {
+			surviving = append(surviving, entry)
+			continue
+		}
+
 		// Delete the .eml file first (file deletion before index update per AC-30).
-		emlPath := buildEmailPath(s.rootDir, entry.UID, entry.UIDValidity, entry.SentAt)
+		emlPath := buildEmailPath(s.rootDir, entry.UID, entry.UIDValidity, dateForPath)
 		if rmErr := os.Remove(emlPath); rmErr != nil && !os.IsNotExist(rmErr) {
 			// File I/O error: keep index entry, aggregate error, continue (AC-32a).
 			deleteErrs = append(deleteErrs, &ErrDeleteEmailFailed{

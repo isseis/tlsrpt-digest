@@ -180,6 +180,13 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 		checkFilePermissions(sentinelPath(rootDir))
 	}
 
+	// Check permissions on the data file when it already exists.
+	// initDataFile creates it with 0600, but a pre-existing file may have looser
+	// permissions that went undetected until now.
+	if _, statErr := os.Stat(dataFilePath(rootDir)); statErr == nil {
+		checkFilePermissions(dataFilePath(rootDir))
+	}
+
 	store := &storeImpl{
 		rootDir:       rootDir,
 		identity:      identity,

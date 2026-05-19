@@ -755,3 +755,50 @@ func TestDeleteEmailsBefore_SweepNotCalledWhenZero(t *testing.T) {
 	// Orphaned directory should NOT be swept (savedAtCutoff is zero).
 	assert.DirExists(t, orphanDir, "orphaned dir should remain when savedAtCutoff is zero")
 }
+
+// TestDeleteEmailsBefore_PlaceholderEntryNotOrphaned verifies that a minimal index entry
+// created by SaveReports before SaveEmailMetas has run (zero SentAt and SavedAt) is NOT
+// GC'd and does NOT orphan the real .eml file. Regression test for the case where
+// time.Time{}.Before(cutoff) is always true, which would incorrectly drop the index entry
+// via the ENOENT-as-idempotent path and leave the real .eml without an index entry.
+func TestDeleteEmailsBefore_PlaceholderEntryNotOrphaned(t *testing.T) {
+	s, rootDir := openTestStore(t)
+
+	sentAt := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	endDate := sentAt.Add(-time.Hour)
+
+	// Save the .eml file but do NOT call SaveEmailMetas — simulate a crash between the two.
+	rawEML := makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")
+	require.NoError(t, s.SaveEmail(1, 100, sentAt, sentAt, rawEML))
+
+	// SaveReports creates a minimal placeholder with zero SentAt/SavedAt.
+	require.NoError(t, SaveReport(s, ReportInput{
+		Report:      makeFullReport("r1", endDate),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+
+	// Verify the placeholder has zero SentAt/SavedAt.
+	df, err := loadDataFileFromPath(rootDir)
+	require.NoError(t, err)
+	require.Len(t, df.Emails, 1)
+	assert.True(t, df.Emails[0].SentAt.IsZero(), "placeholder should have zero SentAt")
+	assert.True(t, df.Emails[0].SavedAt.IsZero(), "placeholder should have zero SavedAt")
+
+	// savedAtCutoff chosen so that:
+	//   • time.Time{}.Before(savedAtCutoff) is true — the forced-deletion bug would fire
+	//   • YYYYMM("202506") is NOT < cutoffYYYYMM("202506") — the directory sweep stays safe
+	savedAtCutoff := time.Date(2025, 6, 30, 0, 0, 0, 0, time.UTC)
+	deleted, err := s.DeleteEmailsBefore(sentAt, savedAtCutoff)
+	require.NoError(t, err)
+	assert.Equal(t, 0, deleted, "placeholder with zero SavedAt must not be GC'd")
+
+	// The real .eml must still exist.
+	emlPath := filepath.Join(rootDir, "emails", "100", "202506", "0000000001.eml")
+	assert.FileExists(t, emlPath, "real .eml must not be orphaned by GC of placeholder entry")
+
+	// The index entry must still be present.
+	df, err = loadDataFileFromPath(rootDir)
+	require.NoError(t, err)
+	assert.Len(t, df.Emails, 1, "index entry must survive GC when it is a placeholder")
+}
