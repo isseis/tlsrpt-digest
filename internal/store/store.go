@@ -20,51 +20,53 @@ var errNotImplemented = errors.New("store: not implemented")
 // All operations are assumed to be called from a single writer (ensured by external scheduler).
 // Read-only mode (OpenReadOnly) prevents write operations and creation of files/directories.
 type Store interface {
-	// SaveReports persists a batch of TLSRPT reports.
-	// Implementations must handle:
-	// - AC-07: Non-empty input array
-	// - AC-08a: UID/UIDValidity consistency
-	// - AC-09: Atomic JSON update
-	// - AC-10: report_end_date extraction and max update
+	// SaveReports persists a batch of TLSRPT reports in a single atomic write.
+	// Reports are UPSERT'd by report-id (a duplicate replaces the existing entry).
+	// For each {uid, uidvalidity} in inputs, the corresponding email index entry's
+	// report_end_date is updated to the maximum DateRange.EndDatetime across all
+	// reports for that message. Returns an error if the write fails.
 	SaveReports(inputs []ReportInput) error
 
-	// SaveEmailMetas persists email metadata to the index (does not save raw .eml files).
-	// Used during reprocess to sync email index after SaveReports.
-	// Implementations must handle:
-	// - AC-08c: UID/UIDValidity batch registration
-	// - AC-09: Atomic JSON update
+	// SaveEmailMetas persists email metadata to the index in a single atomic write
+	// (does not save raw .eml files). For each entry, {uid, uidvalidity, sent_at, saved_at}
+	// is registered. Existing entries for the same {uid, uidvalidity} are left unchanged
+	// (idempotent). If the Date: header is missing or unparseable, sent_at falls back to
+	// saved_at with a WARN log. Calling this once after all SaveEmail calls avoids
+	// per-email JSON reads and writes. Used during reprocess to sync the index.
 	SaveEmailMetas(metas []EmailMeta) error
 
-	// GetReportsSince retrieves reports where report_end_date > since.
-	// Implementations must handle:
-	// - AC-11: Time-based filtering
-	// - AC-12: Performance (≤1 sec for 10000 reports)
+	// GetReportsSince retrieves all reports whose date-range.end-datetime >= since.
+	// Filtering is by the report period end time, not by the storage time.
+	// Returns an empty slice (not an error) when no reports match.
 	GetReportsSince(since time.Time) ([]tlsrpt.Report, error)
 
-	// SaveEmail saves a raw .eml file with EmailMeta index entry.
-	// Creates emails/{uidvalidity}/{YYYYMM}/ directories as needed.
-	// Implements AC-14..AC-18 per 03_implementation_plan.md.
+	// SaveEmail saves a raw .eml file to
+	// {root_dir}/emails/{uidvalidity}/{YYYYMM}/{uid}.eml
+	// (uid zero-padded to 10 digits). Creates subdirectories as needed (mode 0700).
+	// The write is atomic (temp file + rename). If the file already exists for the
+	// same uid and uidvalidity, the call is a no-op (idempotent, no error returned).
+	// Does not update the email index; call SaveEmailMetas after all SaveEmail calls.
 	SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time, rawEML []byte) error
 
-	// LoadEmails retrieves all saved emails with index entries.
-	// Partial failures (individual .eml parse failures) are aggregated via errors.Join.
-	// Implementations must handle:
-	// - AC-20: Full email load from .eml files
-	// - AC-21: SavedAt extraction from file ctime
-	// - AC-22: Partial failure tolerance and errors.Join
+	// LoadEmails recursively enumerates all .eml files under {root_dir}/emails/,
+	// deriving uid and uidvalidity from the {uidvalidity}/{YYYYMM}/{uid}.eml path.
+	// Each entry includes the parsed *mail.Message, UID, UIDValidity, SentAt (from
+	// Date: header, falling back to SavedAt on parse failure), and SavedAt (from
+	// the file's ctime via syscall.Stat). Individual file-read or parse failures are
+	// collected via errors.Join and returned alongside any successfully loaded emails.
 	LoadEmails() ([]LoadedEmail, error)
 
-	// SaveUIDValidity persists the IMAP UIDVALIDITY to sentinel.
-	// AC-23: Atomic sentinel update
+	// SaveUIDValidity persists the IMAP UIDVALIDITY value to the sentinel file
+	// using an atomic write (temp file + rename).
 	SaveUIDValidity(v uint32) error
 
-	// LoadUIDValidity retrieves UIDVALIDITY from sentinel.
-	// AC-24: Returns found=false if not yet set
+	// LoadUIDValidity retrieves the UIDVALIDITY value from the sentinel file.
+	// Returns found=false (not an error) if no value has been stored yet.
 	LoadUIDValidity() (v uint32, found bool, err error)
 
-	// SaveRecoveryRequired saves recovery state to sentinel.
-	// Indicates that UIDVALIDITY changed from prev to curr and needs manual recovery.
-	// Implements F-008 (AC-33..AC-36).
+	// SaveRecoveryRequired records in the sentinel that UIDVALIDITY changed from prev
+	// to curr at detectedAt, signalling that manual recovery is required before further
+	// fetch or summary operations. The write is atomic (temp file + rename).
 	SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time) error
 
 	// LoadRecoveryRequired retrieves recovery state from sentinel.
@@ -74,21 +76,30 @@ type Store interface {
 	// ClearRecoveryRequired removes recovery state from sentinel.
 	ClearRecoveryRequired() error
 
-	// ApplyRecovery updates sentinel to accept curr as the new uid_validity
-	// and clears the recovery_required state.
-	// Must be atomic: both uid_validity and recovery_required are updated together.
-	// Implements F-008 (AC-35).
+	// ApplyRecovery updates uid_validity to newUIDValidity and clears the
+	// recovery_required field in a single atomic read-modify-write on the sentinel.
+	// Using two separate calls (SaveUIDValidity + ClearRecoveryRequired) risks leaving
+	// the sentinel inconsistent on a crash between the two writes; always use this
+	// method when both fields must change together.
 	ApplyRecovery(newUIDValidity uint32) error
 
-	// DeleteReportsBefore deletes reports where report_end_date < cutoff.
-	// Implements F-007a (AC-25..AC-28).
+	// DeleteReportsBefore deletes all report records whose date-range.end-datetime < cutoff
+	// and returns the number of deleted records. Returns deleted=0 without error if no
+	// records match. The updated JSON is written atomically (temp file + rename).
+	// Idempotent: re-running with the same cutoff has no effect once matching records
+	// are removed.
 	DeleteReportsBefore(cutoff time.Time) (deleted int, err error)
 
-	// DeleteEmailsBefore deletes emails where:
-	// - report_end_date < reportCutoff (referenced via index), AND
-	// - saved_at < savedAtCutoff
-	// Also cleans up empty {uidvalidity}/{YYYYMM}/ directories.
-	// Implements F-007b (AC-29..AC-32).
+	// DeleteEmailsBefore deletes .eml files that satisfy either criterion:
+	//   - Normal deletion:  report_end_date != null && report_end_date < reportCutoff
+	//   - Forced deletion:  savedAtCutoff != zero && saved_at < savedAtCutoff
+	//     (catches parse-failed emails and those with a far-future report_end_date)
+	// .eml files are deleted first, then the index is updated atomically. This
+	// ordering ensures a crash leaves "file gone, index entry present" rather than
+	// "entry gone, file orphaned", so the next run can self-heal idempotently.
+	// Pass time.Time{} for savedAtCutoff to disable forced deletion.
+	// Individual file-delete errors are collected via errors.Join and do not abort
+	// the operation; deleted counts only successfully removed files.
 	DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (deleted int, err error)
 }
 
@@ -104,15 +115,20 @@ type storeImpl struct {
 }
 
 // Open opens the store at rootDir with the given identity in the specified mode.
-// In read-write mode, creates root_dir and subdirectories if they don't exist.
-// In read-only mode, returns an empty store if data files don't exist.
-// Implementations must handle:
-// - AC-01: Existence verification
-// - AC-02: Read-only mode for summary operations
-// - AC-03: Initialization with identity
-// - AC-04: Sentinel creation and persistence
-// - AC-05: Subdirectory creation (read-write mode only)
-// - AC-06: Identity verification (current vs sentinel)
+//
+// In read-write mode:
+//   - Creates rootDir and emails/ subdirectory (mode 0700) if they do not exist.
+//   - Initializes tlsrpt.json with an empty record set if it does not exist.
+//   - Creates the sentinel file (.tlsrpt-digest-meta.json) if it does not exist,
+//     recording the IMAP identity (host, port, mailbox) and the current time.
+//
+// In read-only mode (OpenReadOnly):
+//   - No files or directories are created.
+//   - Missing data files are treated as empty state (no reports, no index).
+//
+// If the sentinel already exists, its stored IMAP identity is verified against the
+// supplied identity. A mismatch returns an error containing both the expected and
+// actual identifiers along with rootDir.
 func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 	// Determine if read-only based on mode
 	readOnly := mode == OpenReadOnly
