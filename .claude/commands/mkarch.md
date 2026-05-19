@@ -34,7 +34,7 @@ Work in the following order.
 
 7. Review the document end to end and fix any issues you find before finishing.
 
-Review checklist:
+**Technical correctness checklist:**
 - [ ] `01_requirements.md` is `approved`.
 - [ ] `02_architecture.md` is written in Japanese and its status is `draft`.
 - [ ] All required sections from the requirements process guide are present.
@@ -49,5 +49,14 @@ Review checklist:
 - [ ] For notification-related features, the security section reflects `notification_security.md`.
 - [ ] The component responsibilities table lists all new and modified files.
 - [ ] The design does not overlap with existing packages or re-implement existing responsibilities.
+
+**Readability and consistency checklist:**
+- [ ] The arrow semantics used in each diagram are stated explicitly in a caption or note (e.g., "矢印 A → B は…を表す"), and are applied consistently within that diagram.
+- [ ] Node labels read as component or type names, not as lists of values or behavioral descriptions.
+- [ ] Every Mermaid diagram includes a Legend block that explains its node classes.
+- [ ] Each Legend block shows only color-coded nodes; it does not contain arrows that could imply unintended relationships.
+- [ ] Terminology is consistent throughout the document; the same concept always uses the same Japanese term.
+- [ ] Ambiguous or overly terse expressions are rewritten in direct, plain Japanese. Readers should not need context from prior review discussions to understand the text.
+- [ ] Architectural decisions that depend on constraints not obvious from the requirements are explained inline.
 
 When finished, provide a concise summary of what you created and any assumptions you had to make. If your runtime instructions allow committing at this stage, commit with an English commit message after the review is complete.

@@ -38,7 +38,7 @@ Work in the following order.
 
 7. Review the document end to end and fix any issues you find before finishing.
 
-Review checklist:
+**Technical correctness checklist:**
 - [ ] `02_architecture.md` is `approved`.
 - [ ] `03_implementation_plan.md` is written in Japanese and its status is `draft`.
 - [ ] All required sections from the requirements process guide are present.
@@ -52,5 +52,11 @@ Review checklist:
 - [ ] The plan does not imply Japanese text in Go source comments, identifiers, or string literals.
 - [ ] Any planned test helper files follow `docs/dev/developer_guide/test_organization.md`.
 - [ ] Planned file paths are specific where known and do not conflict with existing package responsibilities.
+
+**Readability and consistency checklist:**
+- [ ] Terminology is consistent with `02_architecture.md`; the same concept always uses the same Japanese term.
+- [ ] Task descriptions are phrased as clear, actionable instructions. Vague verbs (e.g., "対応する", "実装する") are replaced with specific actions where possible.
+- [ ] Redundant or repetitive content is removed; design details already in the architecture document are referenced rather than restated.
+- [ ] Ambiguous or overly terse expressions are rewritten in direct, plain Japanese so readers do not need prior context to understand what is expected.
 
 When finished, provide a concise summary of what you created and any assumptions you had to make. If your runtime instructions allow committing at this stage, commit with an English commit message after the review is complete.
