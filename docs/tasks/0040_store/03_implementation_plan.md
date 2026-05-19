@@ -91,7 +91,7 @@
 
 ### Phase 2: レポート・インデックス API
 
-- [ ] **2.1** レポート保存・取得 API の実装
+- [x] **2.1** レポート保存・取得 API の実装
   - ファイル: `internal/store/reports.go`
   - 作業内容:
     - `tlsrpt.json` の読み込みとスキーマバージョン検証を実装する
@@ -102,7 +102,7 @@
     - `GetReportsSince(since time.Time) ([]tlsrpt.Report, error)` を実装する：`DateRange.EndDatetime >= since` でフィルタし、対象がない場合は空スライスを返す（`AC-11`・`AC-12`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **2.2** レポート API のテスト実装
+- [x] **2.2** レポート API のテスト実装
   - ファイル: `internal/store/reports_test.go`
   - 作業内容:
     - `SaveReport` → `GetReportsSince` のラウンドトリップで全フィールド（`failure-details`・`policy-string`・`mx-host` 含む）が一致すること（`AC-07`・`AC-13`）
@@ -115,7 +115,7 @@
     - 書き込み失敗時にエラーが返ること（`AC-10`）
   - 完了判定: `go test ./internal/store/...` がすべて通ること
 
-- [ ] **2.3** メール保存 API の実装
+- [x] **2.3** メール保存 API の実装
   - ファイル: `internal/store/emails.go`（SaveEmail・SaveEmailMetas 部分）
   - 作業内容:
     - `SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time, rawEML []byte) error` を実装する：
@@ -129,7 +129,7 @@
       - アトミック rename で書き戻す（`AC-09`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **2.4** メール保存 API のテスト実装
+- [x] **2.4** メール保存 API のテスト実装
   - ファイル: `internal/store/emails_test.go`（保存部分）
   - 作業内容:
     - `SaveEmail` 後に `{root_dir}/emails/{uidvalidity}/{YYYYMM}/0000000123.eml` が `mail.ReadMessage` でパース可能な状態で作成されること（`AC-14`・`AC-15`・`AC-16`）

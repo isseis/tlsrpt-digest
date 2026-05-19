@@ -229,45 +229,6 @@ func initDataFile(rootDir string) error {
 	return atomicWriteFile(path, data)
 }
 
-// SaveReports implements Store.SaveReports.
-// TODO: Phase 2 implementation
-func (s *storeImpl) SaveReports(_ []ReportInput) error {
-	if s.readOnly {
-		return ErrReadOnly
-	}
-	return errNotImplemented
-}
-
-// SaveEmailMetas implements Store.SaveEmailMetas.
-// TODO: Phase 2 implementation
-func (s *storeImpl) SaveEmailMetas(_ []EmailMeta) error {
-	if s.readOnly {
-		return ErrReadOnly
-	}
-	return errNotImplemented
-}
-
-// GetReportsSince implements Store.GetReportsSince.
-// TODO: Phase 2 implementation
-func (s *storeImpl) GetReportsSince(_ time.Time) ([]tlsrpt.Report, error) {
-	return nil, errNotImplemented
-}
-
-// SaveEmail implements Store.SaveEmail.
-// TODO: Phase 2 implementation
-func (s *storeImpl) SaveEmail(_, _ uint32, _, _ time.Time, _ []byte) error {
-	if s.readOnly {
-		return ErrReadOnly
-	}
-	return errNotImplemented
-}
-
-// LoadEmails implements Store.LoadEmails.
-// TODO: Phase 3 implementation
-func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
-	return nil, errNotImplemented
-}
-
 // SaveUIDValidity implements Store.SaveUIDValidity.
 // TODO: Phase 3 implementation
 func (s *storeImpl) SaveUIDValidity(_ uint32) error {
@@ -314,24 +275,6 @@ func (s *storeImpl) ApplyRecovery(_ uint32) error {
 		return ErrReadOnly
 	}
 	return errNotImplemented
-}
-
-// DeleteReportsBefore implements Store.DeleteReportsBefore.
-// TODO: Phase 3 implementation
-func (s *storeImpl) DeleteReportsBefore(_ time.Time) (deleted int, err error) {
-	if s.readOnly {
-		return 0, ErrReadOnly
-	}
-	return 0, errNotImplemented
-}
-
-// DeleteEmailsBefore implements Store.DeleteEmailsBefore.
-// TODO: Phase 3 implementation
-func (s *storeImpl) DeleteEmailsBefore(_, _ time.Time) (deleted int, err error) {
-	if s.readOnly {
-		return 0, ErrReadOnly
-	}
-	return 0, errNotImplemented
 }
 
 // SaveReport is a package-level utility function that saves a single report.
