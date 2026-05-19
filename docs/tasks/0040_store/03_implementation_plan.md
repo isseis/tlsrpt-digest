@@ -148,7 +148,7 @@
 
 ### Phase 3: 読み込み・GC・復旧 API
 
-- [ ] **3.1** メール読み込み API の実装
+- [x] **3.1** メール読み込み API の実装
   - ファイル: `internal/store/emails.go`（LoadEmails 部分）
   - 作業内容:
     - `LoadEmails() ([]LoadedEmail, error)` を実装する：
@@ -159,7 +159,7 @@
       - 個別ファイルの失敗は `ErrLoadEmailFailed` に wrap して `errors.Join` で集約し、処理を継続する（`AC-22`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **3.2** メール読み込み API のテスト実装
+- [x] **3.2** メール読み込み API のテスト実装
   - ファイル: `internal/store/emails_test.go`（読み込み部分）
   - 作業内容:
     - 複数の `{uidvalidity}/{YYYYMM}/{uid}.eml` を保存し、`LoadEmails` が全件を返し、UID・UIDVALIDITY がパスから正しく逆算されること（`AC-20`）
@@ -169,7 +169,7 @@
     - reprocess 統合シナリオ：`LoadEmails` → `SaveEmailMetas` → `SaveReports` で結果が整合すること
   - 完了判定: `go test ./internal/store/...` がすべて通ること
 
-- [ ] **3.3** レポート GC の実装
+- [x] **3.3** レポート GC の実装
   - ファイル: `internal/store/reports.go`（DeleteReportsBefore 部分）
   - 作業内容:
     - `DeleteReportsBefore(cutoff time.Time) (deleted int, err error)` を実装する：
@@ -179,7 +179,7 @@
       - 書き込み失敗時は `deleted = 0` とエラーを返す（`AC-28a`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **3.4** レポート GC のテスト実装
+- [x] **3.4** レポート GC のテスト実装
   - ファイル: `internal/store/reports_test.go`（GC 部分）
   - 作業内容:
     - `cutoff` と等しい・1ナノ秒前・1ナノ秒後の `EndDatetime` を持つレポートで削除件数を確認する（`AC-25`）
@@ -190,7 +190,7 @@
     - 1 万件規模での `GetReportsSince` および `DeleteReportsBefore` が 1 秒以内に完了すること（パフォーマンステスト）
   - 完了判定: `go test ./internal/store/...` がすべて通ること
 
-- [ ] **3.5** `.eml` GC の実装
+- [x] **3.5** `.eml` GC の実装
   - ファイル: `internal/store/emails.go`（DeleteEmailsBefore 部分）
   - 作業内容:
     - `DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (deleted int, err error)` を実装する：
@@ -201,7 +201,7 @@
       - `savedAtCutoff` が非ゼロの場合、インデックスベース削除の完了後に `emails/{uidvalidity}/{YYYYMM}` ディレクトリを走査し、`YYYYMM < savedAtCutoff の年月` のディレクトリを `os.RemoveAll` で削除する。エラーは WARN ログに記録して継続する（`AC-32b`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **3.6** `.eml` GC のテスト実装
+- [x] **3.6** `.eml` GC のテスト実装
   - ファイル: `internal/store/emails_test.go`（GC 部分）
   - 作業内容:
     - 通常削除条件・強制削除条件・両方非対象のケースを個別に確認する（`AC-29`）
@@ -215,7 +215,7 @@
     - `savedAtCutoff` がゼロ値のときディレクトリスイープが実行されないこと（`AC-32b`）
   - 完了判定: `go test ./internal/store/...` がすべて通ること
 
-- [ ] **3.7** UIDVALIDITY および recovery API の実装
+- [x] **3.7** UIDVALIDITY および recovery API の実装
   - ファイル: `internal/store/recovery.go`
   - 作業内容:
     - `SaveUIDValidity(v uint32) error`：sentinel の `uid_validity` をアトミック保存する（`AC-23`）
@@ -226,7 +226,7 @@
     - `ApplyRecovery(newUIDValidity uint32) error`：`uid_validity` 更新と `recovery_required` 除去を 1 回の read-modify-write で実行する（`AC-36`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
-- [ ] **3.8** UIDVALIDITY および recovery API のテスト実装
+- [x] **3.8** UIDVALIDITY および recovery API のテスト実装
   - ファイル: `internal/store/recovery_test.go`
   - 作業内容:
     - `SaveUIDValidity` → `LoadUIDValidity` ラウンドトリップ（`AC-23`）
@@ -304,29 +304,29 @@
 ## 6. 実装チェックリスト
 
 ### Phase 1
-- [ ] 型定義（1.1）
-- [ ] エラー型（1.2）
-- [ ] アトミック書き込みヘルパー（1.3）
-- [ ] パーミッション管理ヘルパー（1.4）
-- [ ] sentinel 管理（1.5）
-- [ ] `Store` インターフェースと `Open`（1.6）
-- [ ] Phase 1 テスト（1.7）
+- [x] 型定義（1.1）
+- [x] エラー型（1.2）
+- [x] アトミック書き込みヘルパー（1.3）
+- [x] パーミッション管理ヘルパー（1.4）
+- [x] sentinel 管理（1.5）
+- [x] `Store` インターフェースと `Open`（1.6）
+- [x] Phase 1 テスト（1.7）
 
 ### Phase 2
-- [ ] レポート保存・取得 API（2.1）
-- [ ] レポート API テスト（2.2）
-- [ ] メール保存 API（2.3）
-- [ ] メール保存 API テスト（2.4）
+- [x] レポート保存・取得 API（2.1）
+- [x] レポート API テスト（2.2）
+- [x] メール保存 API（2.3）
+- [x] メール保存 API テスト（2.4）
 
 ### Phase 3
-- [ ] メール読み込み API（3.1）
-- [ ] メール読み込み API テスト（3.2）
-- [ ] レポート GC（3.3）
-- [ ] レポート GC テスト（3.4）
-- [ ] `.eml` GC（3.5）
-- [ ] `.eml` GC テスト（3.6）
-- [ ] UIDVALIDITY/recovery API（3.7）
-- [ ] UIDVALIDITY/recovery API テスト（3.8）
+- [x] メール読み込み API（3.1）
+- [x] メール読み込み API テスト（3.2）
+- [x] レポート GC（3.3）
+- [x] レポート GC テスト（3.4）
+- [x] `.eml` GC（3.5）
+- [x] `.eml` GC テスト（3.6）
+- [x] UIDVALIDITY/recovery API（3.7）
+- [x] UIDVALIDITY/recovery API テスト（3.8）
 
 ### Phase 4
 - [ ] `FakeStore` モック（4.1）

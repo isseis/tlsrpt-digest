@@ -133,10 +133,33 @@ func (s *storeImpl) GetReportsSince(since time.Time) ([]tlsrpt.Report, error) {
 }
 
 // DeleteReportsBefore implements Store.DeleteReportsBefore.
-// TODO: Phase 3 implementation
-func (s *storeImpl) DeleteReportsBefore(_ time.Time) (deleted int, err error) {
+func (s *storeImpl) DeleteReportsBefore(cutoff time.Time) (deleted int, err error) {
 	if s.readOnly {
 		return 0, ErrReadOnly
 	}
-	return 0, errNotImplemented
+
+	df, loadErr := s.loadDataFile()
+	if loadErr != nil {
+		return 0, fmt.Errorf("DeleteReportsBefore: load data file: %w", loadErr)
+	}
+
+	surviving := make([]tlsrpt.Report, 0, len(df.Reports))
+	for _, r := range df.Reports {
+		if r.DateRange.EndDatetime.Before(cutoff) {
+			deleted++
+		} else {
+			surviving = append(surviving, r)
+		}
+	}
+
+	if deleted == 0 {
+		return 0, nil
+	}
+
+	df.Reports = surviving
+	if saveErr := s.saveDataFile(df); saveErr != nil {
+		return 0, fmt.Errorf("DeleteReportsBefore: save data file: %w", saveErr)
+	}
+
+	return deleted, nil
 }

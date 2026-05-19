@@ -3,7 +3,6 @@ package store
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,10 +10,6 @@ import (
 
 	"github.com/isseis/tlsrpt-digest/internal/tlsrpt"
 )
-
-// errNotImplemented is a placeholder error for stub methods that will be
-// implemented in later phases (Phase 2 and Phase 3).
-var errNotImplemented = errors.New("store: not implemented")
 
 // Store represents the persistence layer for TLSRPT reports and emails.
 // All operations are assumed to be called from a single writer (ensured by external scheduler).
@@ -227,54 +222,6 @@ func initDataFile(rootDir string) error {
 		return fmt.Errorf("initDataFile: marshal: %w", err)
 	}
 	return atomicWriteFile(path, data)
-}
-
-// SaveUIDValidity implements Store.SaveUIDValidity.
-// TODO: Phase 3 implementation
-func (s *storeImpl) SaveUIDValidity(_ uint32) error {
-	if s.readOnly {
-		return ErrReadOnly
-	}
-	return errNotImplemented
-}
-
-// LoadUIDValidity implements Store.LoadUIDValidity.
-// TODO: Phase 3 implementation
-func (s *storeImpl) LoadUIDValidity() (v uint32, found bool, err error) {
-	return 0, false, errNotImplemented
-}
-
-// SaveRecoveryRequired implements Store.SaveRecoveryRequired.
-// TODO: Phase 3 implementation
-func (s *storeImpl) SaveRecoveryRequired(_, _ uint32, _ time.Time) error {
-	if s.readOnly {
-		return ErrReadOnly
-	}
-	return errNotImplemented
-}
-
-// LoadRecoveryRequired implements Store.LoadRecoveryRequired.
-// TODO: Phase 3 implementation
-func (s *storeImpl) LoadRecoveryRequired() (prev, curr uint32, detectedAt time.Time, found bool, err error) {
-	return 0, 0, time.Time{}, false, errNotImplemented
-}
-
-// ClearRecoveryRequired implements Store.ClearRecoveryRequired.
-// TODO: Phase 3 implementation
-func (s *storeImpl) ClearRecoveryRequired() error {
-	if s.readOnly {
-		return ErrReadOnly
-	}
-	return errNotImplemented
-}
-
-// ApplyRecovery implements Store.ApplyRecovery.
-// TODO: Phase 3 implementation
-func (s *storeImpl) ApplyRecovery(_ uint32) error {
-	if s.readOnly {
-		return ErrReadOnly
-	}
-	return errNotImplemented
 }
 
 // SaveReport is a package-level utility function that saves a single report.
