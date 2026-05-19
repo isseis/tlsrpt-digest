@@ -61,13 +61,13 @@
 
 **却下理由**: `{YYYYMM}` を `SentAt` 由来とすることは既存要件（0040 §6.3）で定められており、「古いファイルの手動削除を容易にする」目的のためである。破壊的変更であり、変更コストが大きい。また根本的な問題（送信側制御の値）は `SentAt` にも同様に存在する。
 
-### 選択肢 C: `.eml` GC を `saved_at` 一本化し、スイープを廃止する（採択）
+### 選択肢 C: `.eml` GC を `saved_at` 一本化し、スイープを正しい実装に置き換える（採択）
 
 - `DeleteEmailsBefore(savedAtCutoff time.Time)` に一本化する（`reportCutoff` パラメータを削除）
 - `report_end_date` をメールインデックスから削除する
-- `sweepOrphanedEmailDirs` を廃止する
+- `sweepOrphanedEmailDirs` を廃止し、`DeleteEmailsBefore` 内で GC 後に空になった `{uidvalidity}/{YYYYMM}` および `{uidvalidity}` ディレクトリを削除する正しい実装に置き換える
 
-孤立 `.eml` の清掃は `reprocess` サブコマンド（タスク 0070）が全 `.eml` を再帰走査するため、スイープがなくても自然に回収される。
+真に孤立した `.eml` ファイル（インデックスに存在しないファイル）の清掃は `reprocess` サブコマンド（タスク 0070）が全 `.eml` を再帰走査するため、スイープがなくても自然に回収される。
 
 ### 選択肢 D: `internal/tlsrpt.Parse()` に date-range バリデーションを追加する
 
@@ -100,7 +100,8 @@ date-range バリデーションはエントリポイントの責務とし、`in
 
 | 得られるもの | 失うもの |
 |---|---|
-| GC 判定が外部攻撃に対して堅牢になる | 孤立 `.eml` が `reprocess` 実行まで残る場合がある |
-| `DeleteEmailsBefore` のロジックが単純化される | スイープによる孤立ファイルの自動清掃がなくなる |
+| GC 判定が外部攻撃に対して堅牢になる | 真に孤立した `.eml` ファイルは `reprocess` 実行まで残る場合がある |
+| `DeleteEmailsBefore` のロジックが単純化される | — |
+| GC 後の空ディレクトリは `DeleteEmailsBefore` が正しく削除する | — |
 | `SaveReports` がメールインデックスを変更しなくなり責務が明確化される | — |
 | `sweepOrphanedEmailDirs` が消え誤削除リスクがなくなる | — |
