@@ -255,7 +255,7 @@
   - ファイル: `cmd/tlsrpt-digest/main.go`・`cmd/tlsrpt-digest/main_test.go`
   - 作業内容:
     - `main.go` にサブコマンドに応じた open モード選択ロジックを追加する（`fetch`/`gc`/`reprocess`/`recover` は `OpenReadWrite`、`summary` は `OpenReadOnly`）
-    - `main_test.go` に `FakeStore` を使ったエントリポイントからの store 利用シナリオを追加する
+    - `main_test.go` にサブコマンドと open モードの対応検証テスト（`TestStoreOpenMode`、`TestOpenStoreForSubcommand`）を追加する。実際の store を一時ディレクトリで使用し、`FakeStore` はインターフェース準拠のコンパイル時チェックのみに利用する
   - 完了判定: `go test -tags test ./cmd/tlsrpt-digest/...` がすべて通ること
 
 - [x] **4.3** 最終品質チェック

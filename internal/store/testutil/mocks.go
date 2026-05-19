@@ -5,9 +5,11 @@ package storetestutil
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"net/mail"
+	"slices"
 	"time"
 
 	"github.com/isseis/tlsrpt-digest/internal/store"
@@ -77,25 +79,24 @@ func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
 // SaveEmailMetas implements store.Store.
 func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
 	for _, meta := range metas {
-		key := emailKey{meta.UID, meta.UIDValidity}
-		if existing, ok := f.emails[key]; ok {
-			// Fill in SentAt/SavedAt for placeholder entries (created by SaveReports
-			// before SaveEmailMetas ran) but leave fully-populated entries unchanged.
-			if existing.SentAt.IsZero() {
-				sentAt := meta.SentAt
-				if sentAt.IsZero() {
-					sentAt = meta.SavedAt
-				}
-				existing.SentAt = sentAt
-			}
-			if existing.SavedAt.IsZero() {
-				existing.SavedAt = meta.SavedAt
-			}
-			continue
-		}
 		sentAt := meta.SentAt
 		if sentAt.IsZero() {
 			sentAt = meta.SavedAt
+		}
+
+		key := emailKey{meta.UID, meta.UIDValidity}
+		if existing, ok := f.emails[key]; ok {
+			// Fill in SentAt/SavedAt only for placeholder entries (created by SaveReports
+			// before SaveEmailMetas ran, so RawEML == nil).
+			if existing.RawEML == nil {
+				if existing.SentAt.IsZero() {
+					existing.SentAt = sentAt
+				}
+				if existing.SavedAt.IsZero() {
+					existing.SavedAt = meta.SavedAt
+				}
+			}
+			continue
 		}
 		f.emails[key] = &fakeEmailEntry{
 			UID:         meta.UID,
@@ -109,7 +110,7 @@ func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
 
 // GetReportsSince implements store.Store.
 func (f *FakeStore) GetReportsSince(since time.Time) ([]tlsrpt.Report, error) {
-	result := make([]tlsrpt.Report, 0)
+	result := make([]tlsrpt.Report, 0, len(f.Reports))
 	for _, r := range f.Reports {
 		if !r.DateRange.EndDatetime.Before(since) {
 			result = append(result, r)
@@ -137,7 +138,7 @@ func (f *FakeStore) SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time
 
 // LoadEmails implements store.Store.
 func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
-	result := make([]store.LoadedEmail, 0)
+	result := make([]store.LoadedEmail, 0, len(f.emails))
 	var errs []error
 
 	for _, entry := range f.emails {
@@ -170,6 +171,12 @@ func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
 			Path:        relPath,
 		})
 	}
+	slices.SortFunc(result, func(a, b store.LoadedEmail) int {
+		return cmp.Or(
+			cmp.Compare(a.UIDValidity, b.UIDValidity),
+			cmp.Compare(a.UID, b.UID),
+		)
+	})
 	return result, errors.Join(errs...)
 }
 
