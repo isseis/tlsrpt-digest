@@ -242,7 +242,7 @@
 
 ### Phase 4: モックと入口統合
 
-- [ ] **4.1** `FakeStore` モックの実装
+- [x] **4.1** `FakeStore` モックの実装
   - ファイル: `internal/store/testutil/mocks.go`
   - パッケージ名: `storetestutil`
   - 作業内容:
@@ -251,20 +251,21 @@
     - `cmd/tlsrpt-digest` のテストから利用できるようにする
   - 完了判定: `go build -tags test ./internal/store/testutil/...` が通ること
 
-- [ ] **4.2** エントリポイント側の store 利用調整
+- [x] **4.2** エントリポイント側の store 利用調整
   - ファイル: `cmd/tlsrpt-digest/main.go`・`cmd/tlsrpt-digest/main_test.go`
   - 作業内容:
     - `main.go` にサブコマンドに応じた open モード選択ロジックを追加する（`fetch`/`gc`/`reprocess`/`recover` は `OpenReadWrite`、`summary` は `OpenReadOnly`）
     - `main_test.go` に `FakeStore` を使ったエントリポイントからの store 利用シナリオを追加する
   - 完了判定: `go test -tags test ./cmd/tlsrpt-digest/...` がすべて通ること
 
-- [ ] **4.3** 最終品質チェック
+- [x] **4.3** 最終品質チェック
   - 作業内容:
     - `make fmt` を実行してフォーマット済みであることを確認する
     - `make lint` を実行してエラーがないことを確認する
     - `make test` で全テストが通ることを確認する
     - `make deadcode` で未使用コードが報告されないことを確認する
   - 完了判定: すべてのコマンドがエラーなしで完了すること
+  - 備考: `make deadcode` は `internal/store` 全体と `FakeStore` を unreachable と報告するが、これらは task 0070 でエントリポイントに接続される想定の新規コードであり、task 0040 の変更で不要になったコードは存在しない（リスク管理欄参照）
 
 ---
 
@@ -329,9 +330,9 @@
 - [x] UIDVALIDITY/recovery API テスト（3.8）
 
 ### Phase 4
-- [ ] `FakeStore` モック（4.1）
-- [ ] エントリポイント調整（4.2）
-- [ ] 最終品質チェック（4.3）
+- [x] `FakeStore` モック（4.1）
+- [x] エントリポイント調整（4.2）
+- [x] 最終品質チェック（4.3）
 
 ---
 

@@ -1,0 +1,248 @@
+//go:build test
+
+// Package storetestutil provides in-memory test doubles for the store package.
+package storetestutil
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"net/mail"
+	"time"
+
+	"github.com/isseis/tlsrpt-digest/internal/store"
+	"github.com/isseis/tlsrpt-digest/internal/tlsrpt"
+)
+
+type emailKey struct {
+	UID         uint32
+	UIDValidity uint32
+}
+
+type fakeEmailEntry struct {
+	UID           uint32
+	UIDValidity   uint32
+	SentAt        time.Time
+	SavedAt       time.Time
+	RawEML        []byte
+	ReportEndDate *time.Time
+}
+
+// FakeRecovery holds the recovery_required state stored by SaveRecoveryRequired.
+type FakeRecovery struct {
+	Prev       uint32
+	Curr       uint32
+	DetectedAt time.Time
+}
+
+// FakeStore is an in-memory implementation of store.Store for use in tests.
+// All fields are exported so tests can inspect state directly.
+type FakeStore struct {
+	// Reports maps report-id to the stored report (UPSERT semantics).
+	Reports map[string]tlsrpt.Report
+	// UIDValidity holds the persisted UIDVALIDITY value; nil means not yet set.
+	UIDValidity *uint32
+	// Recovery holds the current recovery_required state; nil means no recovery.
+	Recovery *FakeRecovery
+
+	emails map[emailKey]*fakeEmailEntry
+}
+
+// NewFakeStore returns an empty FakeStore ready for use.
+func NewFakeStore() *FakeStore {
+	return &FakeStore{
+		Reports: make(map[string]tlsrpt.Report),
+		emails:  make(map[emailKey]*fakeEmailEntry),
+	}
+}
+
+// SaveReports implements store.Store.
+func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
+	for _, input := range inputs {
+		f.Reports[input.Report.ReportID] = input.Report
+
+		key := emailKey{input.UID, input.UIDValidity}
+		if _, ok := f.emails[key]; !ok {
+			f.emails[key] = &fakeEmailEntry{UID: input.UID, UIDValidity: input.UIDValidity}
+		}
+		end := input.Report.DateRange.EndDatetime
+		if f.emails[key].ReportEndDate == nil || end.After(*f.emails[key].ReportEndDate) {
+			endCopy := end
+			f.emails[key].ReportEndDate = &endCopy
+		}
+	}
+	return nil
+}
+
+// SaveEmailMetas implements store.Store.
+func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
+	for _, meta := range metas {
+		key := emailKey{meta.UID, meta.UIDValidity}
+		if existing, ok := f.emails[key]; ok {
+			// Fill in SentAt/SavedAt for placeholder entries (created by SaveReports
+			// before SaveEmailMetas ran) but leave fully-populated entries unchanged.
+			if existing.SentAt.IsZero() {
+				sentAt := meta.SentAt
+				if sentAt.IsZero() {
+					sentAt = meta.SavedAt
+				}
+				existing.SentAt = sentAt
+			}
+			if existing.SavedAt.IsZero() {
+				existing.SavedAt = meta.SavedAt
+			}
+			continue
+		}
+		sentAt := meta.SentAt
+		if sentAt.IsZero() {
+			sentAt = meta.SavedAt
+		}
+		f.emails[key] = &fakeEmailEntry{
+			UID:         meta.UID,
+			UIDValidity: meta.UIDValidity,
+			SentAt:      sentAt,
+			SavedAt:     meta.SavedAt,
+		}
+	}
+	return nil
+}
+
+// GetReportsSince implements store.Store.
+func (f *FakeStore) GetReportsSince(since time.Time) ([]tlsrpt.Report, error) {
+	result := make([]tlsrpt.Report, 0)
+	for _, r := range f.Reports {
+		if !r.DateRange.EndDatetime.Before(since) {
+			result = append(result, r)
+		}
+	}
+	return result, nil
+}
+
+// SaveEmail implements store.Store.
+func (f *FakeStore) SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time, rawEML []byte) error {
+	key := emailKey{uid, uidValidity}
+	if existing, ok := f.emails[key]; ok && existing.RawEML != nil {
+		return nil // idempotent
+	}
+	if _, ok := f.emails[key]; !ok {
+		f.emails[key] = &fakeEmailEntry{UID: uid, UIDValidity: uidValidity}
+	}
+	f.emails[key].SentAt = sentAt
+	f.emails[key].SavedAt = savedAt
+	rawCopy := make([]byte, len(rawEML))
+	copy(rawCopy, rawEML)
+	f.emails[key].RawEML = rawCopy
+	return nil
+}
+
+// LoadEmails implements store.Store.
+func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
+	result := make([]store.LoadedEmail, 0)
+	var errs []error
+
+	for _, entry := range f.emails {
+		if entry.RawEML == nil {
+			continue
+		}
+		msg, err := mail.ReadMessage(bytes.NewReader(entry.RawEML))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("FakeStore.LoadEmails: parse %d/%d: %w", entry.UIDValidity, entry.UID, err))
+			continue
+		}
+		sentAt := entry.SavedAt
+		if dateStr := msg.Header.Get("Date"); dateStr != "" {
+			if t, parseErr := mail.ParseDate(dateStr); parseErr == nil {
+				sentAt = t.UTC()
+			}
+		}
+		dateForPath := entry.SentAt
+		if dateForPath.IsZero() {
+			dateForPath = entry.SavedAt
+		}
+		yyyymm := dateForPath.UTC().Format("200601")
+		relPath := fmt.Sprintf("%d/%s/%010d.eml", entry.UIDValidity, yyyymm, entry.UID)
+		result = append(result, store.LoadedEmail{
+			Message:     msg,
+			UID:         entry.UID,
+			UIDValidity: entry.UIDValidity,
+			SentAt:      sentAt,
+			SavedAt:     entry.SavedAt,
+			Path:        relPath,
+		})
+	}
+	return result, errors.Join(errs...)
+}
+
+// SaveUIDValidity implements store.Store.
+func (f *FakeStore) SaveUIDValidity(v uint32) error {
+	vCopy := v
+	f.UIDValidity = &vCopy
+	return nil
+}
+
+// LoadUIDValidity implements store.Store.
+func (f *FakeStore) LoadUIDValidity() (uint32, bool, error) {
+	if f.UIDValidity == nil {
+		return 0, false, nil
+	}
+	return *f.UIDValidity, true, nil
+}
+
+// SaveRecoveryRequired implements store.Store.
+func (f *FakeStore) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time) error {
+	f.Recovery = &FakeRecovery{Prev: prev, Curr: curr, DetectedAt: detectedAt}
+	return nil
+}
+
+// LoadRecoveryRequired implements store.Store.
+func (f *FakeStore) LoadRecoveryRequired() (uint32, uint32, time.Time, bool, error) {
+	if f.Recovery == nil {
+		return 0, 0, time.Time{}, false, nil
+	}
+	return f.Recovery.Prev, f.Recovery.Curr, f.Recovery.DetectedAt, true, nil
+}
+
+// ClearRecoveryRequired implements store.Store.
+func (f *FakeStore) ClearRecoveryRequired() error {
+	f.Recovery = nil
+	return nil
+}
+
+// ApplyRecovery implements store.Store.
+func (f *FakeStore) ApplyRecovery(newUIDValidity uint32) error {
+	vCopy := newUIDValidity
+	f.UIDValidity = &vCopy
+	f.Recovery = nil
+	return nil
+}
+
+// DeleteReportsBefore implements store.Store.
+func (f *FakeStore) DeleteReportsBefore(cutoff time.Time) (int, error) {
+	deleted := 0
+	for id, r := range f.Reports {
+		if r.DateRange.EndDatetime.Before(cutoff) {
+			delete(f.Reports, id)
+			deleted++
+		}
+	}
+	return deleted, nil
+}
+
+// DeleteEmailsBefore implements store.Store.
+func (f *FakeStore) DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (int, error) {
+	deleted := 0
+	for key, entry := range f.emails {
+		shouldDelete := false
+		if entry.ReportEndDate != nil && entry.ReportEndDate.Before(reportCutoff) {
+			shouldDelete = true
+		}
+		if !savedAtCutoff.IsZero() && !entry.SavedAt.IsZero() && entry.SavedAt.Before(savedAtCutoff) {
+			shouldDelete = true
+		}
+		if shouldDelete {
+			delete(f.emails, key)
+			deleted++
+		}
+	}
+	return deleted, nil
+}

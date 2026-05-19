@@ -6,12 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
+	"github.com/isseis/tlsrpt-digest/internal/store"
+	storetestutil "github.com/isseis/tlsrpt-digest/internal/store/testutil"
+	"github.com/isseis/tlsrpt-digest/internal/tlsrpt"
 )
 
 const (
@@ -133,4 +137,45 @@ func TestLoadConfig_ValidFile(t *testing.T) {
 func TestLoadConfig_NonexistentFile(t *testing.T) {
 	_, err := loadConfig("/nonexistent/path/config.toml")
 	require.Error(t, err)
+}
+
+// TestStoreOpenMode verifies that subcommands are mapped to the correct open mode.
+func TestStoreOpenMode(t *testing.T) {
+	assert.Equal(t, store.OpenReadWrite, storeOpenMode("fetch"))
+	assert.Equal(t, store.OpenReadWrite, storeOpenMode("gc"))
+	assert.Equal(t, store.OpenReadWrite, storeOpenMode("reprocess"))
+	assert.Equal(t, store.OpenReadWrite, storeOpenMode("recover"))
+	assert.Equal(t, store.OpenReadOnly, storeOpenMode("summary"))
+}
+
+// TestFakeStore_BasicScenario verifies that FakeStore correctly implements
+// the store.Store interface for a representative fetch→summary scenario.
+func TestFakeStore_BasicScenario(t *testing.T) {
+	s := storetestutil.NewFakeStore()
+
+	endDate := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+	report := tlsrpt.Report{
+		ReportID:         "test-report-1",
+		OrganizationName: "example.com",
+		DateRange: tlsrpt.DateRange{
+			StartDatetime: endDate.Add(-24 * time.Hour),
+			EndDatetime:   endDate,
+		},
+	}
+
+	// SaveReports stores the report and creates a minimal email index entry.
+	require.NoError(t, s.SaveReports([]store.ReportInput{
+		{Report: report, UID: 1, UIDValidity: 100},
+	}))
+
+	// GetReportsSince returns the report when its end-date >= since.
+	reports, err := s.GetReportsSince(endDate)
+	require.NoError(t, err)
+	require.Len(t, reports, 1)
+	assert.Equal(t, "test-report-1", reports[0].ReportID)
+
+	// Reports before the window are excluded.
+	reports, err = s.GetReportsSince(endDate.Add(time.Nanosecond))
+	require.NoError(t, err)
+	assert.Empty(t, reports)
 }
