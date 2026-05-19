@@ -16,7 +16,7 @@
 
 ### 1.1 設計原則
 
-- **信頼できる日時のみを使う**: GC 判定は `saved_at`（ローカル制御）に、パス決定は `INTERNALDATE`（IMAP サーバー制御）に一本化し、送信側が設定する値への依存を排除する
+- **信頼できる日時のみを使う**: GC 判定・パス決定ともに `INTERNALDATE`（IMAP サーバー制御）に一本化し、送信側が設定する値への依存を排除する
 - **責務の分離を維持する**: `SaveReports` はレポートレコードの永続化に専念し、メールインデックスを変更しない
 - **削除コードを減らす**: `sweepOrphanedEmailDirs` を廃止することで、日時の月差異に起因するディレクトリ誤削除のリスクを根本から除去する
 
@@ -69,8 +69,8 @@ flowchart TD
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
 
     SR["SaveReports"] -->|"レポートのみ更新"| RPT[("レポートレコード")]
-    DEB["DeleteEmailsBefore<br>(savedAtCutoff)"] -->|"読む"| IDX[("メールインデックス<br>uid / uidvalidity<br>internal_date / saved_at")]
-    DEB -->|"条件: saved_at < savedAtCutoff"| DEL["削除<br>（ローカル制御のみ）"]
+    DEB["DeleteEmailsBefore<br>(cutoff)"] -->|"読む"| IDX[("メールインデックス<br>uid / uidvalidity<br>internal_date / saved_at")]
+    DEB -->|"条件: internal_date < cutoff"| DEL["削除<br>（INTERNALDATE 基準）"]
 
     class RPT,IDX data
     class DEL enhanced
@@ -193,10 +193,10 @@ sequenceDiagram
     participant EF as "emails/"
     participant DF as "tlsrpt.json"
 
-    EP->>ST: "DeleteEmailsBefore(savedAtCutoff)"
+    EP->>ST: "DeleteEmailsBefore(cutoff)"
     ST->>DF: "メールインデックスを読み込む"
     loop "各インデックスエントリ"
-        alt "saved_at != zero && saved_at < savedAtCutoff"
+        alt "internal_date != zero && internal_date < cutoff"
             ST->>EF: ".eml を削除（パスは internal_date から再構築）"
             Note over ST,EF: "I/O エラーは集約して継続"
         else "削除対象外"
@@ -227,10 +227,10 @@ type Store interface {
     // メールインデックスは更新しない（AC-09）。
     SaveReports(inputs []ReportInput) error
 
-    // DeleteEmailsBefore は saved_at < savedAtCutoff を満たす .eml ファイルを削除する。
-    // savedAtCutoff がゼロ値の場合は削除を行わない（AC-02）。
-    // saved_at がゼロのエントリ（プレースホルダー）は削除対象外とする（AC-03）。
-    DeleteEmailsBefore(savedAtCutoff time.Time) (deleted int, err error)
+    // DeleteEmailsBefore は internal_date < cutoff を満たす .eml ファイルを削除する。
+    // cutoff がゼロ値の場合は削除を行わない（AC-02）。
+    // internal_date がゼロのエントリは削除対象外とする（AC-03）。
+    DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)
 }
 ```
 
@@ -312,7 +312,7 @@ type internalEmailIndexEntry struct {
 |---|---|
 | `.eml` の個別削除に I/O エラー | エントリをインデックスに残し、`errors.Join` で集約して継続（AC-05） |
 | インデックスの保存失敗 | 失敗前の削除件数を返し、保存エラーを集約して返す（AC-07） |
-| `saved_at` がゼロのエントリ | 削除対象外として扱い、インデックスに保持（AC-03） |
+| `internal_date` がゼロのエントリ | 削除対象外として扱い、インデックスに保持（AC-03） |
 | `internalDate` がゼロ値（`SaveEmail`・パス再構築） | `savedAt` にフォールバックして `slog.Warn` を出力（AC-19） |
 | 空ディレクトリ削除の失敗 | `slog.Warn` を出力して継続し、戻り値エラーには含めない（AC-13） |
 
@@ -339,13 +339,13 @@ type internalEmailIndexEntry struct {
 flowchart TD
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
-    Start(["DeleteEmailsBefore(savedAtCutoff)"]) --> Zero{"savedAtCutoff<br>がゼロ値？"}
+    Start(["DeleteEmailsBefore(cutoff)"]) --> Zero{"cutoff<br>がゼロ値？"}
     Zero -->|"Yes"| RetZero(["deleted=0, err=nil を返す (AC-02)"])
     Zero -->|"No"| Load["インデックスを読み込む"]
     Load --> Loop["各インデックスエントリを評価"]
-    Loop --> Placeholder{"saved_at がゼロ？<br>（プレースホルダー）"}
+    Loop --> Placeholder{"internal_date がゼロ？"}
     Placeholder -->|"Yes"| Keep["保持（AC-03）"]
-    Placeholder -->|"No"| Cond{"saved_at < savedAtCutoff？"}
+    Placeholder -->|"No"| Cond{"internal_date < cutoff？"}
     Cond -->|"No"| Keep
     Cond -->|"Yes"| DelFile["ファイルを削除 (AC-06)<br>パスは internal_date から再構築"]
     DelFile --> IOErr{"I/O エラー？"}
@@ -375,9 +375,9 @@ flowchart TD
 |---|---|
 | `SaveEmail`（新シグネチャ） | `internalDate` から正しい `{YYYYMM}` パスが生成されること（AC-19） |
 | | `internalDate` がゼロ値のとき `savedAt` にフォールバックして WARN が出力されること（AC-19） |
-| `DeleteEmailsBefore`（新シグネチャ） | `savedAtCutoff` がゼロ → 削除なし（AC-02） |
-| | `saved_at < savedAtCutoff` → ファイルとインデックスエントリを削除（AC-03, AC-06） |
-| | `saved_at` がゼロのエントリ → 削除対象外（AC-03） |
+| `DeleteEmailsBefore`（新シグネチャ） | `cutoff` がゼロ → 削除なし（AC-02） |
+| | `internal_date < cutoff` → ファイルとインデックスエントリを削除（AC-03, AC-06） |
+| | `internal_date` がゼロのエントリ → 削除対象外（AC-03） |
 | | ファイル不在 → 冪等動作（AC-04） |
 | | I/O エラー混在 → 成功件数と集約エラーを返す（AC-05） |
 | | インデックス更新失敗 → 削除済み件数とエラーを返す（AC-07） |
