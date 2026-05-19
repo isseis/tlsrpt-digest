@@ -20,7 +20,7 @@ fmt:
 	gofumpt -w .
 
 deadcode:
-	deadcode -test ./cmd/tlsrpt-digest
+	deadcode -test -tags test ./cmd/tlsrpt-digest
 
 clean:
 	rm -rf build/

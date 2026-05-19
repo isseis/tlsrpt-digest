@@ -12,6 +12,7 @@ import (
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
+	"github.com/isseis/tlsrpt-digest/internal/store"
 )
 
 func main() {
@@ -134,6 +135,24 @@ func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, d
 	}
 
 	return nil
+}
+
+// storeOpenMode returns the store.OpenMode appropriate for a given subcommand.
+// Subcommands that write data (fetch, gc, reprocess, recover) use OpenReadWrite.
+// The summary subcommand uses OpenReadOnly so it can run without a process lock.
+// This stub will be wired into subcommand dispatch in task 0070.
+func storeOpenMode(subcommand string) store.OpenMode {
+	if subcommand == "summary" {
+		return store.OpenReadOnly
+	}
+	return store.OpenReadWrite
+}
+
+// openStoreForSubcommand opens the store with the mode appropriate for subcommand.
+// It is the wiring point between subcommand dispatch and store.Open; task 0070
+// will call this from each subcommand handler.
+func openStoreForSubcommand(rootDir string, identity store.IMAPIdentity, subcommand string) (store.Store, error) {
+	return store.Open(rootDir, identity, storeOpenMode(subcommand))
 }
 
 // loadConfig reads the TOML configuration from path, or returns an empty

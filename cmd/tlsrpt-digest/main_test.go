@@ -1,3 +1,5 @@
+//go:build test
+
 package main
 
 import (
@@ -6,12 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
+	"github.com/isseis/tlsrpt-digest/internal/store"
+	storetestutil "github.com/isseis/tlsrpt-digest/internal/store/testutil"
+	"github.com/isseis/tlsrpt-digest/internal/tlsrpt"
 )
 
 const (
@@ -133,4 +139,59 @@ func TestLoadConfig_ValidFile(t *testing.T) {
 func TestLoadConfig_NonexistentFile(t *testing.T) {
 	_, err := loadConfig("/nonexistent/path/config.toml")
 	require.Error(t, err)
+}
+
+// Compile-time check: FakeStore must implement store.Store so the interface
+// stays in sync as the Store contract evolves.
+var _ store.Store = (*storetestutil.FakeStore)(nil)
+
+// TestStoreOpenMode verifies that subcommands are mapped to the correct open mode.
+func TestStoreOpenMode(t *testing.T) {
+	assert.Equal(t, store.OpenReadWrite, storeOpenMode("fetch"))
+	assert.Equal(t, store.OpenReadWrite, storeOpenMode("gc"))
+	assert.Equal(t, store.OpenReadWrite, storeOpenMode("reprocess"))
+	assert.Equal(t, store.OpenReadWrite, storeOpenMode("recover"))
+	assert.Equal(t, store.OpenReadOnly, storeOpenMode("summary"))
+}
+
+// TestOpenStoreForSubcommand verifies that openStoreForSubcommand wires
+// storeOpenMode into store.Open correctly.  Write-capable subcommands must
+// succeed on SaveReport; the summary subcommand must be refused with ErrReadOnly.
+func TestOpenStoreForSubcommand(t *testing.T) {
+	identity := store.IMAPIdentity{Host: "imap.example.com", Port: 993, Mailbox: "INBOX"}
+	endDate := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+	probe := store.ReportInput{
+		Report: tlsrpt.Report{
+			ReportID:  "probe",
+			DateRange: tlsrpt.DateRange{EndDatetime: endDate},
+		},
+		UID: 1, UIDValidity: 1,
+	}
+
+	cases := []struct {
+		subcommand   string
+		wantReadOnly bool
+	}{
+		{"fetch", false},
+		{"gc", false},
+		{"reprocess", false},
+		{"recover", false},
+		{"summary", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.subcommand, func(t *testing.T) {
+			s, err := openStoreForSubcommand(t.TempDir(), identity, tc.subcommand)
+			require.NoError(t, err)
+
+			writeErr := store.SaveReport(s, probe)
+			if tc.wantReadOnly {
+				assert.ErrorIs(t, writeErr, store.ErrReadOnly,
+					"summary must use OpenReadOnly")
+			} else {
+				assert.NoError(t, writeErr,
+					"%s must use OpenReadWrite", tc.subcommand)
+			}
+		})
+	}
 }
