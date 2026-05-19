@@ -1,24 +1,30 @@
 ## Preparation
 
-Get the target file path from the argument (e.g. `docs/dev/foo.ja.md`).
+Get the source file path from the argument.
 If no argument is provided, ask the user.
 
-Verify that the target file is a Japanese document (`.ja.md`).
-If not, stop.
+Determine the translation direction from the file extension:
 
-Determine the output path for the English version (`.ja.md` → `.md`).
+- Source ends in `.ja.md` → **Japanese → English**
+  - Source: `foo.ja.md`
+  - Output: `foo.md`
+- Source ends in `.md` (but not `.ja.md`) → **English → Japanese**
+  - Source: `foo.md`
+  - Output: `foo.ja.md`
+
+If the source file does not match either pattern, stop and ask the user to clarify.
 
 ## Mode Selection: Full Translation or Differential Translation
 
-**If the English version does not exist**: proceed with full translation (see "Full Translation" section).
+**If the output file does not exist**: proceed with full translation (see "Full Translation" section).
 
-**If the English version already exists**: proceed with differential translation (see "Differential Translation" section).
+**If the output file already exists**: proceed with differential translation (see "Differential Translation" section).
 
 ---
 
 ## Full Translation
 
-Translate the entire Japanese file from scratch.
+Translate the entire source file from scratch.
 
 ### Load Glossary
 
@@ -29,37 +35,37 @@ Use the terms listed there consistently throughout the translation.
 
 Translate strictly following these principles:
 
-- **Accuracy over fluency**: Prioritize precise translation over natural-sounding English.
-- **Faithful translation**: Do not delete any content from the Japanese version. Do not add any content not present in the Japanese version.
-- **Structural consistency**: Match chapter headings and sentence structure to the Japanese version.
+- **Accuracy over fluency**: Prioritize precise translation over natural-sounding output.
+- **Faithful translation**: Do not delete any content from the source. Do not add any content not present in the source.
+- **Structural consistency**: Match chapter headings and sentence structure to the source.
 
-Write the translated English version to the output path.
+Write the translated output to the output path.
 
 ---
 
 ## Differential Translation
 
-Translate only the sections that changed in the Japanese file since the English file was last updated.
+Translate only the sections that changed in the source file since the output file was last updated.
 
 ### Find the Sync Point
 
-Run the following command to find the last commit that modified the English file:
+Run the following command to find the last commit that modified the output file:
 
 ```bash
-git log -1 --format=%H -- <en-file>
+git log -1 --format=%H -- <output-file>
 ```
 
-Record the commit hash (call it `SYNC_HASH`). If no hash is returned (e.g., the file is not yet committed), stop and inform the user that differential translation requires the English file to be committed.
+Record the commit hash (call it `SYNC_HASH`). If no hash is returned (e.g., the output file is not yet committed), stop and inform the user that differential translation requires the output file to be committed.
 
 ### Get the Diff
 
 Run:
 
 ```bash
-git diff SYNC_HASH -- <ja-file>
+git diff SYNC_HASH -- <source-file>
 ```
 
-If the diff is empty, the English file is already up to date. Stop and report this to the user.
+If the diff is empty, the output file is already up to date. Stop and report this to the user.
 
 ### Load Glossary
 
@@ -71,11 +77,11 @@ Use the terms listed there consistently throughout the translation.
 From the diff, identify which sections (by heading) were added, modified, or removed.
 
 For each changed section:
-- **Added lines** (`+`): translate the new Japanese content into English.
-- **Removed lines** (`-`): identify the corresponding content in the English file and remove it.
-- **Modified lines**: translate the new Japanese content and replace the old English content.
+- **Added lines** (`+`): translate the new source content into the target language.
+- **Removed lines** (`-`): identify the corresponding content in the output file and remove it.
+- **Modified lines**: translate the new source content and replace the old output content.
 
-Apply these changes to the English file. Do not touch sections that are not in the diff.
+Apply these changes to the output file. Do not touch sections that are not in the diff.
 
 ---
 
@@ -89,17 +95,17 @@ Skip this step if no new terms were introduced.
 Read the translated output end to end before committing.
 
 **Accuracy checklist:**
-- [ ] No content from the Japanese source is missing in the translation.
-- [ ] No content was added that is not present in the Japanese source.
+- [ ] No content from the source is missing in the translation.
+- [ ] No content was added that is not present in the source.
 - [ ] All technical terms match the glossary.
 
 **Readability checklist (translated output):**
 
-The translation principles (Accuracy over fluency, Structural consistency) take precedence. The following checks apply only within those constraints: do not restructure sentences, reorder clauses, or rephrase in ways that would diverge from the Japanese source structure.
+The translation principles (Accuracy over fluency, Structural consistency) take precedence. The following checks apply only within those constraints: do not restructure sentences, reorder clauses, or rephrase in ways that would diverge from the source structure.
 
 - [ ] Word choices that are technically correct but unnecessarily obscure are replaced with clearer equivalents that carry the same meaning and preserve the source structure.
-- [ ] Terminology is used consistently throughout the translation; the same concept always uses the same English term.
-- [ ] Sentence structure follows target-language conventions where the source structure permits it; literal carry-overs from Japanese syntax that produce unnatural English are corrected as long as doing so does not alter meaning or structure.
+- [ ] Terminology is used consistently throughout the translation; the same concept always uses the same term in the target language.
+- [ ] Sentence structure follows target-language conventions where the source structure permits it; literal carry-overs from source syntax that produce unnatural output are corrected as long as doing so does not alter meaning or structure.
 
 ## Commit
 
