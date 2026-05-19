@@ -155,7 +155,7 @@
       - `{root_dir}/emails/` 以下を再帰 walk し、`{uidvalidity}/{YYYYMM}/{padded_uid}.eml` パターンのファイルを列挙する（`AC-20`）
       - パスから `uidvalidity`・`uid` を `uint32` に逆算する（`AC-20`）
       - `mail.ReadMessage` でパースし `LoadedEmail` を構築する
-      - `SentAt` は `Date:` ヘッダーから取得し、欠損・parse 失敗時は `os.Stat` の mtime（`SavedAt`）を代用する（`AC-21`）
+      - `SentAt` は `Date:` ヘッダーから取得し、欠損・parse 失敗時は `syscall.Stat` の ctime（`SavedAt`）を代用する（`AC-21`）
       - 個別ファイルの失敗は `ErrLoadEmailFailed` に wrap して `errors.Join` で集約し、処理を継続する（`AC-22`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
