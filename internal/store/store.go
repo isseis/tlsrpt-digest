@@ -2,8 +2,10 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -125,6 +127,11 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 		if err := ensureDirExists(emailsDir); err != nil {
 			return nil, fmt.Errorf("Open: ensure emails dir: %w", err)
 		}
+
+		// Initialize the data file with empty content if it does not exist (AC-03).
+		if err := initDataFile(rootDir); err != nil {
+			return nil, fmt.Errorf("Open: init data file: %w", err)
+		}
 	}
 
 	// Load or initialize sentinel
@@ -159,7 +166,7 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 
 	// Check permissions on existing sentinel file and warn if loose.
 	if sentinelExists {
-		_ = checkFilePermissions(sentinelPath(rootDir))
+		checkFilePermissions(sentinelPath(rootDir))
 	}
 
 	store := &storeImpl{
@@ -183,6 +190,28 @@ func emailsPath(rootDir string) string {
 // dataFilePath returns the path to the JSON data file within rootDir.
 func dataFilePath(rootDir string) string {
 	return filepath.Join(rootDir, "tlsrpt.json")
+}
+
+// initDataFile creates tlsrpt.json with an empty record set if it does not already exist.
+// This satisfies AC-03 (data file initialization on first open in read-write mode).
+func initDataFile(rootDir string) error {
+	path := dataFilePath(rootDir)
+	if _, err := os.Stat(path); err == nil {
+		return nil // Already exists; leave it untouched.
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("initDataFile: stat: %w", err)
+	}
+
+	empty := internalDataFile{
+		Version: DataFileVersion,
+		Reports: []tlsrpt.Report{},
+		Emails:  []internalEmailIndexEntry{},
+	}
+	data, err := json.Marshal(empty)
+	if err != nil {
+		return fmt.Errorf("initDataFile: marshal: %w", err)
+	}
+	return atomicWriteFile(path, data)
 }
 
 // SaveReports implements Store.SaveReports.

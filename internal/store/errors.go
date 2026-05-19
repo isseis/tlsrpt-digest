@@ -47,10 +47,15 @@ func (e *ErrUnsupportedSchemaVersion) Error() string {
 type ErrAtomicWriteFailed struct {
 	File string
 	Op   string // Operation that failed (e.g., "write", "sync", "rename")
+	Err  error  // Underlying error
 }
 
 func (e *ErrAtomicWriteFailed) Error() string {
-	return fmt.Sprintf("store: atomic write failed: file=%s op=%s", e.File, e.Op)
+	return fmt.Sprintf("store: atomic write failed: file=%s op=%s: %v", e.File, e.Op, e.Err)
+}
+
+func (e *ErrAtomicWriteFailed) Unwrap() error {
+	return e.Err
 }
 
 // ErrInvalidEmailPath is returned when an email path does not match
@@ -72,7 +77,7 @@ type ErrLoadEmailFailed struct {
 }
 
 func (e *ErrLoadEmailFailed) Error() string {
-	return fmt.Sprintf("store: load email failed: path=%s", e.Path)
+	return fmt.Sprintf("store: load email failed: path=%s: %v", e.Path, e.Err)
 }
 
 func (e *ErrLoadEmailFailed) Unwrap() error {
@@ -92,8 +97,8 @@ type ErrDeleteEmailFailed struct {
 
 func (e *ErrDeleteEmailFailed) Error() string {
 	return fmt.Sprintf(
-		"store: delete email failed: path=%s uid=%d uidvalidity=%d saved_at=%s",
-		e.Path, e.UID, e.UIDValidity, e.SavedAt.Format("2006-01-02T15:04:05Z07:00"),
+		"store: delete email failed: path=%s uid=%d uidvalidity=%d saved_at=%s: %v",
+		e.Path, e.UID, e.UIDValidity, e.SavedAt.Format("2006-01-02T15:04:05Z07:00"), e.Err,
 	)
 }
 

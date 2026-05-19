@@ -54,10 +54,6 @@ type LoadedEmail struct {
 
 // internalDataFile represents the structure of tlsrpt.json.
 // This type is internal and not exposed to callers.
-// Not yet used; will be consumed by Phase 2 (SaveReports, GetReportsSince,
-// DeleteReportsBefore).
-//
-//nolint:unused // will be used in Phase 2
 type internalDataFile struct {
 	Version int                       `json:"version"`
 	Reports []tlsrpt.Report           `json:"reports"`
@@ -65,9 +61,6 @@ type internalDataFile struct {
 }
 
 // internalEmailIndexEntry represents a single email index entry in tlsrpt.json.
-// Not yet used; will be consumed by Phase 2 (SaveEmailMetas, LoadEmails).
-//
-//nolint:unused // will be used in Phase 2
 type internalEmailIndexEntry struct {
 	UID           uint32     `json:"uid"`
 	UIDValidity   uint32     `json:"uidvalidity"`

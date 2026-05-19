@@ -54,10 +54,16 @@ func ensureDirExists(dirPath string) error {
 }
 
 // checkFilePermissions logs a warning if a file has less restrictive permissions than 0600.
-func checkFilePermissions(filePath string) error {
+// Stat failures (e.g., transient I/O errors) are also logged rather than returned so that
+// callers can treat permission checks as best-effort operations.
+func checkFilePermissions(filePath string) {
 	info, err := os.Stat(filePath)
 	if err != nil {
-		return fmt.Errorf("checkFilePermissions: stat failed: %w", err)
+		slog.Warn("checkFilePermissions: stat failed",
+			slog.String("path", filePath),
+			slog.Any("error", err),
+		)
+		return
 	}
 
 	if info.Mode().Perm() != filePerm {
@@ -66,6 +72,4 @@ func checkFilePermissions(filePath string) error {
 			slog.String("current_mode", fmt.Sprintf("%04o", info.Mode().Perm())),
 		)
 	}
-
-	return nil
 }

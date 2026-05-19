@@ -12,7 +12,7 @@ import (
 )
 
 // TestOpen_ReadWriteMode_CreatesDirectories tests AC-01, AC-03, AC-04, AC-05.
-// Verifies that Open with OpenReadWrite mode creates root_dir, emails/, and sentinel.
+// Verifies that Open with OpenReadWrite mode creates root_dir, emails/, tlsrpt.json, and sentinel.
 func TestOpen_ReadWriteMode_CreatesDirectories(t *testing.T) {
 	rootDir := t.TempDir()
 	identity := IMAPIdentity{
@@ -35,6 +35,20 @@ func TestOpen_ReadWriteMode_CreatesDirectories(t *testing.T) {
 	info, err := os.Stat(emailsDir)
 	require.NoError(t, err, "emails directory should exist")
 	require.True(t, info.IsDir(), "emails path should be a directory")
+
+	// Verify tlsrpt.json exists with empty record set (AC-03).
+	dataPath := filepath.Join(rootDir, "tlsrpt.json")
+	_, err = os.Stat(dataPath)
+	require.NoError(t, err, "tlsrpt.json should exist after first open")
+
+	// G304: dataPath is constructed from t.TempDir(), which is always a safe test directory.
+	raw, err := os.ReadFile(dataPath) //nolint:gosec
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got), "tlsrpt.json should be valid JSON")
+	assert.EqualValues(t, DataFileVersion, got["version"], "version should match DataFileVersion")
+	assert.Equal(t, []any{}, got["reports"], "reports should be empty array")
+	assert.Equal(t, []any{}, got["emails"], "emails should be empty array")
 }
 
 // TestOpen_ReadOnlyMode_NoCreation tests AC-02.
