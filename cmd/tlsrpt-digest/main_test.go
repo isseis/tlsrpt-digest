@@ -139,6 +139,10 @@ func TestLoadConfig_NonexistentFile(t *testing.T) {
 	require.Error(t, err)
 }
 
+// Compile-time check: FakeStore must implement store.Store so the interface
+// stays in sync as the Store contract evolves.
+var _ store.Store = (*storetestutil.FakeStore)(nil)
+
 // TestStoreOpenMode verifies that subcommands are mapped to the correct open mode.
 func TestStoreOpenMode(t *testing.T) {
 	assert.Equal(t, store.OpenReadWrite, storeOpenMode("fetch"))
@@ -148,34 +152,44 @@ func TestStoreOpenMode(t *testing.T) {
 	assert.Equal(t, store.OpenReadOnly, storeOpenMode("summary"))
 }
 
-// TestFakeStore_BasicScenario verifies that FakeStore correctly implements
-// the store.Store interface for a representative fetch→summary scenario.
-func TestFakeStore_BasicScenario(t *testing.T) {
-	s := storetestutil.NewFakeStore()
-
+// TestOpenStoreForSubcommand verifies that openStoreForSubcommand wires
+// storeOpenMode into store.Open correctly.  Write-capable subcommands must
+// succeed on SaveReport; the summary subcommand must be refused with ErrReadOnly.
+func TestOpenStoreForSubcommand(t *testing.T) {
+	identity := store.IMAPIdentity{Host: "imap.example.com", Port: 993, Mailbox: "INBOX"}
 	endDate := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
-	report := tlsrpt.Report{
-		ReportID:         "test-report-1",
-		OrganizationName: "example.com",
-		DateRange: tlsrpt.DateRange{
-			StartDatetime: endDate.Add(-24 * time.Hour),
-			EndDatetime:   endDate,
+	probe := store.ReportInput{
+		Report: tlsrpt.Report{
+			ReportID:  "probe",
+			DateRange: tlsrpt.DateRange{EndDatetime: endDate},
 		},
+		UID: 1, UIDValidity: 1,
 	}
 
-	// SaveReports stores the report and creates a minimal email index entry.
-	require.NoError(t, s.SaveReports([]store.ReportInput{
-		{Report: report, UID: 1, UIDValidity: 100},
-	}))
+	cases := []struct {
+		subcommand   string
+		wantReadOnly bool
+	}{
+		{"fetch", false},
+		{"gc", false},
+		{"reprocess", false},
+		{"recover", false},
+		{"summary", true},
+	}
 
-	// GetReportsSince returns the report when its end-date >= since.
-	reports, err := s.GetReportsSince(endDate)
-	require.NoError(t, err)
-	require.Len(t, reports, 1)
-	assert.Equal(t, "test-report-1", reports[0].ReportID)
+	for _, tc := range cases {
+		t.Run(tc.subcommand, func(t *testing.T) {
+			s, err := openStoreForSubcommand(t.TempDir(), identity, tc.subcommand)
+			require.NoError(t, err)
 
-	// Reports before the window are excluded.
-	reports, err = s.GetReportsSince(endDate.Add(time.Nanosecond))
-	require.NoError(t, err)
-	assert.Empty(t, reports)
+			writeErr := store.SaveReport(s, probe)
+			if tc.wantReadOnly {
+				assert.ErrorIs(t, writeErr, store.ErrReadOnly,
+					"summary must use OpenReadOnly")
+			} else {
+				assert.NoError(t, writeErr,
+					"%s must use OpenReadWrite", tc.subcommand)
+			}
+		})
+	}
 }
