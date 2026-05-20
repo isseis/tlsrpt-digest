@@ -145,6 +145,8 @@ flowchart LR
 
 ### 2.3 データフロー（シーケンス図）
 
+矢印 A → B は「A が B を呼び出す」、破線矢印 A -->> B は「B が A に結果を返す」を表す。
+
 ```mermaid
 sequenceDiagram
     participant CMD as cmd/tlsrpt-digest
@@ -173,6 +175,14 @@ sequenceDiagram
     HDL->>HDL: HTTP POST to Slack（チャンクごと）
     HDL-->>CMD: nil（または error）
 ```
+
+**凡例**
+
+| 記法 | 意味 |
+|---|---|
+| `->>` | 同期呼び出し |
+| `-->>` | 戻り値または処理結果の返却 |
+| `note over` | 実装方針上の補足条件 |
 
 ---
 
@@ -219,9 +229,9 @@ type Summary struct {
 
 | 発生箇所 | 種類 | 処理方針 |
 |---|---|---|
-| `store.GetAllReports()` 失敗 | `error`（store 層由来） | `GenerateSummary` がそのままラップして返す（AC-09 に対応） |
+| `store.GetAllReports()` 失敗 | `error`（store 層由来） | `GenerateSummary` がそのままラップして返す |
 | `LogSummary` でのハンドラ書き込み失敗 | `slog.Handler.Handle` の error | 呼び出し元に返す |
-| `Flush` でのHTTP送信失敗 | `SlackHandler` 既存のリトライ・エラー処理 | 変更なし（既存 `retry.go` が担当） |
+| `Flush` でのHTTP送信失敗 | `SlackHandler` 既存のリトライ・エラー処理 | 変更なし。最終的に送信できなかった場合は error を返し、AC-09 を満たす（既存 `retry.go` が担当） |
 
 ### 4.2 混在レポートの警告（AC-11）
 
@@ -243,7 +253,7 @@ flowchart TD
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
-    AGG["GenerateSummary()<br>aggregate.go"] -->|"slog.Warn（混在レポート警告）"| DBG["デバッグロガー<br>（標準出力/ファイル）"]
+    AGG["GenerateSummary()<br>aggregate.go"] -->|"slog.Warn（混在レポート警告）"| DBG[("デバッグロガー<br>（標準出力/ファイル）")]
     AGG -->|"Summary<br>組織名・成功セッション数のみ"| NOTIFY["通知ロガー<br>（SlackHandler）"]
     NOTIFY -->|"HTTP POST"| Slack[("Slack")]
 
@@ -276,8 +286,11 @@ flowchart TD
 ### 6.1 集計フロー（F-001）
 
 半開区間フィルタリング `start < DateRange.EndDatetime <= end` および `HasFailure() == false` で対象レポートを絞り込む。残ったレポートを組織名でグループ化し、各組織の `TotalSuccessfulSessionCount` を合計する。
+対象レポートが 0 件でも `Summary` は返し、`OrganizationStats` は空、`ReportCount` は 0 とする。これにより AC-04 の「レポートなし通知」は呼び出し元で一貫して扱える。
 
 **半開区間を採用した理由**: 連続する集計期間で境界のレポートが重複カウントされないよう、終了側のみを閉じた区間とする（例: 第 1 週 = (Mon 00:00, Mon 00:00 + 7d]、第 2 週 = (Mon 00:00 + 7d, Mon 00:00 + 14d] の境界は重複しない）。
+
+矢印 A → B は「A の判定結果に応じて次の処理へ進む」を表す。
 
 ```mermaid
 flowchart TD
@@ -321,6 +334,8 @@ flowchart TD
 
 #### Attachment チャンク分割の条件（AC-10）
 
+矢印 A → B は「A の処理結果として B を続けて行う」を表す。
+
 ```mermaid
 flowchart TD
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
@@ -348,21 +363,12 @@ flowchart TD
 
 `OrganizationStats` は `slog.Group("organization_stats", ...)` としてシリアライズする。キーが組織名（動的）のため、個別の slog 属性ではなくグループにまとめることで `extractSummary` の復元処理を単純化する。
 
-```
-slog.Record {
-    Message: "periodic_summary"
-    Attrs: [
-        "period_start": time.Time
-        "period_end":   time.Time
-        "report_count": int64
-        "organization_stats": Group {
-            "<org1>": int64   // 組織名 → 成功セッション数
-            "<org2>": int64
-            ...
-        }
-    ]
-}
-```
+| 属性 | 値の型 | 意味 |
+|---|---|---|
+| `period_start` | `time.Time` | 集計期間の開始日時 |
+| `period_end` | `time.Time` | 集計期間の終了日時 |
+| `report_count` | `int64` | 対象レポート総数 |
+| `organization_stats` | `slog.Group` | 組織名をキー、成功セッション数合計を値として保持するグループ |
 
 ---
 
