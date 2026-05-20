@@ -229,7 +229,6 @@ type Store interface {
 
     // DeleteEmailsBefore は internal_date < cutoff を満たす .eml ファイルを削除する。
     // cutoff がゼロ値の場合は削除を行わない（AC-02）。
-    // internal_date がゼロのエントリは削除対象外とする（AC-03）。
     DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)
 }
 ```
