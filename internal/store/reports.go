@@ -77,41 +77,6 @@ func (s *storeImpl) SaveReports(inputs []ReportInput) error {
 		}
 	}
 
-	// Compute the maximum EndDatetime per {uid, uidvalidity} across the current batch.
-	maxEndDate := make(map[emailKey]time.Time)
-	for _, input := range inputs {
-		key := emailKey{UID: input.UID, UIDValidity: input.UIDValidity}
-		if t, ok := maxEndDate[key]; !ok || input.Report.DateRange.EndDatetime.After(t) {
-			maxEndDate[key] = input.Report.DateRange.EndDatetime
-		}
-	}
-
-	// Update the report_end_date for each email index entry in the batch using
-	// a map for O(N) lookup. If the entry does not yet exist, create a minimal
-	// placeholder so that the report_end_date is not lost when SaveEmailMetas
-	// is called afterwards (SaveEmailMetas will fill in the SentAt/SavedAt fields).
-	emailIdx := make(map[emailKey]int, len(df.Emails))
-	for i, entry := range df.Emails {
-		emailIdx[emailKey{entry.UID, entry.UIDValidity}] = i
-	}
-	for key, maxDate := range maxEndDate {
-		maxDateCopy := maxDate
-		if i, ok := emailIdx[key]; ok {
-			// Only advance the date (conservative GC semantics).
-			if df.Emails[i].ReportEndDate == nil || maxDateCopy.After(*df.Emails[i].ReportEndDate) {
-				df.Emails[i].ReportEndDate = &maxDateCopy
-			}
-		} else {
-			// Create a minimal index entry; sent_at/saved_at will be filled by SaveEmailMetas.
-			df.Emails = append(df.Emails, internalEmailIndexEntry{
-				UID:           key.UID,
-				UIDValidity:   key.UIDValidity,
-				ReportEndDate: &maxDateCopy,
-			})
-			emailIdx[key] = len(df.Emails) - 1
-		}
-	}
-
 	return s.saveDataFile(df)
 }
 

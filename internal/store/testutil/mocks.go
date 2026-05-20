@@ -24,12 +24,11 @@ type EmailKey struct {
 
 // FakeEmailEntry holds the in-memory state for a single email in FakeStore.
 type FakeEmailEntry struct {
-	UID           uint32
-	UIDValidity   uint32
-	SentAt        time.Time
-	SavedAt       time.Time
-	RawEML        []byte
-	ReportEndDate *time.Time
+	UID          uint32
+	UIDValidity  uint32
+	InternalDate time.Time
+	SavedAt      time.Time
+	RawEML       []byte
 }
 
 // FakeRecovery holds the recovery_required state stored by SaveRecoveryRequired.
@@ -64,16 +63,6 @@ func NewFakeStore() *FakeStore {
 func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
 	for _, input := range inputs {
 		f.Reports[input.Report.ReportID] = input.Report
-
-		key := EmailKey{input.UID, input.UIDValidity}
-		if _, ok := f.Emails[key]; !ok {
-			f.Emails[key] = &FakeEmailEntry{UID: input.UID, UIDValidity: input.UIDValidity}
-		}
-		end := input.Report.DateRange.EndDatetime
-		if f.Emails[key].ReportEndDate == nil || end.After(*f.Emails[key].ReportEndDate) {
-			endCopy := end
-			f.Emails[key].ReportEndDate = &endCopy
-		}
 	}
 	return nil
 }
@@ -81,30 +70,15 @@ func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
 // SaveEmailMetas implements store.Store.
 func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
 	for _, meta := range metas {
-		sentAt := meta.SentAt
-		if sentAt.IsZero() {
-			sentAt = meta.SavedAt
-		}
-
 		key := EmailKey{meta.UID, meta.UIDValidity}
-		if existing, ok := f.Emails[key]; ok {
-			// Fill in SentAt/SavedAt only for placeholder entries (created by SaveReports
-			// before SaveEmailMetas ran, so RawEML == nil).
-			if existing.RawEML == nil {
-				if existing.SentAt.IsZero() {
-					existing.SentAt = sentAt
-				}
-				if existing.SavedAt.IsZero() {
-					existing.SavedAt = meta.SavedAt
-				}
-			}
+		if _, ok := f.Emails[key]; ok {
 			continue
 		}
 		f.Emails[key] = &FakeEmailEntry{
-			UID:         meta.UID,
-			UIDValidity: meta.UIDValidity,
-			SentAt:      sentAt,
-			SavedAt:     meta.SavedAt,
+			UID:          meta.UID,
+			UIDValidity:  meta.UIDValidity,
+			InternalDate: meta.InternalDate,
+			SavedAt:      meta.SavedAt,
 		}
 	}
 	return nil
@@ -122,7 +96,10 @@ func (f *FakeStore) GetReportsSince(since time.Time) ([]tlsrpt.Report, error) {
 }
 
 // SaveEmail implements store.Store.
-func (f *FakeStore) SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time, rawEML []byte) error {
+func (f *FakeStore) SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error {
+	if internalDate.IsZero() {
+		return store.ErrZeroInternalDate
+	}
 	key := EmailKey{uid, uidValidity}
 	if existing, ok := f.Emails[key]; ok && existing.RawEML != nil {
 		return nil // idempotent
@@ -130,7 +107,7 @@ func (f *FakeStore) SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time
 	if _, ok := f.Emails[key]; !ok {
 		f.Emails[key] = &FakeEmailEntry{UID: uid, UIDValidity: uidValidity}
 	}
-	f.Emails[key].SentAt = sentAt
+	f.Emails[key].InternalDate = internalDate
 	f.Emails[key].SavedAt = savedAt
 	rawCopy := make([]byte, len(rawEML))
 	copy(rawCopy, rawEML)
@@ -152,23 +129,12 @@ func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
 			errs = append(errs, fmt.Errorf("FakeStore.LoadEmails: parse %d/%d: %w", entry.UIDValidity, entry.UID, err))
 			continue
 		}
-		sentAt := entry.SavedAt
-		if dateStr := msg.Header.Get("Date"); dateStr != "" {
-			if t, parseErr := mail.ParseDate(dateStr); parseErr == nil {
-				sentAt = t.UTC()
-			}
-		}
-		dateForPath := entry.SentAt
-		if dateForPath.IsZero() {
-			dateForPath = entry.SavedAt
-		}
-		yyyymm := dateForPath.UTC().Format("200601")
+		yyyymm := entry.InternalDate.UTC().Format("200601")
 		relPath := fmt.Sprintf("%d/%s/%010d.eml", entry.UIDValidity, yyyymm, entry.UID)
 		result = append(result, store.LoadedEmail{
 			Message:     msg,
 			UID:         entry.UID,
 			UIDValidity: entry.UIDValidity,
-			SentAt:      sentAt,
 			SavedAt:     entry.SavedAt,
 			Path:        relPath,
 		})
@@ -238,17 +204,10 @@ func (f *FakeStore) DeleteReportsBefore(cutoff time.Time) (int, error) {
 }
 
 // DeleteEmailsBefore implements store.Store.
-func (f *FakeStore) DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (int, error) {
+func (f *FakeStore) DeleteEmailsBefore(cutoff time.Time) (int, error) {
 	deleted := 0
 	for key, entry := range f.Emails {
-		shouldDelete := false
-		if entry.ReportEndDate != nil && entry.ReportEndDate.Before(reportCutoff) {
-			shouldDelete = true
-		}
-		if !savedAtCutoff.IsZero() && !entry.SavedAt.IsZero() && entry.SavedAt.Before(savedAtCutoff) {
-			shouldDelete = true
-		}
-		if shouldDelete {
+		if entry.InternalDate.Before(cutoff) {
 			delete(f.Emails, key)
 			deleted++
 		}
