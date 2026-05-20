@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     direnv \
     git \
+    gnupg \
     libssl-dev \
     locales \
     man-db \
@@ -103,3 +104,7 @@ RUN echo 'eval "$(direnv hook bash)"' >> /etc/bash.bashrc
 
 WORKDIR /home/$USERNAME
 USER $USERNAME
+
+RUN curl -fsSL https://github.com/web-flow.gpg -o /tmp/web-flow.gpg \
+    && gpg --batch --import /tmp/web-flow.gpg \
+    && rm /tmp/web-flow.gpg
