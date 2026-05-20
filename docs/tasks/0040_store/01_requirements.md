@@ -59,7 +59,7 @@ failure のないレポートは即時通知ではなく、定期サマリとし
 - ストレージルートディレクトリの初期化（sentinel メタファイル作成・検証、サブディレクトリ作成）
 - JSON データファイルの初期化（存在しない場合の新規作成）
 - レポートデータの保存（`SaveReport`）
-- 指定期間のレポート取得（`GetReportsSince`）
+- 全レポートの取得（`GetAllReports`）
 - 指定日時より古いレポートレコードの削除（`DeleteReportsBefore`、累積件数の抑制用）
 - 指定日時より古い `.eml` ファイルの削除（`DeleteEmailsBefore`、ストレージ抑制用）
 - `.eml` ファイルへのメール本文保存（`SaveEmail`）
@@ -121,12 +121,12 @@ failure のないレポートは即時通知ではなく、定期サマリとし
 
 ### F-003: レポートデータの取得
 
-指定期間（呼び出し側が `since time.Time` で指定。典型値は過去 7 日間）のレポートデータを取得する。
+ストアに保存されているすべてのレポートデータを取得する。期間フィルタリングは呼び出し側（アプリケーション層）が担う。
 
 **受け入れ条件（Acceptance Criteria）**:
 
-- `AC-11`: `date-range.end-datetime >= since` を満たすレポートをすべて返す（レポートの対象期間末尾がウィンドウ内のもの。ストアへの保存日時ではなくレポート期間で絞り込む）
-- `AC-12`: 対象レポートが存在しない場合、空のスライスを返す（エラーにしない）
+- `AC-11`: 保存済みのレポートをすべて返す（フィルタリングなし）
+- `AC-12`: レポートが存在しない場合、空のスライスを返す（エラーにしない）
 - `AC-13`: 保存後に取得した結果のレポートは、保存前の `tlsrpt.Report` と全フィールドが一致する（ラウンドトリップ保証）
 
 ### F-004: メール本文の保存（`.eml`）
@@ -232,9 +232,9 @@ UIDVALIDITY 変化検出時にエントリポイント（タスク 0070）が記
 
 ### パフォーマンス
 
-- 定期サマリ用の取得（典型値：過去 7 日分）は 1 秒以内に完了すること
-- 全件メモリ読み込み後にフィルタする実装で、**想定累積上限は 1 万件** とする（典型運用で週数百件、F-007 の GC により上限以下に抑える）
-- 1 万件規模での `GetReportsSince` および `DeleteReportsBefore` は 1 秒以内に完了すること
+- 全レポートの取得（`GetAllReports`）は 1 秒以内に完了すること
+- 全件メモリ読み込み後に呼び出し側がフィルタする実装で、**想定累積上限は 1 万件** とする（典型運用で週数百件、F-007 の GC により上限以下に抑える）
+- 1 万件規模での `GetAllReports` および `DeleteReportsBefore` は 1 秒以内に完了すること
 - 上限を超えた場合の性能劣化、より効率的なクエリ（インデックス化等）への移行は将来の拡張で扱う
 
 ### 信頼性
@@ -268,7 +268,7 @@ UIDVALIDITY 変化検出時にエントリポイント（タスク 0070）が記
 ### 保守性
 
 - `Store` インターフェースを定義し、テスト時にインメモリ実装やモックに差し替えられること。インターフェースは少なくとも以下のメソッドを含む：
-  - `SaveReport` / バッチ保存メソッド / `GetReportsSince`（F-002・F-003）
+  - `SaveReport` / バッチ保存メソッド / `GetAllReports`（F-002・F-003）
   - `SaveEmailMetas`（バッチインデックス登録）/ `SaveEmail` / `LoadEmails`（F-002 AC-08c・F-004・F-005）
   - `SaveUIDValidity(v uint32)` / `LoadUIDValidity()`（F-006、sentinel に保存）
   - `SaveRecoveryRequired` / `LoadRecoveryRequired` / `ClearRecoveryRequired` / `ApplyRecovery`（F-008、sentinel に保存。複数フィールド更新が必要な `recover --mode keep-old` には `ApplyRecovery` を使用する）
@@ -376,15 +376,15 @@ UIDVALIDITY 変化検出時にエントリポイント（タスク 0070）が記
 - UIDVALIDITY 変化前後で同一 UID のメールが別ディレクトリに保存され、互いに衝突しないテスト
 - `.eml` 読み込みのテスト（`testdata/` の実際のメールファイルを canned データとして使用）
 - `SaveUIDValidity` / `LoadUIDValidity` のラウンドトリップテスト（未保存時に `found=false` が返ること、再保存で上書きされること）
-- `GetReportsSince` のフィルタセマンティクステスト（`date-range.end-datetime >= since` でフィルタされること。ストアへの保存日時ではなくレポート期間で絞り込まれることを確認）
-- `DeleteReportsBefore` のテスト（境界値、削除 0 件、冪等性、削除後の `GetReportsSince` 結果整合性）
+- `GetAllReports` のラウンドトリップテスト（保存したレポートがすべて返ること）
+- `DeleteReportsBefore` のテスト（境界値、削除 0 件、冪等性、削除後の `GetAllReports` 結果整合性）
 - `DeleteEmailsBefore` のテスト（インデックス参照による `.eml` 削除、`.eml` 既消失時の冪等性、インデックスとファイル削除の整合性）
 - `SaveEmailMetas` によるバッチインデックス登録テスト（複数エントリの一括登録・既存エントリへの冪等動作・孤立 `.eml` 救済シナリオ）
 - `LoadEmails` の `SentAt` フォールバックテスト（`Date:` ヘッダーが欠損または不正な `.eml` の `SentAt` に `SavedAt` が代用され WARN ログが出力されること）
 - F-008 recovery_required のラウンドトリップテスト（`SaveRecoveryRequired` / `LoadRecoveryRequired` / `ClearRecoveryRequired`、未保存時 `found = false`）
 - ファイルパーミッション検証テスト（新規作成ファイルが `0600`、新規作成ディレクトリが `0700` であること）
 - 未知の `version` を持つデータファイル読み込み時にエラーが返ることのテスト
-- 想定累積上限（1 万件）規模での `GetReportsSince` および `DeleteReportsBefore` の性能テスト
+- 想定累積上限（1 万件）規模での `GetAllReports` および `DeleteReportsBefore` の性能テスト
 
 ### 統合テスト
 

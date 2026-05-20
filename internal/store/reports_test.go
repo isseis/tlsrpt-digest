@@ -79,7 +79,7 @@ func TestSaveReports_AllFieldsPreserved(t *testing.T) {
 		UIDValidity: 12345,
 	}))
 
-	reports, err := s.GetReportsSince(endDate)
+	reports, err := s.GetAllReports()
 	require.NoError(t, err)
 	require.Len(t, reports, 1)
 
@@ -109,7 +109,7 @@ func TestSaveReports_Upsert(t *testing.T) {
 	require.NoError(t, SaveReport(s, ReportInput{Report: r1, UID: 1, UIDValidity: 10}))
 	require.NoError(t, SaveReport(s, ReportInput{Report: r2, UID: 1, UIDValidity: 10}))
 
-	reports, err := s.GetReportsSince(endDate)
+	reports, err := s.GetAllReports()
 	require.NoError(t, err)
 	require.Len(t, reports, 1, "duplicate report-id should result in exactly one record")
 	assert.Equal(t, "updated.com", reports[0].OrganizationName)
@@ -128,8 +128,7 @@ func TestSaveReports_Batch(t *testing.T) {
 	}
 	require.NoError(t, s.SaveReports(inputs))
 
-	since := endDate.Add(-time.Hour)
-	reports, err := s.GetReportsSince(since)
+	reports, err := s.GetAllReports()
 	require.NoError(t, err)
 	assert.Len(t, reports, 3)
 }
@@ -164,62 +163,49 @@ func TestSaveReports_RoundTrip(t *testing.T) {
 		UIDValidity: 777,
 	}))
 
-	reports, err := s.GetReportsSince(time.Time{})
+	reports, err := s.GetAllReports()
 	require.NoError(t, err)
 	require.Len(t, reports, 1)
 	assert.Equal(t, original, reports[0])
 }
 
-// TestGetReportsSince_FilterSemantics verifies the boundary condition:
-// EndDatetime == since is included; EndDatetime < since is excluded;
-// EndDatetime > since is included.
-func TestGetReportsSince_FilterSemantics(t *testing.T) {
+// TestGetAllReports_ReturnsAllRegardlessOfDate verifies that GetAllReports returns
+// all stored reports without any date filtering.
+func TestGetAllReports_ReturnsAllRegardlessOfDate(t *testing.T) {
 	s, _ := openTestStore(t)
 
-	since := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	before := since.Add(-time.Nanosecond)
-	after := since.Add(time.Nanosecond)
-
+	base := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 	inputs := []ReportInput{
-		{Report: makeFullReport("before", before), UID: 1, UIDValidity: 10},
-		{Report: makeFullReport("equal", since), UID: 2, UIDValidity: 10},
-		{Report: makeFullReport("after", after), UID: 3, UIDValidity: 10},
+		{Report: makeFullReport("old", base.Add(-365*24*time.Hour)), UID: 1, UIDValidity: 10},
+		{Report: makeFullReport("recent", base), UID: 2, UIDValidity: 10},
+		{Report: makeFullReport("future", base.Add(365*24*time.Hour)), UID: 3, UIDValidity: 10},
 	}
 	require.NoError(t, s.SaveReports(inputs))
 
-	reports, err := s.GetReportsSince(since)
+	reports, err := s.GetAllReports()
 	require.NoError(t, err)
-
-	// Only "equal" and "after" should be returned.
-	ids := make(map[string]bool)
-	for _, r := range reports {
-		ids[r.ReportID] = true
-	}
-	assert.False(t, ids["before"], "report before cutoff should not be included")
-	assert.True(t, ids["equal"], "report exactly at cutoff should be included")
-	assert.True(t, ids["after"], "report after cutoff should be included")
-	assert.Len(t, reports, 2)
+	assert.Len(t, reports, 3, "GetAllReports should return all reports regardless of date")
 }
 
-// TestGetReportsSince_Empty verifies that an empty store returns a non-nil empty slice.
-func TestGetReportsSince_Empty(t *testing.T) {
+// TestGetAllReports_Empty verifies that an empty store returns a non-nil empty slice.
+func TestGetAllReports_Empty(t *testing.T) {
 	s, _ := openTestStore(t)
 
-	reports, err := s.GetReportsSince(time.Now())
+	reports, err := s.GetAllReports()
 	require.NoError(t, err)
 	assert.NotNil(t, reports, "should return a non-nil empty slice")
 	assert.Empty(t, reports)
 }
 
-// TestGetReportsSince_ReadOnly_Empty verifies that GetReportsSince on a read-only
+// TestGetAllReports_ReadOnly_Empty verifies that GetAllReports on a read-only
 // store backed by a non-existent file returns an empty slice without error.
-func TestGetReportsSince_ReadOnly_Empty(t *testing.T) {
+func TestGetAllReports_ReadOnly_Empty(t *testing.T) {
 	rootDir := t.TempDir()
 	nonexistent := rootDir + "/nosuchdir"
 	s, err := Open(nonexistent, makeTestIdentity(), OpenReadOnly)
 	require.NoError(t, err)
 
-	reports, err := s.GetReportsSince(time.Time{})
+	reports, err := s.GetAllReports()
 	require.NoError(t, err)
 	assert.NotNil(t, reports)
 	assert.Empty(t, reports)
@@ -276,8 +262,8 @@ func TestSaveReports_UnsupportedVersion(t *testing.T) {
 	s, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
 	require.NoError(t, err)
 
-	// GetReportsSince should fail with an unsupported schema version error.
-	_, err = s.GetReportsSince(time.Time{})
+	// GetAllReports should fail with an unsupported schema version error.
+	_, err = s.GetAllReports()
 	require.Error(t, err)
 	var schemaErr *ErrUnsupportedSchemaVersion
 	require.ErrorAs(t, err, &schemaErr)
@@ -326,7 +312,7 @@ func TestDeleteReportsBefore_BoundaryValues(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, deleted)
 
-	remaining, err := s.GetReportsSince(time.Time{})
+	remaining, err := s.GetAllReports()
 	require.NoError(t, err)
 	ids := make(map[string]bool)
 	for _, r := range remaining {
@@ -412,9 +398,9 @@ func TestDeleteReportsBefore_Performance(t *testing.T) {
 	require.NoError(t, s.SaveReports(inputs))
 
 	start := time.Now()
-	_, err := s.GetReportsSince(cutoff)
+	_, err := s.GetAllReports()
 	require.NoError(t, err)
-	assert.Less(t, time.Since(start), time.Second, "GetReportsSince should complete within 1s for 10k records")
+	assert.Less(t, time.Since(start), time.Second, "GetAllReports should complete within 1s for 10k records")
 
 	start = time.Now()
 	_, err = s.DeleteReportsBefore(cutoff)

@@ -90,13 +90,11 @@ func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
 	return nil
 }
 
-// GetReportsSince implements store.Store.
-func (f *FakeStore) GetReportsSince(since time.Time) ([]tlsrpt.Report, error) {
+// GetAllReports implements store.Store.
+func (f *FakeStore) GetAllReports() ([]tlsrpt.Report, error) {
 	result := make([]tlsrpt.Report, 0, len(f.Reports))
 	for _, r := range f.Reports {
-		if !r.DateRange.EndDatetime.Before(since) {
-			result = append(result, r)
-		}
+		result = append(result, r)
 	}
 	return result, nil
 }
