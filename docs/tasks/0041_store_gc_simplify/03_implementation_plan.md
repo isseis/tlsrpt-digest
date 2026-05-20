@@ -148,7 +148,7 @@
   - `TestSaveEmailMetas_NoPlaceholderUpdate`：既存エントリがある場合に `InternalDate`/`SavedAt` を上書きしないことを確認（AC-14）
   - `TestDeleteEmailsBefore_ZeroCutoff`：`cutoff` がゼロ値のとき削除件数 0・エラーなしを確認（AC-02）
   - `TestDeleteEmailsBefore_Conditions`（書き直し）：`internal_date < cutoff` の条件で削除、ファイル不在もカウント、`>= cutoff` のエントリを保持（AC-03・AC-04・AC-06・AC-07）
-  - `TestDeleteEmailsBefore_EmptyDirCleanup`：GC 後の空 `{uidvalidity}/{YYYYMM}` および `{uidvalidity}` ディレクトリが削除されることを確認（AC-12・AC-13）
+  - `TestDeleteEmailsBefore_EmptyDirCleanup`：GC 後の空 `{uidvalidity}/{YYYYMM}` および `{uidvalidity}` ディレクトリが削除されることを確認（AC-13）
   - `TestDeleteEmailsBefore_DirCleanupWarn`：ディレクトリ削除失敗時にエラーを返さず `slog.Warn` が出力されることを確認（AC-13）
 
 #### 3.2 `reports_test.go` の整理
@@ -197,7 +197,7 @@
 | `SaveReports` | `TestSaveReports_DoesNotUpdateEmailIndex`（追加） | メールインデックスを変更しない（AC-09） |
 | `DeleteEmailsBefore` | `TestDeleteEmailsBefore_ZeroCutoff`（追加） | ゼロ値で削除なし（AC-02） |
 | `DeleteEmailsBefore` | `TestDeleteEmailsBefore_Conditions`（書き直し） | `internal_date < cutoff` で削除（AC-03） |
-| `DeleteEmailsBefore` | `TestDeleteEmailsBefore_EmptyDirCleanup`（追加） | 空ディレクトリを削除（AC-12・AC-13） |
+| `DeleteEmailsBefore` | `TestDeleteEmailsBefore_EmptyDirCleanup`（追加） | 空ディレクトリを削除（AC-13） |
 | `DeleteEmailsBefore` | `TestDeleteEmailsBefore_DirCleanupWarn`（追加） | 失敗時は WARN のみ（AC-13） |
 
 ### 4.2 統合テスト
@@ -218,7 +218,7 @@
 | `report_end_date` 参照の見落とし | `grep -rn "report_end_date\|ReportEndDate"` で残存参照を確認する |
 | `saveEMLWithMeta` の更新漏れ | ヘルパー更新後に依存テストが全件コンパイル通ることで確認 |
 | `FakeStore` とインターフェースの乖離 | `cmd/tlsrpt-digest/main_test.go` の `var _ store.Store = (*storetestutil.FakeStore)(nil)` でコンパイル時に検出 |
-| architecture 2.3 シーケンス図の不整合 | 実装は AC-03 と Section 6.1 に従う（ゼロ値ガードなし）。architecture 2.3 は次のタスクで修正する |
+
 
 ---
 
