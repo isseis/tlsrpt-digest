@@ -77,7 +77,7 @@
 
 `Summary` 型の変更は既存コードに影響する。型変更後、すべてのコンパイルエラーを一括修正する。
 
-- [ ] **1.1** `types.go` の `Summary` 型を更新する
+- [x] **1.1** `types.go` の `Summary` 型を更新する
   - ファイル: `internal/notify/types.go`
   - 作業内容:
     - `OrganizationCount int` フィールドを削除する
@@ -86,31 +86,31 @@
   - 確認方法: `go build ./internal/notify/` でコンパイルエラーの箇所を確認する（この時点ではエラーが出る）
   - 想定工数: 15 分 / 実績工数: -
 
-- [ ] **1.2** `helpers.go` の `LogSummary` を一時的にコンパイルが通る状態にする
+- [x] **1.2** `helpers.go` の `LogSummary` を一時的にコンパイルが通る状態にする
   - ファイル: `internal/notify/helpers.go`
   - 作業内容: `organization_count` の `slog.Int64` 行を削除し、`int64(s.ReportCount)` を `s.ReportCount` に変更する。`OrganizationStats` のシリアライズはフェーズ 3 で実装するため、この時点ではプレースホルダとして空のまま残す。
   - 確認方法: `go build ./internal/notify/` が通ること
   - 想定工数: 10 分 / 実績工数: -
 
-- [ ] **1.3** `format.go` の `extractSummary` / `formatSummary` を一時的にコンパイルが通る状態にする
+- [x] **1.3** `format.go` の `extractSummary` / `formatSummary` を一時的にコンパイルが通る状態にする
   - ファイル: `internal/notify/format.go`
   - 作業内容: `organization_count` キーの case 節を削除する。`formatSummary` 内の `s.OrganizationCount` 参照を `len(s.OrganizationStats)` に変更する。実際のフォーマット更新はフェーズ 4 で行う。
   - 確認方法: `go build ./internal/notify/` が通ること
   - 想定工数: 10 分 / 実績工数: -
 
-- [ ] **1.4** `cmd/tlsrpt-digest/main.go` の `primeNotifyHandlers` を新型に対応させる
+- [x] **1.4** `cmd/tlsrpt-digest/main.go` の `primeNotifyHandlers` を新型に対応させる
   - ファイル: `cmd/tlsrpt-digest/main.go`
   - 作業内容: `notify.Summary{..., OrganizationCount: 0, ReportCount: 0}` の `OrganizationCount: 0` を削除する（`int64` リテラル `0` は型変換不要）。
   - 確認方法: `go build ./cmd/tlsrpt-digest/` が通ること
   - 想定工数: 5 分 / 実績工数: -
 
-- [ ] **1.5** `format_test.go` の既存テストを新型に対応させる
+- [x] **1.5** `format_test.go` の既存テストを新型に対応させる
   - ファイル: `internal/notify/format_test.go`
   - 作業内容: `TestFormatSummary_Fields` の `OrganizationCount: 4` を `OrganizationStats: map[string]int64{"org-a": 10, "org-b": 20, "org-c": 30, "org-d": 40}` に置き換える。
   - 確認方法: `make test` が通ること
   - 想定工数: 10 分 / 実績工数: -
 
-- [ ] **1.6** `make test` が通ることを確認する（M1）
+- [x] **1.6** `make test` が通ることを確認する（M1）
   - 確認方法: `make test` が成功し、コンパイルエラーと既存テストの失敗がないこと
 
 ---

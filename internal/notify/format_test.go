@@ -236,7 +236,7 @@ func TestFormatSummary_Fields(t *testing.T) {
 			Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 			End:   time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC),
 		},
-		OrganizationCount: 4,
+		OrganizationStats: map[string]int64{"org-a": 10, "org-b": 20, "org-c": 30, "org-d": 40},
 		ReportCount:       7,
 	}))
 	require.NoError(t, h.Flush(context.Background()))
