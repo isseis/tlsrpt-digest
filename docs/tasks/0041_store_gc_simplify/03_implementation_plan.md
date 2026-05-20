@@ -40,7 +40,7 @@
 #### 0.2 `store.go` のインターフェース変更
 
 - ファイル: `internal/store/store.go`
-- [x] `Store.SaveEmail` のシグネチャを `SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error` に変更し、コメントを更新する（AC-18）
+- [x] `Store.SaveEmail` のシグネチャを `SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error` に変更し、コメントを更新する（AC-18）
 - [x] `Store.DeleteEmailsBefore` のシグネチャを `DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)` に変更し、コメントを更新する（AC-01）
 - 完了判定: `go build ./internal/store/...` が通ること
 - 見積工数: 10 分 / 実績工数: -
@@ -68,7 +68,7 @@
 - ファイル: `internal/store/emails.go`
 - [x] `SentAt` の正規化ブロック（`sentAt := meta.SentAt` 以降）を削除し、`meta.InternalDate` を直接使用する
 - [x] 既存エントリに対する補填ブランチ（`df.Emails[i].SentAt.IsZero()` チェック）を削除し、既存エントリがある場合は何もせず `continue` するだけにする（AC-14）
-- [x] 新規エントリ追加時のフィールドを `SentAt`/`SavedAt` → `InternalDate`/`SavedAt` に変更する
+- [x] 新規エントリ追加時のフィールドを `SentAt`/`SavedAt` → `InternalDate` のみに変更する（`SavedAt` はインデックスから除去済み）
 - 完了判定: `go build ./internal/store/...` が通ること
 - 見積工数: 20 分 / 実績工数: -
 
@@ -111,7 +111,7 @@
 - ファイル: `internal/store/testutil/mocks.go`
 - [x] `FakeEmailEntry.SentAt` を削除し `InternalDate time.Time` を追加する
 - [x] `FakeEmailEntry.ReportEndDate` を削除する
-- [x] `FakeStore.SaveEmail` のシグネチャを `SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error` に変更し、`internalDate.IsZero()` の場合はエラーを返す（AC-19 と同じ動作）
+- [x] `FakeStore.SaveEmail` のシグネチャを `SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error` に変更し、`internalDate.IsZero()` の場合はエラーを返す（AC-19 と同じ動作）
 - [x] `FakeStore.SaveEmailMetas` から補填ブランチを削除し、`SentAt` 参照を `InternalDate` に変更する
 - [x] `FakeStore.SaveReports` からメールインデックス更新ロジックを削除する（AC-09 と同じ）
 - [x] `FakeStore.DeleteEmailsBefore` を新シグネチャ `(cutoff time.Time)` に変更し、`InternalDate.Before(cutoff)` を削除条件とする（AC-01・AC-03）
@@ -145,7 +145,7 @@
   - `TestDeleteEmailsBefore_MissingFileIdempotent`、`TestDeleteEmailsBefore_ZeroDeleted`、`TestDeleteEmailsBefore_PartialFailure`（新シグネチャに対応）
 - [x] 追加するテスト:
   - `TestSaveEmail_ZeroInternalDate_Error`：`internalDate` がゼロ値のときエラーが返ることを確認（AC-19）
-  - `TestSaveEmailMetas_NoPlaceholderUpdate`：既存エントリがある場合に `InternalDate`/`SavedAt` を上書きしないことを確認（AC-14）
+  - `TestSaveEmailMetas_NoPlaceholderUpdate`：既存エントリがある場合に `InternalDate` を上書きしないことを確認（AC-14）
   - `TestDeleteEmailsBefore_ZeroCutoff`：`cutoff` がゼロ値のとき削除件数 0・エラーなしを確認（AC-02）
   - `TestDeleteEmailsBefore_Conditions`（書き直し）：`internal_date < cutoff` の条件で削除、ファイル不在もカウント、`>= cutoff` のエントリを保持（AC-03・AC-04・AC-06・AC-07）
   - `TestDeleteEmailsBefore_EmptyDirCleanup`：GC 後の空 `{uidvalidity}/{YYYYMM}` および `{uidvalidity}` ディレクトリが削除されることを確認（AC-13）

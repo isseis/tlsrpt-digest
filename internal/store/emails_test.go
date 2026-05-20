@@ -216,7 +216,7 @@ func TestSaveEmailMetas_BatchInsert(t *testing.T) {
 }
 
 // TestSaveEmailMetas_Idempotent verifies that re-calling SaveEmailMetas with existing
-// {uid, uidvalidity} entries does not overwrite internal_date or saved_at.
+// {uid, uidvalidity} entries does not overwrite internal_date.
 func TestSaveEmailMetas_Idempotent(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
@@ -242,7 +242,7 @@ func TestSaveEmailMetas_Idempotent(t *testing.T) {
 }
 
 // TestSaveEmailMetas_NoPlaceholderUpdate verifies that SaveEmailMetas does not
-// overwrite an existing entry's InternalDate or SavedAt.
+// overwrite an existing entry's InternalDate.
 func TestSaveEmailMetas_NoPlaceholderUpdate(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
@@ -445,8 +445,8 @@ func TestDeleteEmailsBefore_ZeroCutoff(t *testing.T) {
 	assert.Equal(t, 0, deleted)
 }
 
-// TestDeleteEmailsBefore_Conditions verifies that internal_date < cutoff is deleted,
-// internal_date >= cutoff is kept, and file-not-found counts as deleted.
+// TestDeleteEmailsBefore_Conditions verifies that internal_date < cutoff is deleted
+// and internal_date >= cutoff is kept.
 func TestDeleteEmailsBefore_Conditions(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
