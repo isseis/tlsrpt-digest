@@ -19,8 +19,8 @@ import (
 // already exists but is not a regular file (e.g., a directory).
 var errTargetNotRegularFile = errors.New("store: target path is not a regular file")
 
-// ErrZeroInternalDate is returned by SaveEmail when internalDate is the zero value.
-var ErrZeroInternalDate = errors.New("store: SaveEmail: internalDate must not be zero")
+// ErrZeroInternalDate is returned when an InternalDate (IMAP INTERNALDATE) value is zero.
+var ErrZeroInternalDate = errors.New("store: InternalDate must not be zero")
 
 // buildEmailPath returns the storage path for a .eml file.
 // The uid is zero-padded to 10 digits. internalDate determines the YYYYMM directory component.
@@ -84,6 +84,9 @@ func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
 
 	// For each meta: append a new entry if none exists; skip if already present (idempotent).
 	for _, meta := range metas {
+		if meta.InternalDate.IsZero() {
+			return ErrZeroInternalDate
+		}
 		key := emailKey{meta.UID, meta.UIDValidity}
 		if _, ok := existing[key]; ok {
 			continue

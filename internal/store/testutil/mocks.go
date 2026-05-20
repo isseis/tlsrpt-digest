@@ -69,6 +69,9 @@ func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
 // SaveEmailMetas implements store.Store.
 func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
 	for _, meta := range metas {
+		if meta.InternalDate.IsZero() {
+			return store.ErrZeroInternalDate
+		}
 		key := EmailKey{meta.UID, meta.UIDValidity}
 		if _, ok := f.Emails[key]; ok {
 			continue

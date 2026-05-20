@@ -340,7 +340,7 @@ func TestLoadEmails_Enumeration(t *testing.T) {
 	assert.Contains(t, byKey, emailKey{1, 200})
 }
 
-// TestLoadEmails_Fields verifies that SavedAt and Path are populated correctly.
+// TestLoadEmails_Fields verifies that Path, UID, UIDValidity, and Message are populated correctly.
 func TestLoadEmails_Fields(t *testing.T) {
 	s, _ := openTestStore(t)
 

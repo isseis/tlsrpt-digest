@@ -127,7 +127,7 @@
 
 - ファイル: `internal/store/emails_test.go`
 - 見積工数: 90 分 / 実績工数: -
-- [x] `saveEMLWithMeta` ヘルパーを `sentAt`/`SavedAt` → `internalDate`/`SavedAt` に更新する（`SaveEmail` 呼び出しと `EmailMeta` フィールドを変更）
+- [x] `saveEMLWithMeta` ヘルパーを `internalDate` のみの引数に更新する（`sentAt`/`SavedAt` を廃止し、`SaveEmail` 呼び出しと `EmailMeta` フィールドを変更）
 - [x] 削除するテスト（旧ロジックに依存するもの）:
   - `TestSaveEmail_ZeroSentAtFallback`（フォールバック廃止）
   - `TestSaveEmailMetas_MinimalEntryRescue`（プレースホルダー補填廃止）
