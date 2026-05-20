@@ -234,7 +234,7 @@
   - 作業内容:
     - `TestSummary_NoSensitiveFields`: `LogSummary` で記録した `slog.Record` に Webhook URL やパスワードが含まれないことを確認する（`02_architecture.md` セクション 5.2 の原則 1 に対応）
     - `TestMixedReportWarn_NotInNotifyLogger`: `GenerateSummary` の混在レポート警告（AC-11）が `SpyHandler`（通知ロガー）側に流れず、`debugLogger` 側のみに出力されることを確認する
-  - 確認方法: `go test -v ./internal/notify/ -run TestSummary_NoSensitiveFields,TestMixedReportWarn_NotInNotifyLogger` が PASS すること
+  - 確認方法: `go test -v ./internal/notify/ -run 'TestSummary_NoSensitiveFields|TestMixedReportWarn_NotInNotifyLogger'` が PASS すること
   - 想定工数: 30 分 / 実績工数: -
 
 - [ ] **5.3** `make test` と `make lint` が通ることを確認する
