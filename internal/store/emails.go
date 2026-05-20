@@ -265,21 +265,25 @@ func (s *storeImpl) cleanupEmptyDirs(gcEntries []internalEmailIndexEntry) {
 		uvDirs[uv] = struct{}{}
 	}
 
-	// Remove empty {uidvalidity}/{YYYYMM} dirs first.
+	// Remove {uidvalidity}/{YYYYMM} dirs that are now empty.
 	for k := range mmDirs {
 		dir := filepath.Join(emailsDir, k.uv, k.mm)
-		if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
-			slog.Warn("DeleteEmailsBefore: remove YYYYMM dir failed",
-				slog.String("dir", dir), slog.Any("error", rmErr))
+		if entries, _ := os.ReadDir(dir); len(entries) == 0 {
+			if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
+				slog.Warn("DeleteEmailsBefore: remove YYYYMM dir failed",
+					slog.String("dir", dir), slog.Any("error", rmErr))
+			}
 		}
 	}
 
-	// Then remove empty {uidvalidity} dirs.
+	// Remove {uidvalidity} dirs that are now empty.
 	for uv := range uvDirs {
 		dir := filepath.Join(emailsDir, uv)
-		if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
-			slog.Warn("DeleteEmailsBefore: remove uidvalidity dir failed",
-				slog.String("dir", dir), slog.Any("error", rmErr))
+		if entries, _ := os.ReadDir(dir); len(entries) == 0 {
+			if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
+				slog.Warn("DeleteEmailsBefore: remove uidvalidity dir failed",
+					slog.String("dir", dir), slog.Any("error", rmErr))
+			}
 		}
 	}
 }
