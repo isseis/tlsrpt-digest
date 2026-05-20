@@ -28,10 +28,10 @@ type Store interface {
 	// Returns ErrZeroInternalDate if any entry has a zero InternalDate.
 	SaveEmailMetas(metas []EmailMeta) error
 
-	// GetReportsSince retrieves all reports whose date-range.end-datetime >= since.
-	// Filtering is by the report period end time, not by the storage time.
-	// Returns an empty slice (not an error) when no reports match.
-	GetReportsSince(since time.Time) ([]tlsrpt.Report, error)
+	// GetAllReports retrieves all stored reports without filtering.
+	// Callers are responsible for any date-range or failure filtering.
+	// Returns an empty slice (not an error) when no reports are stored.
+	GetAllReports() ([]tlsrpt.Report, error)
 
 	// SaveEmail saves a raw .eml file to
 	// {root_dir}/emails/{uidvalidity}/{YYYYMM}/{uid}.eml

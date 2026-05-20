@@ -80,20 +80,14 @@ func (s *storeImpl) SaveReports(inputs []ReportInput) error {
 	return s.saveDataFile(df)
 }
 
-// GetReportsSince implements Store.GetReportsSince.
-func (s *storeImpl) GetReportsSince(since time.Time) ([]tlsrpt.Report, error) {
+// GetAllReports implements Store.GetAllReports.
+func (s *storeImpl) GetAllReports() ([]tlsrpt.Report, error) {
 	df, err := s.loadDataFile()
 	if err != nil {
-		return nil, fmt.Errorf("GetReportsSince: load data file: %w", err)
+		return nil, fmt.Errorf("GetAllReports: load data file: %w", err)
 	}
-
-	result := make([]tlsrpt.Report, 0, len(df.Reports))
-	for _, r := range df.Reports {
-		// Include reports whose end-datetime is not before since (i.e., >= since).
-		if !r.DateRange.EndDatetime.Before(since) {
-			result = append(result, r)
-		}
-	}
+	result := make([]tlsrpt.Report, len(df.Reports))
+	copy(result, df.Reports)
 	return result, nil
 }
 

@@ -90,14 +90,16 @@ func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
 	return nil
 }
 
-// GetReportsSince implements store.Store.
-func (f *FakeStore) GetReportsSince(since time.Time) ([]tlsrpt.Report, error) {
+// GetAllReports implements store.Store.
+// The returned slice is sorted by ReportID for deterministic ordering.
+func (f *FakeStore) GetAllReports() ([]tlsrpt.Report, error) {
 	result := make([]tlsrpt.Report, 0, len(f.Reports))
 	for _, r := range f.Reports {
-		if !r.DateRange.EndDatetime.Before(since) {
-			result = append(result, r)
-		}
+		result = append(result, r)
 	}
+	slices.SortFunc(result, func(a, b tlsrpt.Report) int {
+		return cmp.Compare(a.ReportID, b.ReportID)
+	})
 	return result, nil
 }
 

@@ -66,7 +66,7 @@ flowchart LR
 |---|---|
 | F-001（AC-01〜AC-06） | 2.1 全体構成、6.1 初期化フロー、3.1 Open モード定義 |
 | F-002（AC-07〜AC-10） | 3.1 `SaveReports`/`SaveEmailMetas`（`SaveReport` はパッケージレベル関数）、6.2 保存フロー |
-| F-003（AC-11〜AC-13） | 3.1 `GetReportsSince`、6.3 参照フロー |
+| F-003（AC-11〜AC-13） | 3.1 `GetAllReports`、6.3 参照フロー |
 | F-004（AC-14〜AC-19） | 3.1 `SaveEmail`、6.2 保存フロー |
 | F-005（AC-20〜AC-22） | 3.1 `LoadEmails`、4.1 個別読み込み失敗の集約方針、6.4 reprocess 読み込みフロー |
 | F-006（AC-23〜AC-24） | 3.1 `SaveUIDValidity`/`LoadUIDValidity`、6.5 UIDVALIDITY フロー |
@@ -218,9 +218,9 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error)
 type Store interface {
     SaveReports(inputs []ReportInput) error
     SaveEmailMetas(metas []EmailMeta) error
-    GetReportsSince(since time.Time) ([]tlsrpt.Report, error)
+    GetAllReports() ([]tlsrpt.Report, error)
 
-    SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time, rawEML []byte) error
+    SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error
     LoadEmails() ([]LoadedEmail, error)
 
     SaveUIDValidity(v uint32) error
@@ -250,7 +250,7 @@ func SaveReport(s Store, input ReportInput) error {
 | `internal/store/types.go` | 永続化対象の内部モデル（report/email/sentinel）定義 | 新規 |
 | `internal/store/errors.go` | 公開エラー型・分類（不整合/IO/検証） | 新規 |
 | `internal/store/sentinel.go` | sentinel 状態管理、IMAP 識別子整合性検証 | 新規 |
-| `internal/store/reports.go` | `SaveReports`/`GetReportsSince`/`DeleteReportsBefore`、ユーティリティ関数 `SaveReport` | 新規 |
+| `internal/store/reports.go` | `SaveReports`/`GetAllReports`/`DeleteReportsBefore`、ユーティリティ関数 `SaveReport` | 新規 |
 | `internal/store/emails.go` | `SaveEmail`/`SaveEmailMetas`/`LoadEmails`/`DeleteEmailsBefore` | 新規 |
 | `internal/store/recovery.go` | `SaveRecoveryRequired`/`LoadRecoveryRequired`/`ClearRecoveryRequired`/`ApplyRecovery` | 新規 |
 | `internal/store/atomicfile.go` | アトミック更新の共通 I/O ヘルパ | 新規 |
@@ -524,7 +524,7 @@ sequenceDiagram
 
 - F-001: 初期化（作成/冪等/read-only で非作成）
 - F-002/F-004: `SaveEmail`・`SaveEmailMetas`・`SaveReports` の冪等性と同時更新整合
-- F-003: `GetReportsSince` の `date-range.end-datetime >= since` フィルタ
+- F-003: `GetAllReports` の全件返却とラウンドトリップ保証
 - F-005: `LoadEmails` の UID/UIDVALIDITY のパス由来抽出、`SentAt` のヘッダー由来取得とフォールバック、個別失敗継続
 - F-006/F-008: UIDVALIDITY/recovery 状態 API のラウンドトリップと `ApplyRecovery` 原子性
 - F-007a/F-007b: GC 境界値、削除 0 件、再実行冪等、`errors.Join` 集約
@@ -554,7 +554,7 @@ sequenceDiagram
 
 ### Phase 2: レポート・インデックス API
 
-1. `SaveReports`/`GetReportsSince`（`SaveReport` ユーティリティ関数は自動導出）
+1. `SaveReports`/`GetAllReports`（`SaveReport` ユーティリティ関数は自動導出）
 2. `SaveEmailMetas` と `report_end_date` 最大値更新
 3. `SaveEmail`（10 桁 UID ファイル名）
 
