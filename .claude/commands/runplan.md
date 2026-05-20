@@ -17,7 +17,7 @@ Work in the following order.
 
 4. Identify the next phase group to implement.
 - Read the checkboxes in `03_implementation_plan.md`. Legend: `[ ]` not started, `[x]` done, `[-]` skipped.
-- If all phases are complete, proceed directly to the final review step (step 6).
+- If all phases are complete, proceed directly to the final review in step 7.
 - Otherwise, select a phase group: normally one phase at a time.
   - Exception: if the next phase cannot reach a passing `make test` on its own (e.g. it only adds stub code to unblock compilation, or it is so tightly coupled to the following phase that the build cannot pass without both), group it together with the following phase.
   - In that case, briefly note why the phases are grouped before starting work.
@@ -49,12 +49,12 @@ Phase-group review checklist:
 - [ ] `make lint` passes with no errors.
 - [ ] `make test` passes with no errors.
 
-7. Summarize the phase group, then ask whether to continue.
+7. Summarize the phase group, then decide whether to continue or finish.
 - Provide a concise summary of what was implemented in this phase group and which acceptance criteria were verified.
 - Note any assumptions made or items intentionally deferred.
-- Ask the user: "Shall I continue with the next phase?"
-- If the user says yes (or equivalent), return to step 4.
-- If all phases were already complete before step 4, instead perform the final review:
-  - Verify that all acceptance criteria in `01_requirements.md` are satisfied.
-  - Verify that every AC has at least one test.
-  - Report the final status and any remaining gaps.
+- Check whether all phases in `03_implementation_plan.md` are now complete.
+  - If **not all phases are complete**: ask the user "Shall I continue with the next phase?" and return to step 4 if they agree.
+  - If **all phases are complete**: perform the final review without asking:
+    - Verify that every acceptance criterion in `01_requirements.md` is satisfied by the implementation.
+    - Verify that every AC has at least one test.
+    - Report the final status and any remaining gaps.
