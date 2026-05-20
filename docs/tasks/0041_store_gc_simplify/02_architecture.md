@@ -314,7 +314,6 @@ type internalEmailIndexEntry struct {
 |---|---|
 | `.eml` の個別削除に I/O エラー | エントリをインデックスに残し、`errors.Join` で集約して継続（AC-05） |
 | インデックスの保存失敗 | 失敗前の削除件数を返し、保存エラーを集約して返す（AC-07） |
-| `internal_date` がゼロのエントリ | 削除対象外として扱い、インデックスに保持（AC-03） |
 | `internalDate` がゼロ値（`SaveEmail`・パス再構築） | `savedAt` にフォールバックして `slog.Warn` を出力（AC-19） |
 | 空ディレクトリ削除の失敗 | `slog.Warn` を出力して継続し、戻り値エラーには含めない（AC-13） |
 
@@ -345,10 +344,8 @@ flowchart TD
     Zero -->|"Yes"| RetZero(["deleted=0, err=nil を返す (AC-02)"])
     Zero -->|"No"| Load["インデックスを読み込む"]
     Load --> Loop["各インデックスエントリを評価"]
-    Loop --> Placeholder{"internal_date がゼロ？"}
-    Placeholder -->|"Yes"| Keep["保持（AC-03）"]
-    Placeholder -->|"No"| Cond{"internal_date < cutoff？"}
-    Cond -->|"No"| Keep
+    Loop --> Cond{"internal_date < cutoff？"}
+    Cond -->|"No"| Keep["保持"]
     Cond -->|"Yes"| DelFile["ファイルを削除 (AC-06)<br>パスは internal_date から再構築"]
     DelFile --> IOErr{"I/O エラー？"}
     IOErr -->|"Yes"| KeepEntry["エントリを保持<br>エラーを集約 (AC-05)"]
@@ -379,7 +376,6 @@ flowchart TD
 | | `internalDate` がゼロ値のとき `savedAt` にフォールバックして WARN が出力されること（AC-19） |
 | `DeleteEmailsBefore`（新シグネチャ） | `cutoff` がゼロ → 削除なし（AC-02） |
 | | `internal_date < cutoff` → ファイルとインデックスエントリを削除（AC-03, AC-06） |
-| | `internal_date` がゼロのエントリ → 削除対象外（AC-03） |
 | | ファイル不在 → 冪等動作（AC-04） |
 | | I/O エラー混在 → 成功件数と集約エラーを返す（AC-05） |
 | | インデックス更新失敗 → 削除済み件数とエラーを返す（AC-07） |
