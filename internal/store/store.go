@@ -17,9 +17,7 @@ import (
 type Store interface {
 	// SaveReports persists a batch of TLSRPT reports in a single atomic write.
 	// Reports are UPSERT'd by report-id (a duplicate replaces the existing entry).
-	// For each {uid, uidvalidity} in inputs, the corresponding email index entry's
-	// report_end_date is updated to the maximum DateRange.EndDatetime across all
-	// reports for that message. Returns an error if the write fails.
+	// The email index is not modified. Returns an error if the write fails.
 	SaveReports(inputs []ReportInput) error
 
 	// SaveEmailMetas persists email metadata to the index in a single atomic write
@@ -45,10 +43,9 @@ type Store interface {
 
 	// LoadEmails recursively enumerates all .eml files under {root_dir}/emails/,
 	// deriving uid and uidvalidity from the {uidvalidity}/{YYYYMM}/{uid}.eml path.
-	// Each entry includes the parsed *mail.Message, UID, UIDValidity, SentAt (from
-	// Date: header, falling back to SavedAt on parse failure), and SavedAt (from
-	// the file's ctime via syscall.Stat). Individual file-read or parse failures are
-	// collected via errors.Join and returned alongside any successfully loaded emails.
+	// Each entry includes the parsed *mail.Message, UID, UIDValidity, and SavedAt
+	// (from the file's ctime via syscall.Stat). Individual file-read or parse failures
+	// are collected via errors.Join and returned alongside any successfully loaded emails.
 	LoadEmails() ([]LoadedEmail, error)
 
 	// SaveUIDValidity persists the IMAP UIDVALIDITY value to the sentinel file
