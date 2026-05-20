@@ -7,7 +7,7 @@
     "service": "dev-env",
     "workspaceFolder": "/workspaces/ubuntu",
     "remoteUser": "devuser",
-    "postCreateCommand": "cd /workspaces/ubuntu && pre-commit install && pre-commit install-hooks",
+    "postCreateCommand": "pre-commit install --install-hooks",
     "customizations": {
         "vscode": {
             "settings": {
