@@ -264,8 +264,10 @@ func (s *storeImpl) cleanupEmptyDirs(gcEntries []internalEmailIndexEntry) {
 		dir := filepath.Join(emailsDir, k.uv, k.mm)
 		entries, rdErr := os.ReadDir(dir)
 		if rdErr != nil {
-			slog.Warn("DeleteEmailsBefore: read YYYYMM dir failed",
-				slog.String("dir", dir), slog.Any("error", rdErr))
+			if !os.IsNotExist(rdErr) {
+				slog.Warn("DeleteEmailsBefore: read YYYYMM dir failed",
+					slog.String("dir", dir), slog.Any("error", rdErr))
+			}
 			continue
 		}
 		if len(entries) == 0 {
@@ -281,8 +283,10 @@ func (s *storeImpl) cleanupEmptyDirs(gcEntries []internalEmailIndexEntry) {
 		dir := filepath.Join(emailsDir, uv)
 		entries, rdErr := os.ReadDir(dir)
 		if rdErr != nil {
-			slog.Warn("DeleteEmailsBefore: read uidvalidity dir failed",
-				slog.String("dir", dir), slog.Any("error", rdErr))
+			if !os.IsNotExist(rdErr) {
+				slog.Warn("DeleteEmailsBefore: read uidvalidity dir failed",
+					slog.String("dir", dir), slog.Any("error", rdErr))
+			}
 			continue
 		}
 		if len(entries) == 0 {

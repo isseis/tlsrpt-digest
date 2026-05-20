@@ -602,10 +602,13 @@ func TestDeleteEmailsBefore_DirCleanupWarn(t *testing.T) {
 
 	warnFound := false
 	for _, r := range spy.records {
-		if r.Level == slog.LevelWarn {
+		if r.Level != slog.LevelWarn {
+			continue
+		}
+		if r.Message == "DeleteEmailsBefore: remove YYYYMM dir failed" {
 			warnFound = true
 			break
 		}
 	}
-	assert.True(t, warnFound, "a WARN log should be emitted when dir removal fails")
+	assert.True(t, warnFound, "a WARN with message 'DeleteEmailsBefore: remove YYYYMM dir failed' should be emitted")
 }

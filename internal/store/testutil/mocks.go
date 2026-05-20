@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -68,10 +69,14 @@ func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
 
 // SaveEmailMetas implements store.Store.
 func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
+	// Validate all entries before committing any, matching the real store's
+	// atomic semantics (either all succeed or nothing is persisted).
 	for _, meta := range metas {
 		if meta.InternalDate.IsZero() {
 			return store.ErrZeroInternalDate
 		}
+	}
+	for _, meta := range metas {
 		key := EmailKey{meta.UID, meta.UIDValidity}
 		if _, ok := f.Emails[key]; ok {
 			continue
@@ -130,7 +135,7 @@ func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
 			continue
 		}
 		yyyymm := entry.InternalDate.UTC().Format("200601")
-		relPath := fmt.Sprintf("%d/%s/%010d.eml", entry.UIDValidity, yyyymm, entry.UID)
+		relPath := filepath.Join(fmt.Sprintf("%d", entry.UIDValidity), yyyymm, fmt.Sprintf("%010d.eml", entry.UID))
 		result = append(result, store.LoadedEmail{
 			Message:     msg,
 			UID:         entry.UID,
