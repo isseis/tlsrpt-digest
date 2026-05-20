@@ -256,7 +256,7 @@ flowchart TD
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
     AGG["GenerateSummary()<br>aggregate.go"] -->|"slog.Warn（混在レポート警告）"| DBG[("デバッグロガー<br>（標準出力/ファイル）")]
-    AGG -->|"Summary<br>組織名・成功セッション数のみ"| NOTIFY["通知ロガー<br>（SlackHandler）"]
+    AGG -->|"Summary<br>（集計期間・レポート総数・<br>組織名と成功セッション数）"| NOTIFY["通知ロガー<br>（SlackHandler）"]
     NOTIFY -->|"HTTP POST"| Slack[("Slack")]
 
     class DBG,Slack data
@@ -276,7 +276,7 @@ flowchart TD
 
 | ガイドライン原則 | 本機能での適用 |
 |---|---|
-| 原則 1: 引数型による制約 | `Summary` は `OrganizationStats`（組織名と成功セッション数）のみを保持し、パスワードや Webhook URL を含まない |
+| 原則 1: 引数型による制約 | `Summary` は集計期間・レポート総数・`OrganizationStats`（組織名と成功セッション数）を保持し、パスワードや Webhook URL を含まない |
 | 原則 3: 通知側のリダクションは無効化不可 | `SlackHandler` 側の変更なし。既存の設計を維持 |
 | 原則 5: 型付きイベントヘルパー | `LogSummary` のみが通知ロガーへの書き込みを担う。外部から直接 `logger.Info(...)` を呼ぶ経路は作らない |
 | デバッグロガーと通知ロガーの分離 | AC-11 の混在レポート警告は `debugLogger`（`slog.Logger`）に書く。通知ロガー（`slog.Handler`）には流れない |
