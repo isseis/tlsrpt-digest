@@ -294,9 +294,11 @@ type internalEmailIndexEntry struct {
 }
 ```
 
-### 3.3 既存 JSON ファイルとの互換性
+### 3.3 既存 JSON ファイルの扱い
 
-本システムは開発中のため後方互換は考慮しない。既存の `tlsrpt.json` に `sent_at` や `report_end_date` が含まれていても `encoding/json` の標準動作（未知フィールドは無視）により読み込みエラーは発生しない。`InternalDate` がゼロ値のエントリは `SaveEmail` のフォールバック規則と同様に `SavedAt` をパス決定に使用する。`DataFileVersion` は変更しない（AC-11）。
+後方互換性は考慮しない。`internal_date` を持たない既存 `tlsrpt.json` は本タスクのサポート対象外とし、追加の読み込み互換やマイグレーション処理は実装しない。
+
+`InternalDate` がゼロ値のエントリに対する `SavedAt` フォールバックは、新規保存時の防御的フォールバックとしてのみ残す。
 
 ### 3.4 `SaveEmailMetas` の変更
 
@@ -384,12 +386,11 @@ flowchart TD
 | | GC 後に空になったディレクトリが削除されること（AC-13） |
 | | ディレクトリ削除失敗でもエラーを返さないこと（AC-13） |
 | `SaveReports` | メールインデックスを変更しないこと（AC-09） |
-| `internalEmailIndexEntry` | `report_end_date` フィールドを持つ既存 JSON を読み込んでもエラーにならないこと（AC-10） |
 | `SaveEmailMetas` | 既存エントリへの冪等挿入動作（AC-14） |
 
 ### 7.2 統合テスト
 
-- fetch サイクル（`SaveEmail` → `SaveEmailMetas` → `SaveReports`）後に GC を実行し、`saved_at < cutoff` のエントリのみが削除されること
+- fetch サイクル（`SaveEmail` → `SaveEmailMetas` → `SaveReports`）後に GC を実行し、`internal_date < cutoff` のエントリのみが削除されること
 - GC 後に `GetReportsSince` でレポートレコードが正常に取得できること（メールと独立していることの確認）
 
 ### 7.3 セキュリティテスト
