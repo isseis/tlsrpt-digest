@@ -89,7 +89,7 @@ flowchart TD
 
     External[("Slack<br>Incoming Webhook")]
 
-    Main -->|"store, start, end"| Aggregate
+    Main -->|"ctx, store, start, end,<br>debugLogger"| Aggregate
     StoreData --> StoreIface
     StoreIface -->|"[]tlsrpt.Report"| Aggregate
     Aggregate -.->|"型参照"| Types
@@ -160,7 +160,7 @@ sequenceDiagram
     AGG->>ST: GetAllReports()
     ST-->>AGG: []tlsrpt.Report（全件）
     note over AGG: フィルタ: start < EndDatetime <= end<br>かつ HasFailure == false
-    note over AGG: 混在レポート検出時:<br>slog.Warn(debugLogger, ...)（AC-11）
+    note over AGG: 混在レポート検出時:<br>debugLogger.Warn(...)（AC-11）
     AGG-->>CMD: Summary（組織別集計結果）
 
     CMD->>HLP: LogSummary(ctx, h, summary)
@@ -172,7 +172,9 @@ sequenceDiagram
     FMT->>FMT: extractSummary(record) → Summary 復元
     FMT->>FMT: formatSummary(summary, runID) → slackMessage
     FMT-->>HDL: []slackMessage
-    HDL->>HDL: HTTP POST to Slack（チャンクごと）
+    loop []slackMessage の各要素（順次）
+        HDL->>HDL: postWithRetry → HTTP POST to Slack
+    end
     HDL-->>CMD: nil（または error）
 ```
 
@@ -201,7 +203,7 @@ sequenceDiagram
 type Summary struct {
     Period            DateRange
     OrganizationStats map[string]int64
-    ReportCount       int
+    ReportCount       int64
 }
 ```
 
@@ -343,16 +345,16 @@ flowchart TD
 
     Start(["OrganizationStats をアルファベット昇順ソート"]) --> EmptyCheck{"OrganizationStats<br>が空?"}
     EmptyCheck -->|"Yes"| AddRunIDOnly["Run ID のみ追加<br>（1 フィールド）（AC-04）"]
-    EmptyCheck -->|"No"| Loop["9 組織ずつチャンク"]
-    Loop --> Chunk{"最後のチャンク?"}
+    EmptyCheck -->|"No"| TakeChunk["次の 9 組織チャンクを取り出す"]
+    TakeChunk --> Chunk{"最後のチャンク?"}
     Chunk -->|"No"| AddOrgFields["組織フィールドのみ追加<br>（最大 9 フィールド）"]
     Chunk -->|"Yes"| AddOrgAndRunID["組織フィールド（最大 9）<br>+ Run ID（1）を追加"]
-    AddOrgFields --> Loop
+    AddOrgFields --> TakeChunk
     AddOrgAndRunID --> End(["slackMessage 完成"])
     AddRunIDOnly --> End
 
     class Start,End process
-    class Loop,Chunk,AddOrgFields,AddOrgAndRunID enhanced
+    class TakeChunk,Chunk,AddOrgFields,AddOrgAndRunID enhanced
 ```
 
 **凡例**
