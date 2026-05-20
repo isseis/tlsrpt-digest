@@ -196,7 +196,7 @@ sequenceDiagram
     EP->>ST: "DeleteEmailsBefore(cutoff)"
     ST->>DF: "メールインデックスを読み込む"
     loop "各インデックスエントリ"
-        alt "internal_date != zero && internal_date < cutoff"
+        alt "internal_date < cutoff"
             ST->>EF: ".eml を削除（パスは internal_date から再構築）"
             Note over ST,EF: "I/O エラーは集約して継続"
         else "削除対象外"
