@@ -75,11 +75,10 @@ func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
 		return fmt.Errorf("SaveEmailMetas: load data file: %w", err)
 	}
 
-	// Build an index of existing entries for O(1) lookup by {uid, uidvalidity}.
-	// Maps to the slice position so we can update in-place.
-	existing := make(map[emailKey]int, len(df.Emails))
-	for i, entry := range df.Emails {
-		existing[emailKey{entry.UID, entry.UIDValidity}] = i
+	// Build a set of existing {uid, uidvalidity} keys for O(1) existence checks.
+	existing := make(map[emailKey]struct{}, len(df.Emails))
+	for _, entry := range df.Emails {
+		existing[emailKey{entry.UID, entry.UIDValidity}] = struct{}{}
 	}
 
 	// For each meta: append a new entry if none exists; skip if already present (idempotent).
@@ -92,7 +91,7 @@ func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
 			continue
 		}
 		df.Emails = append(df.Emails, internalEmailIndexEntry(meta))
-		existing[key] = len(df.Emails) - 1
+		existing[key] = struct{}{}
 	}
 
 	return s.saveDataFile(df)
@@ -223,9 +222,9 @@ func (s *storeImpl) DeleteEmailsBefore(cutoff time.Time) (deleted int, err error
 		gcEntries = append(gcEntries, entry)
 	}
 
-	// Skip the write when nothing changed.
-	if deleted == 0 && len(deleteErrs) == 0 {
-		return 0, nil
+	// Skip the write when no index entries were removed.
+	if deleted == 0 {
+		return 0, errors.Join(deleteErrs...)
 	}
 
 	// Write updated index atomically.

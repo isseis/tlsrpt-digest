@@ -584,15 +584,16 @@ func TestDeleteEmailsBefore_DirCleanupWarn(t *testing.T) {
 	spy := setDefaultSlogSpy(t)
 	s, rootDir := openTestStore(t)
 
-	// UID=1 is GC'd. Place an extra file in its YYYYMM dir that is unknown to the
-	// store, so the dir is non-empty after GC and os.Remove fails with ENOTEMPTY.
-	internalDate1 := time.Date(2025, 5, 1, 0, 0, 0, 0, time.UTC)
-	saveEMLWithMeta(t, s, 1, internalDate1)
+	// UID=1 is GC'd. After deletion its YYYYMM dir becomes empty, triggering
+	// cleanupEmptyDirs. We make the uidvalidity parent dir read-only so that
+	// os.Remove on the empty YYYYMM subdir fails with EPERM → WARN logged.
+	internalDate := time.Date(2025, 5, 1, 0, 0, 0, 0, time.UTC)
+	saveEMLWithMeta(t, s, 1, internalDate)
 
-	// Create an extra file in the YYYYMM dir that prevents its removal.
-	mmDir := filepath.Join(rootDir, "emails", "100", "202505")
-	extraFile := filepath.Join(mmDir, "extra.txt")
-	require.NoError(t, os.WriteFile(extraFile, []byte("keep"), 0o600)) //nolint:gosec
+	uvDir := filepath.Join(rootDir, "emails", "100")
+	require.NoError(t, os.Chmod(uvDir, 0o555)) //nolint:gosec
+	// Restore write permission so t.TempDir cleanup succeeds.
+	t.Cleanup(func() { _ = os.Chmod(uvDir, 0o700) }) //nolint:gosec
 
 	cutoff := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 	deleted, err := s.DeleteEmailsBefore(cutoff)
