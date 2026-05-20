@@ -91,11 +91,15 @@ func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
 }
 
 // GetAllReports implements store.Store.
+// The returned slice is sorted by ReportID for deterministic ordering.
 func (f *FakeStore) GetAllReports() ([]tlsrpt.Report, error) {
 	result := make([]tlsrpt.Report, 0, len(f.Reports))
 	for _, r := range f.Reports {
 		result = append(result, r)
 	}
+	slices.SortFunc(result, func(a, b tlsrpt.Report) int {
+		return cmp.Compare(a.ReportID, b.ReportID)
+	})
 	return result, nil
 }
 

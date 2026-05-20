@@ -220,7 +220,7 @@ type Store interface {
     SaveEmailMetas(metas []EmailMeta) error
     GetAllReports() ([]tlsrpt.Report, error)
 
-    SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time, rawEML []byte) error
+    SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error
     LoadEmails() ([]LoadedEmail, error)
 
     SaveUIDValidity(v uint32) error

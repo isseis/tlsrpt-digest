@@ -184,7 +184,14 @@ func TestGetAllReports_ReturnsAllRegardlessOfDate(t *testing.T) {
 
 	reports, err := s.GetAllReports()
 	require.NoError(t, err)
-	assert.Len(t, reports, 3, "GetAllReports should return all reports regardless of date")
+	require.Len(t, reports, 3, "GetAllReports should return all reports regardless of date")
+	ids := make(map[string]bool, len(reports))
+	for _, r := range reports {
+		ids[r.ReportID] = true
+	}
+	assert.True(t, ids["old"], "old report should be included")
+	assert.True(t, ids["recent"], "recent report should be included")
+	assert.True(t, ids["future"], "future report should be included")
 }
 
 // TestGetAllReports_Empty verifies that an empty store returns a non-nil empty slice.

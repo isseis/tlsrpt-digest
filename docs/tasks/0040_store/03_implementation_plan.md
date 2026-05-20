@@ -79,7 +79,7 @@
   - 作業内容:
     - `OpenReadWrite` で `root_dir`・`emails/`・`tlsrpt.json` が作成されること（``AC-01``〜``AC-03``）
     - 2 回目の `Open` で既存データが失われないこと（``AC-04``）
-    - `OpenReadOnly` でファイルが新規作成されず、`GetReportsSince` が空スライスを返すこと（``AC-04a``）
+    - `OpenReadOnly` でファイルが新規作成されず、`GetAllReports` が空スライスを返すこと（``AC-04a``）
     - sentinel 新規作成で IMAP識別子と `initialized_at` が記録されること（``AC-05``）
     - 異なる IMAP識別子で `Open` すると `ErrStoreIdentityMismatch` が返り、エラーメッセージに期待値・実値・`root_dir` が含まれること（`AC-06`、`errors.AsType` で型を検証）
     - 未知 `format_version` を持つ sentinel 読み込み時にエラーが返ること
@@ -99,18 +99,18 @@
       - `report-id` をキーとして UPSERT する（`AC-08`）
       - 対応する `{uid, uidvalidity}` のメールインデックスエントリの `report_end_date` を、対象入力群の `DateRange.EndDatetime` の最大値で更新する（`AC-08b`）
       - アトミック rename で書き戻す（`AC-09`）
-    - `GetReportsSince(since time.Time) ([]tlsrpt.Report, error)` を実装する：`DateRange.EndDatetime >= since` でフィルタし、対象がない場合は空スライスを返す（`AC-11`・`AC-12`）
+    - `GetAllReports() ([]tlsrpt.Report, error)` を実装する：保存済みの全レポートを返す（フィルタなし）。レポートがない場合は空スライスを返す（`AC-11`・`AC-12`）
   - 完了判定: `go build ./internal/store/...` が通ること
 
 - [x] **2.2** レポート API のテスト実装
   - ファイル: `internal/store/reports_test.go`
   - 作業内容:
-    - `SaveReport` → `GetReportsSince` のラウンドトリップで全フィールド（`failure-details`・`policy-string`・`mx-host` 含む）が一致すること（`AC-07`・`AC-13`）
+    - `SaveReport` → `GetAllReports` のラウンドトリップで全フィールド（`failure-details`・`policy-string`・`mx-host` 含む）が一致すること（`AC-07`・`AC-13`）
     - 同一 `report-id` の 2 回保存後、取得件数が 1 件であること（`AC-08`）
     - 複数 `ReportInput` を渡す `SaveReports` で全件が取得できること（`AC-08a`）
     - 同一 `{uid, uidvalidity}` で `EndDatetime` が異なる複数レポートを保存し、`report_end_date` が最大値で更新されること（`AC-08b`）
-    - `since` と等しい・1ナノ秒前・1ナノ秒後の `EndDatetime` を持つ 3 件で `GetReportsSince` のフィルタ境界値を確認する（`AC-11`）
-    - 空ストアへの `GetReportsSince` が空スライス（nil でない）を返すこと（`AC-12`）
+    - 過去・現在・未来の日付を持つ 3 件すべてが `GetAllReports` で返されること（`AC-11`）
+    - 空ストアへの `GetAllReports` が空スライス（nil でない）を返すこと（`AC-12`）
     - 未知 `version` を持つデータファイル読み込み時にエラーが返ること
     - 書き込み失敗時にエラーが返ること（`AC-10`）
   - 完了判定: `go test ./internal/store/...` がすべて通ること
@@ -183,11 +183,11 @@
   - ファイル: `internal/store/reports_test.go`（GC 部分）
   - 作業内容:
     - `cutoff` と等しい・1ナノ秒前・1ナノ秒後の `EndDatetime` を持つレポートで削除件数を確認する（`AC-25`）
-    - 削除後の `GetReportsSince` 結果が整合していること（`AC-25`）
+    - 削除後の `GetAllReports` 結果が整合していること（`AC-25`）
     - 削除 0 件で `err = nil` が返ること（`AC-26`）
     - 同じ `cutoff` で 2 回呼んで 2 回目が `deleted = 0` を返すこと（`AC-28`）
     - 削除後に一時ファイルが残らないこと（`AC-27`）
-    - 1 万件規模での `GetReportsSince` および `DeleteReportsBefore` が 1 秒以内に完了すること（パフォーマンステスト）
+    - 1 万件規模での `GetAllReports` および `DeleteReportsBefore` が 1 秒以内に完了すること（パフォーマンステスト）
   - 完了判定: `go test ./internal/store/...` がすべて通ること
 
 - [x] **3.5** `.eml` GC の実装
@@ -274,7 +274,7 @@
 | マイルストーン | 完了条件 |
 |---|---|
 | M1: 基盤 I/O 完成 | Phase 1 が完了し、`Open` で sentinel/JSON/ディレクトリが正しく作成・検証される |
-| M2: レポート・インデックス API 完成 | Phase 2 が完了し、`SaveReports`/`GetReportsSince`/`SaveEmail`/`SaveEmailMetas` が動作する |
+| M2: レポート・インデックス API 完成 | Phase 2 が完了し、`SaveReports`/`GetAllReports`/`SaveEmail`/`SaveEmailMetas` が動作する |
 | M3: GC・復旧 API 完成 | Phase 3 が完了し、全 API が動作する |
 | M4: 統合完成 | Phase 4 が完了し、全テスト・lint・deadcode が通る |
 
@@ -287,7 +287,7 @@
 - **単体テスト**: 各 API の正常系・境界値・エラー系をカバーする。テンポラリディレクトリ（`t.TempDir()`）を使用する
 - **統合テスト**: `store_test.go` 内で `Open → Save* → Load* → Delete*` の一連実行を検証する。reprocess シナリオ（`LoadEmails` → `SaveEmailMetas` → `SaveReports`）の整合性も含む
 - **セキュリティテスト**: ファイル `0600`・ディレクトリ `0700` の検証（`AC-37`・`AC-38`）、および緩いパーミッションへの WARN 確認（`AC-39`）を各フェーズのテストに含める
-- **パフォーマンステスト**: 1 万件規模での `GetReportsSince` および `DeleteReportsBefore` が 1 秒以内に完了することを 3.4 で確認する
+- **パフォーマンステスト**: 1 万件規模での `GetAllReports` および `DeleteReportsBefore` が 1 秒以内に完了することを 3.4 で確認する
 
 ---
 
@@ -401,12 +401,12 @@
 - テスト: `internal/store/reports_test.go::TestSaveReports_Error`
 - 実装: `internal/store/reports.go`
 
-`AC-11`（`date-range.end-datetime >= since` でフィルタされる）
-- テスト: `internal/store/reports_test.go::TestGetReportsSince_FilterSemantics`
-- 実装: `internal/store/reports.go`（GetReportsSince）
+`AC-11`（保存済みレポートをすべて返す）
+- テスト: `internal/store/reports_test.go::TestGetAllReports_ReturnsAllRegardlessOfDate`
+- 実装: `internal/store/reports.go`（GetAllReports）
 
-`AC-12`（対象レポートがない場合に空スライスを返す）
-- テスト: `internal/store/reports_test.go::TestGetReportsSince_Empty`
+`AC-12`（レポートがない場合に空スライスを返す）
+- テスト: `internal/store/reports_test.go::TestGetAllReports_Empty`
 - 実装: `internal/store/reports.go`
 
 `AC-13`（ラウンドトリップで全フィールドが一致する）
@@ -534,7 +534,7 @@
 - [ ] `make test` で全テストが通る
 - [ ] `make deadcode` で未使用コードが報告されない
 - [ ] `01_requirements.md` のすべての受け入れ条件（`AC-01`〜`AC-39`）に対して、少なくとも 1 件のテストが対応する
-- [ ] 1 万件規模での `GetReportsSince` および `DeleteReportsBefore` が 1 秒以内に完了する（パフォーマンステスト）
+- [ ] 1 万件規模での `GetAllReports` および `DeleteReportsBefore` が 1 秒以内に完了する（パフォーマンステスト）
 
 ---
 
