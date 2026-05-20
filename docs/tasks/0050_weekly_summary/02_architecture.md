@@ -97,7 +97,7 @@ flowchart TD
     Helpers -->|"slog.Record をバッファ"| Handler
     Main -->|"Flush(ctx)"| Handler
     Handler -->|"formatRecords()"| Format
-    Format -->|"HTTP POST"| External
+    Handler -->|"HTTP POST"| External
 
     class StoreData,External data
     class StoreIface,Handler process
@@ -170,7 +170,7 @@ sequenceDiagram
     CMD->>HDL: h.Flush(ctx)
     HDL->>FMT: formatRecords(records, runID, debugLogger)
     FMT->>FMT: extractSummary(record) → Summary 復元
-    FMT->>FMT: formatSummary(summary, runID) → []slackMessage
+    FMT->>FMT: formatSummary(summary, runID) → slackMessage
     FMT-->>HDL: []slackMessage
     HDL->>HDL: HTTP POST to Slack（チャンクごと）
     HDL-->>CMD: nil（または error）
@@ -341,12 +341,15 @@ flowchart TD
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
-    Start(["OrganizationStats をアルファベット昇順ソート"]) --> Loop["9 組織ずつチャンク"]
+    Start(["OrganizationStats をアルファベット昇順ソート"]) --> EmptyCheck{"OrganizationStats<br>が空?"}
+    EmptyCheck -->|"Yes"| AddRunIDOnly["Run ID のみ追加<br>（1 フィールド）（AC-04）"]
+    EmptyCheck -->|"No"| Loop["9 組織ずつチャンク"]
     Loop --> Chunk{"最後のチャンク?"}
     Chunk -->|"No"| AddOrgFields["組織フィールドのみ追加<br>（最大 9 フィールド）"]
     Chunk -->|"Yes"| AddOrgAndRunID["組織フィールド（最大 9）<br>+ Run ID（1）を追加"]
     AddOrgFields --> Loop
     AddOrgAndRunID --> End(["slackMessage 完成"])
+    AddRunIDOnly --> End
 
     class Start,End process
     class Loop,Chunk,AddOrgFields,AddOrgAndRunID enhanced
@@ -361,7 +364,7 @@ flowchart TD
 
 ### 6.3 `LogSummary` のシリアライズ形式
 
-`OrganizationStats` は `slog.Group("organization_stats", ...)` としてシリアライズする。キーが組織名（動的）のため、個別の slog 属性ではなくグループにまとめることで `extractSummary` の復元処理を単純化する。
+`OrganizationStats` は `slog.Group("organization_stats", ...)` としてシリアライズする。キーが組織名（動的）のため、個別の slog 属性ではなくグループにまとめることで `extractSummary` の復元処理を単純化する。シリアライズ前に組織名のアルファベット昇順でソートし、ログ出力を決定論的にする。
 
 | 属性 | 値の型 | 意味 |
 |---|---|---|
