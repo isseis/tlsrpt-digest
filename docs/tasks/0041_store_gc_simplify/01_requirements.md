@@ -74,7 +74,7 @@
 - `AC-16`: `LoadedEmail` の `SentAt` フィールドを削除する（送信日時が必要な場合は `LoadedEmail.Message.Header.Get("Date")` で参照可能）
 - `AC-17`: `internalEmailIndexEntry` の `SentAt`（JSON: `sent_at`）を削除し、`InternalDate time.Time`（JSON: `internal_date`）を追加する
 - `AC-18`: `Store.SaveEmail` のシグネチャを `SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error` に変更する
-- `AC-19`: `.eml` のパス（`{YYYYMM}`）の決定に `InternalDate` を使用する。`InternalDate` がゼロ値の場合は `SavedAt` にフォールバックして `slog.Warn` を出力する（ロバストネス原則）
+- `AC-19`: `.eml` のパス（`{YYYYMM}`）の決定に `InternalDate` を使用する。`InternalDate` がゼロ値の場合はエラーを返す（`INTERNALDATE` は RFC 3501 必須フィールドであり、ゼロ値は IMAP サーバーの重大な仕様違反を示す）
 - `AC-20`: `FakeEmailEntry` の `SentAt` を削除し `InternalDate` を追加する。`FakeStore.SaveEmail` のシグネチャを同様に更新する
 
 ### F-001: `DeleteEmailsBefore` の簡略化
@@ -119,7 +119,7 @@
 ## 5. テスト方針
 
 - `InternalDate` を用いたパス決定の確認（AC-19）
-- `InternalDate` がゼロ値のとき `SavedAt` にフォールバックして WARN ログが出力されることの確認（AC-19）
+- `InternalDate` がゼロ値のときエラーが返されることの確認（AC-19）
 - `DeleteEmailsBefore` の新シグネチャでの正常系・境界値・エラー系テスト（AC-01〜AC-07）
 - ファイルが既に存在しない場合も成功カウントに含まれることの確認（AC-04・AC-07）
 - `SaveReports` 呼び出し後にメールインデックスが更新されないことの確認（AC-09）

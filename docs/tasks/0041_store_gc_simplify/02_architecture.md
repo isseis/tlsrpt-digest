@@ -220,7 +220,7 @@ type Store interface {
 
     // SaveEmail は .eml ファイルを保存する。
     // パスは internalDate（IMAP INTERNALDATE）から決定する（AC-18・AC-19）。
-    // internalDate がゼロ値の場合は savedAt にフォールバックして slog.Warn を出力する。
+    // internalDate がゼロ値の場合はエラーを返す（INTERNALDATE は RFC 3501 必須フィールド）。
     SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error
 
     // SaveReports はレポートレコードのみを保存する。
@@ -298,8 +298,6 @@ type internalEmailIndexEntry struct {
 
 後方互換性は考慮しない。`internal_date` を持たない既存 `tlsrpt.json` は本タスクのサポート対象外とし、追加の読み込み互換やマイグレーション処理は実装しない。
 
-`InternalDate` がゼロ値のエントリに対する `SavedAt` フォールバックは、新規保存時の防御的フォールバックとしてのみ残す。
-
 ### 3.4 `SaveEmailMetas` の変更
 
 `SaveReports` がプレースホルダーエントリを作成しなくなるため、`SaveEmailMetas` にある「ゼロ値フィールドを埋める救済ロジック」も不要となる。`SaveEmailMetas` は「同一 `{uid, uidvalidity}` が既に存在する場合は何もしない」という純粋な冪等挿入のみに簡略化する（AC-14）。
@@ -314,7 +312,7 @@ type internalEmailIndexEntry struct {
 |---|---|
 | `.eml` の個別削除に I/O エラー | エントリをインデックスに残し、`errors.Join` で集約して継続（AC-05） |
 | インデックスの保存失敗 | 失敗前の削除件数を返し、保存エラーを集約して返す（AC-07） |
-| `internalDate` がゼロ値（`SaveEmail`・パス再構築） | `savedAt` にフォールバックして `slog.Warn` を出力（AC-19） |
+| `internalDate` がゼロ値（`SaveEmail`） | エラーを返す（AC-19） |
 | 空ディレクトリ削除の失敗 | `slog.Warn` を出力して継続し、戻り値エラーには含めない（AC-13） |
 
 既存の `ErrDeleteEmailFailed` 型は変更なしで継続使用する。
