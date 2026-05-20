@@ -356,8 +356,6 @@ func TestLoadEmails_Fields(t *testing.T) {
 	assert.Equal(t, uint32(42), e.UID)
 	assert.Equal(t, uint32(999), e.UIDValidity)
 	assert.Equal(t, "999/202506/0000000042.eml", filepath.ToSlash(e.Path))
-	assert.False(t, e.SavedAt.IsZero(), "SavedAt from ctime should be non-zero")
-	assert.WithinDuration(t, time.Now(), e.SavedAt, 10*time.Second, "SavedAt should be close to now")
 	assert.NotNil(t, e.Message)
 }
 

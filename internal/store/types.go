@@ -46,7 +46,6 @@ type LoadedEmail struct {
 	Message     *mail.Message // Parsed email message
 	UID         uint32        // IMAP UID
 	UIDValidity uint32        // IMAP UIDVALIDITY
-	SavedAt     time.Time     // File ctime (inode change time) when saved
 	Path        string        // Relative path within {root_dir}/emails/ (e.g., "1234567890/202605/0000000123.eml")
 }
 

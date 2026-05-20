@@ -43,9 +43,9 @@ type Store interface {
 
 	// LoadEmails recursively enumerates all .eml files under {root_dir}/emails/,
 	// deriving uid and uidvalidity from the {uidvalidity}/{YYYYMM}/{uid}.eml path.
-	// Each entry includes the parsed *mail.Message, UID, UIDValidity, and SavedAt
-	// (from the file's ctime via syscall.Stat). Individual file-read or parse failures
-	// are collected via errors.Join and returned alongside any successfully loaded emails.
+	// Each entry includes the parsed *mail.Message, UID, UIDValidity, and Path.
+	// Individual file-read or parse failures are collected via errors.Join and returned
+	// alongside any successfully loaded emails.
 	LoadEmails() ([]LoadedEmail, error)
 
 	// SaveUIDValidity persists the IMAP UIDVALIDITY value to the sentinel file

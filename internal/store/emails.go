@@ -158,17 +158,10 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 			return nil
 		}
 
-		savedAt, ctimeErr := ctimeOf(path)
-		if ctimeErr != nil {
-			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: ctimeErr})
-			return nil
-		}
-
 		result = append(result, LoadedEmail{
 			Message:     msg,
 			UID:         uid,
 			UIDValidity: uidValidity,
-			SavedAt:     savedAt,
 			Path:        relPath,
 		})
 		return nil
