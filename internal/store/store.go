@@ -21,7 +21,7 @@ type Store interface {
 	SaveReports(inputs []ReportInput) error
 
 	// SaveEmailMetas persists email metadata to the index in a single atomic write
-	// (does not save raw .eml files). For each entry, {uid, uidvalidity, internal_date, saved_at}
+	// (does not save raw .eml files). For each entry, {uid, uidvalidity, internal_date}
 	// is registered. Existing entries for the same {uid, uidvalidity} are left unchanged
 	// (idempotent). Calling this once after all SaveEmail calls avoids per-email JSON reads
 	// and writes. Used during reprocess to sync the index.
@@ -39,7 +39,7 @@ type Store interface {
 	// If the file already exists for the same uid and uidvalidity, the call is a no-op
 	// (idempotent, no error returned). Returns an error if internalDate is zero.
 	// Does not update the email index; call SaveEmailMetas after all SaveEmail calls.
-	SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error
+	SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error
 
 	// LoadEmails recursively enumerates all .eml files under {root_dir}/emails/,
 	// deriving uid and uidvalidity from the {uidvalidity}/{YYYYMM}/{uid}.eml path.

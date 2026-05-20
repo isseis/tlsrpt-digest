@@ -31,7 +31,7 @@ func buildEmailPath(rootDir string, uid, uidValidity uint32, internalDate time.T
 }
 
 // SaveEmail implements Store.SaveEmail.
-func (s *storeImpl) SaveEmail(uid, uidValidity uint32, internalDate, _ time.Time, rawEML []byte) error {
+func (s *storeImpl) SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -217,7 +217,6 @@ func (s *storeImpl) DeleteEmailsBefore(cutoff time.Time) (deleted int, err error
 				Path:        emlPath,
 				UID:         entry.UID,
 				UIDValidity: entry.UIDValidity,
-				SavedAt:     entry.SavedAt,
 				Err:         rmErr,
 			})
 			surviving = append(surviving, entry)

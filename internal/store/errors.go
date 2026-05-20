@@ -4,7 +4,6 @@ package store
 import (
 	"errors"
 	"fmt"
-	"time"
 )
 
 // ErrReadOnly is returned when a write operation is attempted on a store
@@ -90,15 +89,14 @@ type ErrDeleteEmailFailed struct {
 	Path        string
 	UID         uint32
 	UIDValidity uint32
-	SavedAt     time.Time
 	// Underlying error (wrapped via Unwrap())
 	Err error
 }
 
 func (e *ErrDeleteEmailFailed) Error() string {
 	return fmt.Sprintf(
-		"store: delete email failed: path=%s uid=%d uidvalidity=%d saved_at=%s: %v",
-		e.Path, e.UID, e.UIDValidity, e.SavedAt.Format(time.RFC3339), e.Err,
+		"store: delete email failed: path=%s uid=%d uidvalidity=%d: %v",
+		e.Path, e.UID, e.UIDValidity, e.Err,
 	)
 }
 

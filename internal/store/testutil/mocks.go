@@ -27,7 +27,6 @@ type FakeEmailEntry struct {
 	UID          uint32
 	UIDValidity  uint32
 	InternalDate time.Time
-	SavedAt      time.Time
 	RawEML       []byte
 }
 
@@ -78,7 +77,6 @@ func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
 			UID:          meta.UID,
 			UIDValidity:  meta.UIDValidity,
 			InternalDate: meta.InternalDate,
-			SavedAt:      meta.SavedAt,
 		}
 	}
 	return nil
@@ -96,7 +94,7 @@ func (f *FakeStore) GetReportsSince(since time.Time) ([]tlsrpt.Report, error) {
 }
 
 // SaveEmail implements store.Store.
-func (f *FakeStore) SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error {
+func (f *FakeStore) SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error {
 	if internalDate.IsZero() {
 		return store.ErrZeroInternalDate
 	}
@@ -108,7 +106,6 @@ func (f *FakeStore) SaveEmail(uid, uidValidity uint32, internalDate, savedAt tim
 		f.Emails[key] = &FakeEmailEntry{UID: uid, UIDValidity: uidValidity}
 	}
 	f.Emails[key].InternalDate = internalDate
-	f.Emails[key].SavedAt = savedAt
 	rawCopy := make([]byte, len(rawEML))
 	copy(rawCopy, rawEML)
 	f.Emails[key].RawEML = rawCopy
@@ -135,7 +132,6 @@ func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
 			Message:     msg,
 			UID:         entry.UID,
 			UIDValidity: entry.UIDValidity,
-			SavedAt:     entry.SavedAt,
 			Path:        relPath,
 		})
 	}

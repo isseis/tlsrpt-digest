@@ -32,7 +32,6 @@ type EmailMeta struct {
 	UID          uint32    // IMAP UID
 	UIDValidity  uint32    // IMAP UIDVALIDITY
 	InternalDate time.Time // IMAP INTERNALDATE (message arrival time on the server)
-	SavedAt      time.Time // File ctime (inode change time) when saved
 }
 
 // ReportInput represents a TLSRPT report to be saved along with its email context.
@@ -64,7 +63,6 @@ type internalEmailIndexEntry struct {
 	UID          uint32    `json:"uid"`
 	UIDValidity  uint32    `json:"uidvalidity"`
 	InternalDate time.Time `json:"internal_date"`
-	SavedAt      time.Time `json:"saved_at"`
 }
 
 // internalSentinelFile represents the structure of .tlsrpt-digest-meta.json.

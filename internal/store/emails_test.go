@@ -32,10 +32,9 @@ func TestSaveEmail_CreatesFile(t *testing.T) {
 	uid := uint32(123)
 	uidValidity := uint32(99999)
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	savedAt := time.Now().UTC()
 	rawEML := makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")
 
-	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, savedAt, rawEML))
+	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, rawEML))
 
 	expectedPath := filepath.Join(rootDir, "emails",
 		"99999", "202506", "0000000123.eml")
@@ -55,11 +54,10 @@ func TestSaveEmail_FileName(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	savedAt := internalDate
 
-	require.NoError(t, s.SaveEmail(1, 100, internalDate, savedAt, makeTestEML("")))
-	require.NoError(t, s.SaveEmail(999999999, 100, internalDate, savedAt, makeTestEML("")))
-	require.NoError(t, s.SaveEmail(4294967295, 100, internalDate, savedAt, makeTestEML(""))) // max uint32
+	require.NoError(t, s.SaveEmail(1, 100, internalDate, makeTestEML("")))
+	require.NoError(t, s.SaveEmail(999999999, 100, internalDate, makeTestEML("")))
+	require.NoError(t, s.SaveEmail(4294967295, 100, internalDate, makeTestEML(""))) // max uint32
 
 	base := filepath.Join(rootDir, "emails", "100", "202506")
 	assert.FileExists(t, filepath.Join(base, "0000000001.eml"))
@@ -72,11 +70,10 @@ func TestSaveEmail_PathFormat(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
 	internalDate := time.Date(2025, 11, 15, 12, 0, 0, 0, time.UTC)
-	savedAt := internalDate
 	uid := uint32(42)
 	uidValidity := uint32(555)
 
-	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, savedAt, makeTestEML("")))
+	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, makeTestEML("")))
 
 	expectedPath := filepath.Join(rootDir, "emails", "555", "202511", "0000000042.eml")
 	assert.FileExists(t, expectedPath)
@@ -88,11 +85,10 @@ func TestSaveEmail_FilePermissions(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	savedAt := internalDate
 	uid := uint32(1)
 	uidValidity := uint32(100)
 
-	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, savedAt, makeTestEML("")))
+	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, makeTestEML("")))
 
 	emlPath := filepath.Join(rootDir, "emails", "100", "202506", "0000000001.eml")
 	emlInfo, err := os.Stat(emlPath)
@@ -111,7 +107,7 @@ func TestSaveEmail_Atomic(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	require.NoError(t, s.SaveEmail(1, 100, internalDate, internalDate, makeTestEML("")))
+	require.NoError(t, s.SaveEmail(1, 100, internalDate, makeTestEML("")))
 
 	emailsDir := filepath.Join(rootDir, "emails")
 	err := filepath.Walk(emailsDir, func(path string, info os.FileInfo, err error) error {
@@ -140,8 +136,8 @@ func TestSaveEmail_Idempotent(t *testing.T) {
 	firstContent := makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")
 	secondContent := makeTestEML("Tue, 02 Jun 2025 00:00:00 +0000")
 
-	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, internalDate, firstContent))
-	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, internalDate, secondContent))
+	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, firstContent))
+	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, secondContent))
 
 	emlPath := filepath.Join(rootDir, "emails", "100", "202506", "0000000001.eml")
 	// G304: emlPath is constructed from t.TempDir(), a safe test path.
@@ -158,8 +154,8 @@ func TestSaveEmail_DifferentUIDValidity(t *testing.T) {
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 	uid := uint32(1)
 
-	require.NoError(t, s.SaveEmail(uid, 100, internalDate, internalDate, makeTestEML("")))
-	require.NoError(t, s.SaveEmail(uid, 200, internalDate, internalDate, makeTestEML("")))
+	require.NoError(t, s.SaveEmail(uid, 100, internalDate, makeTestEML("")))
+	require.NoError(t, s.SaveEmail(uid, 200, internalDate, makeTestEML("")))
 
 	assert.FileExists(t, filepath.Join(rootDir, "emails", "100", "202506", "0000000001.eml"))
 	assert.FileExists(t, filepath.Join(rootDir, "emails", "200", "202506", "0000000001.eml"))
@@ -170,8 +166,7 @@ func TestSaveEmail_DifferentUIDValidity(t *testing.T) {
 func TestSaveEmail_ZeroInternalDate_Error(t *testing.T) {
 	s, _ := openTestStore(t)
 
-	savedAt := time.Date(2025, 8, 15, 0, 0, 0, 0, time.UTC)
-	err := s.SaveEmail(7, 111, time.Time{}, savedAt, makeTestEML(""))
+	err := s.SaveEmail(7, 111, time.Time{}, makeTestEML(""))
 	assert.Error(t, err, "zero internalDate should return an error")
 }
 
@@ -187,7 +182,7 @@ func TestSaveEmail_Error(t *testing.T) {
 	conflictPath := filepath.Join(targetDir, "0000000001.eml")
 	require.NoError(t, os.Mkdir(conflictPath, 0o700))
 
-	err := s.SaveEmail(1, 100, internalDate, internalDate, makeTestEML(""))
+	err := s.SaveEmail(1, 100, internalDate, makeTestEML(""))
 	assert.Error(t, err)
 }
 
@@ -198,7 +193,7 @@ func TestSaveEmail_ReadOnly(t *testing.T) {
 	require.NoError(t, err)
 
 	internalDate := time.Now()
-	err = s.SaveEmail(1, 100, internalDate, internalDate, makeTestEML(""))
+	err = s.SaveEmail(1, 100, internalDate, makeTestEML(""))
 	assert.ErrorIs(t, err, ErrReadOnly)
 }
 
@@ -208,12 +203,10 @@ func TestSaveEmailMetas_BatchInsert(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	savedAt := internalDate.Add(time.Minute)
-
 	metas := []EmailMeta{
-		{UID: 1, UIDValidity: 100, InternalDate: internalDate, SavedAt: savedAt},
-		{UID: 2, UIDValidity: 100, InternalDate: internalDate.Add(time.Hour), SavedAt: savedAt},
-		{UID: 3, UIDValidity: 200, InternalDate: internalDate, SavedAt: savedAt},
+		{UID: 1, UIDValidity: 100, InternalDate: internalDate},
+		{UID: 2, UIDValidity: 100, InternalDate: internalDate.Add(time.Hour)},
+		{UID: 3, UIDValidity: 200, InternalDate: internalDate},
 	}
 	require.NoError(t, s.SaveEmailMetas(metas))
 
@@ -228,18 +221,15 @@ func TestSaveEmailMetas_Idempotent(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	savedAt := internalDate.Add(time.Minute)
-
 	// First registration.
 	metas := []EmailMeta{
-		{UID: 1, UIDValidity: 100, InternalDate: internalDate, SavedAt: savedAt},
+		{UID: 1, UIDValidity: 100, InternalDate: internalDate},
 	}
 	require.NoError(t, s.SaveEmailMetas(metas))
 
-	// Second registration with different saved_at — should not overwrite.
-	differentSavedAt := savedAt.Add(24 * time.Hour)
+	// Second registration — should not overwrite.
 	metas2 := []EmailMeta{
-		{UID: 1, UIDValidity: 100, InternalDate: internalDate, SavedAt: differentSavedAt},
+		{UID: 1, UIDValidity: 100, InternalDate: internalDate},
 	}
 	require.NoError(t, s.SaveEmailMetas(metas2))
 
@@ -248,7 +238,6 @@ func TestSaveEmailMetas_Idempotent(t *testing.T) {
 	require.Len(t, df.Emails, 1)
 
 	entry := df.Emails[0]
-	assert.True(t, entry.SavedAt.Equal(savedAt), "saved_at should not be overwritten by repeated SaveEmailMetas")
 	assert.True(t, entry.InternalDate.Equal(internalDate), "internal_date should not be overwritten by repeated SaveEmailMetas")
 }
 
@@ -258,17 +247,16 @@ func TestSaveEmailMetas_NoPlaceholderUpdate(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	savedAt := internalDate.Add(time.Minute)
 
 	// First registration.
 	require.NoError(t, s.SaveEmailMetas([]EmailMeta{
-		{UID: 1, UIDValidity: 100, InternalDate: internalDate, SavedAt: savedAt},
+		{UID: 1, UIDValidity: 100, InternalDate: internalDate},
 	}))
 
 	// Second call with different values — should not overwrite.
 	differentDate := internalDate.Add(24 * time.Hour)
 	require.NoError(t, s.SaveEmailMetas([]EmailMeta{
-		{UID: 1, UIDValidity: 100, InternalDate: differentDate, SavedAt: differentDate},
+		{UID: 1, UIDValidity: 100, InternalDate: differentDate},
 	}))
 
 	df, err := loadDataFileFromPath(rootDir)
@@ -276,7 +264,6 @@ func TestSaveEmailMetas_NoPlaceholderUpdate(t *testing.T) {
 	require.Len(t, df.Emails, 1)
 	entry := df.Emails[0]
 	assert.True(t, entry.InternalDate.Equal(internalDate), "InternalDate must not be overwritten")
-	assert.True(t, entry.SavedAt.Equal(savedAt), "SavedAt must not be overwritten")
 }
 
 // TestSaveEmailMetas_AtomicWrite verifies that no temp files remain after SaveEmailMetas.
@@ -285,7 +272,7 @@ func TestSaveEmailMetas_AtomicWrite(t *testing.T) {
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 	require.NoError(t, s.SaveEmailMetas([]EmailMeta{
-		{UID: 1, UIDValidity: 100, InternalDate: internalDate, SavedAt: internalDate},
+		{UID: 1, UIDValidity: 100, InternalDate: internalDate},
 	}))
 
 	entries, err := os.ReadDir(rootDir)
@@ -307,7 +294,7 @@ func TestSaveEmailMetas_WriteError(t *testing.T) {
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 	err := s.SaveEmailMetas([]EmailMeta{
-		{UID: 1, UIDValidity: 100, InternalDate: internalDate, SavedAt: internalDate},
+		{UID: 1, UIDValidity: 100, InternalDate: internalDate},
 	})
 	assert.Error(t, err)
 }
@@ -321,7 +308,7 @@ func TestSaveEmailMetas_ReadOnly(t *testing.T) {
 
 	internalDate := time.Now()
 	err = s.SaveEmailMetas([]EmailMeta{
-		{UID: 1, UIDValidity: 100, InternalDate: internalDate, SavedAt: internalDate},
+		{UID: 1, UIDValidity: 100, InternalDate: internalDate},
 	})
 	assert.ErrorIs(t, err, ErrReadOnly)
 }
@@ -336,9 +323,9 @@ func TestLoadEmails_Enumeration(t *testing.T) {
 	internalDate1 := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 	internalDate2 := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
 
-	require.NoError(t, s.SaveEmail(1, 100, internalDate1, internalDate1, makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")))
-	require.NoError(t, s.SaveEmail(2, 100, internalDate2, internalDate2, makeTestEML("Tue, 01 Jul 2025 00:00:00 +0000")))
-	require.NoError(t, s.SaveEmail(1, 200, internalDate1, internalDate1, makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")))
+	require.NoError(t, s.SaveEmail(1, 100, internalDate1, makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")))
+	require.NoError(t, s.SaveEmail(2, 100, internalDate2, makeTestEML("Tue, 01 Jul 2025 00:00:00 +0000")))
+	require.NoError(t, s.SaveEmail(1, 200, internalDate1, makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")))
 
 	emails, err := s.LoadEmails()
 	require.NoError(t, err)
@@ -359,7 +346,7 @@ func TestLoadEmails_Fields(t *testing.T) {
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 	rawEML := makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")
-	require.NoError(t, s.SaveEmail(42, 999, internalDate, internalDate, rawEML))
+	require.NoError(t, s.SaveEmail(42, 999, internalDate, rawEML))
 
 	emails, err := s.LoadEmails()
 	require.NoError(t, err)
@@ -380,8 +367,7 @@ func TestLoadEmails_SkipsFailedFiles(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	savedAt := internalDate
-	require.NoError(t, s.SaveEmail(1, 100, internalDate, savedAt, makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")))
+	require.NoError(t, s.SaveEmail(1, 100, internalDate, makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")))
 
 	// Inject an empty (unparseable) .eml file directly.
 	emptyEML := filepath.Join(rootDir, "emails", "100", "202506", "0000000002.eml")
@@ -414,7 +400,7 @@ func TestLoadEmails_ReprocessIntegration(t *testing.T) {
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 	endDate := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
 	rawEML := makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")
-	require.NoError(t, s.SaveEmail(1, 100, internalDate, internalDate, rawEML))
+	require.NoError(t, s.SaveEmail(1, 100, internalDate, rawEML))
 
 	emails, err := s.LoadEmails()
 	require.NoError(t, err)
@@ -424,7 +410,6 @@ func TestLoadEmails_ReprocessIntegration(t *testing.T) {
 		UID:          emails[0].UID,
 		UIDValidity:  emails[0].UIDValidity,
 		InternalDate: internalDate,
-		SavedAt:      emails[0].SavedAt,
 	}}))
 	require.NoError(t, SaveReport(s, ReportInput{
 		Report:      makeFullReport("r1", endDate),
@@ -441,13 +426,13 @@ func TestLoadEmails_ReprocessIntegration(t *testing.T) {
 // --- DeleteEmailsBefore tests ---
 
 // saveEMLWithMeta is a test helper that saves a .eml file and registers its index entry
-// (always uses uidValidity=100) with the given internalDate and savedAt.
-func saveEMLWithMeta(t *testing.T, s Store, uid uint32, internalDate, savedAt time.Time) {
+// (always uses uidValidity=100) with the given internalDate.
+func saveEMLWithMeta(t *testing.T, s Store, uid uint32, internalDate time.Time) {
 	t.Helper()
 	const uidValidity = uint32(100)
 	rawEML := makeTestEML(internalDate.Format("Mon, 02 Jan 2006 15:04:05 +0000"))
-	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, savedAt, rawEML))
-	require.NoError(t, s.SaveEmailMetas([]EmailMeta{{UID: uid, UIDValidity: uidValidity, InternalDate: internalDate, SavedAt: savedAt}}))
+	require.NoError(t, s.SaveEmail(uid, uidValidity, internalDate, rawEML))
+	require.NoError(t, s.SaveEmailMetas([]EmailMeta{{UID: uid, UIDValidity: uidValidity, InternalDate: internalDate}}))
 }
 
 // TestDeleteEmailsBefore_ZeroCutoff verifies that passing time.Time{} returns 0, nil immediately.
@@ -455,7 +440,7 @@ func TestDeleteEmailsBefore_ZeroCutoff(t *testing.T) {
 	s, _ := openTestStore(t)
 
 	base := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	saveEMLWithMeta(t, s, 1, base, base)
+	saveEMLWithMeta(t, s, 1, base)
 
 	deleted, err := s.DeleteEmailsBefore(time.Time{})
 	require.NoError(t, err)
@@ -471,14 +456,14 @@ func TestDeleteEmailsBefore_Conditions(t *testing.T) {
 
 	// UID=1: internalDate before cutoff → deleted
 	before := cutoff.Add(-time.Hour)
-	saveEMLWithMeta(t, s, 1, before, before)
+	saveEMLWithMeta(t, s, 1, before)
 
 	// UID=2: internalDate equal to cutoff → kept
-	saveEMLWithMeta(t, s, 2, cutoff, cutoff)
+	saveEMLWithMeta(t, s, 2, cutoff)
 
 	// UID=3: internalDate after cutoff → kept
 	after := cutoff.Add(time.Hour)
-	saveEMLWithMeta(t, s, 3, after, after)
+	saveEMLWithMeta(t, s, 3, after)
 
 	deleted, err := s.DeleteEmailsBefore(cutoff)
 	require.NoError(t, err)
@@ -511,7 +496,7 @@ func TestDeleteEmailsBefore_MissingFileIdempotent(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	saveEMLWithMeta(t, s, 1, internalDate.Add(-time.Hour), internalDate.Add(-time.Hour))
+	saveEMLWithMeta(t, s, 1, internalDate.Add(-time.Hour))
 
 	// Manually delete the file to simulate a previous partial run.
 	emlPath := filepath.Join(rootDir, "emails", "100",
@@ -544,8 +529,8 @@ func TestDeleteEmailsBefore_PartialFailure(t *testing.T) {
 	internalDate1 := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 	internalDate2 := time.Date(2025, 7, 1, 0, 0, 0, 0, time.UTC)
 	cutoff := time.Date(2025, 9, 1, 0, 0, 0, 0, time.UTC)
-	saveEMLWithMeta(t, s, 1, internalDate1, internalDate1)
-	saveEMLWithMeta(t, s, 2, internalDate2, internalDate2)
+	saveEMLWithMeta(t, s, 1, internalDate1)
+	saveEMLWithMeta(t, s, 2, internalDate2)
 
 	// Make UID=1's parent directory unwritable so os.Remove fails.
 	parentDir := filepath.Join(rootDir, "emails", "100", "202506")
@@ -573,7 +558,7 @@ func TestDeleteEmailsBefore_EmptyDirCleanup(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
 	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	saveEMLWithMeta(t, s, 1, internalDate, internalDate)
+	saveEMLWithMeta(t, s, 1, internalDate)
 
 	cutoff := internalDate.Add(time.Hour)
 	deleted, err := s.DeleteEmailsBefore(cutoff)
@@ -595,7 +580,7 @@ func TestDeleteEmailsBefore_DirCleanupWarn(t *testing.T) {
 	// UID=1 is GC'd. Place an extra file in its YYYYMM dir that is unknown to the
 	// store, so the dir is non-empty after GC and os.Remove fails with ENOTEMPTY.
 	internalDate1 := time.Date(2025, 5, 1, 0, 0, 0, 0, time.UTC)
-	saveEMLWithMeta(t, s, 1, internalDate1, internalDate1)
+	saveEMLWithMeta(t, s, 1, internalDate1)
 
 	// Create an extra file in the YYYYMM dir that prevents its removal.
 	mmDir := filepath.Join(rootDir, "emails", "100", "202505")
