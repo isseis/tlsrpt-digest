@@ -14,9 +14,8 @@
 
 ## 1. 実装概要
 
-- **目的**: `02_architecture.md` に従い、`.eml` GC 基準を `INTERNALDATE` に統一し、`SentAt` 廃止・`report_end_date` 削除・`sweepOrphanedEmailDirs` の正しい実装への置き換えを行う
+- **目的**: `02_architecture.md` に従い、`.eml` GC 基準を `INTERNALDATE` に統一し、`SentAt` 廃止・`report_end_date` 削除・`sweepOrphanedEmailDirs` の廃止と GC 後の空ディレクトリ削除の実装を行う
 - **実装原則**: フェーズ順に実施し、各フェーズ末でビルドとテストが通る状態を維持する
-- **注意**: `02_architecture.md` Section 2.3 のシーケンス図には `internal_date != zero &&` の条件が残っているが、これは Section 6.1 のフローチャートおよび AC-03 と整合していない。実装は AC-03 と Section 6.1 に従い `internal_date < cutoff` のみを削除条件とする
 
 ---
 
@@ -176,7 +175,7 @@
 | マイルストーン | 完了条件 | 見積工数 |
 |---|---|---|
 | M0: 型・インターフェース確定 | Phase 0 完了。`go build ./internal/store/...` が通る | 30 分 |
-| M1: 実装変更完了 | Phase 1 完了。`go build -tags test ./...` が通る | 125 分 |
+| M1: 実装変更完了 | Phase 1 完了。`go build ./internal/store/...` が通る | 125 分 |
 | M2: モック更新完了 | Phase 2 完了。`go build -tags test ./...` が通る | 40 分 |
 | M3: テスト完了 | Phase 3 完了。`make test` が通る | 120 分 |
 | **合計** | | **315 分（約 5.5 時間）** |
@@ -313,7 +312,7 @@
 
 **AC-12**: `sweepOrphanedEmailDirs` を削除
 - 実装: `internal/store/emails.go`（関数を削除）
-- テスト: `TestDeleteEmailsBefore_EmptyDirCleanup`（新しい空ディレクトリ削除の動作を確認）
+- テスト: 関数削除後に `go build ./internal/store/...` が通ること（残存参照はコンパイルエラーとなる）および `make deadcode` で未使用コードが報告されないことで確認
 
 **AC-13**: GC 後の空ディレクトリを削除（失敗は WARN のみ）
 - 実装: `internal/store/emails.go`（`DeleteEmailsBefore` 末尾の空ディレクトリ削除）
