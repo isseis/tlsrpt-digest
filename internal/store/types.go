@@ -29,10 +29,9 @@ type IMAPIdentity struct {
 
 // EmailMeta represents the metadata of a saved email.
 type EmailMeta struct {
-	UID         uint32    // IMAP UID
-	UIDValidity uint32    // IMAP UIDVALIDITY
-	SentAt      time.Time // Send date from email Date header; fallback to SavedAt if missing
-	SavedAt     time.Time // File ctime (inode change time) when saved
+	UID          uint32    // IMAP UID
+	UIDValidity  uint32    // IMAP UIDVALIDITY
+	InternalDate time.Time // IMAP INTERNALDATE (message arrival time on the server)
 }
 
 // ReportInput represents a TLSRPT report to be saved along with its email context.
@@ -47,8 +46,6 @@ type LoadedEmail struct {
 	Message     *mail.Message // Parsed email message
 	UID         uint32        // IMAP UID
 	UIDValidity uint32        // IMAP UIDVALIDITY
-	SentAt      time.Time     // Send date from email Date header; fallback to SavedAt if missing
-	SavedAt     time.Time     // File ctime (inode change time) when saved
 	Path        string        // Relative path within {root_dir}/emails/ (e.g., "1234567890/202605/0000000123.eml")
 }
 
@@ -62,11 +59,9 @@ type internalDataFile struct {
 
 // internalEmailIndexEntry represents a single email index entry in tlsrpt.json.
 type internalEmailIndexEntry struct {
-	UID           uint32     `json:"uid"`
-	UIDValidity   uint32     `json:"uidvalidity"`
-	SentAt        time.Time  `json:"sent_at"`
-	SavedAt       time.Time  `json:"saved_at"`
-	ReportEndDate *time.Time `json:"report_end_date"` // Null if parse failed
+	UID          uint32    `json:"uid"`
+	UIDValidity  uint32    `json:"uidvalidity"`
+	InternalDate time.Time `json:"internal_date"`
 }
 
 // internalSentinelFile represents the structure of .tlsrpt-digest-meta.json.

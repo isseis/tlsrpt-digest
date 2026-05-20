@@ -4,10 +4,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | `draft` |
+| ステータス | `approved` |
 | 作成日 | 2026-05-20 |
-| レビュー日 | - |
-| レビュアー | - |
+| レビュー日 | 2026-05-20 |
+| レビュアー | isseis |
 | コメント | - |
 
 ---
@@ -30,18 +30,18 @@
 #### 0.1 `types.go` の型変更
 
 - ファイル: `internal/store/types.go`
-- [ ] `EmailMeta.SentAt` を削除し `InternalDate time.Time` を追加する（`02_architecture.md` Section 3.2 参照）
-- [ ] `LoadedEmail.SentAt` フィールドを削除する
-- [ ] `internalEmailIndexEntry.SentAt`（JSON: `sent_at`）を `InternalDate`（JSON: `internal_date`）に変更する
-- [ ] `internalEmailIndexEntry.ReportEndDate` フィールドを削除する
+- [x] `EmailMeta.SentAt` を削除し `InternalDate time.Time` を追加する（`02_architecture.md` Section 3.2 参照）
+- [x] `LoadedEmail.SentAt` フィールドを削除する
+- [x] `internalEmailIndexEntry.SentAt`（JSON: `sent_at`）を `InternalDate`（JSON: `internal_date`）に変更する
+- [x] `internalEmailIndexEntry.ReportEndDate` フィールドを削除する
 - 完了判定: `go build ./internal/store/...` が通ること
 - 見積工数: 20 分 / 実績工数: -
 
 #### 0.2 `store.go` のインターフェース変更
 
 - ファイル: `internal/store/store.go`
-- [ ] `Store.SaveEmail` のシグネチャを `SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error` に変更し、コメントを更新する（AC-18）
-- [ ] `Store.DeleteEmailsBefore` のシグネチャを `DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)` に変更し、コメントを更新する（AC-01）
+- [x] `Store.SaveEmail` のシグネチャを `SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error` に変更し、コメントを更新する（AC-18）
+- [x] `Store.DeleteEmailsBefore` のシグネチャを `DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)` に変更し、コメントを更新する（AC-01）
 - 完了判定: `go build ./internal/store/...` が通ること
 - 見積工数: 10 分 / 実績工数: -
 
@@ -52,55 +52,55 @@
 #### 1.1 `emails.go`: `buildEmailPath` の引数変更
 
 - ファイル: `internal/store/emails.go`
-- [ ] `buildEmailPath` の引数を `sentAt` → `internalDate time.Time` に変更する
+- [x] `buildEmailPath` の引数を `sentAt` → `internalDate time.Time` に変更する
 - 見積工数: 5 分 / 実績工数: -
 
 #### 1.2 `emails.go`: `SaveEmail` の実装変更（AC-18・AC-19）
 
 - ファイル: `internal/store/emails.go`
-- [ ] パラメータ名を `sentAt` → `internalDate` に変更する
-- [ ] ゼロ値フォールバックを削除し、`internalDate.IsZero()` の場合は `fmt.Errorf(...)` でエラーを返す（AC-19）
+- [x] パラメータ名を `sentAt` → `internalDate` に変更する
+- [x] ゼロ値フォールバックを削除し、`internalDate.IsZero()` の場合は `fmt.Errorf(...)` でエラーを返す（AC-19）
 - 完了判定: `go build ./internal/store/...` が通ること
 - 見積工数: 15 分 / 実績工数: -
 
 #### 1.3 `emails.go`: `SaveEmailMetas` のプレースホルダー補填ロジック削除（AC-14）
 
 - ファイル: `internal/store/emails.go`
-- [ ] `SentAt` の正規化ブロック（`sentAt := meta.SentAt` 以降）を削除し、`meta.InternalDate` を直接使用する
-- [ ] 既存エントリに対する補填ブランチ（`df.Emails[i].SentAt.IsZero()` チェック）を削除し、既存エントリがある場合は何もせず `continue` するだけにする（AC-14）
-- [ ] 新規エントリ追加時のフィールドを `SentAt`/`SavedAt` → `InternalDate`/`SavedAt` に変更する
+- [x] `SentAt` の正規化ブロック（`sentAt := meta.SentAt` 以降）を削除し、`meta.InternalDate` を直接使用する
+- [x] 既存エントリに対する補填ブランチ（`df.Emails[i].SentAt.IsZero()` チェック）を削除し、既存エントリがある場合は何もせず `continue` するだけにする（AC-14）
+- [x] 新規エントリ追加時のフィールドを `SentAt`/`SavedAt` → `InternalDate` のみに変更する（`SavedAt` はインデックスから除去済み）
 - 完了判定: `go build ./internal/store/...` が通ること
 - 見積工数: 20 分 / 実績工数: -
 
 #### 1.4 `emails.go`: `LoadEmails` から `SentAt` を除去（AC-16）
 
 - ファイル: `internal/store/emails.go`
-- [ ] `LoadedEmail{}` 生成時の `SentAt:` フィールドを削除する
-- [ ] `sentAt` 変数の計算（`Date:` ヘッダー解析ブロック）を削除する
+- [x] `LoadedEmail{}` 生成時の `SentAt:` フィールドを削除する
+- [x] `sentAt` 変数の計算（`Date:` ヘッダー解析ブロック）を削除する
 - 完了判定: `go build ./internal/store/...` が通ること
 - 見積工数: 10 分 / 実績工数: -
 
 #### 1.5 `reports.go`: `SaveReports` からメールインデックス更新ロジックを削除（AC-09）
 
 - ファイル: `internal/store/reports.go`
-- [ ] `maxEndDate` マップの計算ブロックを削除する
-- [ ] `emailIdx` マップを使った `report_end_date` 更新ブロック（プレースホルダー作成を含む）を削除する
+- [x] `maxEndDate` マップの計算ブロックを削除する
+- [x] `emailIdx` マップを使った `report_end_date` 更新ブロック（プレースホルダー作成を含む）を削除する
 - 完了判定: `go build ./internal/store/...` が通ること
 - 見積工数: 15 分 / 実績工数: -
 
 #### 1.6 `emails.go`: `DeleteEmailsBefore` の新実装（AC-01〜AC-07・AC-12・AC-13）
 
 - ファイル: `internal/store/emails.go`
-- [ ] `sweepOrphanedEmailDirs` を削除する（AC-12）
-- [ ] `DeleteEmailsBefore` のシグネチャを `(cutoff time.Time)` に変更する（AC-01）
-- [ ] `cutoff.IsZero()` の場合は `0, nil` を即時返す（AC-02）
-- [ ] 削除条件を `entry.InternalDate.Before(cutoff)` のみとする（AC-03）
-- [ ] パス再構築を `entry.InternalDate` から行う（`sentAt`/`savedAt` フォールバックを削除）
-- [ ] ファイル削除 → インデックスアトミック更新の順を維持する（AC-06）
-- [ ] ファイル不在（`os.IsNotExist`）は非エラーとして削除件数に含む（AC-04・AC-07）
-- [ ] 個別 I/O エラーは `errors.Join` で集約し継続する（AC-05）
-- [ ] インデックス更新失敗時は `deleted` と集約エラーを返す（AC-07）
-- [ ] インデックス更新後に GC 済みエントリの `{uidvalidity}/{YYYYMM}` ディレクトリが空なら削除し、`{uidvalidity}` ディレクトリも空なら削除する。失敗は `slog.Warn` のみ（AC-13）
+- [x] `sweepOrphanedEmailDirs` を削除する（AC-12）
+- [x] `DeleteEmailsBefore` のシグネチャを `(cutoff time.Time)` に変更する（AC-01）
+- [x] `cutoff.IsZero()` の場合は `0, nil` を即時返す（AC-02）
+- [x] 削除条件を `entry.InternalDate.Before(cutoff)` のみとする（AC-03）
+- [x] パス再構築を `entry.InternalDate` から行う（`sentAt`/`savedAt` フォールバックを削除）
+- [x] ファイル削除 → インデックスアトミック更新の順を維持する（AC-06）
+- [x] ファイル不在（`os.IsNotExist`）は非エラーとして削除件数に含む（AC-04・AC-07）
+- [x] 個別 I/O エラーは `errors.Join` で集約し継続する（AC-05）
+- [x] インデックス更新失敗時は `deleted` と集約エラーを返す（AC-07）
+- [x] インデックス更新後に GC 済みエントリの `{uidvalidity}/{YYYYMM}` ディレクトリが空なら削除し、`{uidvalidity}` ディレクトリも空なら削除する。失敗は `slog.Warn` のみ（AC-13）
 - 完了判定: `go build ./internal/store/...` が通ること
 - 見積工数: 60 分 / 実績工数: -
 
@@ -109,13 +109,13 @@
 ### Phase 2: `testutil/mocks.go` の更新（AC-20）
 
 - ファイル: `internal/store/testutil/mocks.go`
-- [ ] `FakeEmailEntry.SentAt` を削除し `InternalDate time.Time` を追加する
-- [ ] `FakeEmailEntry.ReportEndDate` を削除する
-- [ ] `FakeStore.SaveEmail` のシグネチャを `SaveEmail(uid, uidValidity uint32, internalDate, savedAt time.Time, rawEML []byte) error` に変更し、`internalDate.IsZero()` の場合はエラーを返す（AC-19 と同じ動作）
-- [ ] `FakeStore.SaveEmailMetas` から補填ブランチを削除し、`SentAt` 参照を `InternalDate` に変更する
-- [ ] `FakeStore.SaveReports` からメールインデックス更新ロジックを削除する（AC-09 と同じ）
-- [ ] `FakeStore.DeleteEmailsBefore` を新シグネチャ `(cutoff time.Time)` に変更し、`InternalDate.Before(cutoff)` を削除条件とする（AC-01・AC-03）
-- [ ] `FakeStore.LoadEmails` の `LoadedEmail{}` 生成から `SentAt:` フィールドを削除する
+- [x] `FakeEmailEntry.SentAt` を削除し `InternalDate time.Time` を追加する
+- [x] `FakeEmailEntry.ReportEndDate` を削除する
+- [x] `FakeStore.SaveEmail` のシグネチャを `SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error` に変更し、`internalDate.IsZero()` の場合はエラーを返す（AC-19 と同じ動作）
+- [x] `FakeStore.SaveEmailMetas` から補填ブランチを削除し、`SentAt` 参照を `InternalDate` に変更する
+- [x] `FakeStore.SaveReports` からメールインデックス更新ロジックを削除する（AC-09 と同じ）
+- [x] `FakeStore.DeleteEmailsBefore` を新シグネチャ `(cutoff time.Time)` に変更し、`InternalDate.Before(cutoff)` を削除条件とする（AC-01・AC-03）
+- [x] `FakeStore.LoadEmails` の `LoadedEmail{}` 生成から `SentAt:` フィールドを削除する
 - 完了判定: `go build -tags test ./internal/store/testutil/...` が通ること
 - 見積工数: 40 分 / 実績工数: -
 
@@ -127,8 +127,8 @@
 
 - ファイル: `internal/store/emails_test.go`
 - 見積工数: 90 分 / 実績工数: -
-- [ ] `saveEMLWithMeta` ヘルパーを `sentAt`/`SavedAt` → `internalDate`/`SavedAt` に更新する（`SaveEmail` 呼び出しと `EmailMeta` フィールドを変更）
-- [ ] 削除するテスト（旧ロジックに依存するもの）:
+- [x] `saveEMLWithMeta` ヘルパーを `internalDate` のみの引数に更新する（`sentAt`/`SavedAt` を廃止し、`SaveEmail` 呼び出しと `EmailMeta` フィールドを変更）
+- [x] 削除するテスト（旧ロジックに依存するもの）:
   - `TestSaveEmail_ZeroSentAtFallback`（フォールバック廃止）
   - `TestSaveEmailMetas_MinimalEntryRescue`（プレースホルダー補填廃止）
   - `TestSaveEmailMetas_OrphanRescue`（同上）
@@ -138,14 +138,14 @@
   - `TestDeleteEmailsBefore_SweepNotCalledWhenZero`（同上）
   - `TestDeleteEmailsBefore_PlaceholderEntryNotOrphaned`（プレースホルダー廃止）
   - `TestLoadEmails_SentAtFallback`（LoadedEmail.SentAt廃止）
-- [ ] 更新するテスト（引数名・フィールド名変更）:
+- [x] 更新するテスト（引数名・フィールド名変更）:
   - `TestSaveEmail_CreatesFile` 〜 `TestSaveEmail_ReadOnly`（`sentAt` 引数 → `internalDate`）
   - `TestSaveEmailMetas_BatchInsert`、`TestSaveEmailMetas_Idempotent`、`TestSaveEmailMetas_AtomicWrite`、`TestSaveEmailMetas_WriteError`、`TestSaveEmailMetas_ReadOnly`（`EmailMeta.SentAt` → `InternalDate`）
   - `TestLoadEmails_Fields`（`LoadedEmail.SentAt` フィールドの検証を削除し、`LoadedEmail` が `SentAt` を持たないことをコンパイルで担保）
   - `TestDeleteEmailsBefore_MissingFileIdempotent`、`TestDeleteEmailsBefore_ZeroDeleted`、`TestDeleteEmailsBefore_PartialFailure`（新シグネチャに対応）
-- [ ] 追加するテスト:
+- [x] 追加するテスト:
   - `TestSaveEmail_ZeroInternalDate_Error`：`internalDate` がゼロ値のときエラーが返ることを確認（AC-19）
-  - `TestSaveEmailMetas_NoPlaceholderUpdate`：既存エントリがある場合に `InternalDate`/`SavedAt` を上書きしないことを確認（AC-14）
+  - `TestSaveEmailMetas_NoPlaceholderUpdate`：既存エントリがある場合に `InternalDate` を上書きしないことを確認（AC-14）
   - `TestDeleteEmailsBefore_ZeroCutoff`：`cutoff` がゼロ値のとき削除件数 0・エラーなしを確認（AC-02）
   - `TestDeleteEmailsBefore_Conditions`（書き直し）：`internal_date < cutoff` の条件で削除、ファイル不在もカウント、`>= cutoff` のエントリを保持（AC-03・AC-04・AC-06・AC-07）
   - `TestDeleteEmailsBefore_EmptyDirCleanup`：GC 後の空 `{uidvalidity}/{YYYYMM}` および `{uidvalidity}` ディレクトリが削除されることを確認（AC-13）
@@ -155,18 +155,18 @@
 
 - ファイル: `internal/store/reports_test.go`
 - 見積工数: 20 分 / 実績工数: -
-- [ ] 削除するテスト:
+- [x] 削除するテスト:
   - `TestSaveReports_UpdatesReportEndDate`（report_end_date廃止）
-- [ ] 追加するテスト:
+- [x] 追加するテスト:
   - `TestSaveReports_DoesNotUpdateEmailIndex`：`SaveReports` 後にメールインデックスが空のままであることを確認（AC-09）
 
 #### 3.3 品質確認
 
 - 見積工数: 10 分 / 実績工数: -
-- [ ] `make fmt` を実行してフォーマット済みであることを確認する
-- [ ] `make test` で全テストが通ることを確認する
-- [ ] `make lint` でエラーがないことを確認する
-- [ ] `make deadcode` で未使用コードが報告されないことを確認する
+- [x] `make fmt` を実行してフォーマット済みであることを確認する
+- [x] `make test` で全テストが通ることを確認する
+- [x] `make lint` でエラーがないことを確認する
+- [x] `make deadcode` で未使用コードが報告されないことを確認する
 
 ---
 
@@ -226,41 +226,41 @@
 
 ### Phase 0 チェックリスト
 
-- [ ] `EmailMeta.SentAt` 削除・`InternalDate` 追加（types.go）
-- [ ] `LoadedEmail.SentAt` 削除（types.go）
-- [ ] `internalEmailIndexEntry.SentAt` → `InternalDate`（types.go）
-- [ ] `internalEmailIndexEntry.ReportEndDate` 削除（types.go）
-- [ ] `Store.SaveEmail` シグネチャ変更（store.go）
-- [ ] `Store.DeleteEmailsBefore` シグネチャ変更（store.go）
+- [x] `EmailMeta.SentAt` 削除・`InternalDate` 追加（types.go）
+- [x] `LoadedEmail.SentAt` 削除（types.go）
+- [x] `internalEmailIndexEntry.SentAt` → `InternalDate`（types.go）
+- [x] `internalEmailIndexEntry.ReportEndDate` 削除（types.go）
+- [x] `Store.SaveEmail` シグネチャ変更（store.go）
+- [x] `Store.DeleteEmailsBefore` シグネチャ変更（store.go）
 
 ### Phase 1 チェックリスト
 
-- [ ] `buildEmailPath` 引数変更（emails.go）
-- [ ] `SaveEmail` ゼロ値エラー実装（emails.go）
-- [ ] `SaveEmailMetas` 補填ブランチ削除（emails.go）
-- [ ] `LoadEmails` から SentAt 除去（emails.go）
-- [ ] `SaveReports` インデックス更新ロジック削除（reports.go）
-- [ ] `sweepOrphanedEmailDirs` 削除（emails.go）
-- [ ] `DeleteEmailsBefore` 新実装（emails.go）
+- [x] `buildEmailPath` 引数変更（emails.go）
+- [x] `SaveEmail` ゼロ値エラー実装（emails.go）
+- [x] `SaveEmailMetas` 補填ブランチ削除（emails.go）
+- [x] `LoadEmails` から SentAt 除去（emails.go）
+- [x] `SaveReports` インデックス更新ロジック削除（reports.go）
+- [x] `sweepOrphanedEmailDirs` 削除（emails.go）
+- [x] `DeleteEmailsBefore` 新実装（emails.go）
 
 ### Phase 2 チェックリスト
 
-- [ ] `FakeEmailEntry` フィールド更新（testutil/mocks.go）
-- [ ] `FakeStore.SaveEmail` 更新（testutil/mocks.go）
-- [ ] `FakeStore.SaveEmailMetas` 更新（testutil/mocks.go）
-- [ ] `FakeStore.SaveReports` 更新（testutil/mocks.go）
-- [ ] `FakeStore.DeleteEmailsBefore` 更新（testutil/mocks.go）
-- [ ] `FakeStore.LoadEmails` 更新（testutil/mocks.go）
+- [x] `FakeEmailEntry` フィールド更新（testutil/mocks.go）
+- [x] `FakeStore.SaveEmail` 更新（testutil/mocks.go）
+- [x] `FakeStore.SaveEmailMetas` 更新（testutil/mocks.go）
+- [x] `FakeStore.SaveReports` 更新（testutil/mocks.go）
+- [x] `FakeStore.DeleteEmailsBefore` 更新（testutil/mocks.go）
+- [x] `FakeStore.LoadEmails` 更新（testutil/mocks.go）
 
 ### Phase 3 チェックリスト
 
-- [ ] `saveEMLWithMeta` ヘルパー更新
-- [ ] 削除対象テスト 9 件を削除
-- [ ] 既存テスト群を新シグネチャ・フィールドに更新
-- [ ] 新規テスト 6 件を追加
-- [ ] `TestSaveReports_UpdatesReportEndDate` 削除
-- [ ] `TestSaveReports_DoesNotUpdateEmailIndex` 追加
-- [ ] `make fmt && make test && make lint && make deadcode` が全て通ること
+- [x] `saveEMLWithMeta` ヘルパー更新
+- [x] 削除対象テスト 9 件を削除
+- [x] 既存テスト群を新シグネチャ・フィールドに更新
+- [x] 新規テスト 6 件を追加
+- [x] `TestSaveReports_UpdatesReportEndDate` 削除
+- [x] `TestSaveReports_DoesNotUpdateEmailIndex` 追加
+- [x] `make fmt && make test && make lint && make deadcode` が全て通ること
 
 ---
 

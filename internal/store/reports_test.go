@@ -134,29 +134,21 @@ func TestSaveReports_Batch(t *testing.T) {
 	assert.Len(t, reports, 3)
 }
 
-// TestSaveReports_UpdatesReportEndDate verifies that when multiple reports share the
-// same {uid, uidvalidity}, the email index entry's report_end_date is set to the maximum
-// EndDatetime across all those reports.
-func TestSaveReports_UpdatesReportEndDate(t *testing.T) {
+// TestSaveReports_DoesNotUpdateEmailIndex verifies that SaveReports does not modify
+// the email index (df.Emails remains empty after SaveReports).
+func TestSaveReports_DoesNotUpdateEmailIndex(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
-	earlier := time.Date(2025, 5, 31, 0, 0, 0, 0, time.UTC)
-	later := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-
-	// Two reports for the same email, with different end dates.
+	endDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
 	inputs := []ReportInput{
-		{Report: makeFullReport("report-1", earlier), UID: 1, UIDValidity: 10},
-		{Report: makeFullReport("report-2", later), UID: 1, UIDValidity: 10},
+		{Report: makeFullReport("report-1", endDate), UID: 1, UIDValidity: 10},
+		{Report: makeFullReport("report-2", endDate.Add(24*time.Hour)), UID: 2, UIDValidity: 10},
 	}
 	require.NoError(t, s.SaveReports(inputs))
 
-	// Reload the data file and inspect the email index entry.
 	df, err := loadDataFileFromPath(rootDir)
 	require.NoError(t, err)
-	require.Len(t, df.Emails, 1)
-	require.NotNil(t, df.Emails[0].ReportEndDate)
-	assert.True(t, df.Emails[0].ReportEndDate.Equal(later),
-		"report_end_date should be the maximum EndDatetime")
+	assert.Empty(t, df.Emails, "SaveReports must not modify the email index")
 }
 
 // TestSaveReports_RoundTrip verifies that all fields of a tlsrpt.Report survive

@@ -17,17 +17,15 @@ import (
 type Store interface {
 	// SaveReports persists a batch of TLSRPT reports in a single atomic write.
 	// Reports are UPSERT'd by report-id (a duplicate replaces the existing entry).
-	// For each {uid, uidvalidity} in inputs, the corresponding email index entry's
-	// report_end_date is updated to the maximum DateRange.EndDatetime across all
-	// reports for that message. Returns an error if the write fails.
+	// The email index is not modified. Returns an error if the write fails.
 	SaveReports(inputs []ReportInput) error
 
 	// SaveEmailMetas persists email metadata to the index in a single atomic write
-	// (does not save raw .eml files). For each entry, {uid, uidvalidity, sent_at, saved_at}
+	// (does not save raw .eml files). For each entry, {uid, uidvalidity, internal_date}
 	// is registered. Existing entries for the same {uid, uidvalidity} are left unchanged
-	// (idempotent). If the Date: header is missing or unparseable, sent_at falls back to
-	// saved_at with a WARN log. Calling this once after all SaveEmail calls avoids
-	// per-email JSON reads and writes. Used during reprocess to sync the index.
+	// (idempotent). Calling this once after all SaveEmail calls avoids per-email JSON reads
+	// and writes. Used during reprocess to sync the index.
+	// Returns ErrZeroInternalDate if any entry has a zero InternalDate.
 	SaveEmailMetas(metas []EmailMeta) error
 
 	// GetReportsSince retrieves all reports whose date-range.end-datetime >= since.
@@ -37,18 +35,21 @@ type Store interface {
 
 	// SaveEmail saves a raw .eml file to
 	// {root_dir}/emails/{uidvalidity}/{YYYYMM}/{uid}.eml
-	// (uid zero-padded to 10 digits). Creates subdirectories as needed (mode 0700).
-	// The write is atomic (temp file + rename). If the file already exists for the
-	// same uid and uidvalidity, the call is a no-op (idempotent, no error returned).
+	// (uid zero-padded to 10 digits; YYYYMM derived from internalDate).
+	// Creates subdirectories as needed (mode 0700). The write is atomic (temp file + rename).
+	// If a file already exists at the computed path, the call is a no-op (idempotent, no
+	// error returned). The path is determined by uid, uidvalidity, and internalDate together;
+	// callers must always pass the same internalDate for a given uid+uidvalidity pair (IMAP
+	// INTERNALDATE is stable, so this is guaranteed in normal operation).
+	// Returns an error if internalDate is zero.
 	// Does not update the email index; call SaveEmailMetas after all SaveEmail calls.
-	SaveEmail(uid, uidValidity uint32, sentAt, savedAt time.Time, rawEML []byte) error
+	SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error
 
 	// LoadEmails recursively enumerates all .eml files under {root_dir}/emails/,
 	// deriving uid and uidvalidity from the {uidvalidity}/{YYYYMM}/{uid}.eml path.
-	// Each entry includes the parsed *mail.Message, UID, UIDValidity, SentAt (from
-	// Date: header, falling back to SavedAt on parse failure), and SavedAt (from
-	// the file's ctime via syscall.Stat). Individual file-read or parse failures are
-	// collected via errors.Join and returned alongside any successfully loaded emails.
+	// Each entry includes the parsed *mail.Message, UID, UIDValidity, and Path.
+	// Individual file-read or parse failures are collected via errors.Join and returned
+	// alongside any successfully loaded emails.
 	LoadEmails() ([]LoadedEmail, error)
 
 	// SaveUIDValidity persists the IMAP UIDVALIDITY value to the sentinel file
@@ -85,17 +86,17 @@ type Store interface {
 	// are removed.
 	DeleteReportsBefore(cutoff time.Time) (deleted int, err error)
 
-	// DeleteEmailsBefore deletes .eml files that satisfy either criterion:
-	//   - Normal deletion:  report_end_date != null && report_end_date < reportCutoff
-	//   - Forced deletion:  savedAtCutoff != zero && saved_at < savedAtCutoff
-	//     (catches parse-failed emails and those with a far-future report_end_date)
+	// DeleteEmailsBefore deletes .eml files whose internal_date < cutoff.
+	// Returns 0, nil immediately if cutoff is zero.
 	// .eml files are deleted first, then the index is updated atomically. This
 	// ordering ensures a crash leaves "file gone, index entry present" rather than
 	// "entry gone, file orphaned", so the next run can self-heal idempotently.
-	// Pass time.Time{} for savedAtCutoff to disable forced deletion.
+	// Files already absent from disk are treated as successfully deleted (idempotent).
 	// Individual file-delete errors are collected via errors.Join and do not abort
-	// the operation; deleted counts only successfully removed files.
-	DeleteEmailsBefore(reportCutoff, savedAtCutoff time.Time) (deleted int, err error)
+	// the operation. After a successful index update, empty {uidvalidity}/{YYYYMM}
+	// and {uidvalidity} directories are removed; cleanup failures are logged as WARN
+	// and never returned as errors.
+	DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)
 }
 
 // storeImpl is the concrete implementation of Store.
