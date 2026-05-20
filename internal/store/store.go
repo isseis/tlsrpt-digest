@@ -37,8 +37,11 @@ type Store interface {
 	// {root_dir}/emails/{uidvalidity}/{YYYYMM}/{uid}.eml
 	// (uid zero-padded to 10 digits; YYYYMM derived from internalDate).
 	// Creates subdirectories as needed (mode 0700). The write is atomic (temp file + rename).
-	// If the file already exists for the same uid and uidvalidity, the call is a no-op
-	// (idempotent, no error returned). Returns an error if internalDate is zero.
+	// If a file already exists at the computed path, the call is a no-op (idempotent, no
+	// error returned). The path is determined by uid, uidvalidity, and internalDate together;
+	// callers must always pass the same internalDate for a given uid+uidvalidity pair (IMAP
+	// INTERNALDATE is stable, so this is guaranteed in normal operation).
+	// Returns an error if internalDate is zero.
 	// Does not update the email index; call SaveEmailMetas after all SaveEmail calls.
 	SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error
 
