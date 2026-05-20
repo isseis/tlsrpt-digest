@@ -15,30 +15,30 @@ Work in the following order.
 - If the status is not `approved`, do not begin implementing.
 - In that case, stop and report that implementation cannot begin until `03_implementation_plan.md` is `approved`.
 
-4. Identify the next incomplete phase.
+4. Identify the next phase group to implement.
 - Read the checkboxes in `03_implementation_plan.md`. Legend: `[ ]` not started, `[x]` done, `[-]` skipped.
-- Work on the next phase that contains at least one unchecked `[ ]` item.
-- If a phase has sub-sections, complete the entire phase before moving to the next.
-- If all phases are complete, proceed directly to the review step (step 6).
+- If all phases are complete, proceed directly to the final review step (step 6).
+- Otherwise, select a phase group: normally one phase at a time.
+  - Exception: if the next phase cannot reach a passing `make test` on its own (e.g. it only adds stub code to unblock compilation, or it is so tightly coupled to the following phase that the build cannot pass without both), group it together with the following phase.
+  - In that case, briefly note why the phases are grouped before starting work.
 
-5. Implement the current phase.
+5. Implement the selected phase group.
 - Follow the design in `02_architecture.md` when implementing.
 - Apply test helper rules from `docs/dev/developer_guide/test_organization.md`:
   - If new cross-package helpers or mocks are needed, place them under `testutil/` with the correct file naming and package naming.
   - If package-internal helpers are needed, place them in `test_helpers.go` or `test_helpers_<category>.go` with `//go:build test`.
 - After each code change involving Go files: run `make fmt`, then `make test`, then `make lint`. Fix any errors before continuing.
-- When all items in the phase are complete, update the plan's checkboxes (`[x]` for done, `[-]` for skipped with a note) and commit.
-- Return to step 4.
+- When all items in the phase group are complete, update the plan's checkboxes (`[x]` for done, `[-]` for skipped with a note) and commit.
 
-6. Review the implementation.
+6. Review the phase group.
 - Run `make deadcode` and remove any dead code made obsolete by this change. If changes were made, run `make fmt && make test && make lint`, then commit.
-- Review the diff between the current branch and its base branch against the checklist below.
-- For each issue found: fix it, run `make fmt && make test && make lint`, commit, and re-run the checklist until all items pass.
+- Review the diff introduced by the phase group against the checklist below.
+  - Skip checklist items that are intentionally deferred to a later phase (e.g. "all AC satisfied" is not expected after a stub-only phase); note the reason for skipping.
+- For each issue found: fix it, run `make fmt && make test && make lint`, commit, and re-run the checklist until all applicable items pass.
 
-Review checklist:
-- [ ] All acceptance criteria in `01_requirements.md` are satisfied by the implementation.
+Phase-group review checklist:
 - [ ] Implementation is consistent with the design in `02_architecture.md`.
-- [ ] Every acceptance criterion in `01_requirements.md` has at least one test that verifies it.
+- [ ] Every AC covered by this phase group has at least one test that verifies it.
 - [ ] Test coverage is sufficient: non-trivial logic, error paths, and boundary values are covered.
 - [ ] No tests duplicate existing test coverage without good reason.
 - [ ] No tests are so trivial that they add no verification value.
@@ -49,5 +49,12 @@ Review checklist:
 - [ ] `make lint` passes with no errors.
 - [ ] `make test` passes with no errors.
 
-7. Summarize.
-- Provide a concise summary of what was implemented, which acceptance criteria were verified, and any assumptions made.
+7. Summarize the phase group, then ask whether to continue.
+- Provide a concise summary of what was implemented in this phase group and which acceptance criteria were verified.
+- Note any assumptions made or items intentionally deferred.
+- Ask the user: "Shall I continue with the next phase?"
+- If the user says yes (or equivalent), return to step 4.
+- If all phases were already complete before step 4, instead perform the final review:
+  - Verify that all acceptance criteria in `01_requirements.md` are satisfied.
+  - Verify that every AC has at least one test.
+  - Report the final status and any remaining gaps.
