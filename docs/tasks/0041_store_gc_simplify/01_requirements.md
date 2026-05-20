@@ -53,7 +53,7 @@
 
 - `DeleteReportsBefore`：レポートレコードの GC は引き続き `date-range.end-datetime` 基準とする（変更なし）
 - date-range バリデーション：エントリポイントの責務であり、タスク 0070 で対応する
-- データファイルのスキーマバージョン変更：後述のとおり後方互換の変更のため不要
+- 既存 `tlsrpt.json` との後方互換性維持およびマイグレーション
 
 ### 影響を受けるコンポーネント
 
@@ -97,8 +97,6 @@
 
 - `AC-08`: `internalEmailIndexEntry` から `report_end_date` フィールドを削除する
 - `AC-09`: `SaveReports` からメールインデックス更新ブロック全体を削除する。具体的には `report_end_date` の更新と、エントリが存在しない場合のプレースホルダー作成の両方を削除し、`SaveReports` はレポートデータのみを更新する
-- `AC-10`: 既存の `tlsrpt.json` に `report_end_date` フィールドが含まれていても、読み込み時に無視される（`encoding/json` の標準動作により後方互換性を保つ）
-- `AC-11`: `DataFileVersion` は変更しない。フィールド削除は後方互換の変更であり、既存ファイルの読み込みに影響しないため、バージョン変更・マイグレーション処理は不要とする
 - `AC-14`: `SaveEmailMetas` から既存エントリへのプレースホルダー補填ブランチ（`RawEML == nil` ガード付き `InternalDate`/`SavedAt` 補填）を削除する。AC-09 により `SaveReports` がプレースホルダーを作成しなくなるため不要となる
 
 ### F-003: `sweepOrphanedEmailDirs` の廃止と空ディレクトリ削除
@@ -111,10 +109,6 @@
 ---
 
 ## 4. 非機能要件
-
-### 後方互換性
-
-- 既存の `tlsrpt.json`（`report_end_date` フィールドを含む）を持つ環境でも、データ損失なく動作すること
 
 ### 保守性
 
@@ -131,6 +125,5 @@
 - ファイルが既に存在しない場合も成功カウントに含まれることの確認（AC-04・AC-07）
 - `SaveReports` 呼び出し後にメールインデックスが更新されないことの確認（AC-09）
 - `SaveEmailMetas` が既存エントリを補填しないことの確認（AC-14）
-- 既存の `tlsrpt.json`（`report_end_date` フィールド付き）を読み込んでもエラーにならないことの確認（AC-10）
 - GC 後に空になった `{uidvalidity}/{YYYYMM}` および `{uidvalidity}` ディレクトリが削除されることの確認（AC-13）
 - ディレクトリ削除失敗時でも `DeleteEmailsBefore` がエラーを返さないことの確認（AC-13）
