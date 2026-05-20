@@ -25,6 +25,7 @@ type Store interface {
 	// is registered. Existing entries for the same {uid, uidvalidity} are left unchanged
 	// (idempotent). Calling this once after all SaveEmail calls avoids per-email JSON reads
 	// and writes. Used during reprocess to sync the index.
+	// Returns ErrZeroInternalDate if any entry has a zero InternalDate.
 	SaveEmailMetas(metas []EmailMeta) error
 
 	// GetReportsSince retrieves all reports whose date-range.end-datetime >= since.
