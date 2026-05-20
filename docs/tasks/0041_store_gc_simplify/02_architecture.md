@@ -371,7 +371,7 @@ flowchart TD
 | 対象 | 検証内容 |
 |---|---|
 | `SaveEmail`（新シグネチャ） | `internalDate` から正しい `{YYYYMM}` パスが生成されること（AC-19） |
-| | `internalDate` がゼロ値のとき `savedAt` にフォールバックして WARN が出力されること（AC-19） |
+| | `internalDate` がゼロ値のときエラーが返されること（AC-19） |
 | `DeleteEmailsBefore`（新シグネチャ） | `cutoff` がゼロ → 削除なし（AC-02） |
 | | `internal_date < cutoff` → ファイルとインデックスエントリを削除（AC-03, AC-06） |
 | | ファイル不在 → 冪等動作（AC-04） |
