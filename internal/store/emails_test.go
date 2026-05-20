@@ -379,8 +379,9 @@ func TestLoadEmails_Fields(t *testing.T) {
 func TestLoadEmails_SkipsFailedFiles(t *testing.T) {
 	s, rootDir := openTestStore(t)
 
-	sentAt := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
-	require.NoError(t, s.SaveEmail(1, 100, sentAt, sentAt, makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")))
+	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	savedAt := internalDate
+	require.NoError(t, s.SaveEmail(1, 100, internalDate, savedAt, makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")))
 
 	// Inject an empty (unparseable) .eml file directly.
 	emptyEML := filepath.Join(rootDir, "emails", "100", "202506", "0000000002.eml")
