@@ -25,15 +25,15 @@
 - 通常削除：`report_end_date < reportCutoff`（送信側が設定する値）
 - 強制削除：`saved_at < savedAtCutoff`（ローカル制御の値）
 
-`report_end_date` は TLSRPT レポート送信者が設定する値であり、遠未来日付（例：year 3000）の誤設定や意図的な攻撃に対して脆弱である。一方 `saved_at`（ダウンロード日時）は本システムが記録するローカル制御の値であり、信頼性が高い。
+`report_end_date` は TLSRPT レポート送信者が設定する値であり、遠未来日付（例：year 3000）の誤設定や意図的な攻撃に対して脆弱である。GC の目的は「古いレポートデータを削除する」ことであり、データの古さはダウンロード日時（`saved_at`）ではなく先方の送信日時（`INTERNALDATE`）で計測するのが意味的に正しい。
 
 **問題 2: ディレクトリスイープの不整合**
 
-`sweepOrphanedEmailDirs` はパスの `{YYYYMM}`（`sent_at` 由来）と `savedAtCutoff` を比較して孤立ディレクトリを削除するが、`sent_at` と `saved_at` が異なる月になり得るため（例：2025 年 1 月送信・2025 年 6 月ダウンロード）、保持すべきファイルを誤削除するリスクがある。
+`sweepOrphanedEmailDirs` はパスの `{YYYYMM}`（`sent_at` 由来）と `savedAtCutoff` を比較して孤立ディレクトリを削除するが、`sent_at` と `saved_at` が異なる月になり得るため（例：2025 年 1 月送信・2025 年 6 月ダウンロード）、保持すべきファイルを誤削除するリスクがある。なお `{YYYYMM}` は本タスク（F-000）で `INTERNALDATE` 由来に変更する。
 
 ### 1.2 目的
 
-`.eml` の GC 基準をローカル制御可能な `saved_at` のみに統一し、送信側データに依存しない堅牢な GC を実現する。
+`.eml` の GC 基準を `INTERNALDATE`（IMAP サーバー受信日時）に統一し、送信側データに依存しない堅牢な GC を実現する。あわせて `{YYYYMM}` パスの決定も `INTERNALDATE` に統一することで、設計全体の一貫性を高める。
 
 ---
 
@@ -99,7 +99,7 @@
 - `AC-09`: `SaveReports` からメールインデックス更新ブロック全体を削除する。具体的には `report_end_date` の更新と、エントリが存在しない場合のプレースホルダー作成の両方を削除し、`SaveReports` はレポートデータのみを更新する
 - `AC-10`: 既存の `tlsrpt.json` に `report_end_date` フィールドが含まれていても、読み込み時に無視される（`encoding/json` の標準動作により後方互換性を保つ）
 - `AC-11`: `DataFileVersion` は変更しない。フィールド削除は後方互換の変更であり、既存ファイルの読み込みに影響しないため、バージョン変更・マイグレーション処理は不要とする
-- `AC-14`: `SaveEmailMetas` から既存エントリへのプレースホルダー補填ブランチ（`RawEML == nil` ガード付き `SentAt`/`SavedAt` 補填）を削除する。AC-09 により `SaveReports` がプレースホルダーを作成しなくなるため不要となる
+- `AC-14`: `SaveEmailMetas` から既存エントリへのプレースホルダー補填ブランチ（`RawEML == nil` ガード付き `InternalDate`/`SavedAt` 補填）を削除する。AC-09 により `SaveReports` がプレースホルダーを作成しなくなるため不要となる
 
 ### F-003: `sweepOrphanedEmailDirs` の廃止と空ディレクトリ削除
 
