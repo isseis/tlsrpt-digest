@@ -4,10 +4,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | `draft` |
+| ステータス | `approved` |
 | 作成日 | 2026-05-19 |
-| レビュー日 | - |
-| レビュアー | - |
+| レビュー日 | 2026-05-20 |
+| レビュアー | isseis |
 | コメント | - |
 
 ---
@@ -196,7 +196,7 @@ sequenceDiagram
     EP->>ST: "DeleteEmailsBefore(cutoff)"
     ST->>DF: "メールインデックスを読み込む"
     loop "各インデックスエントリ"
-        alt "internal_date != zero && internal_date < cutoff"
+        alt "internal_date < cutoff"
             ST->>EF: ".eml を削除（パスは internal_date から再構築）"
             Note over ST,EF: "I/O エラーは集約して継続"
         else "削除対象外"
@@ -229,7 +229,6 @@ type Store interface {
 
     // DeleteEmailsBefore は internal_date < cutoff を満たす .eml ファイルを削除する。
     // cutoff がゼロ値の場合は削除を行わない（AC-02）。
-    // internal_date がゼロのエントリは削除対象外とする（AC-03）。
     DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)
 }
 ```
