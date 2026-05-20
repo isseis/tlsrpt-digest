@@ -20,7 +20,7 @@ import (
 var errTargetNotRegularFile = errors.New("store: target path is not a regular file")
 
 // ErrZeroInternalDate is returned when an InternalDate (IMAP INTERNALDATE) value is zero.
-var ErrZeroInternalDate = errors.New("store: InternalDate must not be zero")
+var ErrZeroInternalDate = errors.New("store: internalDate must not be zero")
 
 // buildEmailPath returns the storage path for a .eml file.
 // The uid is zero-padded to 10 digits. internalDate determines the YYYYMM directory component.
