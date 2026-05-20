@@ -167,7 +167,16 @@ func TestSaveEmail_ZeroInternalDate_Error(t *testing.T) {
 	s, _ := openTestStore(t)
 
 	err := s.SaveEmail(7, 111, time.Time{}, makeTestEML(""))
-	assert.Error(t, err, "zero internalDate should return an error")
+	assert.ErrorIs(t, err, ErrZeroInternalDate)
+}
+
+// TestSaveEmailMetas_ZeroInternalDate_Error verifies that SaveEmailMetas returns
+// ErrZeroInternalDate when any entry has a zero InternalDate.
+func TestSaveEmailMetas_ZeroInternalDate_Error(t *testing.T) {
+	s, _ := openTestStore(t)
+
+	err := s.SaveEmailMetas([]EmailMeta{{UID: 1, UIDValidity: 100, InternalDate: time.Time{}}})
+	assert.ErrorIs(t, err, ErrZeroInternalDate)
 }
 
 // TestSaveEmail_Error verifies that SaveEmail returns an error when writing fails.
