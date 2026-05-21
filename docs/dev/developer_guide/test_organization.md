@@ -88,3 +88,27 @@ When adding new test helper code, follow this decision tree:
 - Test setup helper function → `testutil/helpers.go`
 - Method on internal type → `test_helpers.go`
 - Factory function using private constructor → `test_helpers.go`
+
+## Test Data Files: `testdata/` vs Inline Constants
+
+### When to use `testdata/`
+
+Use `testdata/` for data that originates **outside the codebase** — files received from external systems that are used as-is to exercise real parsing or processing logic.
+
+**Examples of what belongs in `testdata/`:**
+- Real TLSRPT report emails (`.eml`, `.json.gz`) captured from an actual mail server
+- Recorded HTTP responses or protocol captures used for integration testing
+
+### When to embed data inline
+
+Embed test data as constants or string literals directly in the test function when the data is **artificially constructed** for the purpose of the test.
+
+**Examples of what belongs inline:**
+- Self-signed TLS certificates generated solely to test certificate validation logic
+- Minimal TOML snippets constructed to trigger a specific validation error
+- Small JSON payloads hand-crafted to test a parser edge case
+
+**Why inline is preferred for artificial data:**
+- The test is self-contained: the reader sees the exact input without opening a separate file.
+- There is no ambiguity about whether the file represents a real-world artifact or a test fixture.
+- Write the file to `t.TempDir()` at test setup time when a file path is needed (e.g., for `os.ReadFile`-based code under test).
