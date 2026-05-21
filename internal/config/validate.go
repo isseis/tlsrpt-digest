@@ -2,7 +2,6 @@ package config
 
 import (
 	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"os"
 	"regexp"
@@ -50,12 +49,9 @@ func validateTLSCACert(path string) error {
 	if err != nil {
 		return fmt.Errorf("config: %w: %s: %w", ErrTLSCACertNotReadable, path, err)
 	}
-	block, _ := pem.Decode(data)
-	if block == nil || block.Type != "CERTIFICATE" {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(data) {
 		return fmt.Errorf("config: %w: %s", ErrTLSCACertNotPEM, path)
-	}
-	if _, err := x509.ParseCertificate(block.Bytes); err != nil {
-		return fmt.Errorf("config: %w: %s: %w", ErrTLSCACertNotPEM, path, err)
 	}
 	return nil
 }
