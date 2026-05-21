@@ -11,6 +11,7 @@ import (
 	"github.com/oklog/ulid/v2"
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
+	"github.com/isseis/tlsrpt-digest/internal/imap"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
 	"github.com/isseis/tlsrpt-digest/internal/store"
 )
@@ -38,6 +39,8 @@ func main() {
 		slog.Error("failed to load configuration", "error", err)
 		os.Exit(1)
 	}
+
+	_ = buildIMAPConfig(cfg)
 
 	// Build notification handlers (Phase 2: after TOML).
 	// SlackHandlers are intentionally NOT wired into slog.Default() — ordinary
@@ -155,15 +158,24 @@ func openStoreForSubcommand(rootDir string, identity store.IMAPIdentity, subcomm
 	return store.Open(rootDir, identity, storeOpenMode(subcommand))
 }
 
-// loadConfig reads the TOML configuration from path, or returns an empty
-// Config when path is empty.
+// loadConfig reads the TOML configuration from path via config.LoadFile.
 func loadConfig(path string) (*config.Config, error) {
-	if path == "" {
-		return &config.Config{}, nil
+	return config.LoadFile(path, slog.Default())
+}
+
+// buildIMAPConfig constructs an imap.Config from the TOML-derived Config and
+// environment variables. Credentials are not stored in the config file; they
+// are sourced from TLSRPT_IMAP_USERNAME and TLSRPT_IMAP_PASSWORD.
+func buildIMAPConfig(cfg *config.Config) imap.Config {
+	username := os.Getenv("TLSRPT_IMAP_USERNAME")
+	password := os.Getenv("TLSRPT_IMAP_PASSWORD")
+	return imap.Config{
+		Host:            cfg.IMAP.Host,
+		Port:            cfg.IMAP.Port,
+		Mailbox:         cfg.IMAP.Mailbox,
+		TLSCACert:       cfg.IMAP.TLSCACert,
+		MaxMessageBytes: cfg.IMAP.MaxMessageBytes,
+		Username:        username,
+		Password:        config.Secret(password),
 	}
-	data, err := os.ReadFile(path) //nolint:gosec // G304: path is an operator-supplied flag
-	if err != nil {
-		return nil, err
-	}
-	return config.Load(data)
 }

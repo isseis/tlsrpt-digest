@@ -255,7 +255,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 `02_architecture.md` セクション 3.4（`cmd/tlsrpt-digest/main.go` の変更方針）を参照。
 
-- [ ] **5.1** `cmd/tlsrpt-digest/main.go` の `loadConfig` を `LoadFile` ベースに置換する
+- [x] **5.1** `cmd/tlsrpt-digest/main.go` の `loadConfig` を `LoadFile` ベースに置換する
   - ファイル: `cmd/tlsrpt-digest/main.go`
   - 作業内容:
     - `loadConfig(path string) (*config.Config, error)` の実装を `config.LoadFile(path, slog.Default())` を呼ぶだけに変更する
@@ -264,7 +264,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go build ./cmd/tlsrpt-digest/` が通ること
   - 想定工数: 15 分 / 実績工数: -
 
-- [ ] **5.2** `cmd/tlsrpt-digest/main.go` に IMAP 設定を組み立てる補助関数を追加する
+- [x] **5.2** `cmd/tlsrpt-digest/main.go` に IMAP 設定を組み立てる補助関数を追加する
   - ファイル: `cmd/tlsrpt-digest/main.go`
   - 作業内容:
     - `buildIMAPConfig(cfg *config.Config) imap.Config` を追加する
@@ -274,7 +274,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go build ./cmd/tlsrpt-digest/` が通ること
   - 想定工数: 30 分 / 実績工数: -
 
-- [ ] **5.3** `cmd/tlsrpt-digest/main_test.go` の `loadConfig` 関連テストを更新する
+- [x] **5.3** `cmd/tlsrpt-digest/main_test.go` の `loadConfig` 関連テストを更新する
   - ファイル: `cmd/tlsrpt-digest/main_test.go`
   - 作業内容:
     - `TestLoadConfig_EmptyPath`: `loadConfig("")` がエラーを返し `errors.Is(err, config.ErrConfigPathEmpty)` が真であることを確認するよう変更する（従来の「空 `Config` を返す」挙動は廃止）
@@ -284,10 +284,10 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go test -tags test -v ./cmd/tlsrpt-digest/` で全テストが PASS すること
   - 想定工数: 20 分 / 実績工数: -
 
-- [ ] **5.4** `make fmt` を実行してフォーマットを確認する
+- [x] **5.4** `make fmt` を実行してフォーマットを確認する
   - 確認方法: `make fmt` 後に `git diff` で差分がないこと
 
-- [ ] **5.5** `make test` と `make lint` が通ることを確認する
+- [x] **5.5** `make test` と `make lint` が通ることを確認する
 
 - [ ] **5.6** `make deadcode` で不要なコードがないことを確認する（M5）
   - 注意: `buildIMAPConfig` は `_ = buildIMAPConfig(cfg)` で呼び出すため `make deadcode` には未到達として報告されない。タスク 0070 で `_` を実際の利用先に置き換えること

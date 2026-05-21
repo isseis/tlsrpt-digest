@@ -121,9 +121,9 @@ func TestBootstrap_DryRun_NoURLs(t *testing.T) {
 }
 
 func TestLoadConfig_EmptyPath(t *testing.T) {
-	cfg, err := loadConfig("")
-	require.NoError(t, err)
-	assert.Equal(t, &config.Config{}, cfg)
+	_, err := loadConfig("")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, config.ErrConfigPathEmpty))
 }
 
 func TestLoadConfig_ValidFile(t *testing.T) {
@@ -145,6 +145,7 @@ allowed_host = "hooks.slack.com"
 func TestLoadConfig_NonexistentFile(t *testing.T) {
 	_, err := loadConfig("/nonexistent/path/config.toml")
 	require.Error(t, err)
+	assert.True(t, errors.Is(err, config.ErrConfigFileRead))
 }
 
 // Compile-time check: FakeStore must implement store.Store so the interface
