@@ -196,7 +196,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 `02_architecture.md` セクション 3.3・3.4・6.3・6.4 を参照。
 
-- [ ] **3.1** `internal/config/load_file.go` を新規作成し `LoadFile` を実装する
+- [x] **3.1** `internal/config/load_file.go` を新規作成し `LoadFile` を実装する
   - ファイル: `internal/config/load_file.go`
   - 作業内容:
     - `LoadFile(path string, logger *slog.Logger) (*Config, error)` を実装する
@@ -210,7 +210,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: フェーズ 3.2 のテストが通ること
   - 想定工数: 45 分 / 実績工数: -
 
-- [ ] **3.2** `internal/config/load_file_test.go` を新規作成し `LoadFile` のテストを実装する
+- [x] **3.2** `internal/config/load_file_test.go` を新規作成し `LoadFile` のテストを実装する
   - ファイル: `internal/config/load_file_test.go`（新規、`package config_test`）
   - 作業内容:
     - `TestLoadFile_EmptyPath`: 空文字列を渡したとき `errors.Is(err, config.ErrConfigPathEmpty)` が真であることを確認する（AC-02）
@@ -224,7 +224,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go test -v ./internal/config/` で全テストが PASS すること
   - 想定工数: 60 分 / 実績工数: -
 
-- [ ] **3.3** `make test` が通ることを確認する（M3）
+- [x] **3.3** `make test` が通ることを確認する（M3）
   - 確認方法: `make test` が成功すること。失敗した場合は前フェーズのタスクに戻り原因を修正すること
 
 ---
@@ -397,7 +397,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 |---|---|---|
 | フェーズ 1 | `make test` が成功し既存テストの後方互換が維持されている | [x] |
 | フェーズ 2 | AC-01・AC-03〜AC-10・AC-10a の全テストが PASS | [x] |
-| フェーズ 3 | AC-02・AC-10b・AC-10c・AC-10d の全テストが PASS | [ ] |
+| フェーズ 3 | AC-02・AC-10b・AC-10c・AC-10d の全テストが PASS | [x] |
 | フェーズ 4 | AC-11〜AC-17 の全テストが PASS | [ ] |
 | フェーズ 5 | `make lint`・`make test`・`make deadcode` がすべて成功 | [ ] |
 

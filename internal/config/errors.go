@@ -4,9 +4,10 @@ import "errors"
 
 // Configuration loading errors.
 var (
-	ErrConfigPathEmpty = errors.New("path is empty")
-	ErrConfigFileRead  = errors.New("cannot read file")
-	ErrConfigDecode    = errors.New("cannot decode TOML")
+	ErrConfigPathEmpty     = errors.New("path is empty")
+	ErrConfigFileRead      = errors.New("cannot read file")
+	ErrConfigDecode        = errors.New("cannot decode TOML")
+	ErrStoreRootDirResolve = errors.New("cannot resolve store.root_dir to absolute path")
 )
 
 // Field validation errors.
