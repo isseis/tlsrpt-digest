@@ -4,11 +4,11 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | `draft` |
+| ステータス | `reviewed` |
 | 作成日 | 2026-05-21 |
-| レビュー日 | - |
-| レビュアー | - |
-| コメント | - |
+| レビュー日 | 2026-05-21 |
+| レビュアー | Codex |
+| コメント | 実装時の曖昧さ（`LoadFile` 契約、必須項目未指定、相対パス正規化、空の `-config`）を明確化 |
 
 ---
 
@@ -16,13 +16,14 @@
 
 ### 1.1 設計原則
 
-1. **責務の集約**: TOML のデコード・既定値の適用・値検証・整合性チェックは `internal/config` パッケージに集約する。呼び出し元（`cmd/tlsrpt-digest`）は `config.LoadFile()` を 1 回呼ぶだけで、有効な `*Config` を得られる。
+1. **責務の集約**: TOML のデコード・既定値の適用・値検証・整合性チェックは `internal/config` パッケージに集約する。呼び出し元（`cmd/tlsrpt-digest`）は `config.LoadFile` を 1 回呼ぶだけで、既定値適用済みかつ検証済みの `*Config` を得られる。
 2. **機密情報を TOML に置かない**: IMAP のユーザ名・パスワード、Slack Webhook URL は TOML に置かず、環境変数経由で取得する（AC-07・AC-08）。`internal/config` はこれらの値を `*Config` に格納しない（環境変数の読み出しは `cmd/tlsrpt-digest` の責務）。
 3. **既知キーのみ許容（strict decode）**: `DisallowUnknownFields` を有効化し、TOML の typo や旧形式キーを早期に検出する（AC-04）。既存の `config.Load` の方針を踏襲する。
-4. **TOML パースエラーに機密情報を含めない**: TOML の `Decode` エラーは設定ファイルそのものの文法情報のみで、TOML 本文は機密を含まない前提とする。エラー文には値そのものを露出しないよう、ラップは `fmt.Errorf("...: %w", err)` の形でラベルのみを付加する。
+4. **TOML パースエラーに機密情報を含めない**: TOML の `Decode` エラーは設定ファイルそのものの文法情報のみで、TOML 本文は機密を含まない前提とする。エラー文には値そのものを露出しないよう、基底エラーにラベルと文脈だけを付加する。
 5. **整合性 WARN はエラーにしない**: 互いに矛盾する保持期間設定（AC-10b・AC-10c）は WARN ログのみで継続する。これは「ユーザが意図的にこの組み合わせを選んだ場合に動作を停止させない」ためであり、設定値そのものは個別バリデーション（AC-10a 等）で十分検査されているという前提に基づく。
-6. **CWD 依存の排除**: `store.root_dir` の相対パスは `config.LoadFile()` 内で絶対パスへ正規化する（AC-10d）。systemd timer 経由の起動など CWD が `/` になる環境で意図しない参照先を持たないようにするための恒久対応。
+6. **CWD 依存の排除**: `store.root_dir` の相対パスは `config.LoadFile` 内で絶対パスへ正規化する（AC-10d）。systemd timer 経由の起動など CWD が `/` になる環境で意図しない参照先を持たないようにするための恒久対応。
 7. **エラーは sentinel + ラップ**: バリデーション失敗時には `errors.Is` で識別可能な sentinel エラーをラップして返す（CLAUDE.md「Error Testing」方針）。
+8. **エントリポイントは設定ファイル必須**: 本タスク以降、実行に必要な IMAP 接続情報は TOML から得るため、`cmd/tlsrpt-digest` の `-config` 未指定は設定エラーとして扱う。`loadConfig("")` で空 `Config` を返す既存の暫定挙動は廃止する。
 
 ### 1.2 概念モデル
 
@@ -34,24 +35,22 @@ flowchart LR
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
-    TOML[("TOML 設定ファイル<br>imap / notify / store / summary")] --> Load["LoadFile()<br>config.go（拡張）"]
-    Env[("環境変数<br>IMAP 認証情報・Webhook URL")] --> Main["cmd/tlsrpt-digest<br>main.go（変更）"]
+    TOML[("TOML 設定ファイル")] --> Load["config.LoadFile"]
+    Env[("環境変数")] --> Main["cmd/tlsrpt-digest"]
     Load --> Cfg["Config 構造体"]
     Cfg --> Main
-    Main --> Components["imap / notify / store の<br>各コンポーネント初期化"]
+    Main --> Components["実行時コンポーネント"]
 
-    class TOML,Env data
-    class Main,Components process
-    class Load,Cfg enhanced
+    subgraph Legend["凡例（Legend）"]
+        LData[("設定入力")]
+        LProcess["既存コンポーネント"]
+        LEnhanced["変更・拡張対象"]
+    end
+
+    class TOML,Env,LData data
+    class Main,Components,LProcess process
+    class Load,Cfg,LEnhanced enhanced
 ```
-
-**凡例**
-
-| 色 | クラス | 意味 |
-|---|---|---|
-| 青 | data | 設定入力（TOML ファイル・環境変数） |
-| オレンジ | process | 変更なし、または既存責務を維持するコンポーネント |
-| 緑 | enhanced | 本タスクで変更・拡張するファイル |
 
 ---
 
@@ -68,22 +67,22 @@ graph TB
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
     subgraph cmd_pkg ["cmd/tlsrpt-digest（変更）"]
-        Main["main.go<br>loadConfig() を LoadFile() 呼び出しに置換"]
+        Main["main.go"]
     end
 
     subgraph config_pkg ["internal/config（変更対象）"]
-        Loader["config.go（拡張）<br>LoadFile() / Load()"]
-        Types["types.go（新規）<br>IMAPConfig / NotifyConfig /<br>StoreConfig / SummaryConfig"]
-        Defaults["defaults.go（新規）<br>applyDefaults()"]
-        Validate["validate.go（新規）<br>validate*()"]
-        Errors["errors.go（新規）<br>ErrInvalid* sentinel"]
-        Secret["secret.go（変更なし）<br>Secret 型"]
+        Loader["config.go / load_file.go"]
+        Types["types.go<br>Config 型"]
+        Defaults["defaults.go<br>既定値定義"]
+        Validate["validate.go<br>値検証"]
+        Errors["errors.go<br>sentinel エラー"]
+        Secret["secret.go<br>Secret 型"]
     end
 
     subgraph external_pkgs ["他パッケージ（参照側）"]
-        Imap["internal/imap<br>imap.Config を生成する main で参照"]
-        Notify["internal/notify<br>SlackHandlerOptions に allowed_host"]
-        Store["internal/store<br>root_dir 等を参照"]
+        Imap["internal/imap"]
+        Notify["internal/notify"]
+        Store["internal/store"]
     end
 
     Main -->|"path"| Loader
@@ -97,16 +96,14 @@ graph TB
     Main --> Notify
     Main --> Store
 
-    class Loader,Types,Defaults,Validate,Errors enhanced
-    class Secret,Main,Imap,Notify,Store process
+    subgraph Legend["凡例（Legend）"]
+        LProcess["既存コンポーネント"]
+        LEnhanced["新規追加または変更対象"]
+    end
+
+    class Loader,Types,Defaults,Validate,Errors,LEnhanced enhanced
+    class Secret,Main,Imap,Notify,Store,LProcess process
 ```
-
-**凡例**
-
-| 色 | クラス | 意味 |
-|---|---|---|
-| オレンジ | process | 変更なしの既存コンポーネント |
-| 緑 | enhanced | 本タスクで新規追加または変更するファイル |
 
 ### 2.2 パッケージ依存関係
 
@@ -125,54 +122,49 @@ flowchart LR
     STORE --> CFG
     NOTIFY --> CFG
 
-    class CMD,IMAP,NOTIFY,STORE process
-    class CFG enhanced
+    subgraph Legend["凡例（Legend）"]
+        LProcess["既存パッケージ"]
+        LEnhanced["変更対象パッケージ"]
+    end
+
+    class CMD,IMAP,NOTIFY,STORE,LProcess process
+    class CFG,LEnhanced enhanced
 ```
 
 **設計上の注意**: 既存パッケージ（`imap`・`notify`・`store`）は `internal/config` の `Secret` 型を参照するのみであり、本タスクで追加する `IMAPConfig`・`StoreConfig` 等の構造体には依存しない。これらの構造体は TOML 表現として閉じており、各パッケージは独自の設定型（例：`imap.Config`）を引き続き利用する。型同士の変換は `cmd/tlsrpt-digest` が担う。
 
-**凡例**
-
-| 色 | クラス | 意味 |
-|---|---|---|
-| オレンジ | process | 変更なしのパッケージ |
-| 緑 | enhanced | 変更対象パッケージ |
-
 ### 2.3 データフロー（シーケンス図）
 
-矢印 A → B は「A が B を呼び出す」、破線矢印 A -->> B は「B が A に結果を返す」を表す。
+矢印 A → B は「A が B に入力を渡す」、破線矢印 A -->> B は「B が A に結果を返す」を表す。
 
 ```mermaid
 sequenceDiagram
-    participant M as cmd/tlsrpt-digest/main.go
+    participant M as cmd/tlsrpt-digest
     participant LF as config.LoadFile
     participant LD as config.Load
-    participant VA as validate
-    participant DF as applyDefaults
-    participant L as slog (Phase 1 logger)
+    participant NC as 正規化処理
+    participant VC as 値検証
+    participant L as Phase 1 logger
 
-    M->>LF: LoadFile(path, logger)
-    LF->>LF: os.ReadFile(path)
-    LF->>LD: Load(data, logger)
-    LD->>LD: toml.Decode (strict)
-    LD->>DF: applyDefaults(cfg)
-    DF-->>LD: cfg（既定値適用済み）
-    LD->>VA: validate(cfg)
-    note over VA: 値検証（AC-05〜AC-10a）<br>失敗時は ErrInvalid* を返す
-    VA-->>LD: nil / error
-    LD-->>LF: *Config / error
-    note over LF: 相対パス絶対化（AC-10d）<br>整合性 WARN（AC-10b・AC-10c）<br>正規化結果を INFO で出力（AC-10d）
-    LF->>L: slog.Info/Warn（必要に応じて）
-    LF-->>M: *Config / error
+    M->>LF: 設定ファイルパス
+    LF->>LD: TOML バイト列
+    LD->>NC: rawConfig
+    note over NC: 未設定値は既定値へ変換<br>明示的な不正値はエラーとして保持
+    NC-->>LD: Config / error
+    LD->>VC: Config
+    VC-->>LD: 検証結果
+    LD-->>LF: Config / error
+    LF->>L: INFO / WARN（必要な場合）
+    LF-->>M: Config / error
 ```
 
-**凡例**
+**記法**
 
 | 記法 | 意味 |
 |---|---|
-| `->>` | 同期呼び出し |
-| `-->>` | 戻り値の返却 |
-| `note over` | 実装方針上の補足条件 |
+| `->>` | 入力の受け渡し |
+| `-->>` | 結果の返却 |
+| `note over` | 設計上の制約 |
 
 ---
 
@@ -200,48 +192,79 @@ sequenceDiagram
 
 ### 3.2 型定義（高レベル）
 
-`internal/config/types.go`（新規）に以下の構造体を定義する。フィールドの順序は TOML キーと一致させ、TOML タグで明示する。
+`internal/config/types.go`（新規）に以下の構造体を定義する。公開する `Config` は正規化済みのアプリケーション設定を表し、TOML タグはデコード専用の `rawConfig` 側に閉じ込める。
 
 ```go
-// Config は TOML 設定ファイル全体のルート構造。
+// Config は既定値適用と検証を終えたアプリケーション設定。
 // 機密情報（IMAP 認証情報・Webhook URL）はここに含めない。
 type Config struct {
-    IMAP    IMAPConfig    `toml:"imap"`
-    Notify  NotifyConfig  `toml:"notify"`
-    Store   StoreConfig   `toml:"store"`
-    Summary SummaryConfig `toml:"summary"`
+    IMAP    IMAPConfig
+    Notify  NotifyConfig
+    Store   StoreConfig
+    Summary SummaryConfig
 }
 
-// IMAPConfig は IMAP 接続に関する設定（認証情報を除く）。
 type IMAPConfig struct {
-    Host            string `toml:"host"`
-    Port            int    `toml:"port"`
-    Mailbox         string `toml:"mailbox"`
-    FetchDays       int    `toml:"fetch_days"`
-    TLSCACert       string `toml:"tls_ca_cert"`
-    MaxMessageBytes int64  `toml:"max_message_bytes"`
+    Host            string
+    Port            int
+    Mailbox         string
+    FetchDays       int
+    TLSCACert       string
+    MaxMessageBytes int64
 }
 
-// NotifyConfig は通知関連の設定。Webhook URL は環境変数で管理するため含めない。
 type NotifyConfig struct {
-    Slack NotifySlackConfig `toml:"slack"`
+    Slack NotifySlackConfig
 }
 
-// NotifySlackConfig は既存定義を踏襲する（AllowedHost のみ）。
 type NotifySlackConfig struct {
-    AllowedHost string `toml:"allowed_host"`
+    AllowedHost string
 }
 
-// StoreConfig はストアの保存先と保持期間。
 type StoreConfig struct {
-    RootDir         string `toml:"root_dir"`
-    RetentionDays   int    `toml:"retention_days"`
-    MaxEmailAgeDays int    `toml:"max_email_age_days"`
+    RootDir         string
+    RetentionDays   int
+    MaxEmailAgeDays int
 }
 
-// SummaryConfig は定期サマリの集計期間。
 type SummaryConfig struct {
-    WindowDays int `toml:"window_days"`
+    WindowDays int
+}
+
+// rawConfig は TOML デコード専用の内部表現。
+// ポインタにより「未設定」と「明示的なゼロ値」を区別する。
+type rawConfig struct {
+    IMAP    rawIMAPConfig    `toml:"imap"`
+    Notify  rawNotifyConfig  `toml:"notify"`
+    Store   rawStoreConfig   `toml:"store"`
+    Summary rawSummaryConfig `toml:"summary"`
+}
+
+type rawIMAPConfig struct {
+    Host            string  `toml:"host"`
+    Port            *int    `toml:"port"`
+    Mailbox         *string `toml:"mailbox"`
+    FetchDays       *int    `toml:"fetch_days"`
+    TLSCACert       *string `toml:"tls_ca_cert"`
+    MaxMessageBytes *int64  `toml:"max_message_bytes"`
+}
+
+type rawNotifyConfig struct {
+    Slack rawNotifySlackConfig `toml:"slack"`
+}
+
+type rawNotifySlackConfig struct {
+    AllowedHost *string `toml:"allowed_host"`
+}
+
+type rawStoreConfig struct {
+    RootDir         *string `toml:"root_dir"`
+    RetentionDays   *int    `toml:"retention_days"`
+    MaxEmailAgeDays *int    `toml:"max_email_age_days"`
+}
+
+type rawSummaryConfig struct {
+    WindowDays *int `toml:"window_days"`
 }
 ```
 
@@ -249,36 +272,37 @@ type SummaryConfig struct {
 
 ### 3.3 主要関数の高レベルインターフェース
 
-```go
-// LoadFile は path から TOML を読み込み、既定値適用と検証を経た Config を返す。
-// path が空文字列の場合は ErrConfigPathEmpty を返す。
-// 相対パス store.root_dir は絶対パスへ正規化される。
-// 整合性に関する WARN ログおよび root_dir 正規化結果の INFO ログは logger 経由で出力する。
-func LoadFile(path string, logger *slog.Logger) (*Config, error)
+| 関数 | 入力 | 出力 | 責務 |
+|---|---|---|---|
+| `LoadFile` | 設定ファイルパス、Phase 1 logger | `*Config` または error | ファイル入力から設定を読み込み、相対 `store.root_dir` の正規化、INFO/WARN ログ出力、`Load` の呼び出しを担う |
+| `Load` | TOML バイト列 | `*Config` または error | strict decode、raw 設定から正規化済み設定への変換、既定値適用、値検証を担う |
 
-// Load は TOML バイト列をデコードし、既定値適用と検証を行う。
-// 主にテストおよび非ファイル入力からの読み込みに利用する。
-// 整合性 WARN や絶対化処理は呼び出し元（LoadFile）の責務とする。
+具体的な公開シグネチャは以下とする。
+
+```go
 func Load(data []byte) (*Config, error)
+func LoadFile(path string, logger *slog.Logger) (*Config, error)
 ```
 
-`LoadFile` を新規導入する理由は、(a) 相対パスを正規化するためにファイルの所在地ではなく呼び出し元の CWD を基準にする必要があり、(b) WARN/INFO ログのために `*slog.Logger` を引数で受け取る必要があるためである。一方 `Load(data []byte)` はテスト容易性のために維持する（既存テストも引き続き利用できる）。
+`LoadFile` の `logger` が `nil` の場合は `slog.Default()` を使う。`path == ""` は `ErrConfigPathEmpty` を返す。
+
+`LoadFile` を新規導入する理由は、相対パスを正規化する基準が設定ファイルの所在地ではなく実行時の CWD であり、WARN/INFO ログの出力先も呼び出し元の Phase 1 logger に合わせる必要があるためである。一方 `Load` はテスト容易性のために維持し、非ファイル入力からも同じデコード・検証契約を利用できるようにする。したがって `Load` が返す `Store.RootDir` は既定値適用後の値（例：`"./store"`）であり、絶対パス化と INFO/WARN ログは `LoadFile` の契約に限定する。
 
 ### 3.4 コンポーネント責務
 
 | ファイル | 変更種別 | 責務 |
 |---|---|---|
-| `internal/config/config.go` | **変更** | 既存の `Config`・`Load` を拡張。`Load` は TOML strict デコード・既定値適用・検証を順に呼び出す（AC-01〜AC-04 全般）|
-| `internal/config/types.go` | **新規** | `IMAPConfig`・`NotifyConfig`・`StoreConfig`・`SummaryConfig` 等の型定義（§3.2） |
-| `internal/config/defaults.go` | **新規** | 既定値適用ロジック `applyDefaults(*Config)`（AC-11〜AC-17） |
+| `internal/config/config.go` | **変更** | 既存の `Load` を拡張。TOML strict decode、raw 設定から正規化済み `Config` への変換、値検証を呼び出す（AC-01〜AC-04 全般） |
+| `internal/config/types.go` | **新規** | 正規化済み `Config` と TOML デコード専用 `rawConfig` の型定義（§3.2） |
+| `internal/config/defaults.go` | **新規** | raw 設定の未設定値に既定値を適用し、正規化済み `Config` を生成する責務（AC-11〜AC-17） |
 | `internal/config/validate.go` | **新規** | 値検証ロジック（AC-05・AC-06・AC-08・AC-09・AC-10・AC-10a）。`AllowedHost` 検証ロジックは既存の `validateAllowedHost` を本ファイルへ移動 |
-| `internal/config/load_file.go` | **新規** | `LoadFile(path string, logger *slog.Logger) (*Config, error)`。ファイル読み込み・`Load` 呼び出し・相対パス正規化（AC-10d）・整合性 WARN（AC-10b・AC-10c） |
+| `internal/config/load_file.go` | **新規** | `LoadFile`。ファイル入力、`Load` 呼び出し、相対パス正規化（AC-10d）、整合性 WARN（AC-10b・AC-10c） |
 | `internal/config/errors.go` | **新規** | sentinel エラー（§4） |
 | `internal/config/secret.go` | 変更なし | 既存の `Secret` 型を流用 |
 | `internal/config/*_test.go` | **変更/新規** | 既存テストの拡張および新規 AC に対応するテスト追加（§6） |
-| `cmd/tlsrpt-digest/main.go` | **変更** | `loadConfig` の呼び出し先を `config.LoadFile` に変更。IMAP の認証情報を環境変数（`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` 想定）から取得し、`imap.Config` を構築する補助関数を追加 |
+| `cmd/tlsrpt-digest/main.go` | **変更** | `loadConfig` の呼び出し先を `config.LoadFile` に変更し、`-config` 未指定を設定エラーにする。IMAP の認証情報を環境変数 `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` から取得し、`imap.Config` を構築する補助関数を追加 |
 
-`cmd/tlsrpt-digest/main.go` の env 変数名（`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`）は本書での提案である。正式命名は実装時に再確認する余地を残すが、既存の `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` / `TLSRPT_SLACK_WEBHOOK_URL_ERROR` と同じ `TLSRPT_*` プレフィックス規約に揃える。
+`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` は本タスクで採用する正式な環境変数名とする。Slack Webhook URL の既存環境変数と同じ `TLSRPT_*` プレフィックス規約に揃える。
 
 ---
 
@@ -286,9 +310,10 @@ func Load(data []byte) (*Config, error)
 
 ### 4.1 エラー型方針
 
-- すべての検証失敗は `errors.Is` で識別可能な sentinel エラーを基底とし、コンテキスト情報（フィールド名・値・パス等）は `fmt.Errorf("...: %w", err)` で付与する。
-- TOML パースエラー（`toml.Decode` の戻り値）はラップして `ErrConfigDecode` で包む。テストは `errors.Is(err, config.ErrConfigDecode)` を使用する。
+- すべての検証失敗は `errors.Is` で識別可能な sentinel エラーを基底とし、コンテキスト情報（フィールド名・値・パス等）は基底エラーを保持したまま付与する。
+- TOML パースエラーはラップして `ErrConfigDecode` で包む。テストは `errors.Is(err, config.ErrConfigDecode)` を使用する。
 - 既存の `ErrInvalidAllowedHost` は `errors.go` に集約し、本タスクの他 sentinel と並べる（互換性は維持）。
+- 必須項目の未指定は、その項目の値検証エラーとして扱う。たとえば `imap.host` 未指定または空文字は `ErrInvalidIMAPHost`、`imap.port` 未指定または範囲外は `ErrInvalidIMAPPort` を返す。
 
 ### 4.2 sentinel 一覧
 
@@ -308,13 +333,14 @@ var ErrInvalidMaxEmailAgeDays = errors.New("config: store.max_email_age_days mus
 var ErrInvalidAllowedHost     = errors.New("config: notify.slack.allowed_host must be a plain hostname without scheme, port, or whitespace")
 var ErrTLSCACertNotReadable   = errors.New("config: imap.tls_ca_cert cannot be read")
 var ErrTLSCACertNotPEM        = errors.New("config: imap.tls_ca_cert is not a PEM-encoded certificate")
+var ErrInvalidMaxMessageBytes = errors.New("config: imap.max_message_bytes must be >= 0")
 ```
 
 ### 4.3 エラーメッセージ設計パターン
 
 - フィールド名は TOML キー（例：`imap.fetch_days`）を採用し、Go フィールド名は使わない（ユーザが目視で TOML を修正できるようにするため）。
 - TLS CA 証明書のパスはエラーメッセージに含めて構わない（パスそのものは機密情報ではない）。一方、TOML 本体や認証情報は含めない（§5）。
-- ラップ例：`fmt.Errorf("config: imap.tls_ca_cert %q: %w", path, ErrTLSCACertNotReadable)`。
+- TLS CA 証明書の読み込み失敗は、対象キー名とパスを含めつつ `ErrTLSCACertNotReadable` を保持する。
 
 ### 4.4 警告（WARN）の扱い
 
@@ -337,7 +363,7 @@ var ErrTLSCACertNotPEM        = errors.New("config: imap.tls_ca_cert is not a PE
 
 | パス | 該当箇所 | 本タスクでの対策 |
 |---|---|---|
-| エラーメッセージへの機密値の埋め込み | TOML パースエラー | `toml.Decode` の戻り値はラップのみ。エラー本文に TOML 本文をダンプしない（AC-04 関連） |
+| エラーメッセージへの機密値の埋め込み | TOML パースエラー | TOML デコードエラーはラップのみ。エラー本文に TOML 本文をダンプしない（AC-04 関連） |
 | `fmt.Sprintf("%v", cfg)` 等での Config 全体出力 | `Config` 構造体 | `Config` 本体には認証情報を持たない。env 由来の認証情報は `Secret` 型でラップして `imap.Config` に渡す（`cmd/tlsrpt-digest`） |
 | 通知メッセージへの設定値混入 | 本タスク範囲外 | `internal/notify` 側のガイドライン（原則 1・原則 3）で対応済 |
 | デバッグログへの認証情報出力 | env から取得した認証情報 | `Secret` 型の `String()` / `LogValue()` が常に `[REDACTED]` を返す（既存実装） |
@@ -352,25 +378,23 @@ flowchart TD
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
-    TOML[("TOML ファイル<br>機密を含まない設定値")] --> Load["config.LoadFile()<br>config パッケージ"]
-    Env[("環境変数<br>IMAP 認証情報・Webhook URL")] --> Main["cmd/tlsrpt-digest<br>main.go"]
-    Load -->|"Config 構造体<br>機密なし"| Main
-    Main -->|"Secret でラップ"| Imap[("imap.Config<br>Password: Secret")]
-    Main -->|"AllowedHost のみ参照"| Notify[("notify.SlackHandler")]
-    Load -->|"WARN/INFO ログ<br>機密なし"| StdErr[("標準エラー出力<br>（Phase 1 logger）")]
+    TOML[("TOML ファイル")] --> Load["config.LoadFile"]
+    Env[("環境変数")] --> Main["cmd/tlsrpt-digest"]
+    Load -->|"機密なし"| Main
+    Main -->|"Secret でラップ"| Imap["imap.Config"]
+    Main -->|"AllowedHost のみ参照"| Notify["notify.SlackHandler"]
+    Load -->|"機密なし"| StdErr[("標準エラー出力")]
 
-    class TOML,Env,Imap,Notify,StdErr data
-    class Load enhanced
-    class Main process
+    subgraph Legend["凡例（Legend）"]
+        LData[("データ源・データシンク")]
+        LProcess["Notifier へ機密を流さないコンポーネント"]
+        LEnhanced["設定読み込みコンポーネント"]
+    end
+
+    class TOML,Env,StdErr,LData data
+    class Load,LEnhanced enhanced
+    class Main,Imap,Notify,LProcess process
 ```
-
-**凡例**
-
-| 色 | クラス | 意味 |
-|---|---|---|
-| 青 | data | データ源・データシンク |
-| オレンジ | process | 機密情報を取り扱うが Notifier には流さないコンポーネント |
-| 緑 | enhanced | 本タスクで導入する設定読み込みコンポーネント |
 
 ### 5.3 設計方針との対応（notification_security.md）
 
@@ -388,61 +412,66 @@ flowchart TD
 
 ### 6.1 設定読み込みフロー全体
 
-矢印 A → B は「A の処理完了後に B へ進む」を表す。菱形は分岐条件を表す。
+矢印 A → B は「A の設計上の責務が完了した後に B へ進む」を表す。エラー矢印は、その段階で検出した設定エラーを呼び出し元へ返すことを表す。
 
 ```mermaid
 flowchart TD
-    Start(["LoadFile(path, logger)"]) --> CheckPath{"path が空?"}
-    CheckPath -->|"Yes"| ErrPathEmpty["ErrConfigPathEmpty を返す"]
-    CheckPath -->|"No"| ReadFile["os.ReadFile(path)"]
-    ReadFile --> CheckRead{"読み込み成功?"}
-    CheckRead -->|"No"| ErrRead["ErrConfigFileRead をラップして返す"]
-    CheckRead -->|"Yes"| LoadCall["Load(data) を呼ぶ"]
-    LoadCall --> Decode["TOML strict デコード"]
-    Decode --> CheckDecode{"成功?"}
-    CheckDecode -->|"No"| ErrDecode["ErrConfigDecode をラップして返す"]
-    CheckDecode -->|"Yes"| ApplyDefaults["applyDefaults(cfg)"]
-    ApplyDefaults --> Validate["validate(cfg)"]
-    Validate --> CheckValid{"成功?"}
-    CheckValid -->|"No"| ErrInvalid["ErrInvalid* をラップして返す"]
-    CheckValid -->|"Yes"| Normalize["store.root_dir を絶対パス化<br>INFO ログ出力（AC-10d）"]
-    Normalize --> WarnRet{"retention_days > max_email_age_days?"}
-    WarnRet -->|"Yes"| LogWarnRet["WARN ログ（AC-10b）"]
-    WarnRet -->|"No"| WarnFetch
-    LogWarnRet --> WarnFetch{"fetch_days >= retention_days?"}
-    WarnFetch -->|"Yes"| LogWarnFetch["WARN ログ（AC-10c）"]
-    WarnFetch -->|"No"| Return
-    LogWarnFetch --> Return["*Config を返す"]
+    classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
+    classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
+    classDef problem fill:#ffe6e6,stroke:#d62728,stroke-width:2px,color:#7b0000;
+
+    Start(["LoadFile"]) --> Input["設定ファイル入力"]
+    Input --> Decode["strict decode"]
+    Decode --> Normalize["rawConfig から Config へ正規化"]
+    Normalize --> Validate["値検証"]
+    Validate --> PostCheck["正規化と整合性警告"]
+    PostCheck --> Return(["Config"])
+
+    Input -.-> ReadError["ファイル入力エラー"]
+    Decode -.-> DecodeError["TOML デコードエラー"]
+    Normalize -.-> ValueError["不正な明示値"]
+    Validate -.-> ValidationError["値検証エラー"]
+
+    subgraph Legend["凡例（Legend）"]
+        LProcess["既存処理"]
+        LEnhanced["本タスクの主な設計対象"]
+        LProblem["エラー経路"]
+    end
+
+    class Start,Return,Input process
+    class Decode,Normalize,Validate,PostCheck enhanced
+    class ReadError,DecodeError,ValueError,ValidationError problem
+    class LProcess process
+    class LEnhanced enhanced
+    class LProblem problem
 ```
-
-**凡例**
-
-| 記法 | 意味 |
-|---|---|
-| 角丸ノード `(["..."])` | 開始または終了点 |
-| 矩形ノード `["..."]` | 処理ステップ |
-| 菱形ノード `{"..."}` | 分岐条件 |
-| ラベル付き矢印 `-->|"..."|` | 条件分岐先（Yes/No 等） |
 
 ### 6.2 既定値適用の順序
 
-`applyDefaults` は値検証の前に実行する。これにより「未設定」と「明示的に 0 を指定」を区別せず、`0`／`""` のときに既定値を適用する単純なルールで処理する。
+TOML はまず `rawConfig` にデコードする。`rawConfig` の任意項目はポインタで表現し、「未設定」と「明示的に `0` / 空文字を指定」を区別する。
 
-- 「明示的に 0 を指定」を許容しないという方針は、AC-10a が「0 以下はエラー」と定めていることと整合する（既定値で 1 以上に置き換えられた後に、AC-10a がそれ以外のケースを補足する）。
-- 例外的に「明示的に `0` を許容する」項目は本タスク範囲では存在しない。`max_message_bytes` のみ「0 = 無制限」とし、既定値も `0` とする（既定値適用と検証の両方で 0 を許容する特殊扱い）。
+- 未設定の任意項目には既定値を適用し、正規化済みの `Config` へ変換する。
+- 明示的に `0` 以下が指定された日数項目は、既定値で上書きせず AC-09 / AC-10a のエラーとして扱う。
+- `max_message_bytes` のみ `0 = 無制限` を許容する。負数は不正値として扱う。
+
+この方針により、既定値適用（AC-11〜AC-17）と「0 以下はエラー」（AC-09・AC-10a）を同時に満たす。
+
+文字列項目はキーごとの意味を明確にする。`notify.slack.allowed_host` と `imap.tls_ca_cert` の空文字は有効値として扱う。`imap.mailbox` と `store.root_dir` の空文字は未設定と同じ扱いとし、既定値を適用する。
 
 ### 6.3 TLS CA 証明書の検証フロー（AC-10）
 
 `imap.tls_ca_cert` が空でない場合に限り、以下の 2 段階の確認を行う。
 
 - **可読性確認**: 指定パスのファイルが読み出せること。失敗時は `ErrTLSCACertNotReadable` をラップして返す。
-- **PEM 形式確認**: 読み出した内容が PEM エンコードされた `CERTIFICATE` ブロックとして解釈でき、その内容が `x509` パッケージで証明書としてパースできること。失敗時は `ErrTLSCACertNotPEM` をラップして返す。
+- **PEM 形式確認**: 読み出した内容が PEM エンコードされた `CERTIFICATE` ブロックとして解釈でき、証明書としてパースできること。失敗時は `ErrTLSCACertNotPEM` をラップして返す。
 
 実際の証明書チェーン構築・有効期限チェック・信頼ストアへの追加は `internal/imap` の TLS 接続時に行うため、本タスクの範囲はファイル可読性と PEM 形式の確認のみとする（早期失敗のためであり、TLS スタックでの完全な検証は別途実施される）。
 
 ### 6.4 相対パス正規化（AC-10d）
 
-`store.root_dir` が相対パスの場合、`filepath.Abs` でカレントディレクトリ基準に絶対パスへ変換する。変換後の値を `cfg.Store.RootDir` に書き戻し、`slog.Info("config: store.root_dir resolved", "path", abs)` を出力する。すでに絶対パスであれば変換せず、INFO ログも出さない。
+`store.root_dir` が相対パスの場合、設定読み込み時のカレントディレクトリを基準に絶対パスへ正規化する。正規化後の値は `Config.Store.RootDir` に格納し、正規化後のパスを INFO ログに出力する。すでに絶対パスであれば値を変更せず、正規化ログも出力しない。
+
+この正規化は `LoadFile` でのみ実施する。`Load` はバイト列入力のため CWD 依存の副作用を持たせず、相対パスをそのまま返す。
 
 ---
 
@@ -455,16 +484,17 @@ flowchart TD
 | テスト対象 | 観点 | 関連 AC |
 |---|---|---|
 | 有効な TOML | すべての設定値が正しく読み込まれる | AC-01 |
+| 空の設定ファイルパス | `ErrConfigPathEmpty` を返す | AC-02 |
 | 存在しないパス | `ErrConfigFileRead` を返す | AC-02 |
 | TOML 文法エラー | `ErrConfigDecode` を返す | AC-03 |
 | 未知のキー | strict デコードで失敗する | AC-04 |
 | 空の `imap.host` | `ErrInvalidIMAPHost` を返す | AC-05 |
-| 範囲外の `imap.port` | `ErrInvalidIMAPPort` を返す | AC-06 |
+| 未指定または範囲外の `imap.port` | `ErrInvalidIMAPPort` を返す | AC-06 |
 | `imap.password` 等が TOML にある | strict デコードで失敗する（AC-07 の間接検証）| AC-07 |
 | `notify.slack.allowed_host` のホスト名検証 | 既存テストを移植・拡張 | AC-08 |
-| `imap.fetch_days` の境界 | 0 以下でエラー | AC-09 |
+| `imap.fetch_days` の境界 | 明示的な 0 以下でエラー、未設定では既定値 | AC-09・AC-12 |
 | `imap.tls_ca_cert` 未設定 / 有効 PEM / 不正 PEM / 存在しないパス | エラー有無の切り分け | AC-10・AC-14 |
-| `summary.window_days`・`store.retention_days`・`store.max_email_age_days` の 0 以下 | `ErrInvalid*Days` を返す | AC-10a |
+| `summary.window_days`・`store.retention_days`・`store.max_email_age_days` の 0 以下 | 明示的な 0 以下で `ErrInvalid*Days` を返し、未設定では既定値 | AC-10a・AC-15〜AC-17 |
 | `retention_days > max_email_age_days` の組み合わせ | WARN ログのみで継続 | AC-10b |
 | `fetch_days >= retention_days` の組み合わせ | WARN ログのみで継続 | AC-10c |
 | `store.root_dir` に相対パスを指定 | 絶対化される / INFO ログが出る | AC-10d |
@@ -497,12 +527,12 @@ flowchart TD
 
 ### フェーズ 2: 既定値・バリデーション
 
-3. `defaults.go`・`validate.go` を新規追加し `Load(data)` を再構成
+3. `defaults.go`・`validate.go` を新規追加し `Load` を再構成
 4. AC-01・AC-04〜AC-09 のテストを追加・通過
 
 ### フェーズ 3: ファイル読み込みと整合性チェック
 
-5. `load_file.go` を追加し `LoadFile(path, logger)` を実装
+5. `load_file.go` を追加し `LoadFile` を実装
 6. AC-02・AC-03・AC-10〜AC-10d のテストを追加・通過
 
 ### フェーズ 4: 既定値の網羅
@@ -521,7 +551,7 @@ flowchart TD
 
 現在スコープ外だが、将来対応が想定される拡張のための設計上の考慮を述べる。
 
-- **環境変数による設定上書き**: 現状は env から取得するのは認証情報のみ。汎用的な「TOML キーを env で上書き」を将来追加する場合は、`Load` 後に env を反映する `applyEnvOverrides(*Config)` を defaults と validate の間に挿入できる構造とする。
+- **環境変数による設定上書き**: 現状は env から取得するのは認証情報のみ。汎用的な「TOML キーを env で上書き」を将来追加する場合は、`Load` 後に env を反映する `applyEnvOverrides` を defaults と validate の間に挿入できる構造とする。
 - **設定ファイルのホットリロード**: `LoadFile` を冪等に保ち、副作用を持たせない（グローバル状態に書き込まない）ことで将来のホットリロード対応の余地を残す。
 - **設定スキーマのバージョン管理**: 現状は単一スキーマだが、TOML 側に `schema_version` キーを追加する場合は `Config` の最上位に `SchemaVersion int` を追加し、`Load` 内で互換性チェックを行う構造とする。strict デコードを維持しつつ、`schema_version` だけは既知の値として許容する。
-- **設定ファイル分割**: `imap.toml`・`notify.toml` のように分割したいケースが出た場合、`LoadFiles(paths []string, logger *slog.Logger)` を追加し、後勝ちでマージする方針を取れる。本タスクではこの API は提供しない。
+- **設定ファイル分割**: `imap.toml`・`notify.toml` のように分割したいケースが出た場合、`LoadFiles` を追加し、後勝ちでマージする方針を取れる。本タスクではこの API は提供しない。
