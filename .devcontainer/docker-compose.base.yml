@@ -20,7 +20,7 @@ services:
       # Share GitHub CLI, Claude, and Codex credentials for seamless authentication in the container
       - ~/.config/gh:/home/devuser/.config/gh
       - ~/.claude:/home/devuser/.claude
-      - ~/.codex/auth.json:/home/devuser/.codex/auth.json
+      - ~/.codex:/home/devuser/.codex
     # Keep the container running
     command: /bin/sh -c "while sleep 1000; do :; done"
     depends_on:
