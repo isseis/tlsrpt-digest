@@ -145,8 +145,8 @@ func TestSlackHandler_NoExportedLoggerField(t *testing.T) {
 	// become a notification write path.
 	notifyType := reflect.TypeOf(notify.SlackHandler{})
 	var exported []string
-	for f := range notifyType.Fields() {
-		f := f
+	for i := range notifyType.NumField() {
+		f := notifyType.Field(i)
 		if f.IsExported() && f.Type == reflect.TypeOf((*slog.Logger)(nil)) {
 			exported = append(exported, f.Name)
 		}
@@ -205,11 +205,11 @@ func TestRedactionAlwaysEnabled(t *testing.T) {
 	opts := notify.SlackHandlerOptions{}
 	v := reflect.ValueOf(opts)
 	tp := v.Type()
-	for field := range tp.Fields() {
-		name := strings.ToLower(field.Name)
+	for i := range tp.NumField() {
+		name := strings.ToLower(tp.Field(i).Name)
 		assert.False(t,
 			strings.Contains(name, "disableredact") || strings.Contains(name, "noredact"),
-			"field %s looks like a redaction-disable option", field.Name,
+			"field %s looks like a redaction-disable option", tp.Field(i).Name,
 		)
 	}
 }
