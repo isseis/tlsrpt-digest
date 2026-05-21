@@ -154,9 +154,9 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 想定工数: 30 分 / 実績工数: -
 
 - [ ] **2.4** `internal/config/helpers_test.go` を新規作成し `LoadFile` テスト向けログキャプチャヘルパーを定義する
-  - ファイル: `internal/config/helpers_test.go`（新規、`//go:build test`、`package config_test`）
+  - ファイル: `internal/config/helpers_test.go`（新規、`package config_test`）
   - 作業内容:
-    - ファイル先頭に `//go:build test` を記述する（既存の `cmd/tlsrpt-digest/main_test.go` と同じプロジェクト規約に準拠）
+    - `//go:build test` は付けない。`_test.go` ファイルはビルドタグなしで `go test ./internal/config/` に含まれる。ビルドタグを付けると `load_file_test.go` がこのヘルパーに依存したとき `-tags test` なしの `go test` でコンパイルエラーになる。`cmd/tlsrpt-digest/main_test.go` のタグはそのパッケージ固有の事情によるものであり、`internal/config` には転用しない
     - `newCapturingLogger() (*slog.Logger, *bytes.Buffer)` を定義する: `bytes.Buffer` を出力先とする `slog.NewTextHandler` でロガーを構築し、バッファへの参照でログ内容を文字列検査できるようにする
     - このヘルパーは `load_file_test.go` の WARN/INFO ログ検証テスト（AC-10b・AC-10c・AC-10d）で使用する
   - 確認方法: `go test -count=1 ./internal/config/` が通ること（コンパイルエラーがないこと）
