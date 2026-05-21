@@ -40,8 +40,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	_ = buildIMAPConfig(cfg)
-
 	// Build notification handlers (Phase 2: after TOML).
 	// SlackHandlers are intentionally NOT wired into slog.Default() — ordinary
 	// application log calls must not enter the notification buffer. Callers use

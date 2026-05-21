@@ -270,7 +270,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
     - `buildIMAPConfig(cfg *config.Config) imap.Config` を追加する
     - `os.Getenv("TLSRPT_IMAP_USERNAME")` と `os.Getenv("TLSRPT_IMAP_PASSWORD")` を取得する
     - `imap.Config` に `cfg.IMAP.Host`・`cfg.IMAP.Port`・`cfg.IMAP.Mailbox`・`cfg.IMAP.TLSCACert`・`cfg.IMAP.MaxMessageBytes` を設定し、ユーザ名を `Username` フィールドに、パスワードを `config.Secret(password)` でラップして `Password` フィールドに格納する
-    - `main()` から `_ = buildIMAPConfig(cfg)` として呼び出す（タスク 0070 で実際の利用先に置き換えるまでの仮置き。Go コンパイラの「使用されていない変数」エラーを回避しつつ `make deadcode` への到達性を維持するため）
+    - タスク 0070 で実際の利用先に置き換える（`make deadcode` は `-test -tags test` で実行されるため、`main_test.go` からの参照だけで到達性は維持される）
   - 確認方法: `go build ./cmd/tlsrpt-digest/` が通ること
   - 想定工数: 30 分 / 実績工数: -
 
@@ -290,7 +290,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 - [x] **5.5** `make test` と `make lint` が通ることを確認する
 
 - [x] **5.6** `make deadcode` で不要なコードがないことを確認する（M5）
-  - 注意: `buildIMAPConfig` は `_ = buildIMAPConfig(cfg)` で呼び出すため `make deadcode` には未到達として報告されない。タスク 0070 で `_` を実際の利用先に置き換えること
+  - 注意: `buildIMAPConfig` は `make deadcode` の `-test -tags test` オプションにより `main_test.go` からの参照で到達性が維持される。`main()` からの呼び出しは不要。タスク 0070 で実際の利用先に置き換えること
 
 ---
 
