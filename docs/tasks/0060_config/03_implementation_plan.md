@@ -289,7 +289,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 - [x] **5.5** `make test` と `make lint` が通ることを確認する
 
-- [ ] **5.6** `make deadcode` で不要なコードがないことを確認する（M5）
+- [x] **5.6** `make deadcode` で不要なコードがないことを確認する（M5）
   - 注意: `buildIMAPConfig` は `_ = buildIMAPConfig(cfg)` で呼び出すため `make deadcode` には未到達として報告されない。タスク 0070 で `_` を実際の利用先に置き換えること
 
 ---
@@ -399,7 +399,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 | フェーズ 2 | AC-01・AC-03〜AC-10・AC-10a の全テストが PASS | [x] |
 | フェーズ 3 | AC-02・AC-10b・AC-10c・AC-10d の全テストが PASS | [x] |
 | フェーズ 4 | AC-11〜AC-17 の全テストが PASS | [x] |
-| フェーズ 5 | `make lint`・`make test`・`make deadcode` がすべて成功 | [ ] |
+| フェーズ 5 | `make lint`・`make test`・`make deadcode` がすべて成功 | [x] |
 
 ---
 
@@ -417,11 +417,11 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 ## 8. 完了条件
 
-- [ ] `make lint` がエラーなく完了する
-- [ ] `make test` がすべて成功する
-- [ ] `01_requirements.md` の全受け入れ条件（AC-01〜AC-17）に対応するテストが存在する
+- [x] `make lint` がエラーなく完了する
+- [x] `make test` がすべて成功する
+- [x] `01_requirements.md` の全受け入れ条件（AC-01〜AC-17）に対応するテストが存在する
 - [ ] セクション 5 の受け入れ条件トレーサビリティ表に実装ファイルの行番号が記入されている
-- [ ] `make deadcode` を実行済みで意図しない未到達コードがない
+- [x] `make deadcode` を実行済みで意図しない未到達コードがない
 
 ---
 
