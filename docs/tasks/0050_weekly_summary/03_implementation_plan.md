@@ -155,7 +155,7 @@
 
 `02_architecture.md` セクション 6.3 のシリアライズ仕様を実装する。
 
-- [ ] **3.1** `helpers.go` の `LogSummary` を `OrganizationStats` 対応に更新する
+- [x] **3.1** `helpers.go` の `LogSummary` を `OrganizationStats` 対応に更新する
   - ファイル: `internal/notify/helpers.go`
   - 作業内容:
     - `slog.Int64("organization_count", ...)` 行を削除する
@@ -165,7 +165,7 @@
   - 確認方法: 3.2 のテストが通ること
   - 想定工数: 30 分 / 実績工数: -
 
-- [ ] **3.2** `helpers_test.go` に `LogSummary` のシリアライズテストを追加する
+- [x] **3.2** `helpers_test.go` に `LogSummary` のシリアライズテストを追加する
   - ファイル: `internal/notify/helpers_test.go`
   - 作業内容（各テスト関数）:
     - `TestLogSummary_OrganizationStats_Serialized`: `OrganizationStats` に複数の組織を設定した `Summary` をログ記録したとき、`slog.Record` の属性に `organization_stats` グループが含まれ、組織名と成功セッション数が正しいことを `spyHandler` で確認する
@@ -174,7 +174,7 @@
   - 確認方法: `go test -v ./internal/notify/` で追加テストが PASS すること
   - 想定工数: 45 分 / 実績工数: -
 
-- [ ] **3.3** `make test` が通ることを確認する
+- [x] **3.3** `make test` が通ることを確認する
 
 ---
 
