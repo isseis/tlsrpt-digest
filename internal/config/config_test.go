@@ -338,7 +338,10 @@ func TestLoad_DaysValidation(t *testing.T) {
 }
 
 func TestLoad_MaxMessageBytesValidation(t *testing.T) {
-	data := []byte(baseConfigTOML + `max_message_bytes = -1
+	data := []byte(`[imap]
+host = "imap.example.com"
+port = 993
+max_message_bytes = -1
 `)
 	_, err := config.Load(data)
 	require.Error(t, err)
@@ -346,9 +349,20 @@ func TestLoad_MaxMessageBytesValidation(t *testing.T) {
 }
 
 func TestLoad_Default_MailboxINBOX(t *testing.T) {
-	cfg, err := config.Load([]byte(baseConfigTOML))
-	require.NoError(t, err)
-	assert.Equal(t, "INBOX", cfg.IMAP.Mailbox)
+	tests := []struct {
+		name string
+		toml string
+	}{
+		{"absent", baseConfigTOML},
+		{"empty string", baseConfigTOML + "mailbox = \"\"\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := config.Load([]byte(tt.toml))
+			require.NoError(t, err)
+			assert.Equal(t, "INBOX", cfg.IMAP.Mailbox)
+		})
+	}
 }
 
 func TestLoad_Default_FetchDays14(t *testing.T) {
@@ -358,12 +372,24 @@ func TestLoad_Default_FetchDays14(t *testing.T) {
 }
 
 func TestLoad_Default_StoreRootDir(t *testing.T) {
-	cfg, err := config.Load([]byte(baseConfigTOML))
-	require.NoError(t, err)
-	assert.Equal(t, "./store", cfg.Store.RootDir)
+	tests := []struct {
+		name string
+		toml string
+	}{
+		{"absent", baseConfigTOML},
+		{"empty string", baseConfigTOML + "[store]\nroot_dir = \"\"\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := config.Load([]byte(tt.toml))
+			require.NoError(t, err)
+			assert.Equal(t, "./store", cfg.Store.RootDir)
+		})
+	}
 }
 
 func TestLoad_Default_TLSCACertEmpty(t *testing.T) {
+	// Key assertion: absent tls_ca_cert must not trigger validation errors.
 	cfg, err := config.Load([]byte(baseConfigTOML))
 	require.NoError(t, err)
 	assert.Equal(t, "", cfg.IMAP.TLSCACert)
