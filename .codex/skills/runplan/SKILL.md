@@ -22,7 +22,7 @@ Your goal is to implement one task under `docs/tasks/` by following its
 
 5. Select the next phase group from `03_implementation_plan.md` checkboxes:
    `[ ]` not started, `[x]` done, `[-]` skipped.
-   - If all phases are complete, go to final review.
+   - If all phases are complete, skip to step 10 and follow the "If all phases are complete" bullet.
    - Otherwise, use one phase unless it cannot pass `make test` alone.
      If needed, extend the group until it can pass and briefly note why.
 
@@ -35,7 +35,10 @@ Your goal is to implement one task under `docs/tasks/` by following its
    - Fix errors before continuing, except test failures caused by the
      phase group's incomplete state.
    - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note),
-     then commit using the `git-commit` skill guidelines.
+     then commit using the `git-commit` skill guidelines. (This intermediate
+     commit captures the pre-review implementation state; the phase group is
+     not finalized until the review loop in step 8 completes with no Critical
+     or Major issues.)
 
 7. Run `make deadcode`. Remove functions made unreachable by this phase
    group; keep intentional scaffolding for future phases or tasks.

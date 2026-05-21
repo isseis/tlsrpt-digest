@@ -9,7 +9,7 @@ Work in order.
 3. Read `01_requirements.md`, `02_architecture.md` (both in the target task directory), and `docs/dev/developer_guide/test_organization.md`.
 
 4. Select the next phase group from `03_implementation_plan.md` checkboxes (`[ ]` not started, `[x]` done, `[-]` skipped).
-- If all phases are complete, go to final review (step 8).
+- If all phases are complete, skip to step 8 and follow the "If all phases are complete" bullet.
 - Otherwise, use one phase unless it cannot pass `make test` alone (e.g. stub-only or tightly coupled); then extend the group until it can pass. Briefly note the reason for grouping before starting work.
 
 5. Implement the selected phase group.
