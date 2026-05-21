@@ -74,3 +74,9 @@ type rawStoreConfig struct {
 type rawSummaryConfig struct {
 	WindowDays *int `toml:"window_days"`
 }
+
+var _ = rawConfig{
+	IMAP:    rawIMAPConfig{},
+	Store:   rawStoreConfig{},
+	Summary: rawSummaryConfig{},
+}

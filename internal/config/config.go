@@ -20,11 +20,11 @@ var reValidHostname = regexp.MustCompile(
 // Load reads TOML from data, decodes it into Config with strict unknown-key
 // rejection, and validates field values.
 func Load(data []byte) (*Config, error) {
-	var raw rawConfig
+	var raw legacyConfig
 	dec := toml.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&raw); err != nil {
-		return nil, fmt.Errorf("config: decode failed: %w", err)
+		return nil, fmt.Errorf("config: %w: %w", ErrConfigDecode, err)
 	}
 	cfg := Config{
 		Notify: NotifyConfig{
@@ -44,6 +44,10 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+type legacyConfig struct {
+	Notify rawNotifyConfig `toml:"notify"`
 }
 
 // validate checks semantic constraints that cannot be expressed via struct tags.
