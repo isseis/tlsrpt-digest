@@ -234,37 +234,37 @@ type SummaryConfig struct {
 // rawConfig は TOML デコード専用の内部表現。
 // ポインタにより「未設定」と「明示的なゼロ値」を区別する。
 type rawConfig struct {
-    IMAP    rawIMAPConfig    `toml:"imap"`
-    Notify  rawNotifyConfig  `toml:"notify"`
-    Store   rawStoreConfig   `toml:"store"`
-    Summary rawSummaryConfig `toml:"summary"`
+    IMAP    rawIMAPConfig
+    Notify  rawNotifyConfig
+    Store   rawStoreConfig
+    Summary rawSummaryConfig
 }
 
 type rawIMAPConfig struct {
-    Host            string  `toml:"host"`
-    Port            *int    `toml:"port"`
-    Mailbox         *string `toml:"mailbox"`
-    FetchDays       *int    `toml:"fetch_days"`
-    TLSCACert       *string `toml:"tls_ca_cert"`
-    MaxMessageBytes *int64  `toml:"max_message_bytes"`
+    Host            *string
+    Port            *int
+    Mailbox         *string
+    FetchDays       *int
+    TLSCACert       *string
+    MaxMessageBytes *int64
 }
 
 type rawNotifyConfig struct {
-    Slack rawNotifySlackConfig `toml:"slack"`
+    Slack rawNotifySlackConfig
 }
 
 type rawNotifySlackConfig struct {
-    AllowedHost *string `toml:"allowed_host"`
+    AllowedHost *string
 }
 
 type rawStoreConfig struct {
-    RootDir         *string `toml:"root_dir"`
-    RetentionDays   *int    `toml:"retention_days"`
-    MaxEmailAgeDays *int    `toml:"max_email_age_days"`
+    RootDir         *string
+    RetentionDays   *int
+    MaxEmailAgeDays *int
 }
 
 type rawSummaryConfig struct {
-    WindowDays *int `toml:"window_days"`
+    WindowDays *int
 }
 ```
 
@@ -319,21 +319,21 @@ func LoadFile(path string, logger *slog.Logger) (*Config, error)
 
 ```go
 // 設定ファイル全般
-var ErrConfigPathEmpty = errors.New("config: path is empty")
-var ErrConfigFileRead  = errors.New("config: cannot read file")
-var ErrConfigDecode    = errors.New("config: cannot decode TOML")
+var ErrConfigPathEmpty = errors.New("path is empty")
+var ErrConfigFileRead  = errors.New("cannot read file")
+var ErrConfigDecode    = errors.New("cannot decode TOML")
 
 // 個別フィールド検証
-var ErrInvalidIMAPHost        = errors.New("config: imap.host is empty")
-var ErrInvalidIMAPPort        = errors.New("config: imap.port out of range (1-65535)")
-var ErrInvalidFetchDays       = errors.New("config: imap.fetch_days must be >= 1")
-var ErrInvalidWindowDays      = errors.New("config: summary.window_days must be >= 1")
-var ErrInvalidRetentionDays   = errors.New("config: store.retention_days must be >= 1")
-var ErrInvalidMaxEmailAgeDays = errors.New("config: store.max_email_age_days must be >= 1")
-var ErrInvalidAllowedHost     = errors.New("config: notify.slack.allowed_host must be a plain hostname without scheme, port, or whitespace")
-var ErrTLSCACertNotReadable   = errors.New("config: imap.tls_ca_cert cannot be read")
-var ErrTLSCACertNotPEM        = errors.New("config: imap.tls_ca_cert is not a PEM-encoded certificate")
-var ErrInvalidMaxMessageBytes = errors.New("config: imap.max_message_bytes must be >= 0")
+var ErrInvalidIMAPHost        = errors.New("imap.host is empty")
+var ErrInvalidIMAPPort        = errors.New("imap.port out of range (1-65535)")
+var ErrInvalidFetchDays       = errors.New("imap.fetch_days must be >= 1")
+var ErrInvalidWindowDays      = errors.New("summary.window_days must be >= 1")
+var ErrInvalidRetentionDays   = errors.New("store.retention_days must be >= 1")
+var ErrInvalidMaxEmailAgeDays = errors.New("store.max_email_age_days must be >= 1")
+var ErrInvalidAllowedHost     = errors.New("notify.slack.allowed_host must be a plain hostname without scheme, port, or whitespace")
+var ErrTLSCACertNotReadable   = errors.New("imap.tls_ca_cert cannot be read")
+var ErrTLSCACertNotPEM        = errors.New("imap.tls_ca_cert is not a PEM-encoded certificate")
+var ErrInvalidMaxMessageBytes = errors.New("imap.max_message_bytes must be >= 0")
 ```
 
 ### 4.3 エラーメッセージ設計パターン
