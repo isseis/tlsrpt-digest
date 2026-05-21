@@ -182,13 +182,13 @@
 
 `02_architecture.md` セクション 6.2 および 6.3 を参照。
 
-- [ ] **4.1** `format.go` の `extractSummary` を `organization_stats` グループ対応に更新する
+- [x] **4.1** `format.go` の `extractSummary` を `organization_stats` グループ対応に更新する
   - ファイル: `internal/notify/format.go`
   - 作業内容: `organization_stats` キーの case 節を追加する。`attr.Value.Kind() == slog.KindGroup` のとき、グループ内の各属性を `OrganizationStats` マップに復元する。
   - 確認方法: `TestExtractSummary_OrganizationStats_Roundtrip` が PASS すること
   - 想定工数: 30 分 / 実績工数: -
 
-- [ ] **4.2** `format.go` の `formatSummary` を attachment チャンク分割・`text` フィールド配置に更新する
+- [x] **4.2** `format.go` の `formatSummary` を attachment チャンク分割・`text` フィールド配置に更新する
   - ファイル: `internal/notify/format.go`
   - 作業内容（`02_architecture.md` セクション 6.2 の Slack メッセージ構造に従う）:
     - `text` フィールド: 集計期間・レポート総数・組織総数を設定する（AC-05, AC-07）
@@ -199,7 +199,7 @@
   - 確認方法: 4.3 のテストが通ること
   - 想定工数: 60 分 / 実績工数: -
 
-- [ ] **4.3** `format_test.go` に `formatSummary` / `extractSummary` のテストを追加・更新する
+- [x] **4.3** `format_test.go` に `formatSummary` / `extractSummary` のテストを追加・更新する
   - ファイル: `internal/notify/format_test.go`
   - 作業内容（各テスト関数）:
     - `TestExtractSummary_OrganizationStats_Roundtrip`: `LogSummary` でシリアライズした `slog.Record` を `extractSummary` で復元したとき、`OrganizationStats` が元の値と一致することを確認する
@@ -212,7 +212,7 @@
   - 確認方法: `go test -v ./internal/notify/` で全テストが PASS すること
   - 想定工数: 60 分 / 実績工数: -
 
-- [ ] **4.4** `make test` が通ることを確認する（M4）
+- [x] **4.4** `make test` が通ることを確認する（M4）
 
 ---
 

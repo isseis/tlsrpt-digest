@@ -3,6 +3,8 @@ package notify
 import (
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -165,7 +167,15 @@ func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 				s.Period.End = t
 			}
 		case "organization_stats":
-			// Populated in phase 4; ignored here until then.
+			if attr.Value.Kind() == slog.KindGroup {
+				for _, stat := range attr.Value.Group() {
+					if stat.Value.Kind() != slog.KindInt64 {
+						warnUnknownKey(debugLogger, "organization_stats."+stat.Key, r.Message)
+						continue
+					}
+					s.OrganizationStats[stat.Key] = stat.Value.Int64()
+				}
+			}
 		default:
 			warnUnknownKey(debugLogger, attr.Key, r.Message)
 		}
@@ -174,10 +184,10 @@ func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 	return s
 }
 
-// maxAlertFieldsPerAttachment caps alert fields per Slack attachment.
+// maxAlertFields caps alert fields per Slack attachment.
 // Slack Incoming Webhooks allow at most 10 fields per attachment; one slot is
 // reserved for the Run ID field appended to the last attachment.
-const maxAlertFieldsPerAttachment = 9
+const maxAlertFields = 9
 
 // formatAlerts builds a single aggregated slackMessage for TLS failure alerts.
 // Alerts are chunked across multiple attachments (≤9 alert fields each) to
@@ -188,8 +198,8 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, orgCount)
 
 	var attachments []slackAttachment
-	for i := 0; i < len(alerts); i += maxAlertFieldsPerAttachment {
-		end := min(i+maxAlertFieldsPerAttachment, len(alerts))
+	for i := 0; i < len(alerts); i += maxAlertFields {
+		end := min(i+maxAlertFields, len(alerts))
 		chunk := alerts[i:end]
 
 		var fields []slackField
@@ -236,29 +246,47 @@ func formatSystemError(e SystemError, runID string) slackMessage {
 	}
 }
 
+// maxSummaryOrgFields caps organization fields per Slack attachment.
+// The final attachment also receives the Run ID field.
+const maxSummaryOrgFields = 9
+
 // formatSummary builds a slackMessage for a periodic summary.
 func formatSummary(s Summary, runID string) slackMessage {
-	return slackMessage{
-		Text: fmt.Sprintf("%s TLS Report Summary", emojiSuccess),
-		Attachments: []slackAttachment{
-			{
-				Color: colorGood,
-				Fields: []slackField{
-					{
-						Title: "Period",
-						Value: fmt.Sprintf("%s – %s",
-							s.Period.Start.Format(time.DateOnly),
-							s.Period.End.Format(time.DateOnly),
-						),
-						Short: true,
-					},
-					{Title: "Organizations", Value: fmt.Sprintf("%d", len(s.OrganizationStats)), Short: true},
-					{Title: "Reports", Value: fmt.Sprintf("%d", s.ReportCount), Short: true},
-					{Title: "Run ID", Value: runID, Short: true},
-				},
-			},
-		},
+	text := fmt.Sprintf("%s TLS Report Summary\nPeriod: %s – %s\nReports: %d\nOrganizations: %d",
+		emojiSuccess,
+		s.Period.Start.Format(time.DateOnly),
+		s.Period.End.Format(time.DateOnly),
+		s.ReportCount,
+		len(s.OrganizationStats),
+	)
+
+	keys := slices.Sorted(maps.Keys(s.OrganizationStats))
+	attachments := make([]slackAttachment, 0, max(1, (len(keys)+maxSummaryOrgFields-1)/maxSummaryOrgFields))
+	if len(keys) == 0 {
+		attachments = append(attachments, slackAttachment{
+			Color:  colorGood,
+			Fields: []slackField{{Title: "Run ID", Value: runID, Short: true}},
+		})
+		return slackMessage{Text: text, Attachments: attachments}
 	}
+
+	for i := 0; i < len(keys); i += maxSummaryOrgFields {
+		end := min(i+maxSummaryOrgFields, len(keys))
+		fields := make([]slackField, 0, maxSummaryOrgFields+1)
+		for _, organization := range keys[i:end] {
+			fields = append(fields, slackField{
+				Title: organization,
+				Value: fmt.Sprintf("%d successful sessions", s.OrganizationStats[organization]),
+				Short: true,
+			})
+		}
+		if end == len(keys) {
+			fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: true})
+		}
+		attachments = append(attachments, slackAttachment{Color: colorGood, Fields: fields})
+	}
+
+	return slackMessage{Text: text, Attachments: attachments}
 }
 
 // uniqueOrgCount returns the number of distinct OrganizationName values in alerts.

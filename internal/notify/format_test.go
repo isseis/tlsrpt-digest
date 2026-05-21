@@ -2,6 +2,8 @@ package notify_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +18,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// testPeriod is a fixed DateRange used across tests that do not assert on
+// period values, keeping tests deterministic.
+var testPeriod = notify.DateRange{
+	Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	End:   time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC),
+}
 
 func sampleAlert() notify.Alert {
 	return notify.Alert{
@@ -56,6 +65,16 @@ func flushAlert(t *testing.T, alert notify.Alert) []byte {
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
 	defer cleanup()
 	require.NoError(t, notify.LogAlert(context.Background(), h, alert))
+	require.NoError(t, h.Flush(context.Background()))
+	return recv
+}
+
+func flushSummary(t *testing.T, summary notify.Summary) []byte {
+	t.Helper()
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeExactInfo, &recv)
+	defer cleanup()
+	require.NoError(t, notify.LogSummary(context.Background(), h, summary))
 	require.NoError(t, h.Flush(context.Background()))
 	return recv
 }
@@ -219,7 +238,7 @@ func TestFormatSummary_Color(t *testing.T) {
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeExactInfo, &recv)
 	defer cleanup()
 	require.NoError(t, notify.LogSummary(context.Background(), h, notify.Summary{
-		Period: notify.DateRange{Start: time.Now(), End: time.Now()},
+		Period: testPeriod,
 	}))
 	require.NoError(t, h.Flush(context.Background()))
 	body := string(recv)
@@ -263,6 +282,110 @@ func TestFormatSummary_UsesProvidedPeriod(t *testing.T) {
 	assert.Contains(t, body, "2025-06-14")
 }
 
+func TestFormatSummary_OrganizationStatsFromLogSummary(t *testing.T) {
+	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
+		Period: notify.DateRange{
+			Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			End:   time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC),
+		},
+		OrganizationStats: map[string]int64{"org-a": 10, "org-b": 20},
+		ReportCount:       2,
+	}))
+
+	fields := flattenSlackFields(msg)
+	assert.Equal(t, "10 successful sessions", fields["org-a"])
+	assert.Equal(t, "20 successful sessions", fields["org-b"])
+}
+
+func TestFormatSummary_PeriodInText(t *testing.T) {
+	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
+		Period: notify.DateRange{
+			Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			End:   time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC),
+		},
+	}))
+
+	assert.Contains(t, msg.Text, "2024-01-01")
+	assert.Contains(t, msg.Text, "2024-01-07")
+}
+
+func TestFormatSummary_OrgStatsInAttachment(t *testing.T) {
+	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
+		Period:            testPeriod,
+		OrganizationStats: map[string]int64{"org-a": 10, "org-b": 20},
+	}))
+
+	fields := flattenSlackFields(msg)
+	assert.Equal(t, "10 successful sessions", fields["org-a"])
+	assert.Equal(t, "20 successful sessions", fields["org-b"])
+}
+
+func TestFormatSummary_OrganizationStatsSortedInAttachment(t *testing.T) {
+	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
+		Period: testPeriod,
+		OrganizationStats: map[string]int64{
+			"org-b": 20,
+			"org-a": 10,
+		},
+	}))
+
+	require.Len(t, msg.Attachments, 1)
+	require.GreaterOrEqual(t, len(msg.Attachments[0].Fields), 2)
+	assert.Equal(t, "org-a", msg.Attachments[0].Fields[0].Title)
+	assert.Equal(t, "10 successful sessions", msg.Attachments[0].Fields[0].Value)
+	assert.Equal(t, "org-b", msg.Attachments[0].Fields[1].Title)
+	assert.Equal(t, "20 successful sessions", msg.Attachments[0].Fields[1].Value)
+}
+
+func TestFormatSummary_ReportCountInText(t *testing.T) {
+	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
+		Period:            testPeriod,
+		OrganizationStats: map[string]int64{"org-a": 10},
+		ReportCount:       7,
+	}))
+
+	assert.Contains(t, msg.Text, "Reports: 7")
+	assert.Contains(t, msg.Text, "Organizations: 1")
+}
+
+func TestFormatSummary_SingleAttachmentUpTo9Orgs(t *testing.T) {
+	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
+		Period:            testPeriod,
+		OrganizationStats: summaryOrgStats(9),
+	}))
+
+	require.Len(t, msg.Attachments, 1)
+	assert.Len(t, msg.Attachments[0].Fields, 10)
+	assert.Equal(t, "run-001", msg.Attachments[0].Fields[9].Value)
+}
+
+func TestFormatSummary_ChunkingOver9Orgs(t *testing.T) {
+	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
+		Period:            testPeriod,
+		OrganizationStats: summaryOrgStats(10),
+	}))
+
+	require.Len(t, msg.Attachments, 2)
+	assert.Len(t, msg.Attachments[0].Fields, 9)
+	assert.NotContains(t, flattenFields(msg.Attachments[0].Fields), "Run ID")
+	assert.Len(t, msg.Attachments[1].Fields, 2)
+	assert.Equal(t, "Run ID", msg.Attachments[1].Fields[1].Title)
+	assert.Equal(t, "run-001", msg.Attachments[1].Fields[1].Value)
+}
+
+func TestFormatSummary_EmptyOrganizationStats(t *testing.T) {
+	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
+		Period:            testPeriod,
+		OrganizationStats: map[string]int64{},
+	}))
+
+	require.Len(t, msg.Attachments, 1)
+	require.Len(t, msg.Attachments[0].Fields, 1)
+	assert.Equal(t, "Run ID", msg.Attachments[0].Fields[0].Title)
+	assert.Equal(t, "run-001", msg.Attachments[0].Fields[0].Value)
+	assert.Contains(t, msg.Text, "Organizations: 0")
+}
+
 func TestFormatAlerts_NoPolicyFound(t *testing.T) {
 	a := sampleAlert()
 	a.PolicyType = notify.PolicyTypeNoPolicyFound
@@ -282,6 +405,52 @@ func TestFormatAlerts_PolicyTypeUnknown(t *testing.T) {
 // the extract functions produces a Warn entry in the DebugLogger.
 // This catches helper/format mismatches early (e.g. a key renamed in LogAlert
 // but not updated in extractAlert).
+func TestExtractSummary_MalformedOrganizationStatsLogged(t *testing.T) {
+	var debugBuf strings.Builder
+	debugLogger := slog.New(slog.NewTextHandler(&debugBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	var recv []byte
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recv, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	opts := notify.SlackHandlerOptions{
+		WebhookURL:    config.Secret(srv.URL + "/webhook"),
+		AllowedHost:   "127.0.0.1",
+		RunID:         "run-malformed",
+		LevelMode:     notify.LevelModeExactInfo,
+		HTTPClient:    srv.Client(),
+		BackoffConfig: notify.DefaultBackoffConfig,
+		DebugLogger:   debugLogger,
+	}
+	h, err := notify.NewSlackHandler(opts)
+	require.NoError(t, err)
+
+	r := slog.NewRecord(time.Now(), slog.LevelInfo, "periodic_summary", 0)
+	r.AddAttrs(
+		slog.Any("period_start", time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)),
+		slog.Any("period_end", time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC)),
+		slog.Int64("report_count", 1),
+		slog.Group("organization_stats",
+			slog.String("org-a", "not-an-int"),
+			slog.Int64("org-b", 20),
+		),
+	)
+	require.NoError(t, h.Handle(context.Background(), r))
+	require.NotPanics(t, func() {
+		require.NoError(t, h.Flush(context.Background()))
+	})
+
+	msg := decodeSlackMessage(t, recv)
+	fields := flattenSlackFields(msg)
+	assert.NotContains(t, fields, "org-a")
+	assert.Equal(t, "20 successful sessions", fields["org-b"])
+	assert.Contains(t, debugBuf.String(), "organization_stats.org-a")
+	assert.NotContains(t, debugBuf.String(), "not-an-int")
+}
+
 func TestExtract_UnknownAttrKeyLogged(t *testing.T) {
 	var debugBuf strings.Builder
 	debugLogger := slog.New(slog.NewTextHandler(&debugBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -316,4 +485,53 @@ func TestExtract_UnknownAttrKeyLogged(t *testing.T) {
 		"DebugLogger should warn about the unknown attr key")
 	assert.NotContains(t, debugBuf.String(), "some_value",
 		"DebugLogger must not log the attr value")
+}
+
+type capturedSlackMessage struct {
+	Text        string                    `json:"text"`
+	Attachments []capturedSlackAttachment `json:"attachments"`
+}
+
+type capturedSlackAttachment struct {
+	Color  string               `json:"color"`
+	Fields []capturedSlackField `json:"fields"`
+}
+
+type capturedSlackField struct {
+	Title string `json:"title"`
+	Value string `json:"value"`
+	Short bool   `json:"short"`
+}
+
+func decodeSlackMessage(t *testing.T, body []byte) capturedSlackMessage {
+	t.Helper()
+	var msg capturedSlackMessage
+	require.NoError(t, json.Unmarshal(body, &msg))
+	return msg
+}
+
+func flattenSlackFields(msg capturedSlackMessage) map[string]string {
+	fields := make(map[string]string)
+	for _, attachment := range msg.Attachments {
+		for _, field := range attachment.Fields {
+			fields[field.Title] = field.Value
+		}
+	}
+	return fields
+}
+
+func flattenFields(fields []capturedSlackField) map[string]string {
+	result := make(map[string]string)
+	for _, field := range fields {
+		result[field.Title] = field.Value
+	}
+	return result
+}
+
+func summaryOrgStats(count int) map[string]int64 {
+	stats := make(map[string]int64, count)
+	for i := 1; i <= count; i++ {
+		stats[fmt.Sprintf("org-%02d", i)] = int64(i)
+	}
+	return stats
 }
