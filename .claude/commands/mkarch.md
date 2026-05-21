@@ -4,26 +4,27 @@ Work in the following order.
 
 1. Identify the target task directory by following the rules in `docs/dev/developer_guide/task_identification.md`.
 
-2. Read the required input documents.
-- `01_requirements.md` in the target task directory
-- `docs/dev/developer_guide/requirements_process.md`
-- `docs/dev/developer_guide/mermaid_reference.md`
+2. Read `01_requirements.md` in the target task directory.
 
 3. Verify that architecture work is allowed.
 - Check the document status in `01_requirements.md`.
 - If the status is not `approved`, do not create `02_architecture.md`.
 - In that case, stop and report that architecture work cannot begin until `01_requirements.md` is `approved`.
 
-4. Read conditional guidance only when relevant.
+4. Read the remaining required input documents.
+- `docs/dev/developer_guide/requirements_process.md`
+- `docs/dev/developer_guide/mermaid_reference.md`
+
+5. Read conditional guidance only when relevant.
 - Read `docs/dev/developer_guide/notification_security.md` if the feature sends notifications or handles notification destinations.
 - Read `docs/dev/developer_guide/package_reference.md` if that file exists and the task introduces new packages or modifies existing packages.
 
-5. Inspect the current codebase before writing the design.
+6. Inspect the current codebase before writing the design.
 - Check the relevant packages under `cmd/` and `internal/`.
 - Identify existing components that should be reused.
 - Do not design new logic that duplicates responsibilities already handled elsewhere in the repository.
 
-6. Create `02_architecture.md` in the same task directory.
+7. Create `02_architecture.md` in the same task directory.
 - Write in Japanese.
 - Set the document status to `draft`.
 - Include all required sections defined in `docs/dev/developer_guide/requirements_process.md`.
@@ -32,7 +33,7 @@ Work in the following order.
 - Restrict code examples to high-level interfaces, type definitions, and error type definitions only.
 - Do not include implementation details, pseudocode, step-by-step algorithms, or low-level code.
 
-7. Review the document end to end and fix any issues you find before finishing.
+8. Review the document end to end and fix any issues you find before finishing.
 
 **Technical correctness checklist:**
 - [ ] `01_requirements.md` is `approved`.
