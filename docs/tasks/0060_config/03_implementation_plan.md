@@ -30,8 +30,8 @@
 | マイルストーン | 完了条件 |
 |---|---|
 | M1: 型・エラー定義 | フェーズ 1 完了後、`make test` が通る（既存テストへの後方互換を維持） |
-| M2: 既定値・バリデーション | フェーズ 2 完了後、AC-01・AC-04〜AC-10・AC-10a のテストが通る |
-| M3: ファイル読み込み | フェーズ 3 完了後、AC-02・AC-03・AC-10b・AC-10c・AC-10d のテストが通る |
+| M2: 既定値・バリデーション | フェーズ 2 完了後、AC-01・AC-03〜AC-10・AC-10a のテストが通る |
+| M3: ファイル読み込み | フェーズ 3 完了後、AC-02・AC-10b・AC-10c・AC-10d のテストが通る |
 | M4: 既定値テスト網羅 | フェーズ 4 完了後、AC-11〜AC-17 のテストが通る |
 | M5: 統合完了 | フェーズ 5 完了後、`make lint`・`make test`・`make deadcode` がすべて成功する |
 
@@ -139,7 +139,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
     - `cfg.Store.MaxEmailAgeDays` が 1 未満のとき `ErrInvalidMaxEmailAgeDays` をラップして返す（AC-10a）
     - `cfg.IMAP.MaxMessageBytes` が負のとき `ErrInvalidMaxMessageBytes` をラップして返す（`02_architecture.md` セクション 4.2 の設計上の防衛的検証。対応する AC は存在しないが `0 = 無制限` の仕様上負数は不正値）
     - `cfg.IMAP.TLSCACert` が非空のとき、ファイル読み込み失敗で `ErrTLSCACertNotReadable`、PEM 形式不正で `ErrTLSCACertNotPEM` をラップして返す（AC-10）
-    - `cfg.Notify.Slack.AllowedHost` を検証するため、`config.go` にある `validateAllowedHost` 関数を本ファイルに移動する（AC-08）
+    - `cfg.Notify.Slack.AllowedHost` を検証するため、`config.go` にある `validateAllowedHost` 関数および `reValidHostname` 変数を本ファイルに移動する（AC-08）
   - 確認方法: フェーズ 2.5 のテストが通ること
   - 想定工数: 45 分 / 実績工数: -
 
@@ -204,7 +204,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
     - `os.ReadFile` でファイルを読み込み、失敗時に `fmt.Errorf("config: %w: %w", ErrConfigFileRead, err)` を返す（AC-02）
     - `Load` を呼び出して `*Config` を取得する
     - `logger` が nil のとき `slog.Default()` を使う（`02_architecture.md` セクション 3.3 の方針）
-    - `Config.Store.RootDir` が相対パスのとき `filepath.Abs` で絶対化し、変換後のパスを `logger.Info(...)` で出力する。絶対パスの場合は変更せずログも出力しない（AC-10d）
+    - `Config.Store.RootDir` が相対パスのとき `filepath.Abs` で絶対化し（エラー時はラップして返す）、変換後のパスを `logger.Info(...)` で出力する。絶対パスの場合は変更せずログも出力しない（AC-10d）
     - `Store.RetentionDays > Store.MaxEmailAgeDays` のとき `logger.Warn(...)` を出力して継続する（AC-10b）
     - `IMAP.FetchDays >= Store.RetentionDays` のとき `logger.Warn(...)` を出力して継続する（AC-10c）
   - 確認方法: フェーズ 3.2 のテストが通ること
@@ -269,7 +269,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 作業内容:
     - `buildIMAPConfig(cfg *config.Config) imap.Config` を追加する
     - `os.Getenv("TLSRPT_IMAP_USERNAME")` と `os.Getenv("TLSRPT_IMAP_PASSWORD")` を取得する
-    - `imap.Config` に `cfg.IMAP.Host`・`cfg.IMAP.Port`・`cfg.IMAP.Mailbox`・`cfg.IMAP.TLSCACert`・`cfg.IMAP.MaxMessageBytes` を設定し、パスワードを `config.Secret(password)` でラップして `Password` フィールドに格納する
+    - `imap.Config` に `cfg.IMAP.Host`・`cfg.IMAP.Port`・`cfg.IMAP.Mailbox`・`cfg.IMAP.TLSCACert`・`cfg.IMAP.MaxMessageBytes` を設定し、ユーザ名を `Username` フィールドに、パスワードを `config.Secret(password)` でラップして `Password` フィールドに格納する
     - `main()` から `_ = buildIMAPConfig(cfg)` として呼び出す（タスク 0070 で実際の利用先に置き換えるまでの仮置き。Go コンパイラの「使用されていない変数」エラーを回避しつつ `make deadcode` への到達性を維持するため）
   - 確認方法: `go build ./cmd/tlsrpt-digest/` が通ること
   - 想定工数: 30 分 / 実績工数: -
@@ -281,7 +281,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
     - `TestLoadConfig_ValidFile`: 書き込む TOML に `[imap]` セクション（`host = "imap.example.com"` および `port = 993`）を追加する（IMAP 必須フィールドのバリデーションを通過させるため）
     - `TestLoadConfig_NonexistentFile`: `errors.Is(err, config.ErrConfigFileRead)` が真であることを確認するよう強化する
     - `newConfigWithAllowedHost` ヘルパー: `Config` に `IMAP`・`Store`・`Summary` フィールドが追加されてもゼロ値で問題ないことを確認する（コンパイルエラーがなければ変更不要）
-  - 確認方法: `go test -v ./cmd/tlsrpt-digest/` で全テストが PASS すること
+  - 確認方法: `go test -tags test -v ./cmd/tlsrpt-digest/` で全テストが PASS すること
   - 想定工数: 20 分 / 実績工数: -
 
 - [ ] **5.4** `make fmt` を実行してフォーマットを確認する
@@ -396,8 +396,8 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 | フェーズ | 完了条件 | 状態 |
 |---|---|---|
 | フェーズ 1 | `make test` が成功し既存テストの後方互換が維持されている | [ ] |
-| フェーズ 2 | AC-01・AC-04〜AC-10・AC-10a の全テストが PASS | [ ] |
-| フェーズ 3 | AC-02・AC-03・AC-10b・AC-10c・AC-10d の全テストが PASS | [ ] |
+| フェーズ 2 | AC-01・AC-03〜AC-10・AC-10a の全テストが PASS | [ ] |
+| フェーズ 3 | AC-02・AC-10b・AC-10c・AC-10d の全テストが PASS | [ ] |
 | フェーズ 4 | AC-11〜AC-17 の全テストが PASS | [ ] |
 | フェーズ 5 | `make lint`・`make test`・`make deadcode` がすべて成功 | [ ] |
 
