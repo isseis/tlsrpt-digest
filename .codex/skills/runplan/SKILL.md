@@ -56,9 +56,8 @@ Your goal is to implement one task under `docs/tasks/` by following its
      evaluating the code.
    - **Files changed**: list the source files added or modified in this phase
      group and instruct the subagent to read them in full. Instruct the
-     subagent to run both `git diff HEAD -- <files>` and
-     `git diff --staged -- <files>` to see exactly what changed in the
-     uncommitted phase-group diff.
+     subagent to run `git diff HEAD -- <files>` to see exactly what
+     changed in the uncommitted phase-group diff.
    - **Evaluation criteria**: every item from the phase-group checklist below,
      copied verbatim.
    - **Output format**: for each issue found, report Severity (Critical /
