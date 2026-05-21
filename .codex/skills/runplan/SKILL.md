@@ -69,8 +69,9 @@ Your goal is to implement one task under `docs/tasks/` by following its
      `make fmt && make test && make lint`.
    - Apply Minor fixes at your discretion.
    - If any Critical or Major issue required a fix, spawn a second
-     review subagent to verify the fixes. Repeat until the subagent reports
-     no Critical or Major issues.
+     review subagent to verify the fixes. Repeat, subject to the
+     three-pass limit below, until the subagent reports no Critical or
+     Major issues.
    - After three review passes, continue only if the remaining Critical or
      Major issues are concrete, scoped to this phase group, and clearly
      fixable without expanding the phase scope. Otherwise, stop and report the
