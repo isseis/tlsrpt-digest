@@ -32,15 +32,19 @@ Your goal is to implement one task under `docs/tasks/` by following its
      `make fmt && make test && make lint`.
    - Fix errors before continuing, except test failures caused by the
      phase group's incomplete state.
-   - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
+   - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note),
+     then commit using the `git-commit` skill guidelines: inspect the staged
+     diff, draft the commit message, ask for confirmation, and only commit
+     after approval.
 
 6. Review the phase group.
    - Run `make deadcode`.
    - Remove functions made unreachable by this phase group.
    - Keep intentional scaffolding for future phases or tasks.
    - Review only the diff introduced by this phase group.
-   - Fix issues, run `make fmt && make test && make lint`, commit, and
-     repeat until applicable checklist items pass.
+   - Fix issues, run `make fmt && make test && make lint`, then commit using
+     the `git-commit` skill guidelines. Repeat until applicable checklist
+     items pass.
 
 7. Phase-group checklist:
    - Consistent with `02_architecture.md`.
