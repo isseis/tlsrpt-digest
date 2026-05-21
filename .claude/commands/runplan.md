@@ -49,11 +49,12 @@ Phase-group review checklist:
 - [ ] `make lint` passes with no errors.
 - [ ] `make test` passes with no errors.
 
-7. Summarize the phase group, then decide whether to continue or finish.
-- Provide a concise summary of what was implemented in this phase group and which acceptance criteria were verified.
-- Note any assumptions made or items intentionally deferred.
+7. Decide whether to continue or finish.
+- If a phase group was just implemented (i.e. this is not a direct jump from step 4):
+  - Provide a concise summary of what was implemented in this phase group and which acceptance criteria were verified.
+  - Note any assumptions made or items intentionally deferred.
 - Check whether all phases in `03_implementation_plan.md` are now complete.
-  - If **not all phases are complete**: ask the user "Shall I continue with the next phase?" and return to step 4 if they agree.
+  - If **not all phases are complete**: ask the user "Shall I continue with the next phase?" and return to step 4 if they agree; otherwise provide a status report and stop.
   - If **all phases are complete**: perform the final review without asking:
     - Verify that every acceptance criterion in `01_requirements.md` is satisfied by the implementation.
     - Verify that every AC has at least one test.
