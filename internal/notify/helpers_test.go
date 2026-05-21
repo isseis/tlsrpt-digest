@@ -53,6 +53,53 @@ func TestLogSummary_Level(t *testing.T) {
 	assert.Equal(t, slog.LevelInfo, spy.records[0].Level)
 }
 
+func TestLogSummary_OrganizationStats_Serialized(t *testing.T) {
+	var spy spyHandler
+	require.NoError(t, notify.LogSummary(context.Background(), &spy, notify.Summary{
+		Period: notify.DateRange{Start: time.Now(), End: time.Now()},
+		OrganizationStats: map[string]int64{
+			"org-b": 20,
+			"org-a": 10,
+		},
+		ReportCount: 2,
+	}))
+	require.Len(t, spy.records, 1)
+
+	stats := summaryOrganizationStats(t, spy.records[0])
+	assert.Equal(t, map[string]int64{"org-a": 10, "org-b": 20}, stats)
+}
+
+func TestLogSummary_OrganizationStats_SortedKeys(t *testing.T) {
+	var spy spyHandler
+	require.NoError(t, notify.LogSummary(context.Background(), &spy, notify.Summary{
+		Period: notify.DateRange{Start: time.Now(), End: time.Now()},
+		OrganizationStats: map[string]int64{
+			"org-c": 30,
+			"org-a": 10,
+			"org-b": 20,
+		},
+	}))
+	require.Len(t, spy.records, 1)
+
+	group := summaryOrganizationStatsGroup(t, spy.records[0])
+	keys := make([]string, 0, len(group))
+	for _, attr := range group {
+		keys = append(keys, attr.Key)
+	}
+	assert.Equal(t, []string{"org-a", "org-b", "org-c"}, keys)
+}
+
+func TestLogSummary_EmptyOrganizationStats(t *testing.T) {
+	var spy spyHandler
+	require.NotPanics(t, func() {
+		require.NoError(t, notify.LogSummary(context.Background(), &spy, notify.Summary{
+			Period:            notify.DateRange{Start: time.Now(), End: time.Now()},
+			OrganizationStats: map[string]int64{},
+		}))
+	})
+	require.Len(t, spy.records, 1)
+}
+
 func TestLogAlert_StructuredPayloadOnly(t *testing.T) {
 	var spy spyHandler
 	require.NoError(t, notify.LogAlert(context.Background(), &spy, notify.Alert{
@@ -79,4 +126,27 @@ func TestLogAlert_StructuredPayloadOnly(t *testing.T) {
 	assert.True(t, foundOrgName)
 	assert.True(t, foundPolicyType)
 	assert.True(t, foundFailureCount)
+}
+
+func summaryOrganizationStats(t *testing.T, record slog.Record) map[string]int64 {
+	t.Helper()
+	stats := make(map[string]int64)
+	for _, attr := range summaryOrganizationStatsGroup(t, record) {
+		stats[attr.Key] = attr.Value.Int64()
+	}
+	return stats
+}
+
+func summaryOrganizationStatsGroup(t *testing.T, record slog.Record) []slog.Attr {
+	t.Helper()
+	var group []slog.Attr
+	record.Attrs(func(attr slog.Attr) bool {
+		if attr.Key == "organization_stats" {
+			require.Equal(t, slog.KindGroup, attr.Value.Kind())
+			group = attr.Value.Group()
+		}
+		return true
+	})
+	require.NotNil(t, group, "organization_stats group not found")
+	return group
 }

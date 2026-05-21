@@ -3,6 +3,8 @@ package notify
 import (
 	"context"
 	"log/slog"
+	"maps"
+	"slices"
 	"time"
 )
 
@@ -42,10 +44,15 @@ func LogSummary(ctx context.Context, h slog.Handler, s Summary) error {
 		return nil
 	}
 	r := slog.NewRecord(time.Now(), slog.LevelInfo, "periodic_summary", 0)
+	statAttrs := make([]any, 0, len(s.OrganizationStats))
+	for _, organization := range slices.Sorted(maps.Keys(s.OrganizationStats)) {
+		statAttrs = append(statAttrs, slog.Int64(organization, s.OrganizationStats[organization]))
+	}
 	r.AddAttrs(
 		slog.Any("period_start", s.Period.Start),
 		slog.Any("period_end", s.Period.End),
 		slog.Int64("report_count", s.ReportCount),
+		slog.Group("organization_stats", statAttrs...),
 	)
 	return h.Handle(ctx, r)
 }
