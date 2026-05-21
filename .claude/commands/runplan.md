@@ -32,7 +32,7 @@ Work in the following order.
 - When all items in the phase group are complete, update the plan's checkboxes (`[x]` for done, `[-]` for skipped with a note) and commit.
 
 6. Review the phase group.
-- Run `make deadcode` and remove any dead code made obsolete by this change. If changes were made, run `make fmt && make test && make lint`, then commit.
+- Run `make deadcode`. For each reported function, determine whether it was made unreachable by this phase group (i.e. it existed before and is no longer called as a result of this change) — if so, remove it. Do not remove code that was intentionally introduced in this phase group as scaffolding for a later phase or task; such dead code is expected and will be activated by future work. If any removals were made, run `make fmt && make test && make lint`, then commit.
 - Review the diff introduced by the phase group against the checklist below.
   - Skip checklist items that are intentionally deferred to a later phase (e.g. "all AC satisfied" is not expected after a stub-only phase); note the reason for skipping.
 - For each issue found: fix it, run `make fmt && make test && make lint`, commit, and re-run the checklist until all applicable items pass.
