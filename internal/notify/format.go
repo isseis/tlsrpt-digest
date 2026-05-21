@@ -180,10 +180,10 @@ func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 	return s
 }
 
-// maxAlertFieldsPerAttachment caps alert fields per Slack attachment.
+// maxAlertFields caps alert fields per Slack attachment.
 // Slack Incoming Webhooks allow at most 10 fields per attachment; one slot is
 // reserved for the Run ID field appended to the last attachment.
-const maxAlertFieldsPerAttachment = 9
+const maxAlertFields = 9
 
 // formatAlerts builds a single aggregated slackMessage for TLS failure alerts.
 // Alerts are chunked across multiple attachments (≤9 alert fields each) to
@@ -194,8 +194,8 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, orgCount)
 
 	var attachments []slackAttachment
-	for i := 0; i < len(alerts); i += maxAlertFieldsPerAttachment {
-		end := min(i+maxAlertFieldsPerAttachment, len(alerts))
+	for i := 0; i < len(alerts); i += maxAlertFields {
+		end := min(i+maxAlertFields, len(alerts))
 		chunk := alerts[i:end]
 
 		var fields []slackField
@@ -242,9 +242,9 @@ func formatSystemError(e SystemError, runID string) slackMessage {
 	}
 }
 
-// maxSummaryOrgFieldsPerAttachment caps organization fields per Slack attachment.
+// maxSummaryOrgFields caps organization fields per Slack attachment.
 // The final attachment also receives the Run ID field.
-const maxSummaryOrgFieldsPerAttachment = 9
+const maxSummaryOrgFields = 9
 
 // formatSummary builds a slackMessage for a periodic summary.
 func formatSummary(s Summary, runID string) slackMessage {
@@ -257,7 +257,7 @@ func formatSummary(s Summary, runID string) slackMessage {
 	)
 
 	keys := slices.Sorted(maps.Keys(s.OrganizationStats))
-	attachments := make([]slackAttachment, 0, max(1, (len(keys)+maxSummaryOrgFieldsPerAttachment-1)/maxSummaryOrgFieldsPerAttachment))
+	attachments := make([]slackAttachment, 0, max(1, (len(keys)+maxSummaryOrgFields-1)/maxSummaryOrgFields))
 	if len(keys) == 0 {
 		attachments = append(attachments, slackAttachment{
 			Color:  colorGood,
@@ -266,9 +266,9 @@ func formatSummary(s Summary, runID string) slackMessage {
 		return slackMessage{Text: text, Attachments: attachments}
 	}
 
-	for i := 0; i < len(keys); i += maxSummaryOrgFieldsPerAttachment {
-		end := min(i+maxSummaryOrgFieldsPerAttachment, len(keys))
-		fields := make([]slackField, 0, maxSummaryOrgFieldsPerAttachment+1)
+	for i := 0; i < len(keys); i += maxSummaryOrgFields {
+		end := min(i+maxSummaryOrgFields, len(keys))
+		fields := make([]slackField, 0, maxSummaryOrgFields+1)
 		for _, organization := range keys[i:end] {
 			fields = append(fields, slackField{
 				Title: organization,
