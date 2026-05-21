@@ -23,7 +23,7 @@ Work in the following order.
 
 6. Review the phase group.
 - Run `make deadcode`. Remove functions made unreachable by this phase group; keep intentional scaffolding for future phases or tasks. If changes were made, run `make fmt && make test && make lint` and commit.
-- Review the diff against the checklist below. Skip items intentionally deferred to a later phase (note the reason).
+- Review the diff introduced by this phase group against the checklist below. Skip items intentionally deferred to a later phase (note the reason).
 - For each issue found: fix, run `make fmt && make test && make lint`, commit, and re-run the checklist.
 
 Phase-group review checklist:
