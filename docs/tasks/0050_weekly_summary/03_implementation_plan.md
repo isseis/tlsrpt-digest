@@ -223,8 +223,8 @@
 - [x] **5.1** 統合テストを `helpers_test.go` に追加する
   - ファイル: `internal/notify/helpers_test.go`
   - 作業内容（各テスト関数）:
-    - `TestSummaryFlow_E2E`: `storetestutil.FakeStore` にサンプルレポートを格納し、`GenerateSummary` → `LogSummary` → `Flush` を順に呼び出す。`buildCaptureHandler` で実際の Slack HTTP ペイロードを取得し、組織名・成功セッション数・集計期間・Run ID が含まれることを確認する（AC-08）
-    - `TestSummaryFlow_E2E_NoReports`: レポート 0 件で `GenerateSummary` → `LogSummary` → `Flush` を実行し、Run ID を含む Slack ペイロードが送信されることを確認する（AC-04 + AC-08）
+    - `TestSummaryFlow_Integration`: `storetestutil.FakeStore` にサンプルレポートを格納し、`GenerateSummary` → `LogSummary` → `Flush` を順に呼び出す。`buildCaptureHandler` で実際の Slack HTTP ペイロードを取得し、組織名・成功セッション数・集計期間・Run ID が含まれることを確認する（AC-08）
+    - `TestSummaryFlow_Integration_NoReports`: レポート 0 件で `GenerateSummary` → `LogSummary` → `Flush` を実行し、Run ID を含む Slack ペイロードが送信されることを確認する（AC-04 + AC-08）
     - `TestSummaryFlow_FlushError`: `SpyHandler.FlushErr` にエラーをセットし、`LogSummary` → `Flush` の結果としてそのエラーが呼び出し元に伝播することを確認する（AC-09）。`SlackHandler` の HTTP エラー処理は `handler_test.go` で検証済みのため、ここでは伝播のみを検証する。
   - 確認方法: `go test -v ./internal/notify/` で全テストが PASS すること
   - 想定工数: 60 分 / 実績工数: -
@@ -265,7 +265,7 @@
 **AC-04**: 対象期間にレポートが存在しない場合も常に通知する
 - テスト: `internal/notify/aggregate_test.go::TestGenerateSummary_EmptyPeriod`
 - テスト: `internal/notify/format_test.go::TestFormatSummary_EmptyOrganizationStats`
-- テスト: `internal/notify/helpers_test.go::TestSummaryFlow_E2E_NoReports`
+- テスト: `internal/notify/helpers_test.go::TestSummaryFlow_Integration_NoReports`
 - 実装: `internal/notify/aggregate.go`、`internal/notify/format.go`
 
 **AC-05**: サマリメッセージにレポート対象期間（開始〜終了）が含まれる
@@ -281,7 +281,7 @@
 - 実装: `internal/notify/format.go`（`formatSummary`）
 
 **AC-08**: 定期サマリが正しく Notifier に渡される
-- テスト: `internal/notify/helpers_test.go::TestSummaryFlow_E2E`
+- テスト: `internal/notify/helpers_test.go::TestSummaryFlow_Integration`
 - テスト: `internal/notify/format_test.go::TestExtractSummary_OrganizationStats_Roundtrip`
 - 実装: `internal/notify/helpers.go`（`LogSummary`）、`internal/notify/format.go`（`extractSummary`）
 

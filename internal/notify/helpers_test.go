@@ -133,7 +133,7 @@ func TestLogAlert_StructuredPayloadOnly(t *testing.T) {
 	assert.True(t, foundFailureCount)
 }
 
-func TestSummaryFlow_E2E(t *testing.T) {
+func TestSummaryFlow_Integration(t *testing.T) {
 	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC)
 
@@ -161,7 +161,7 @@ func TestSummaryFlow_E2E(t *testing.T) {
 	assert.Equal(t, "run-001", fields["Run ID"])
 }
 
-func TestSummaryFlow_E2E_NoReports(t *testing.T) {
+func TestSummaryFlow_Integration_NoReports(t *testing.T) {
 	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC)
 
