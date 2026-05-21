@@ -16,6 +16,7 @@ import (
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
+	notifytestutil "github.com/isseis/tlsrpt-digest/internal/notify/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -152,6 +153,44 @@ func TestSlackHandler_NoExportedLoggerField(t *testing.T) {
 		}
 	}
 	assert.Empty(t, exported)
+}
+
+func TestSummary_NoSensitiveFields(t *testing.T) {
+	var spy spyHandler
+	require.NoError(t, notify.LogSummary(context.Background(), &spy, notify.Summary{
+		Period:            notify.DateRange{Start: time.Now(), End: time.Now()},
+		OrganizationStats: map[string]int64{"org-a": 10},
+		ReportCount:       1,
+	}))
+
+	require.Len(t, spy.records, 1)
+	allowed := map[string]bool{
+		"period_start":       true,
+		"period_end":         true,
+		"report_count":       true,
+		"organization_stats": true,
+	}
+	spy.records[0].Attrs(func(attr slog.Attr) bool {
+		assert.True(t, allowed[attr.Key], "unexpected attr key %q in LogSummary record", attr.Key)
+		return true
+	})
+}
+
+func TestMixedReportWarn_NotInNotifyLogger(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC)
+
+	st := fakeStoreWithReports(summaryReport("mixed", "org-mixed", start.Add(time.Hour), 42, 1))
+	spy := &notifytestutil.SpyHandler{}
+
+	var debugBuf strings.Builder
+	debugLogger := slog.New(slog.NewTextHandler(&debugBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	_, err := notify.GenerateSummary(context.Background(), st, start, end, debugLogger)
+	require.NoError(t, err)
+
+	assert.Contains(t, debugBuf.String(), "org-mixed")
+	assert.Empty(t, spy.Records, "notify handler must not receive mixed-report warnings")
 }
 
 func TestRedactionAlwaysEnabled(t *testing.T) {
