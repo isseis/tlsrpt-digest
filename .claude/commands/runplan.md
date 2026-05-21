@@ -1,53 +1,42 @@
 Your goal is to implement one task under `docs/tasks/` by following its `03_implementation_plan.md`.
 
-Work in the following order.
+Work in order.
 
-1. Identify the target task directory by following the rules in `docs/dev/developer_guide/task_identification.md`.
+1. Identify the target task per `docs/dev/developer_guide/task_identification.md`.
 
-2. Read the required input documents.
-- `01_requirements.md` in the target task directory
-- `02_architecture.md` in the target task directory
-- `03_implementation_plan.md` in the target task directory
-- `docs/dev/developer_guide/test_organization.md`
+2. Read `03_implementation_plan.md`. If the document status is not `approved`, stop and report.
 
-3. Verify that implementation is allowed.
-- Check the document status in `03_implementation_plan.md`.
-- If the status is not `approved`, do not begin implementing.
-- In that case, stop and report that implementation cannot begin until `03_implementation_plan.md` is `approved`.
+3. Read `01_requirements.md`, `02_architecture.md` (both in the target task directory), and `docs/dev/developer_guide/test_organization.md`.
 
-4. Identify the next incomplete phase.
-- Read the checkboxes in `03_implementation_plan.md`. Legend: `[ ]` not started, `[x]` done, `[-]` skipped.
-- Work on the next phase that contains at least one unchecked `[ ]` item.
-- If a phase has sub-sections, complete the entire phase before moving to the next.
-- If all phases are complete, proceed directly to the review step (step 6).
+4. Select the next phase group from `03_implementation_plan.md` checkboxes (`[ ]` not started, `[x]` done, `[-]` skipped).
+- If all phases are complete, go to step 7.
+- Otherwise, use one phase unless it cannot pass `make test` alone (e.g. stub-only or tightly coupled); then extend the group until it can pass. Briefly note the reason for grouping before starting work.
 
-5. Implement the current phase.
-- Follow the design in `02_architecture.md` when implementing.
-- Apply test helper rules from `docs/dev/developer_guide/test_organization.md`:
-  - If new cross-package helpers or mocks are needed, place them under `testutil/` with the correct file naming and package naming.
-  - If package-internal helpers are needed, place them in `test_helpers.go` or `test_helpers_<category>.go` with `//go:build test`.
-- After each code change involving Go files: run `make fmt`, then `make test`, then `make lint`. Fix any errors before continuing.
-- When all items in the phase are complete, update the plan's checkboxes (`[x]` for done, `[-]` for skipped with a note) and commit.
-- Return to step 4.
+5. Implement the selected phase group.
+- Follow the design in `02_architecture.md`.
+- Place test helpers per `docs/dev/developer_guide/test_organization.md`: cross-package helpers under `testutil/`; package-internal helpers in `test_helpers.go` (or `test_helpers_<category>.go`) with `//go:build test`.
+- After each Go file change, run `make fmt && make test && make lint`; fix errors before continuing. Exception: errors caused by the phase group's incomplete state (e.g. build or test failures from missing implementations that stubs depend on) need not be fixed until the group is complete; fix only errors unrelated to the in-progress group.
+- When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
 
-6. Review the implementation.
-- Run `make deadcode` and remove any dead code made obsolete by this change. If changes were made, run `make fmt && make test && make lint`, then commit.
-- Review the diff between the current branch and its base branch against the checklist below.
-- For each issue found: fix it, run `make fmt && make test && make lint`, commit, and re-run the checklist until all items pass.
+6. Review the phase group.
+- Run `make deadcode`. Remove functions made unreachable by this phase group; keep intentional scaffolding for future phases or tasks. If changes were made, run `make fmt && make test && make lint` and commit.
+- Review the diff introduced by this phase group against the checklist below. Skip items intentionally deferred to a later phase (note the reason).
+- For each issue: fix, run `make fmt && make test && make lint`, commit, and re-run the checklist.
 
-Review checklist:
-- [ ] All acceptance criteria in `01_requirements.md` are satisfied by the implementation.
-- [ ] Implementation is consistent with the design in `02_architecture.md`.
-- [ ] Every acceptance criterion in `01_requirements.md` has at least one test that verifies it.
+Phase-group review checklist:
+- [ ] Implementation is consistent with `02_architecture.md`.
+- [ ] Every AC assigned to this phase group by the implementation plan has at least one test.
 - [ ] Test coverage is sufficient: non-trivial logic, error paths, and boundary values are covered.
-- [ ] No tests duplicate existing test coverage without good reason.
+- [ ] No tests duplicate existing coverage without good reason.
 - [ ] No tests are so trivial that they add no verification value.
-- [ ] No logic is reimplemented from scratch when an existing function in the codebase can be used.
+- [ ] No logic is reimplemented when an existing function in the codebase can be used.
 - [ ] All source comments and identifiers are in English.
 - [ ] No planning document references (e.g. `AC-01`, `F-001`) remain in source comments or string literals.
 - [ ] `make fmt` produces no diff.
 - [ ] `make lint` passes with no errors.
 - [ ] `make test` passes with no errors.
 
-7. Summarize.
-- Provide a concise summary of what was implemented, which acceptance criteria were verified, and any assumptions made.
+7. Decide whether to continue or finish.
+- If steps 5 and 6 ran this iteration: summarize implementation, verified ACs, assumptions, and deferred items.
+- If phases remain: ask "Shall I continue with the next phase group?" — return to step 4 if agreed, otherwise report status and stop.
+- If all phases are complete: verify every AC in `01_requirements.md` is satisfied by the implementation and has at least one test. Report the final status and any gaps.
