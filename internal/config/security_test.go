@@ -7,9 +7,8 @@ import (
 )
 
 func TestRawIMAPConfig_NoCredentialFields(t *testing.T) {
-	typ := reflect.TypeOf(rawIMAPConfig{})
-	for i := range typ.NumField() {
-		field := typ.Field(i)
+	typ := reflect.TypeFor[rawIMAPConfig]()
+	for field := range typ.Fields() {
 		fieldName := strings.ToLower(field.Name)
 		tomlName := strings.ToLower(field.Tag.Get("toml"))
 		for _, forbidden := range []string{"password", "username"} {
