@@ -84,7 +84,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 `02_architecture.md` セクション 3.2 および 4.2 を参照。
 
-- [ ] **1.1** `internal/config/types.go` を新規作成し `Config` 型階層と `rawConfig` 型階層を定義する
+- [x] **1.1** `internal/config/types.go` を新規作成し `Config` 型階層と `rawConfig` 型階層を定義する
   - ファイル: `internal/config/types.go`
   - 作業内容:
     - `Config`・`IMAPConfig`・`NotifyConfig`・`NotifySlackConfig`・`StoreConfig`・`SummaryConfig` を定義する（TOML タグなし、公開型）
@@ -93,7 +93,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go build ./internal/config/` が通ること
   - 想定工数: 30 分 / 実績工数: -
 
-- [ ] **1.2** `internal/config/errors.go` を新規作成し sentinel エラーを集約する
+- [x] **1.2** `internal/config/errors.go` を新規作成し sentinel エラーを集約する
   - ファイル: `internal/config/errors.go`
   - 作業内容:
     - `ErrConfigPathEmpty`・`ErrConfigFileRead`・`ErrConfigDecode` を定義する
@@ -102,7 +102,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go build ./...` が通ること（`ErrInvalidAllowedHost` を参照する他パッケージを含む）
   - 想定工数: 15 分 / 実績工数: -
 
-- [ ] **1.3** `make test` が通ることを確認する（M1）
+- [x] **1.3** `make test` が通ることを確認する（M1）
   - 確認方法: `make test` が成功し、既存テストの失敗がないこと。失敗した場合は前フェーズのタスクに戻り原因を修正すること
 
 ---
@@ -395,7 +395,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 | フェーズ | 完了条件 | 状態 |
 |---|---|---|
-| フェーズ 1 | `make test` が成功し既存テストの後方互換が維持されている | [ ] |
+| フェーズ 1 | `make test` が成功し既存テストの後方互換が維持されている | [x] |
 | フェーズ 2 | AC-01・AC-03〜AC-10・AC-10a の全テストが PASS | [ ] |
 | フェーズ 3 | AC-02・AC-10b・AC-10c・AC-10d の全テストが PASS | [ ] |
 | フェーズ 4 | AC-11〜AC-17 の全テストが PASS | [ ] |
