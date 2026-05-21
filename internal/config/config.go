@@ -20,7 +20,9 @@ var reValidHostname = regexp.MustCompile(
 // Load reads TOML from data, decodes it into Config with strict unknown-key
 // rejection, and validates field values.
 func Load(data []byte) (*Config, error) {
-	var raw legacyConfig
+	var raw struct {
+		Notify rawNotifyConfig `toml:"notify"`
+	}
 	dec := toml.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&raw); err != nil {
@@ -44,10 +46,6 @@ func stringValue(value *string) string {
 		return ""
 	}
 	return *value
-}
-
-type legacyConfig struct {
-	Notify rawNotifyConfig `toml:"notify"`
 }
 
 // validate checks semantic constraints that cannot be expressed via struct tags.
