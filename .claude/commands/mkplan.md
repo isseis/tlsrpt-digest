@@ -47,7 +47,7 @@ Work in the following order.
    After receiving findings:
    - Fix all Critical and Major issues.
    - Apply Minor fixes at your discretion.
-   - If more than one Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until the subagent reports no Critical or Major issues, up to a maximum of three passes.
+   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until the subagent reports no Critical or Major issues, up to a maximum of three passes.
    - Commit only after all review passes are complete and all Critical and Major issues are resolved.
 
 **Technical correctness checklist (use verbatim as evaluation criteria in the subagent prompt above):**

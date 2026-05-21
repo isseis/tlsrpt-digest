@@ -95,14 +95,14 @@ Skip this step if no new terms were introduced.
 Spawn a review subagent using the Agent tool to critically evaluate the translation.
 Construct a self-contained prompt that includes all of the following:
 - **Persona**: act as an experienced technical translator and editor whose job is to find real problems — not to approve. Be thorough and unsparing. Surface omissions, additions not in the source, mistranslations, and inconsistent terminology. Do not soften findings.
-- **Files to read**: the absolute paths of the source file and the translated output file, and `docs/translation_glossary.md`.
+- **Files to read**: embed the resolved absolute paths of the source file, the translated output file, and `docs/translation_glossary.md` as literal strings in the prompt so the subagent can read them without relying on your context.
 - **Evaluation criteria**: every item from the Accuracy checklist and the Readability checklist below, copied verbatim.
 - **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (section heading or paragraph), Problem (what is wrong), and Suggestion (concrete fix). If a checklist category has no issues, state that explicitly.
 
 After receiving findings:
 - Fix all Critical and Major issues.
 - Apply Minor fixes at your discretion.
-- If more than one Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until the subagent reports no Critical or Major issues, up to a maximum of three passes.
+- If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until the subagent reports no Critical or Major issues, up to a maximum of three passes.
 
 **Accuracy checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] No content from the source is missing in the translation.

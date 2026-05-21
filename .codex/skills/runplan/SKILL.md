@@ -53,9 +53,9 @@ Your goal is to implement one task under `docs/tasks/` by following its
      `02_architecture.md` and `03_implementation_plan.md` in full before
      evaluating the code.
    - **Files changed**: list the source files added or modified in this phase
-     group and instruct the subagent to read them in full. Also instruct the
-     subagent to run `git log --oneline -5` to identify the commits in this
-     phase group, then `git diff <base-commit>..HEAD` to see exactly what
+     group and instruct the subagent to read them in full. Also provide the
+     specific commit range for this phase group (e.g., `HEAD~N..HEAD`) and
+     instruct the subagent to run `git diff <range>` to see exactly what
      changed.
    - **Evaluation criteria**: every item from the phase-group checklist below,
      copied verbatim.
@@ -68,7 +68,7 @@ Your goal is to implement one task under `docs/tasks/` by following its
      `make fmt && make test && make lint` and commit using the `git-commit`
      skill guidelines.
    - Apply Minor fixes at your discretion.
-   - If more than one Critical or Major issue required a fix, spawn a second
+   - If any Critical or Major issue required a fix, spawn a second
      review subagent to verify the fixes. Repeat until the subagent reports
      no Critical or Major issues, up to a maximum of three passes.
 
