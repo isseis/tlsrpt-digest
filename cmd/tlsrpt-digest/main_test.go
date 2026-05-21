@@ -120,10 +120,35 @@ func TestBootstrap_DryRun_NoURLs(t *testing.T) {
 	assert.ElementsMatch(t, []notify.LevelMode{notify.LevelModeExactInfo, notify.LevelModeWarnAndAbove}, gotModes)
 }
 
+func TestBuildIMAPConfig(t *testing.T) {
+	t.Setenv("TLSRPT_IMAP_USERNAME", "testuser")
+	t.Setenv("TLSRPT_IMAP_PASSWORD", "testpass")
+
+	cfg := &config.Config{
+		IMAP: config.IMAPConfig{
+			Host:            "imap.example.com",
+			Port:            993,
+			Mailbox:         "INBOX",
+			TLSCACert:       "/etc/ssl/cert.pem",
+			MaxMessageBytes: 1024,
+		},
+	}
+
+	got := buildIMAPConfig(cfg)
+
+	assert.Equal(t, "imap.example.com", got.Host)
+	assert.Equal(t, 993, got.Port)
+	assert.Equal(t, "INBOX", got.Mailbox)
+	assert.Equal(t, "/etc/ssl/cert.pem", got.TLSCACert)
+	assert.Equal(t, int64(1024), got.MaxMessageBytes)
+	assert.Equal(t, "testuser", got.Username)
+	assert.Equal(t, config.Secret("testpass"), got.Password)
+}
+
 func TestLoadConfig_EmptyPath(t *testing.T) {
-	cfg, err := loadConfig("")
-	require.NoError(t, err)
-	assert.Equal(t, &config.Config{}, cfg)
+	_, err := loadConfig("")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, config.ErrConfigPathEmpty))
 }
 
 func TestLoadConfig_ValidFile(t *testing.T) {
@@ -145,6 +170,7 @@ allowed_host = "hooks.slack.com"
 func TestLoadConfig_NonexistentFile(t *testing.T) {
 	_, err := loadConfig("/nonexistent/path/config.toml")
 	require.Error(t, err)
+	assert.True(t, errors.Is(err, config.ErrConfigFileRead))
 }
 
 // Compile-time check: FakeStore must implement store.Store so the interface

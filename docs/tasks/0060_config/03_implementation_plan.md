@@ -233,7 +233,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 `02_architecture.md` セクション 6.2 の既定値方針を参照。
 
-- [ ] **4.1** `internal/config/config_test.go` に AC-11〜AC-17 の既定値テストを追加する
+- [x] **4.1** `internal/config/config_test.go` に AC-11〜AC-17 の既定値テストを追加する
   - ファイル: `internal/config/config_test.go`
   - 作業内容（各テスト関数）:
     - `TestLoad_Default_MailboxINBOX`: `imap.mailbox` を未設定のとき `Config.IMAP.Mailbox == "INBOX"` であることを確認する（AC-11）
@@ -246,7 +246,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go test -v ./internal/config/` で全テストが PASS すること
   - 想定工数: 30 分 / 実績工数: -
 
-- [ ] **4.2** `make test` が通ることを確認する（M4）
+- [x] **4.2** `make test` が通ることを確認する（M4）
   - 確認方法: `make test` が成功すること。失敗した場合は前フェーズのタスクに戻り原因を修正すること
 
 ---
@@ -255,7 +255,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 `02_architecture.md` セクション 3.4（`cmd/tlsrpt-digest/main.go` の変更方針）を参照。
 
-- [ ] **5.1** `cmd/tlsrpt-digest/main.go` の `loadConfig` を `LoadFile` ベースに置換する
+- [x] **5.1** `cmd/tlsrpt-digest/main.go` の `loadConfig` を `LoadFile` ベースに置換する
   - ファイル: `cmd/tlsrpt-digest/main.go`
   - 作業内容:
     - `loadConfig(path string) (*config.Config, error)` の実装を `config.LoadFile(path, slog.Default())` を呼ぶだけに変更する
@@ -264,17 +264,17 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go build ./cmd/tlsrpt-digest/` が通ること
   - 想定工数: 15 分 / 実績工数: -
 
-- [ ] **5.2** `cmd/tlsrpt-digest/main.go` に IMAP 設定を組み立てる補助関数を追加する
+- [x] **5.2** `cmd/tlsrpt-digest/main.go` に IMAP 設定を組み立てる補助関数を追加する
   - ファイル: `cmd/tlsrpt-digest/main.go`
   - 作業内容:
     - `buildIMAPConfig(cfg *config.Config) imap.Config` を追加する
     - `os.Getenv("TLSRPT_IMAP_USERNAME")` と `os.Getenv("TLSRPT_IMAP_PASSWORD")` を取得する
     - `imap.Config` に `cfg.IMAP.Host`・`cfg.IMAP.Port`・`cfg.IMAP.Mailbox`・`cfg.IMAP.TLSCACert`・`cfg.IMAP.MaxMessageBytes` を設定し、ユーザ名を `Username` フィールドに、パスワードを `config.Secret(password)` でラップして `Password` フィールドに格納する
-    - `main()` から `_ = buildIMAPConfig(cfg)` として呼び出す（タスク 0070 で実際の利用先に置き換えるまでの仮置き。Go コンパイラの「使用されていない変数」エラーを回避しつつ `make deadcode` への到達性を維持するため）
+    - タスク 0070 で実際の利用先に置き換える（`make deadcode` は `-test -tags test` で実行されるため、`main_test.go` からの参照だけで到達性は維持される）
   - 確認方法: `go build ./cmd/tlsrpt-digest/` が通ること
   - 想定工数: 30 分 / 実績工数: -
 
-- [ ] **5.3** `cmd/tlsrpt-digest/main_test.go` の `loadConfig` 関連テストを更新する
+- [x] **5.3** `cmd/tlsrpt-digest/main_test.go` の `loadConfig` 関連テストを更新する
   - ファイル: `cmd/tlsrpt-digest/main_test.go`
   - 作業内容:
     - `TestLoadConfig_EmptyPath`: `loadConfig("")` がエラーを返し `errors.Is(err, config.ErrConfigPathEmpty)` が真であることを確認するよう変更する（従来の「空 `Config` を返す」挙動は廃止）
@@ -284,13 +284,13 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go test -tags test -v ./cmd/tlsrpt-digest/` で全テストが PASS すること
   - 想定工数: 20 分 / 実績工数: -
 
-- [ ] **5.4** `make fmt` を実行してフォーマットを確認する
+- [x] **5.4** `make fmt` を実行してフォーマットを確認する
   - 確認方法: `make fmt` 後に `git diff` で差分がないこと
 
-- [ ] **5.5** `make test` と `make lint` が通ることを確認する
+- [x] **5.5** `make test` と `make lint` が通ることを確認する
 
-- [ ] **5.6** `make deadcode` で不要なコードがないことを確認する（M5）
-  - 注意: `buildIMAPConfig` は `_ = buildIMAPConfig(cfg)` で呼び出すため `make deadcode` には未到達として報告されない。タスク 0070 で `_` を実際の利用先に置き換えること
+- [x] **5.6** `make deadcode` で不要なコードがないことを確認する（M5）
+  - 注意: `buildIMAPConfig` は `make deadcode` の `-test -tags test` オプションにより `main_test.go` からの参照で到達性が維持される。`main()` からの呼び出しは不要。タスク 0070 で実際の利用先に置き換えること
 
 ---
 
@@ -398,8 +398,8 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 | フェーズ 1 | `make test` が成功し既存テストの後方互換が維持されている | [x] |
 | フェーズ 2 | AC-01・AC-03〜AC-10・AC-10a の全テストが PASS | [x] |
 | フェーズ 3 | AC-02・AC-10b・AC-10c・AC-10d の全テストが PASS | [x] |
-| フェーズ 4 | AC-11〜AC-17 の全テストが PASS | [ ] |
-| フェーズ 5 | `make lint`・`make test`・`make deadcode` がすべて成功 | [ ] |
+| フェーズ 4 | AC-11〜AC-17 の全テストが PASS | [x] |
+| フェーズ 5 | `make lint`・`make test`・`make deadcode` がすべて成功 | [x] |
 
 ---
 
@@ -417,11 +417,11 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 ## 8. 完了条件
 
-- [ ] `make lint` がエラーなく完了する
-- [ ] `make test` がすべて成功する
-- [ ] `01_requirements.md` の全受け入れ条件（AC-01〜AC-17）に対応するテストが存在する
+- [x] `make lint` がエラーなく完了する
+- [x] `make test` がすべて成功する
+- [x] `01_requirements.md` の全受け入れ条件（AC-01〜AC-17）に対応するテストが存在する
 - [ ] セクション 5 の受け入れ条件トレーサビリティ表に実装ファイルの行番号が記入されている
-- [ ] `make deadcode` を実行済みで意図しない未到達コードがない
+- [x] `make deadcode` を実行済みで意図しない未到達コードがない
 
 ---
 

@@ -338,11 +338,79 @@ func TestLoad_DaysValidation(t *testing.T) {
 }
 
 func TestLoad_MaxMessageBytesValidation(t *testing.T) {
-	data := []byte(baseConfigTOML + `max_message_bytes = -1
+	data := []byte(`[imap]
+host = "imap.example.com"
+port = 993
+max_message_bytes = -1
 `)
 	_, err := config.Load(data)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, config.ErrInvalidMaxMessageBytes))
+}
+
+func TestLoad_Default_MailboxINBOX(t *testing.T) {
+	tests := []struct {
+		name string
+		toml string
+	}{
+		{"absent", baseConfigTOML},
+		{"empty string", baseConfigTOML + "mailbox = \"\"\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := config.Load([]byte(tt.toml))
+			require.NoError(t, err)
+			assert.Equal(t, "INBOX", cfg.IMAP.Mailbox)
+		})
+	}
+}
+
+func TestLoad_Default_FetchDays14(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, 14, cfg.IMAP.FetchDays)
+}
+
+func TestLoad_Default_StoreRootDir(t *testing.T) {
+	tests := []struct {
+		name string
+		toml string
+	}{
+		{"absent", baseConfigTOML},
+		{"empty string", baseConfigTOML + "[store]\nroot_dir = \"\"\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := config.Load([]byte(tt.toml))
+			require.NoError(t, err)
+			assert.Equal(t, "./store", cfg.Store.RootDir)
+		})
+	}
+}
+
+func TestLoad_Default_TLSCACertEmpty(t *testing.T) {
+	// Key assertion: absent tls_ca_cert must not trigger validation errors.
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, "", cfg.IMAP.TLSCACert)
+}
+
+func TestLoad_Default_WindowDays7(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, 7, cfg.Summary.WindowDays)
+}
+
+func TestLoad_Default_RetentionDays30(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, 30, cfg.Store.RetentionDays)
+}
+
+func TestLoad_Default_MaxEmailAgeDays30(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, 30, cfg.Store.MaxEmailAgeDays)
 }
 
 const testCertificatePEM = `-----BEGIN CERTIFICATE-----
