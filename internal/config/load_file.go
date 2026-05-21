@@ -32,12 +32,14 @@ func LoadFile(path string, logger *slog.Logger) (*Config, error) {
 		return nil, err
 	}
 
-	if !filepath.IsAbs(cfg.Store.RootDir) {
-		abs, err := filepath.Abs(cfg.Store.RootDir)
-		if err != nil {
-			return nil, fmt.Errorf("config: cannot resolve store.root_dir: %w", err)
+	abs, err := filepath.Abs(cfg.Store.RootDir)
+	if err != nil {
+		return nil, fmt.Errorf("config: %w: %w", ErrStoreRootDirResolve, err)
+	}
+	if abs != cfg.Store.RootDir {
+		if !filepath.IsAbs(cfg.Store.RootDir) {
+			logger.Info("store.root_dir converted to absolute path", "path", abs)
 		}
-		logger.Info("store.root_dir converted to absolute path", "path", abs)
 		cfg.Store.RootDir = abs
 	}
 

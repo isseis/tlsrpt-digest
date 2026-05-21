@@ -50,7 +50,7 @@ func TestLoadFile_EmptyPath(t *testing.T) {
 }
 
 func TestLoadFile_NonexistentPath(t *testing.T) {
-	_, err := config.LoadFile("/nonexistent/path/config.toml", nil)
+	_, err := config.LoadFile(filepath.Join(t.TempDir(), "missing.toml"), nil)
 	assert.True(t, errors.Is(err, config.ErrConfigFileRead))
 }
 
@@ -149,6 +149,26 @@ root_dir = "./data"
 		"expected INFO log level, got: %s", buf.String())
 	assert.True(t, strings.Contains(buf.String(), "store.root_dir converted to absolute path"),
 		"expected INFO log about absolutization, got: %s", buf.String())
+}
+
+// TestLoadFile_DefaultRootDir_Absolutized verifies that when store.root_dir is
+// omitted, the default ("./store") is absolutized and an INFO log is emitted.
+func TestLoadFile_DefaultRootDir_Absolutized(t *testing.T) {
+	toml := `
+[imap]
+host = "imap.example.com"
+port = 993
+`
+	path := writeTempConfig(t, toml)
+	logger, buf := newCapturingLogger()
+	cfg, err := config.LoadFile(path, logger)
+	require.NoError(t, err)
+	assert.True(t, filepath.IsAbs(cfg.Store.RootDir),
+		"expected absolute path for default root_dir, got: %s", cfg.Store.RootDir)
+	assert.True(t, strings.Contains(buf.String(), "level=INFO"),
+		"expected INFO log level, got: %s", buf.String())
+	assert.True(t, strings.Contains(buf.String(), "store.root_dir converted to absolute path"),
+		"expected INFO log about absolutization of default root_dir, got: %s", buf.String())
 }
 
 func TestLoadFile_AbsoluteRootDir_Unchanged(t *testing.T) {
