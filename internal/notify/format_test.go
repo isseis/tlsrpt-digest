@@ -19,6 +19,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testPeriod is a fixed DateRange used across tests that do not assert on
+// period values, keeping tests deterministic.
+var testPeriod = notify.DateRange{
+	Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+	End:   time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC),
+}
+
 func sampleAlert() notify.Alert {
 	return notify.Alert{
 		OrganizationName: "example.com",
@@ -231,7 +238,7 @@ func TestFormatSummary_Color(t *testing.T) {
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeExactInfo, &recv)
 	defer cleanup()
 	require.NoError(t, notify.LogSummary(context.Background(), h, notify.Summary{
-		Period: notify.DateRange{Start: time.Now(), End: time.Now()},
+		Period: testPeriod,
 	}))
 	require.NoError(t, h.Flush(context.Background()))
 	body := string(recv)
@@ -304,7 +311,7 @@ func TestFormatSummary_PeriodInText(t *testing.T) {
 
 func TestFormatSummary_OrgStatsInAttachment(t *testing.T) {
 	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
-		Period:            notify.DateRange{Start: time.Now(), End: time.Now()},
+		Period:            testPeriod,
 		OrganizationStats: map[string]int64{"org-a": 10, "org-b": 20},
 	}))
 
@@ -315,7 +322,7 @@ func TestFormatSummary_OrgStatsInAttachment(t *testing.T) {
 
 func TestFormatSummary_OrganizationStatsSortedInAttachment(t *testing.T) {
 	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
-		Period: notify.DateRange{Start: time.Now(), End: time.Now()},
+		Period: testPeriod,
 		OrganizationStats: map[string]int64{
 			"org-b": 20,
 			"org-a": 10,
@@ -332,7 +339,7 @@ func TestFormatSummary_OrganizationStatsSortedInAttachment(t *testing.T) {
 
 func TestFormatSummary_ReportCountInText(t *testing.T) {
 	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
-		Period:            notify.DateRange{Start: time.Now(), End: time.Now()},
+		Period:            testPeriod,
 		OrganizationStats: map[string]int64{"org-a": 10},
 		ReportCount:       7,
 	}))
@@ -343,7 +350,7 @@ func TestFormatSummary_ReportCountInText(t *testing.T) {
 
 func TestFormatSummary_SingleAttachmentUpTo9Orgs(t *testing.T) {
 	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
-		Period:            notify.DateRange{Start: time.Now(), End: time.Now()},
+		Period:            testPeriod,
 		OrganizationStats: summaryOrgStats(9),
 	}))
 
@@ -354,7 +361,7 @@ func TestFormatSummary_SingleAttachmentUpTo9Orgs(t *testing.T) {
 
 func TestFormatSummary_ChunkingOver9Orgs(t *testing.T) {
 	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
-		Period:            notify.DateRange{Start: time.Now(), End: time.Now()},
+		Period:            testPeriod,
 		OrganizationStats: summaryOrgStats(10),
 	}))
 
@@ -368,7 +375,7 @@ func TestFormatSummary_ChunkingOver9Orgs(t *testing.T) {
 
 func TestFormatSummary_EmptyOrganizationStats(t *testing.T) {
 	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
-		Period:            notify.DateRange{Start: time.Now(), End: time.Now()},
+		Period:            testPeriod,
 		OrganizationStats: map[string]int64{},
 	}))
 
