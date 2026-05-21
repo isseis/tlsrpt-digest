@@ -16,7 +16,6 @@ import (
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
-	notifytestutil "github.com/isseis/tlsrpt-digest/internal/notify/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -181,7 +180,14 @@ func TestMixedReportWarn_NotInNotifyLogger(t *testing.T) {
 	end := time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC)
 
 	st := fakeStoreWithReports(summaryReport("mixed", "org-mixed", start.Add(time.Hour), 42, 1))
-	spy := &notifytestutil.SpyHandler{}
+
+	// Wire a spy as slog.Default to simulate a notify handler being globally
+	// accessible. GenerateSummary must write warnings only to the provided
+	// debugLogger, not to slog.Default().
+	var defaultSpy spyHandler
+	prev := slog.Default()
+	slog.SetDefault(slog.New(&defaultSpy))
+	defer slog.SetDefault(prev)
 
 	var debugBuf strings.Builder
 	debugLogger := slog.New(slog.NewTextHandler(&debugBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -189,8 +195,8 @@ func TestMixedReportWarn_NotInNotifyLogger(t *testing.T) {
 	_, err := notify.GenerateSummary(context.Background(), st, start, end, debugLogger)
 	require.NoError(t, err)
 
-	assert.Contains(t, debugBuf.String(), "org-mixed")
-	assert.Empty(t, spy.Records, "notify handler must not receive mixed-report warnings")
+	assert.Contains(t, debugBuf.String(), "org-mixed", "warning must appear in debugLogger")
+	assert.Empty(t, defaultSpy.records, "mixed-report warning must not flow to slog.Default()")
 }
 
 func TestRedactionAlwaysEnabled(t *testing.T) {

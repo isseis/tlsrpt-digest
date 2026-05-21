@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
-	notifytestutil "github.com/isseis/tlsrpt-digest/internal/notify/testutil"
 	storetestutil "github.com/isseis/tlsrpt-digest/internal/store/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -182,8 +184,20 @@ func TestSummaryFlow_E2E_NoReports(t *testing.T) {
 }
 
 func TestSummaryFlow_FlushError(t *testing.T) {
-	flushErr := errors.New("flush failed")
-	spy := &notifytestutil.SpyHandler{FlushErr: flushErr}
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	h, err := notify.NewSlackHandler(notify.SlackHandlerOptions{
+		WebhookURL:    config.Secret(srv.URL + "/webhook"),
+		AllowedHost:   "127.0.0.1",
+		RunID:         "test",
+		LevelMode:     notify.LevelModeExactInfo,
+		HTTPClient:    srv.Client(),
+		BackoffConfig: notify.DefaultBackoffConfig,
+	})
+	require.NoError(t, err)
 
 	summary := notify.Summary{
 		Period:            notify.DateRange{Start: time.Now(), End: time.Now()},
@@ -191,9 +205,11 @@ func TestSummaryFlow_FlushError(t *testing.T) {
 		ReportCount:       1,
 	}
 
-	require.NoError(t, notify.LogSummary(context.Background(), spy, summary))
-	err := spy.Flush(context.Background())
-	require.ErrorIs(t, err, flushErr)
+	require.NoError(t, notify.LogSummary(context.Background(), h, summary))
+	flushErr := h.Flush(context.Background())
+	require.Error(t, flushErr)
+	_, ok := errors.AsType[*notify.SlackClientError](flushErr)
+	assert.True(t, ok, "Flush must propagate SlackClientError to the caller")
 }
 
 func summaryOrganizationStats(t *testing.T, record slog.Record) map[string]int64 {

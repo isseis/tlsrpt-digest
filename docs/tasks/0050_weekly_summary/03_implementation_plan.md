@@ -317,7 +317,7 @@
 - [x] `make lint` がエラーなく完了する
 - [x] `make test` がすべて成功する
 - [x] `01_requirements.md` の全受け入れ条件（AC-01〜AC-11）に対応するテストが存在する
-- [x] `make deadcode` で不要なコードが報告されない（`GenerateSummary` は Task 0070 で cmd/ から呼び出す想定の意図的なスキャフォールディング）
+- [x] `make deadcode` を実行済み。このタスクで導入した関数に意図しない未到達コードはない。既知の未到達報告はすべて意図的: `GenerateSummary` 等は Task 0070 で `cmd/` から呼び出す予定のスキャフォールディング、`store/testutil`・`tlsrpt`・`notify/test_helpers.go` の未到達項目はこのタスク以前から存在する既存報告
 - [ ] セクション 5 の受け入れ条件トレーサビリティ表に実装ファイルの行番号が記入されている
 
 ---
