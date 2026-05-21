@@ -43,7 +43,7 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 
 ### 影響を受けるコンポーネント
 
-- **直接変更**: `internal/config/`（新規作成）または `cmd/tlsrpt-digest/` 内
+- **直接変更**: `internal/config/`（変更・拡張）
 - **間接的影響**: `cmd/tlsrpt-digest/`（設定の利用側）
 
 ---
@@ -59,7 +59,7 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 - `AC-01`: 有効な TOML ファイルを指定した場合、すべての設定値を正しく読み込む
 - `AC-02`: 指定ファイルが存在しない場合、エラーを返す
 - `AC-03`: TOML の文法エラーがある場合、エラーを返す
-- `AC-04`: 未知のキーが含まれる場合、エラーまたは警告を出力する（strict モード）
+- `AC-04`: 未知のキーが含まれる場合、エラーを返す
 
 ### F-002: 設定値のバリデーション
 
@@ -69,14 +69,14 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 
 - `AC-05`: IMAP ホスト名が空の場合はエラーを返す
 - `AC-06`: IMAP ポート番号が 1〜65535 の範囲外の場合はエラーを返す
-- `AC-07`: IMAP ユーザ名またはパスワードが空の場合はエラーを返す
-- `AC-08`: Slack Webhook URL は環境変数（`TLSRPT_SLACK_WEBHOOK_URL_SUCCESS`・`TLSRPT_SLACK_WEBHOOK_URL_ERROR`）で管理するため、設定ファイルには `notify.slack.allowed_host` のみを記載する。「少なくとも1つの通知手段が設定されているか」の検証は `internal/notify` パッケージが担い、`internal/config` は `notify.slack.allowed_host` の形式チェック（ポート番号・スキームを含まない完全修飾ホスト名）のみを行う
+- `AC-07`: IMAP ユーザ名およびパスワードは設定ファイルには記載しない（環境変数で管理する）
+- `AC-08`: Slack Webhook URL は設定ファイルには記載しない（外部で管理する）。設定ファイルの Slack 設定は `notify.slack.allowed_host` のみとする。`notify.slack.allowed_host` が設定されている場合、ポート番号・スキームを含まない完全修飾ホスト名であることを検証する。未設定の場合はエラーとしない
 - `AC-09`: `imap.fetch_days` が 1 未満の場合はエラーを返す
 - `AC-10`: `imap.tls_ca_cert` が設定されている場合、指定パスのファイルが存在しかつ PEM 形式の証明書として読み込めることを確認する。読み込めない場合はエラーを返す
 - `AC-10a`: 定期サマリ集計期間・レポート保持期間・メール最大保持期間（仮称 `summary.window_days`・`store.retention_days`・`store.max_email_age_days`、AC-15〜17 参照）はいずれも 1 以上の整数であること。0 以下または非整数の場合はエラーを返す
 - `AC-10b`: 仮称 `store.retention_days`（正式キー名は `02_architecture.md` で確定）> 仮称 `store.max_email_age_days` の場合は WARN ログを出力する（エラーにはしない）。この設定では `.eml` がレポート JSON より先に削除されるため、`reprocess` による復元が一部不可能になる可能性がある旨を警告する
 - `AC-10c`: `imap.fetch_days` >= 仮称 `store.retention_days`（正式キー名は `02_architecture.md` で確定）の場合は WARN ログを出力する（エラーにはしない）。フェッチ対象期間がレポート保持期間以上の場合、GC で削除済みのレポートを再処理する可能性がある旨を警告する
-- `AC-10d`: `store.root_dir` に相対パスが指定された場合、設定読み込み時のカレントディレクトリを基準に絶対パスへ正規化する。正規化後のパスは INFO ログに出力する（systemd timer 経由実行などで CWD が `/` になる環境での意図しない参照先を防ぐ）。`filepath.Abs` 等で正規化する
+- `AC-10d`: `store.root_dir` に相対パスが指定された場合、設定読み込み時のカレントディレクトリを基準に絶対パスへ正規化する。正規化後のパスは INFO ログに出力する（systemd timer 経由実行などで CWD が `/` になる環境での意図しない参照先を防ぐ）
 
 ### F-003: デフォルト値の適用
 
@@ -86,11 +86,11 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 
 - `AC-11`: IMAP メールボックス名が未設定の場合、デフォルト値（`"INBOX"`）が適用される。TLSRPT レポートをサーバ側フィルタで専用フォルダ（例：`tls-reports`）に振り分けている場合は明示的に指定する
 - `AC-12`: `imap.fetch_days` が未設定の場合、デフォルト値（`14`）が適用される
-- `AC-13`: ストレージルートディレクトリ（`store.root_dir`）が未設定の場合、デフォルト値（例：`"./store"`）が適用される。データファイルパス（`{root_dir}/tlsrpt.json`）およびメール保存ディレクトリ（`{root_dir}/emails/`）はプログラムが自動的に導出するため、個別に設定することはできない。なお、相対パスは `AC-10d` により絶対パスへ正規化される
+- `AC-13`: ストレージルートディレクトリ（`store.root_dir`）が未設定の場合、デフォルト値（例：`"./store"`）が適用される。ルートディレクトリ配下のサブパスはプログラムが自動的に導出するため、個別に設定することはできない。なお、相対パスは `AC-10d` により絶対パスへ正規化される
 - `AC-14`: `imap.tls_ca_cert` が未設定の場合、OS のシステム CA バンドルを使用する（デフォルト動作）
-- `AC-15`: 定期サマリの集計期間（TOML キー名は `02_architecture.md` で確定、仮称 `summary.window_days`）が未設定の場合、デフォルト値（例：`7` 日）が適用される。`summary` サブコマンドの `--since` フラグで上書き可能
-- `AC-16`: レポートレコードの保持期間（TOML キー名は `02_architecture.md` で確定、仮称 `store.retention_days`）が未設定の場合、デフォルト値（例：`30` 日）が適用される。`gc` サブコマンドの `--before` フラグで上書き可能
-- `AC-17`: メール最大保持期間（TOML キー名は `02_architecture.md` で確定、仮称 `store.max_email_age_days`）が未設定の場合、デフォルト値（例：`30` 日）が適用される。`gc` サブコマンドの `--max-email-age` フラグで上書き可能
+- `AC-15`: 定期サマリの集計期間（TOML キー名は `02_architecture.md` で確定、仮称 `summary.window_days`）が未設定の場合、デフォルト値（例：`7` 日）が適用される
+- `AC-16`: レポートレコードの保持期間（TOML キー名は `02_architecture.md` で確定、仮称 `store.retention_days`）が未設定の場合、デフォルト値（例：`30` 日）が適用される
+- `AC-17`: メール最大保持期間（TOML キー名は `02_architecture.md` で確定、仮称 `store.max_email_age_days`）が未設定の場合、デフォルト値（例：`30` 日）が適用される
 
 ---
 
@@ -102,14 +102,14 @@ tlsrpt-digest は IMAP 接続情報、通知先など複数の設定項目を持
 
 ### 保守性
 
-- `Config` 構造体は各パッケージ（imap、notify、store）の設定をネストした形で持つ
+- 各コンポーネント（imap、notify、store）の設定を一元管理できること
 
 ---
 
 ## 5. 制約
 
 - 使用言語は Go とする（Go 1.26 以上）
-- TOML ライブラリには `BurntSushi/toml` を使用する
+- TOML ライブラリには `pelletier/go-toml/v2` を使用する
 - テストには `stretchr/testify` を使用する
 
 ---
