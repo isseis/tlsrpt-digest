@@ -6,16 +6,16 @@ Work in order.
 
 2. Read `03_implementation_plan.md`. If the document status is not `approved`, stop and report.
 
-3. Read `01_requirements.md`, `02_architecture.md`, and `docs/dev/developer_guide/test_organization.md`.
+3. Read `01_requirements.md`, `02_architecture.md` (both in the target task directory), and `docs/dev/developer_guide/test_organization.md`.
 
 4. Select the next phase group from `03_implementation_plan.md` checkboxes (`[ ]` not started, `[x]` done, `[-]` skipped).
 - If all phases are complete, go to step 7.
-- Otherwise, use one phase unless it cannot pass `make test` alone (e.g. stub-only or tightly coupled); then extend the group until it can pass, and briefly note why.
+- Otherwise, use one phase unless it cannot pass `make test` alone (e.g. stub-only or tightly coupled); then extend the group until it can pass. Briefly note the reason for grouping before starting work.
 
 5. Implement the selected phase group.
 - Follow the design in `02_architecture.md`.
 - Place test helpers per `docs/dev/developer_guide/test_organization.md`: cross-package helpers under `testutil/`; package-internal helpers in `test_helpers.go` (or `test_helpers_<category>.go`) with `//go:build test`.
-- After each Go file change, run `make fmt && make test && make lint`; fix errors before continuing, except test failures caused by the phase group's incomplete state.
+- After each Go file change, run `make fmt && make test && make lint`; fix errors before continuing. Exception: errors caused by the phase group's incomplete state (e.g. build or test failures from missing implementations that stubs depend on) need not be fixed until the group is complete; fix only errors unrelated to the in-progress group.
 - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
 
 6. Review the phase group.
@@ -24,9 +24,9 @@ Work in order.
 - For each issue: fix, run `make fmt && make test && make lint`, commit, and re-run the checklist.
 
 Phase-group review checklist:
-- [ ] Consistent with `02_architecture.md`.
+- [ ] Implementation is consistent with `02_architecture.md`.
 - [ ] Every AC assigned to this phase group by the implementation plan has at least one test.
-- [ ] Covers non-trivial logic, error paths, and boundary values.
+- [ ] Test coverage is sufficient: non-trivial logic, error paths, and boundary values are covered.
 - [ ] No tests duplicate existing coverage without good reason.
 - [ ] No tests are so trivial that they add no verification value.
 - [ ] No logic is reimplemented when an existing function in the codebase can be used.
