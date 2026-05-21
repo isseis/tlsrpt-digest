@@ -398,6 +398,52 @@ func TestFormatAlerts_PolicyTypeUnknown(t *testing.T) {
 // the extract functions produces a Warn entry in the DebugLogger.
 // This catches helper/format mismatches early (e.g. a key renamed in LogAlert
 // but not updated in extractAlert).
+func TestExtractSummary_MalformedOrganizationStatsLogged(t *testing.T) {
+	var debugBuf strings.Builder
+	debugLogger := slog.New(slog.NewTextHandler(&debugBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	var recv []byte
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recv, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	opts := notify.SlackHandlerOptions{
+		WebhookURL:    config.Secret(srv.URL + "/webhook"),
+		AllowedHost:   "127.0.0.1",
+		RunID:         "run-malformed",
+		LevelMode:     notify.LevelModeExactInfo,
+		HTTPClient:    srv.Client(),
+		BackoffConfig: notify.DefaultBackoffConfig,
+		DebugLogger:   debugLogger,
+	}
+	h, err := notify.NewSlackHandler(opts)
+	require.NoError(t, err)
+
+	r := slog.NewRecord(time.Now(), slog.LevelInfo, "periodic_summary", 0)
+	r.AddAttrs(
+		slog.Any("period_start", time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)),
+		slog.Any("period_end", time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC)),
+		slog.Int64("report_count", 1),
+		slog.Group("organization_stats",
+			slog.String("org-a", "not-an-int"),
+			slog.Int64("org-b", 20),
+		),
+	)
+	require.NoError(t, h.Handle(context.Background(), r))
+	require.NotPanics(t, func() {
+		require.NoError(t, h.Flush(context.Background()))
+	})
+
+	msg := decodeSlackMessage(t, recv)
+	fields := flattenSlackFields(msg)
+	assert.NotContains(t, fields, "org-a")
+	assert.Equal(t, "20 successful sessions", fields["org-b"])
+	assert.Contains(t, debugBuf.String(), "organization_stats.org-a")
+	assert.NotContains(t, debugBuf.String(), "not-an-int")
+}
+
 func TestExtract_UnknownAttrKeyLogged(t *testing.T) {
 	var debugBuf strings.Builder
 	debugLogger := slog.New(slog.NewTextHandler(&debugBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))

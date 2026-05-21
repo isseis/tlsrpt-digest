@@ -169,6 +169,10 @@ func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 		case "organization_stats":
 			if attr.Value.Kind() == slog.KindGroup {
 				for _, stat := range attr.Value.Group() {
+					if stat.Value.Kind() != slog.KindInt64 {
+						warnUnknownKey(debugLogger, "organization_stats."+stat.Key, r.Message)
+						continue
+					}
 					s.OrganizationStats[stat.Key] = stat.Value.Int64()
 				}
 			}
