@@ -15,4 +15,4 @@ description: Use when the user asks to create a git commit from staged changes.
    - For larger changes, use a summary line plus 3-5 bullet points.
    - Wrap body lines at 80 characters; keep the summary on one line.
 4. Ask for confirmation with a y/n prompt.
-5. If the user confirms, run `git commit` with the proposed message.
+5. If the user confirms, run `git commit -m "<message>"` with the proposed message.

@@ -11,7 +11,7 @@ Your goal is to implement one task under `docs/tasks/` by following its
 1. Identify the target task per
    `docs/dev/developer_guide/task_identification.md`.
 
-2. Read `01_requirements.md`, `02_architecture.md`,
+2. Read the target task's `01_requirements.md`, `02_architecture.md`,
    `03_implementation_plan.md`, and
    `docs/dev/developer_guide/test_organization.md`.
 
