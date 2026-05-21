@@ -87,6 +87,22 @@ func TestGenerateSummary_SumsSuccessfulSessions(t *testing.T) {
 	assert.Equal(t, map[string]int64{"org-a": 25, "org-b": 7}, summary.OrganizationStats)
 }
 
+func TestGenerateSummary_SumsSuccessfulSessionsAcrossPolicies(t *testing.T) {
+	start := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
+	report := summaryReport("multi-policy", "org-a", start.Add(time.Hour), 10, 0)
+	report.Policies = append(report.Policies, tlsrpt.PolicyRecord{
+		Summary: tlsrpt.Summary{TotalSuccessfulSessionCount: 15},
+	})
+	st := fakeStoreWithReports(report)
+
+	summary, err := notify.GenerateSummary(context.Background(), st, start, end, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), summary.ReportCount)
+	assert.Equal(t, map[string]int64{"org-a": 25}, summary.OrganizationStats)
+}
+
 func TestGenerateSummary_PeriodInSummary(t *testing.T) {
 	start := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
@@ -144,6 +160,34 @@ func TestGenerateSummary_MixedReportNotInStats(t *testing.T) {
 	assert.Equal(t, map[string]int64{"org-a": 10}, summary.OrganizationStats)
 }
 
+func TestGenerateSummary_ContextCanceledBeforeStoreRead(t *testing.T) {
+	start := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	st := &trackingStore{FakeStore: storetestutil.NewFakeStore()}
+
+	_, err := notify.GenerateSummary(ctx, st, start, end, nil)
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.False(t, st.called, "GetAllReports should not run after pre-call cancellation")
+}
+
+func TestGenerateSummary_ContextCanceledDuringLoop(t *testing.T) {
+	start := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
+	ctx, cancel := context.WithCancel(context.Background())
+	st := fakeStoreWithReports(
+		summaryReport("001-mixed", "org-mixed", start.Add(time.Hour), 42, 1),
+		summaryReport("002-after-cancel", "org-a", start.Add(2*time.Hour), 10, 0),
+	)
+	debugLogger := slog.New(cancelOnWarnHandler{cancel: cancel})
+
+	_, err := notify.GenerateSummary(ctx, st, start, end, debugLogger)
+
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 func TestGenerateSummary_StoreError(t *testing.T) {
 	start := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
@@ -156,6 +200,32 @@ func TestGenerateSummary_StoreError(t *testing.T) {
 	assert.ErrorIs(t, err, storeErr)
 	assert.True(t, strings.HasPrefix(err.Error(), "GenerateSummary: "))
 }
+
+type trackingStore struct {
+	*storetestutil.FakeStore
+	called bool
+}
+
+func (s *trackingStore) GetAllReports() ([]tlsrpt.Report, error) {
+	s.called = true
+	return s.FakeStore.GetAllReports()
+}
+
+type cancelOnWarnHandler struct {
+	cancel context.CancelFunc
+}
+
+func (h cancelOnWarnHandler) Enabled(_ context.Context, level slog.Level) bool {
+	return level >= slog.LevelWarn
+}
+
+func (h cancelOnWarnHandler) Handle(_ context.Context, _ slog.Record) error {
+	h.cancel()
+	return nil
+}
+
+func (h cancelOnWarnHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
+func (h cancelOnWarnHandler) WithGroup(_ string) slog.Handler      { return h }
 
 type errStoreWrapper struct {
 	*storetestutil.FakeStore
