@@ -27,7 +27,7 @@ Work in the following order.
 - Apply test helper rules from `docs/dev/developer_guide/test_organization.md`:
   - If new cross-package helpers or mocks are needed, place them under `testutil/` with the correct file naming and package naming.
   - If package-internal helpers are needed, place them in `test_helpers.go` or `test_helpers_<category>.go` with `//go:build test`.
-- After each code change involving Go files: run `make fmt`, then `make test`, then `make lint`. Fix any errors before continuing.
+- After each code change involving Go files: run `make fmt`, then `make test`, then `make lint`. Fix any errors before continuing. Exception: when implementing a phase group, test failures caused by the incomplete state of the group (e.g. missing implementations that stubs depend on) are expected and need not be fixed until the group is complete; fix only errors unrelated to the in-progress group.
 - When all items in the phase group are complete, update the plan's checkboxes (`[x]` for done, `[-]` for skipped with a note) and commit.
 
 6. Review the phase group.
