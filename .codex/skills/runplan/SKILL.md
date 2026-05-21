@@ -33,9 +33,7 @@ Your goal is to implement one task under `docs/tasks/` by following its
    - Fix errors before continuing, except test failures caused by the
      phase group's incomplete state.
    - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note),
-     then commit using the `git-commit` skill guidelines: inspect the staged
-     diff, draft the commit message, ask for confirmation, and only commit
-     after approval.
+     then commit using the `git-commit` skill guidelines.
 
 6. Review the phase group.
    - Run `make deadcode`.
