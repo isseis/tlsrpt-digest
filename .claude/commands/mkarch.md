@@ -4,26 +4,27 @@ Work in the following order.
 
 1. Identify the target task directory by following the rules in `docs/dev/developer_guide/task_identification.md`.
 
-2. Read the required input documents.
-- `01_requirements.md` in the target task directory
-- `docs/dev/developer_guide/requirements_process.md`
-- `docs/dev/developer_guide/mermaid_reference.md`
+2. Read `01_requirements.md` in the target task directory.
 
 3. Verify that architecture work is allowed.
 - Check the document status in `01_requirements.md`.
 - If the status is not `approved`, do not create `02_architecture.md`.
 - In that case, stop and report that architecture work cannot begin until `01_requirements.md` is `approved`.
 
-4. Read conditional guidance only when relevant.
+4. Read the remaining required input documents.
+- `docs/dev/developer_guide/requirements_process.md`
+- `docs/dev/developer_guide/mermaid_reference.md`
+
+5. Read conditional guidance only when relevant.
 - Read `docs/dev/developer_guide/notification_security.md` if the feature sends notifications or handles notification destinations.
 - Read `docs/dev/developer_guide/package_reference.md` if that file exists and the task introduces new packages or modifies existing packages.
 
-5. Inspect the current codebase before writing the design.
+6. Inspect the current codebase before writing the design.
 - Check the relevant packages under `cmd/` and `internal/`.
 - Identify existing components that should be reused.
 - Do not design new logic that duplicates responsibilities already handled elsewhere in the repository.
 
-6. Create `02_architecture.md` in the same task directory.
+7. Create `02_architecture.md` in the same task directory.
 - Write in Japanese.
 - Set the document status to `draft`.
 - Include all required sections defined in `docs/dev/developer_guide/requirements_process.md`.
@@ -32,9 +33,20 @@ Work in the following order.
 - Restrict code examples to high-level interfaces, type definitions, and error type definitions only.
 - Do not include implementation details, pseudocode, step-by-step algorithms, or low-level code.
 
-7. Review the document end to end and fix any issues you find before finishing.
+8. Spawn a review subagent using the Agent tool to critically evaluate the created document.
+   Construct a self-contained prompt that includes all of the following:
+   - **Persona**: act as an experienced software architect and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface gaps, ambiguities, and design risks. Do not soften findings.
+   - **Files to read**: embed the resolved absolute paths of `02_architecture.md`, `01_requirements.md`, `docs/dev/developer_guide/requirements_process.md`, and `docs/dev/developer_guide/mermaid_reference.md` as literal strings in the prompt so the subagent can read them without relying on your context. If the feature sends notifications or handles notification destinations, also embed the resolved absolute path of `docs/dev/developer_guide/notification_security.md`.
+   - **Evaluation criteria**: every item from the Technical correctness checklist and the Readability and consistency checklist below, copied verbatim.
+   - **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (section name or checklist item), Problem (what is wrong or missing), and Suggestion (concrete fix). If a checklist category has no issues, state that explicitly.
 
-**Technical correctness checklist:**
+   After receiving findings:
+   - Fix all Critical and Major issues.
+   - Apply Minor fixes at your discretion.
+   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until the subagent reports no Critical or Major issues, up to a maximum of three passes.
+   - Commit only after all review passes are complete and all Critical and Major issues are resolved.
+
+**Technical correctness checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] `01_requirements.md` is `approved`.
 - [ ] `02_architecture.md` is written in Japanese and its status is `draft`.
 - [ ] All required sections from the requirements process guide are present.
@@ -50,7 +62,7 @@ Work in the following order.
 - [ ] The component responsibilities table lists all new and modified files.
 - [ ] The design does not overlap with existing packages or re-implement existing responsibilities.
 
-**Readability and consistency checklist:**
+**Readability and consistency checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] The arrow semantics used in each diagram are stated explicitly in a caption or note (e.g., "矢印 A → B は…を表す"), and are applied consistently within that diagram.
 - [ ] Node labels read as component or type names, not as lists of values or behavioral descriptions.
 - [ ] Every Mermaid diagram includes a Legend block that explains its node classes.
@@ -59,4 +71,4 @@ Work in the following order.
 - [ ] Ambiguous or overly terse expressions are rewritten in direct, plain Japanese. Readers should not need context from prior review discussions to understand the text.
 - [ ] Architectural decisions that depend on constraints not obvious from the requirements are explained inline.
 
-When finished, provide a concise summary of what you created and any assumptions you had to make. If your runtime instructions allow committing at this stage, commit with an English commit message after the review is complete.
+When finished, provide a concise summary of what you created and any assumptions you had to make.

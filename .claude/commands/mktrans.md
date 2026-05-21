@@ -90,16 +90,26 @@ Apply these changes to the output file. Do not touch sections that are not in th
 If any terms were used during translation that are not in the glossary, add them to `docs/translation_glossary.md`.
 Skip this step if no new terms were introduced.
 
-## Review the Translation
+## Review the Translation (via Subagent)
 
-Read the translated output end to end before committing.
+Spawn a review subagent using the Agent tool to critically evaluate the translation.
+Construct a self-contained prompt that includes all of the following:
+- **Persona**: act as an experienced technical translator and editor whose job is to find real problems — not to approve. Be thorough and unsparing. Surface omissions, additions not in the source, mistranslations, and inconsistent terminology. Do not soften findings.
+- **Files to read**: embed the resolved absolute path of each of the following as a literal string in the prompt so the subagent can read them without relying on your context: the source file, the translated output file, and `docs/translation_glossary.md` (resolve to its absolute path as well).
+- **Evaluation criteria**: every item from the Accuracy checklist and the Readability checklist below, copied verbatim.
+- **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (section heading or paragraph), Problem (what is wrong), and Suggestion (concrete fix). If a checklist category has no issues, state that explicitly.
 
-**Accuracy checklist:**
+After receiving findings:
+- Fix all Critical and Major issues.
+- Apply Minor fixes at your discretion.
+- If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until the subagent reports no Critical or Major issues, up to a maximum of three passes.
+
+**Accuracy checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] No content from the source is missing in the translation.
 - [ ] No content was added that is not present in the source.
 - [ ] All technical terms match the glossary.
 
-**Readability checklist (translated output):**
+**Readability checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 
 The translation principles (Accuracy over fluency, Structural consistency) take precedence. The following checks apply only within those constraints: do not restructure sentences, reorder clauses, or rephrase in ways that would diverge from the source structure.
 
@@ -108,6 +118,8 @@ The translation principles (Accuracy over fluency, Structural consistency) take 
 - [ ] Sentence structure follows target-language conventions where the source structure permits it; literal carry-overs from source syntax that produce unnatural output are corrected as long as doing so does not alter meaning or structure.
 
 ## Commit
+
+Commit only after all review passes are complete and all Critical and Major issues are resolved.
 
 Commit in the following order:
 1. Commit the translated file only (do not include glossary changes).
