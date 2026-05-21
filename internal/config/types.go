@@ -74,12 +74,3 @@ type rawStoreConfig struct {
 type rawSummaryConfig struct {
 	WindowDays *int `toml:"window_days"`
 }
-
-// rawConfig and its sub-types for imap/store/summary are declared here for
-// future config sections. This assignment prevents the deadcode tool from
-// flagging them as unused while they are not yet wired into Load.
-var _ = rawConfig{
-	IMAP:    rawIMAPConfig{},
-	Store:   rawStoreConfig{},
-	Summary: rawSummaryConfig{},
-}

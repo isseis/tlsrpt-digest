@@ -111,7 +111,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 `02_architecture.md` セクション 3.3・3.4・6.1・6.2 を参照。`applyDefaults` はエラーを返さない（`02_architecture.md` セクション 3.3 のシグネチャ通り）。明示的な不正値に対するエラーは `validate` が担う。
 
-- [ ] **2.1** `internal/config/defaults.go` を新規作成し既定値適用ロジックを実装する
+- [x] **2.1** `internal/config/defaults.go` を新規作成し既定値適用ロジックを実装する
   - ファイル: `internal/config/defaults.go`
   - 作業内容:
     - `applyDefaults(raw *rawConfig) Config` を実装する（戻り値はエラーなし）
@@ -127,7 +127,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: フェーズ 2.5 のテストが通ること
   - 想定工数: 30 分 / 実績工数: -
 
-- [ ] **2.2** `internal/config/validate.go` を新規作成し値検証ロジックを実装する
+- [x] **2.2** `internal/config/validate.go` を新規作成し値検証ロジックを実装する
   - ファイル: `internal/config/validate.go`
   - 作業内容:
     - `validate(cfg *Config) error` を実装する
@@ -143,7 +143,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: フェーズ 2.5 のテストが通ること
   - 想定工数: 45 分 / 実績工数: -
 
-- [ ] **2.3** `internal/config/config.go` の `Load` を `defaults.go`・`validate.go` を使う形に再構成する
+- [x] **2.3** `internal/config/config.go` の `Load` を `defaults.go`・`validate.go` を使う形に再構成する
   - ファイル: `internal/config/config.go`
   - 作業内容:
     - strict decode で `rawConfig` にデコードし、デコードエラーを `fmt.Errorf("config: %w: %w", ErrConfigDecode, err)` でラップして返す（AC-03・AC-04）
@@ -153,7 +153,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go build ./internal/config/` が通ること
   - 想定工数: 30 分 / 実績工数: -
 
-- [ ] **2.4** `internal/config/helpers_test.go` を新規作成し `LoadFile` テスト向けログキャプチャヘルパーを定義する
+- [x] **2.4** `internal/config/helpers_test.go` を新規作成し `LoadFile` テスト向けログキャプチャヘルパーを定義する
   - ファイル: `internal/config/helpers_test.go`（新規、`package config_test`）
   - 作業内容:
     - `//go:build test` は付けない。`_test.go` ファイルは Go ツールチェーンによってテストビルド時のみコンパイルされるため、本番バイナリへの混入を防ぐビルドタグは不要である
@@ -162,7 +162,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go test -count=1 ./internal/config/` が通ること（コンパイルエラーがないこと）
   - 想定工数: 10 分 / 実績工数: -
 
-- [ ] **2.5** `internal/config/config_test.go` に新機能のテストを追加し、既存テストを更新する
+- [x] **2.5** `internal/config/config_test.go` に新機能のテストを追加し、既存テストを更新する
   - ファイル: `internal/config/config_test.go`
   - 作業内容（既存テストの更新）:
     - `TestLoad_ValidAllowedHost`・`TestLoad_EmptyAllowedHost`・`TestLoad_MissingNotifySection`・`TestNotifySlackConfig_AllowedHostValidation` のそれぞれの TOML データに `[imap]` セクション（`host = "imap.example.com"` および `port = 993`）を追加する（IMAP 必須フィールドが検証に通るようにするため）
@@ -180,14 +180,14 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go test -v ./internal/config/` で全テストが PASS すること
   - 想定工数: 60 分 / 実績工数: -
 
-- [ ] **2.6** `internal/config/security_test.go` を新規作成し `rawIMAPConfig` の構造保証テストを追加する
+- [x] **2.6** `internal/config/security_test.go` を新規作成し `rawIMAPConfig` の構造保証テストを追加する
   - ファイル: `internal/config/security_test.go`（新規、`package config`）
   - 作業内容:
     - `TestRawIMAPConfig_NoCredentialFields`: `reflect.TypeOf(rawIMAPConfig{})` を使ってフィールドを列挙し、フィールド名（小文字化）と TOML タグ値のいずれにも `"password"`・`"username"` が含まれないことを確認する。これにより将来 `rawIMAPConfig` に誤って認証情報フィールドが追加された場合に即検出できる（AC-07 の不変条件）
   - 確認方法: `go test -v ./internal/config/` で `TestRawIMAPConfig_NoCredentialFields` が PASS すること
   - 想定工数: 20 分 / 実績工数: -
 
-- [ ] **2.7** `make test` が通ることを確認する（M2）
+- [x] **2.7** `make test` が通ることを確認する（M2）
   - 確認方法: `make test` が成功すること。失敗した場合は前フェーズのタスクに戻り原因を修正すること
 
 ---
@@ -396,7 +396,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 | フェーズ | 完了条件 | 状態 |
 |---|---|---|
 | フェーズ 1 | `make test` が成功し既存テストの後方互換が維持されている | [x] |
-| フェーズ 2 | AC-01・AC-03〜AC-10・AC-10a の全テストが PASS | [ ] |
+| フェーズ 2 | AC-01・AC-03〜AC-10・AC-10a の全テストが PASS | [x] |
 | フェーズ 3 | AC-02・AC-10b・AC-10c・AC-10d の全テストが PASS | [ ] |
 | フェーズ 4 | AC-11〜AC-17 の全テストが PASS | [ ] |
 | フェーズ 5 | `make lint`・`make test`・`make deadcode` がすべて成功 | [ ] |
