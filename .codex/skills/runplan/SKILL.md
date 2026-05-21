@@ -37,16 +37,39 @@ Your goal is to implement one task under `docs/tasks/` by following its
    - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note),
      then commit using the `git-commit` skill guidelines.
 
-7. Review the phase group.
-   - Run `make deadcode`.
-   - Remove functions made unreachable by this phase group.
-   - Keep intentional scaffolding for future phases or tasks.
-   - Review only the diff introduced by this phase group.
-   - Fix issues, run `make fmt && make test && make lint`, then commit using
-     the `git-commit` skill guidelines. Repeat until applicable checklist
-     items pass.
+7. Run `make deadcode`. Remove functions made unreachable by this phase
+   group; keep intentional scaffolding for future phases or tasks.
+   If changes were made, run `make fmt && make test && make lint` and commit
+   using the `git-commit` skill guidelines.
 
-8. Phase-group checklist:
+8. Spawn a review subagent using the Agent tool to critically evaluate this
+   phase group's changes.
+   Construct a self-contained prompt that includes all of the following:
+   - **Persona**: act as an experienced senior Go engineer and senior SRE
+     whose job is to find real problems — not to approve. Be thorough and
+     unsparing. Surface bugs, missing test coverage, architecture drift, and
+     unclear code. Do not soften findings.
+   - **Context**: the task directory path, so the subagent can read
+     `02_architecture.md` and `03_implementation_plan.md` as the authoritative
+     design and plan references.
+   - **Files changed**: list the source files added or modified in this phase
+     group and instruct the subagent to read them in full. Also instruct the
+     subagent to run `git diff` to see exactly what changed.
+   - **Evaluation criteria**: every item from the phase-group checklist below,
+     copied verbatim.
+   - **Output format**: for each issue found, report Severity (Critical /
+     Major / Minor), File and line, Problem, and Suggestion. If a checklist
+     item has no issues, state that explicitly.
+
+   After receiving findings:
+   - Fix all Critical and Major issues, then run
+     `make fmt && make test && make lint` and commit using the `git-commit`
+     skill guidelines.
+   - Apply Minor fixes at your discretion.
+   - If significant changes were made, spawn a second review subagent to
+     verify the fixes.
+
+9. Phase-group checklist (use verbatim as evaluation criteria in the subagent prompt above):
    - Consistent with `02_architecture.md`.
    - Every AC assigned to this phase group has at least one test.
    - Covers non-trivial logic, error paths, and boundary values.
@@ -57,7 +80,7 @@ Your goal is to implement one task under `docs/tasks/` by following its
      string literals.
    - `make fmt`, `make lint`, and `make test` pass.
 
-9. Decide whether to continue or finish.
+10. Decide whether to continue or finish.
    - If implementation ran this iteration, summarize implementation,
      verified ACs, assumptions, and deferred items.
    - If phases remain, ask whether to continue with the next phase group.

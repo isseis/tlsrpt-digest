@@ -18,12 +18,22 @@ Work in order.
 - After each Go file change, run `make fmt && make test && make lint`; fix errors before continuing. Exception: errors caused by the phase group's incomplete state (e.g. build or test failures from missing implementations that stubs depend on) need not be fixed until the group is complete; fix only errors unrelated to the in-progress group.
 - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
 
-6. Review the phase group.
-- Run `make deadcode`. Remove functions made unreachable by this phase group; keep intentional scaffolding for future phases or tasks. If changes were made, run `make fmt && make test && make lint` and commit.
-- Review the diff introduced by this phase group against the checklist below. Skip items intentionally deferred to a later phase (note the reason).
-- For each issue: fix, run `make fmt && make test && make lint`, commit, and re-run the checklist.
+6. Run `make deadcode`. Remove functions made unreachable by this phase group; keep intentional scaffolding for future phases or tasks. If changes were made, run `make fmt && make test && make lint` and commit.
 
-Phase-group review checklist:
+7. Spawn a review subagent using the Agent tool to critically evaluate this phase group's changes.
+   Construct a self-contained prompt that includes all of the following:
+   - **Persona**: act as an experienced senior Go engineer and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface bugs, missing test coverage, architecture drift, and unclear code. Do not soften findings.
+   - **Context**: the task directory path, so the subagent can read `02_architecture.md` and `03_implementation_plan.md` as the authoritative design and plan references.
+   - **Files changed**: list the source files added or modified in this phase group and instruct the subagent to read them in full. Also instruct the subagent to run `git diff` to see exactly what changed.
+   - **Evaluation criteria**: every item from the phase-group review checklist below, copied verbatim.
+   - **Output format**: for each issue found, report Severity (Critical / Major / Minor), File and line, Problem, and Suggestion. If a checklist item has no issues, state that explicitly.
+
+   After receiving findings:
+   - Fix all Critical and Major issues, then run `make fmt && make test && make lint` and commit.
+   - Apply Minor fixes at your discretion.
+   - If significant changes were made, spawn a second review subagent to verify the fixes.
+
+Phase-group review checklist (use verbatim as evaluation criteria in the subagent prompt above):
 - [ ] Implementation is consistent with `02_architecture.md`.
 - [ ] Every AC assigned to this phase group by the implementation plan has at least one test.
 - [ ] Test coverage is sufficient: non-trivial logic, error paths, and boundary values are covered.
@@ -36,7 +46,7 @@ Phase-group review checklist:
 - [ ] `make lint` passes with no errors.
 - [ ] `make test` passes with no errors.
 
-7. Decide whether to continue or finish.
-- If steps 5 and 6 ran this iteration: summarize implementation, verified ACs, assumptions, and deferred items.
+8. Decide whether to continue or finish.
+- If steps 5–7 ran this iteration: summarize implementation, verified ACs, assumptions, and deferred items.
 - If phases remain: ask "Shall I continue with the next phase group?" — return to step 4 if agreed, otherwise report status and stop.
 - If all phases are complete: verify every AC in `01_requirements.md` is satisfied by the implementation and has at least one test. Report the final status and any gaps.

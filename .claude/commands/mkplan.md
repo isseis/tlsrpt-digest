@@ -37,7 +37,17 @@ Work in the following order.
 - If package-internal helpers are needed, plan them as `test_helpers.go` or `test_helpers_<category>.go` with `//go:build test`.
 - Do not add helper files in the plan unless they are actually needed.
 
-8. Review the document end to end and fix any issues you find before finishing.
+8. Spawn a review subagent using the Agent tool to critically evaluate the created document.
+   Construct a self-contained prompt that includes all of the following:
+   - **Persona**: act as an experienced senior engineer and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface gaps, missing test coverage, vague task descriptions, and AC traceability holes. Do not soften findings.
+   - **Files to read**: the absolute paths of `03_implementation_plan.md`, `02_architecture.md`, `01_requirements.md`, and `docs/dev/developer_guide/requirements_process.md` in this repository.
+   - **Evaluation criteria**: every item from the Technical correctness checklist and the Readability and consistency checklist below, copied verbatim.
+   - **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (section name or checklist item), Problem (what is wrong or missing), and Suggestion (concrete fix). If a checklist category has no issues, state that explicitly.
+
+   After receiving findings:
+   - Fix all Critical and Major issues.
+   - Apply Minor fixes at your discretion.
+   - If significant changes were made, spawn a second review subagent to verify the fixes.
 
 **Technical correctness checklist:**
 - [ ] `02_architecture.md` is `approved`.
