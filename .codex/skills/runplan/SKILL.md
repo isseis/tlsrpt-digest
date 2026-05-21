@@ -34,16 +34,15 @@ Your goal is to implement one task under `docs/tasks/` by following its
      `make fmt && make test && make lint`.
    - Fix errors before continuing, except test failures caused by the
      phase group's incomplete state.
-   - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note),
-     then commit using the `git-commit` skill guidelines. (This intermediate
-     commit captures the pre-review implementation state; the phase group is
-     not finalized until the review loop in step 8 completes with no Critical
-     or Major issues.)
+   - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note).
+     Do not commit yet; the phase-group commit is created once at the end of
+     step 8 after the review loop has no Critical or Major issues.
 
 7. Run `make deadcode`. Remove functions made unreachable by this phase
    group; keep intentional scaffolding for future phases or tasks.
-   If changes were made, run `make fmt && make test && make lint` and commit
-   using the `git-commit` skill guidelines.
+   If changes were made, run `make fmt && make test && make lint`. Do not
+   commit yet; include these changes in the single phase-group commit at the
+   end of step 8.
 
 8. Spawn a review subagent using the Agent tool to critically evaluate this
    phase group's changes.
@@ -56,10 +55,10 @@ Your goal is to implement one task under `docs/tasks/` by following its
      `02_architecture.md` and `03_implementation_plan.md` in full before
      evaluating the code.
    - **Files changed**: list the source files added or modified in this phase
-     group and instruct the subagent to read them in full. Also provide the
-     specific commit range for this phase group (e.g., `HEAD~N..HEAD`) and
-     instruct the subagent to run `git diff <range>` to see exactly what
-     changed.
+     group and instruct the subagent to read them in full. Instruct the
+     subagent to run both `git diff HEAD -- <files>` and
+     `git diff --staged -- <files>` to see exactly what changed in the
+     uncommitted phase-group diff.
    - **Evaluation criteria**: every item from the phase-group checklist below,
      copied verbatim.
    - **Output format**: for each issue found, report Severity (Critical /
@@ -68,12 +67,15 @@ Your goal is to implement one task under `docs/tasks/` by following its
 
    After receiving findings:
    - Fix all Critical and Major issues, then run
-     `make fmt && make test && make lint` and commit using the `git-commit`
-     skill guidelines.
+     `make fmt && make test && make lint`.
    - Apply Minor fixes at your discretion.
    - If any Critical or Major issue required a fix, spawn a second
      review subagent to verify the fixes. Repeat until the subagent reports
      no Critical or Major issues, up to a maximum of three passes.
+   - Once the review loop ends with no Critical or Major issues, commit the
+     entire phase group once using the `git-commit` skill guidelines.
+     If the maximum review pass is reached with remaining Critical or Major
+     issues, stop and report instead of committing.
 
 9. Phase-group checklist (use verbatim as evaluation criteria in the subagent prompt above):
    - Consistent with `02_architecture.md`.
