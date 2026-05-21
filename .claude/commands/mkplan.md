@@ -40,16 +40,17 @@ Work in the following order.
 8. Spawn a review subagent using the Agent tool to critically evaluate the created document.
    Construct a self-contained prompt that includes all of the following:
    - **Persona**: act as an experienced senior engineer and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface gaps, missing test coverage, vague task descriptions, and AC traceability holes. Do not soften findings.
-   - **Files to read**: the absolute paths of `03_implementation_plan.md`, `02_architecture.md`, `01_requirements.md`, and `docs/dev/developer_guide/requirements_process.md` in this repository.
+   - **Files to read**: embed the resolved absolute paths of `03_implementation_plan.md`, `02_architecture.md`, `01_requirements.md`, `docs/dev/developer_guide/requirements_process.md`, and `docs/dev/developer_guide/test_organization.md` as literal strings in the prompt so the subagent can read them without relying on your context.
    - **Evaluation criteria**: every item from the Technical correctness checklist and the Readability and consistency checklist below, copied verbatim.
    - **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (section name or checklist item), Problem (what is wrong or missing), and Suggestion (concrete fix). If a checklist category has no issues, state that explicitly.
 
    After receiving findings:
    - Fix all Critical and Major issues.
    - Apply Minor fixes at your discretion.
-   - If significant changes were made, spawn a second review subagent to verify the fixes.
+   - If more than one Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until the subagent reports no Critical or Major issues, up to a maximum of three passes.
+   - Commit only after all review passes are complete and all Critical and Major issues are resolved.
 
-**Technical correctness checklist:**
+**Technical correctness checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] `02_architecture.md` is `approved`.
 - [ ] `03_implementation_plan.md` is written in Japanese and its status is `draft`.
 - [ ] All required sections from the requirements process guide are present.
@@ -64,10 +65,10 @@ Work in the following order.
 - [ ] Any planned test helper files follow `docs/dev/developer_guide/test_organization.md`.
 - [ ] Planned file paths are specific where known and do not conflict with existing package responsibilities.
 
-**Readability and consistency checklist:**
+**Readability and consistency checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] Terminology is consistent with `02_architecture.md`; the same concept always uses the same Japanese term.
 - [ ] Task descriptions are phrased as clear, actionable instructions. Vague verbs (e.g., "対応する", "実装する") are replaced with specific actions where possible.
 - [ ] Redundant or repetitive content is removed; design details already in the architecture document are referenced rather than restated.
 - [ ] Ambiguous or overly terse expressions are rewritten in direct, plain Japanese so readers do not need prior context to understand what is expected.
 
-When finished, provide a concise summary of what you created and any assumptions you had to make. If your runtime instructions allow committing at this stage, commit with an English commit message after the review is complete.
+When finished, provide a concise summary of what you created and any assumptions you had to make.

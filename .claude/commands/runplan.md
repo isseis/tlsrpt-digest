@@ -9,7 +9,7 @@ Work in order.
 3. Read `01_requirements.md`, `02_architecture.md` (both in the target task directory), and `docs/dev/developer_guide/test_organization.md`.
 
 4. Select the next phase group from `03_implementation_plan.md` checkboxes (`[ ]` not started, `[x]` done, `[-]` skipped).
-- If all phases are complete, go to step 7.
+- If all phases are complete, go to final review (step 8).
 - Otherwise, use one phase unless it cannot pass `make test` alone (e.g. stub-only or tightly coupled); then extend the group until it can pass. Briefly note the reason for grouping before starting work.
 
 5. Implement the selected phase group.
@@ -23,15 +23,15 @@ Work in order.
 7. Spawn a review subagent using the Agent tool to critically evaluate this phase group's changes.
    Construct a self-contained prompt that includes all of the following:
    - **Persona**: act as an experienced senior Go engineer and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface bugs, missing test coverage, architecture drift, and unclear code. Do not soften findings.
-   - **Context**: the task directory path, so the subagent can read `02_architecture.md` and `03_implementation_plan.md` as the authoritative design and plan references.
-   - **Files changed**: list the source files added or modified in this phase group and instruct the subagent to read them in full. Also instruct the subagent to run `git diff` to see exactly what changed.
+   - **Context**: the task directory path; instruct the subagent to read `02_architecture.md` and `03_implementation_plan.md` in full before evaluating the code.
+   - **Files changed**: list the source files added or modified in this phase group and instruct the subagent to read them in full. Also instruct the subagent to run `git log --oneline -5` to identify the commits in this phase group, then `git diff <base-commit>..HEAD` to see exactly what changed.
    - **Evaluation criteria**: every item from the phase-group review checklist below, copied verbatim.
    - **Output format**: for each issue found, report Severity (Critical / Major / Minor), File and line, Problem, and Suggestion. If a checklist item has no issues, state that explicitly.
 
    After receiving findings:
    - Fix all Critical and Major issues, then run `make fmt && make test && make lint` and commit.
    - Apply Minor fixes at your discretion.
-   - If significant changes were made, spawn a second review subagent to verify the fixes.
+   - If more than one Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until the subagent reports no Critical or Major issues, up to a maximum of three passes.
 
 Phase-group review checklist (use verbatim as evaluation criteria in the subagent prompt above):
 - [ ] Implementation is consistent with `02_architecture.md`.
@@ -47,6 +47,6 @@ Phase-group review checklist (use verbatim as evaluation criteria in the subagen
 - [ ] `make test` passes with no errors.
 
 8. Decide whether to continue or finish.
-- If steps 5–7 ran this iteration: summarize implementation, verified ACs, assumptions, and deferred items.
+- If implementation ran this iteration: summarize implementation, verified ACs, assumptions, and deferred items.
 - If phases remain: ask "Shall I continue with the next phase group?" — return to step 4 if agreed, otherwise report status and stop.
 - If all phases are complete: verify every AC in `01_requirements.md` is satisfied by the implementation and has at least one test. Report the final status and any gaps.

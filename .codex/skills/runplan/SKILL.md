@@ -49,12 +49,14 @@ Your goal is to implement one task under `docs/tasks/` by following its
      whose job is to find real problems — not to approve. Be thorough and
      unsparing. Surface bugs, missing test coverage, architecture drift, and
      unclear code. Do not soften findings.
-   - **Context**: the task directory path, so the subagent can read
-     `02_architecture.md` and `03_implementation_plan.md` as the authoritative
-     design and plan references.
+   - **Context**: the task directory path; instruct the subagent to read
+     `02_architecture.md` and `03_implementation_plan.md` in full before
+     evaluating the code.
    - **Files changed**: list the source files added or modified in this phase
      group and instruct the subagent to read them in full. Also instruct the
-     subagent to run `git diff` to see exactly what changed.
+     subagent to run `git log --oneline -5` to identify the commits in this
+     phase group, then `git diff <base-commit>..HEAD` to see exactly what
+     changed.
    - **Evaluation criteria**: every item from the phase-group checklist below,
      copied verbatim.
    - **Output format**: for each issue found, report Severity (Critical /
@@ -66,19 +68,22 @@ Your goal is to implement one task under `docs/tasks/` by following its
      `make fmt && make test && make lint` and commit using the `git-commit`
      skill guidelines.
    - Apply Minor fixes at your discretion.
-   - If significant changes were made, spawn a second review subagent to
-     verify the fixes.
+   - If more than one Critical or Major issue required a fix, spawn a second
+     review subagent to verify the fixes. Repeat until the subagent reports
+     no Critical or Major issues, up to a maximum of three passes.
 
 9. Phase-group checklist (use verbatim as evaluation criteria in the subagent prompt above):
    - Consistent with `02_architecture.md`.
    - Every AC assigned to this phase group has at least one test.
-   - Covers non-trivial logic, error paths, and boundary values.
-   - No duplicate or trivial tests.
-   - No reimplementation when existing code can be used.
-   - Comments and identifiers are English.
-   - No planning references such as `AC-01` remain in source comments or
-     string literals.
-   - `make fmt`, `make lint`, and `make test` pass.
+   - Test coverage is sufficient: non-trivial logic, error paths, and boundary values are covered.
+   - No tests duplicate existing coverage without good reason.
+   - No tests are so trivial that they add no verification value.
+   - No logic is reimplemented when an existing function in the codebase can be used.
+   - All source comments and identifiers are in English.
+   - No planning document references (e.g. `AC-01`, `F-001`) remain in source comments or string literals.
+   - `make fmt` produces no diff.
+   - `make lint` passes with no errors.
+   - `make test` passes with no errors.
 
 10. Decide whether to continue or finish.
    - If implementation ran this iteration, summarize implementation,
