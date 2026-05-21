@@ -43,6 +43,40 @@ webhook_url = "https://hooks.slack.com/services/xxx"
 	assert.True(t, errors.Is(err, config.ErrConfigDecode))
 }
 
+func TestLoad_FutureSectionsRejectedUntilImplemented(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{
+			name: "imap",
+			data: `[imap]
+host = "imap.example.com"
+`,
+		},
+		{
+			name: "store",
+			data: `[store]
+root_dir = "./store"
+`,
+		},
+		{
+			name: "summary",
+			data: `[summary]
+window_days = 7
+`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := config.Load([]byte(tt.data))
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, config.ErrConfigDecode))
+		})
+	}
+}
+
 func TestNotifySlackConfig_AllowedHostValidation(t *testing.T) {
 	tests := []struct {
 		name    string
