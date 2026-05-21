@@ -233,7 +233,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 
 `02_architecture.md` セクション 6.2 の既定値方針を参照。
 
-- [ ] **4.1** `internal/config/config_test.go` に AC-11〜AC-17 の既定値テストを追加する
+- [x] **4.1** `internal/config/config_test.go` に AC-11〜AC-17 の既定値テストを追加する
   - ファイル: `internal/config/config_test.go`
   - 作業内容（各テスト関数）:
     - `TestLoad_Default_MailboxINBOX`: `imap.mailbox` を未設定のとき `Config.IMAP.Mailbox == "INBOX"` であることを確認する（AC-11）
@@ -246,7 +246,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
   - 確認方法: `go test -v ./internal/config/` で全テストが PASS すること
   - 想定工数: 30 分 / 実績工数: -
 
-- [ ] **4.2** `make test` が通ることを確認する（M4）
+- [x] **4.2** `make test` が通ることを確認する（M4）
   - 確認方法: `make test` が成功すること。失敗した場合は前フェーズのタスクに戻り原因を修正すること
 
 ---
@@ -398,7 +398,7 @@ AC-10 の有効 PEM テストには、テスト関数内の定数として自己
 | フェーズ 1 | `make test` が成功し既存テストの後方互換が維持されている | [x] |
 | フェーズ 2 | AC-01・AC-03〜AC-10・AC-10a の全テストが PASS | [x] |
 | フェーズ 3 | AC-02・AC-10b・AC-10c・AC-10d の全テストが PASS | [x] |
-| フェーズ 4 | AC-11〜AC-17 の全テストが PASS | [ ] |
+| フェーズ 4 | AC-11〜AC-17 の全テストが PASS | [x] |
 | フェーズ 5 | `make lint`・`make test`・`make deadcode` がすべて成功 | [ ] |
 
 ---

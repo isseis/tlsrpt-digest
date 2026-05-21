@@ -345,6 +345,48 @@ func TestLoad_MaxMessageBytesValidation(t *testing.T) {
 	assert.True(t, errors.Is(err, config.ErrInvalidMaxMessageBytes))
 }
 
+func TestLoad_Default_MailboxINBOX(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, "INBOX", cfg.IMAP.Mailbox)
+}
+
+func TestLoad_Default_FetchDays14(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, 14, cfg.IMAP.FetchDays)
+}
+
+func TestLoad_Default_StoreRootDir(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, "./store", cfg.Store.RootDir)
+}
+
+func TestLoad_Default_TLSCACertEmpty(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, "", cfg.IMAP.TLSCACert)
+}
+
+func TestLoad_Default_WindowDays7(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, 7, cfg.Summary.WindowDays)
+}
+
+func TestLoad_Default_RetentionDays30(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, 30, cfg.Store.RetentionDays)
+}
+
+func TestLoad_Default_MaxEmailAgeDays30(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, 30, cfg.Store.MaxEmailAgeDays)
+}
+
 const testCertificatePEM = `-----BEGIN CERTIFICATE-----
 MIICCDCCAXGgAwIBAgIUNWu49yb0AKVxDsP02RBRe9jokjUwDQYJKoZIhvcNAQEL
 BQAwFjEUMBIGA1UEAwwLZXhhbXBsZS5jb20wHhcNMjYwNTIxMTI1MzIwWhcNMjYw
