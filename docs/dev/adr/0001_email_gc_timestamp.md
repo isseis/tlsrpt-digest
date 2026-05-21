@@ -103,7 +103,7 @@ Validate `end-datetime <= now + 48h` or similar at parse time.
 
 - `EmailMeta` and `internalEmailIndexEntry` have an `InternalDate` (IMAP INTERNALDATE) field and do not have a `SentAt` field.
 - `LoadedEmail` does not have a `SentAt` field (when the sent time is needed, it can be accessed via `Message.Header.Get("Date")`).
-- `Store.SaveEmail` takes `internalDate` and `savedAt` as arguments.
+- `Store.SaveEmail` takes `internalDate` as an argument and does not take `savedAt` as an argument.
 - If `INTERNALDATE` is a zero value, an error is returned (`INTERNALDATE` is a mandatory field per RFC 3501, and a zero value indicates a serious specification violation by the IMAP server).
 
 | Timestamp | Role in `.eml` GC | Role in Path Determination | Role in Report GC |
