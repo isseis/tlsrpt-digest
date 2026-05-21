@@ -275,7 +275,7 @@ func TestFormatSummary_UsesProvidedPeriod(t *testing.T) {
 	assert.Contains(t, body, "2025-06-14")
 }
 
-func TestExtractSummary_OrganizationStats_Roundtrip(t *testing.T) {
+func TestFormatSummary_OrganizationStatsFromLogSummary(t *testing.T) {
 	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
 		Period: notify.DateRange{
 			Start: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -311,6 +311,23 @@ func TestFormatSummary_OrgStatsInAttachment(t *testing.T) {
 	fields := flattenSlackFields(msg)
 	assert.Equal(t, "10 successful sessions", fields["org-a"])
 	assert.Equal(t, "20 successful sessions", fields["org-b"])
+}
+
+func TestFormatSummary_OrganizationStatsSortedInAttachment(t *testing.T) {
+	msg := decodeSlackMessage(t, flushSummary(t, notify.Summary{
+		Period: notify.DateRange{Start: time.Now(), End: time.Now()},
+		OrganizationStats: map[string]int64{
+			"org-b": 20,
+			"org-a": 10,
+		},
+	}))
+
+	require.Len(t, msg.Attachments, 1)
+	require.GreaterOrEqual(t, len(msg.Attachments[0].Fields), 2)
+	assert.Equal(t, "org-a", msg.Attachments[0].Fields[0].Title)
+	assert.Equal(t, "10 successful sessions", msg.Attachments[0].Fields[0].Value)
+	assert.Equal(t, "org-b", msg.Attachments[0].Fields[1].Title)
+	assert.Equal(t, "20 successful sessions", msg.Attachments[0].Fields[1].Value)
 }
 
 func TestFormatSummary_ReportCountInText(t *testing.T) {
