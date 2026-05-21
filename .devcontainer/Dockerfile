@@ -98,6 +98,7 @@ COPY .devcontainer/bashrc_git_ps1.sh /etc/bash_completion.d/git_ps1_settings.sh
 
 RUN mkdir -p /home/$USERNAME/.vscode-server/extensions \
     && mkdir -p /home/$USERNAME/.ssh \
+    && mkdir -p /home/$USERNAME/.codex \
     && chown -R $USERNAME:$USERNAME /home/$USERNAME
 
 RUN echo 'eval "$(direnv hook bash)"' >> /etc/bash.bashrc
