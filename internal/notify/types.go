@@ -42,12 +42,12 @@ type SystemError struct {
 }
 
 // Summary is the notification payload for a periodic summary event.
-// The caller provides the aggregated data; this package only handles
-// the notification representation.
+// OrganizationStats maps organization name to total successful session count.
+// OrganizationCount is derived via len(OrganizationStats) and is not stored.
 type Summary struct {
 	Period            DateRange
-	OrganizationCount int
-	ReportCount       int
+	OrganizationStats map[string]int64
+	ReportCount       int64
 }
 
 // Flusher is implemented by SlackHandler in addition to slog.Handler.

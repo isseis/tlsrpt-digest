@@ -151,13 +151,11 @@ func extractSystemError(r slog.Record, debugLogger *slog.Logger) SystemError {
 
 // extractSummary reads Summary fields from slog.Attrs stored by LogSummary.
 func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
-	var s Summary
+	s := Summary{OrganizationStats: make(map[string]int64)}
 	r.Attrs(func(attr slog.Attr) bool {
 		switch attr.Key {
-		case "organization_count":
-			s.OrganizationCount = int(attr.Value.Int64())
 		case "report_count":
-			s.ReportCount = int(attr.Value.Int64())
+			s.ReportCount = attr.Value.Int64()
 		case "period_start":
 			if t, ok := attr.Value.Any().(time.Time); ok {
 				s.Period.Start = t
@@ -166,6 +164,8 @@ func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 			if t, ok := attr.Value.Any().(time.Time); ok {
 				s.Period.End = t
 			}
+		case "organization_stats":
+			// Populated in phase 4; ignored here until then.
 		default:
 			warnUnknownKey(debugLogger, attr.Key, r.Message)
 		}
@@ -252,7 +252,7 @@ func formatSummary(s Summary, runID string) slackMessage {
 						),
 						Short: true,
 					},
-					{Title: "Organizations", Value: fmt.Sprintf("%d", s.OrganizationCount), Short: true},
+					{Title: "Organizations", Value: fmt.Sprintf("%d", len(s.OrganizationStats)), Short: true},
 					{Title: "Reports", Value: fmt.Sprintf("%d", s.ReportCount), Short: true},
 					{Title: "Run ID", Value: runID, Short: true},
 				},

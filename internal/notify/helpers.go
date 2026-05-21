@@ -45,8 +45,7 @@ func LogSummary(ctx context.Context, h slog.Handler, s Summary) error {
 	r.AddAttrs(
 		slog.Any("period_start", s.Period.Start),
 		slog.Any("period_end", s.Period.End),
-		slog.Int64("organization_count", int64(s.OrganizationCount)),
-		slog.Int64("report_count", int64(s.ReportCount)),
+		slog.Int64("report_count", s.ReportCount),
 	)
 	return h.Handle(ctx, r)
 }

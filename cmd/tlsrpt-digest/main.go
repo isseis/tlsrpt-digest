@@ -106,7 +106,7 @@ func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, d
 	for _, h := range handlers {
 		if err := notify.LogSummary(ctx, h, notify.Summary{
 			Period:            notify.DateRange{Start: now, End: now},
-			OrganizationCount: 0,
+			OrganizationStats: map[string]int64{},
 			ReportCount:       0,
 		}); err != nil {
 			return err
