@@ -1,132 +1,132 @@
-# ADR-0001: `.eml` ファイルの GC 判定に使用する日時の選択
+# ADR-0001: Selecting the Timestamp for `.eml` File GC Determination
 
-| 項目 | 内容 |
+| Item | Content |
 |---|---|
-| 番号 | ADR-0001 |
-| ステータス | 採択 |
-| 決定日 | 2026-05-20 |
-| 関連タスク | 0040_store, 0041_store_gc_simplify |
+| Number | ADR-0001 |
+| Status | Adopted |
+| Decision Date | 2026-05-20 |
+| Related Tasks | 0040_store, 0041_store_gc_simplify |
 
 ---
 
-## 1. コンテキスト
+## 1. Context
 
-### システムにおける `.eml` GC の位置づけ
+### Role of `.eml` GC in the System
 
-本システムは IMAP メールボックスから TLSRPT レポートメールを取得し、メール原本を `.eml` ファイルとして `{root_dir}/emails/{uidvalidity}/{YYYYMM}/{padded_uid}.eml` に保存する。`{YYYYMM}` は IMAP サーバーが設定する受信日時（`INTERNALDATE`）から導出し、古いファイルを日付単位で手動削除しやすくするための構造である。
+This system fetches TLSRPT report emails from an IMAP mailbox and stores the raw email files as `.eml` files at `{root_dir}/emails/{uidvalidity}/{YYYYMM}/{padded_uid}.eml`. The `{YYYYMM}` component is derived from the reception timestamp (`INTERNALDATE`) set by the IMAP server, structuring the files to make it easy to manually delete old files by date.
 
-`DeleteEmailsBefore` は保持期間を超えた `.eml` ファイルを定期 GC する。GC の判定基準として、システム内には以下の 4 種類の日時が存在する。
+`DeleteEmailsBefore` periodically GCs `.eml` files that have exceeded the retention period. The system has the following four types of timestamps available as GC determination criteria.
 
-### 利用可能な日時とその特性
+### Available Timestamps and Their Characteristics
 
-| 日時 | 取得元 | 制御主体 | 信頼性 |
+| Timestamp | Source | Controlling Party | Reliability |
 |---|---|---|---|
-| **送信日時**（SentAt） | メールの `Date:` ヘッダー | 送信側（外部） | 低：外部から任意に設定可能 |
-| **IMAP 受信日時**（INTERNALDATE） | IMAP サーバー | メールサーバー（外部） | 中：サーバー依存 |
-| **ダウンロード日時**（SavedAt） | ファイルの inode change time（ctime） | 本システム（ローカル） | 高：外部から改ざん不可 |
-| **レポート期間終了日**（report_end_date） | TLSRPT レポート内の `date-range.end-datetime` | 送信側（外部） | 低：外部から任意に設定可能 |
+| **Sent time** (SentAt) | Email `Date:` header | Sender (external) | Low: can be set arbitrarily by external parties |
+| **IMAP reception time** (INTERNALDATE) | IMAP server | Mail server (external) | Medium: server-dependent |
+| **Download time** (SavedAt) | File inode change time (ctime) | This system (local) | High: cannot be tampered with externally |
+| **Report period end date** (report_end_date) | `date-range.end-datetime` in TLSRPT report | Sender (external) | Low: can be set arbitrarily by external parties |
 
 ---
 
-## 2. 設計上の考慮事項
+## 2. Design Considerations
 
-### 外部制御値を GC 基準にした場合のリスク
+### Risks of Using Externally Controlled Values as GC Criteria
 
-`SentAt` と `report_end_date` は送信側が設定する値であり、遠未来日付（例：year 3000）の誤設定や意図的な攻撃によって GC が機能しなくなるリスクがある。`.eml` ファイルが削除されずに蓄積し続けると、ディスク使用量が無制限に増大する。
+`SentAt` and `report_end_date` are values set by the sender. There is a risk that GC will stop functioning due to misconfiguration with far-future dates (e.g., year 3000) or intentional attacks. If `.eml` files continue to accumulate without being deleted, disk usage will grow without limit.
 
-一方、`SavedAt`（ctime）は本システムが記録するローカル制御の値であり、外部から改ざんできないため GC 基準として信頼性が高い。
+`SavedAt` (ctime), on the other hand, is a locally controlled value recorded by this system and cannot be tampered with externally, making it highly reliable as a GC criterion.
 
-### ファイルパス構造と GC 基準日時の関係
+### Relationship Between File Path Structure and GC Reference Timestamp
 
-`.eml` のパスに含まれる `{YYYYMM}` は `INTERNALDATE`（IMAP サーバー受信日時）由来である。GC の削除判定に使う日時（ダウンロード日時・期間終了日など）は `INTERNALDATE` と異なる月になり得るため（例：2025 年 1 月受信・2025 年 6 月ダウンロード）、ディレクトリ名と GC 基準日時を直接比較して削除するアプローチは誤削除のリスクを生じる。
+The `{YYYYMM}` component in the `.eml` path is derived from `INTERNALDATE` (IMAP server reception time). The timestamp used for GC deletion determination (download time, period end date, etc.) can differ from `INTERNALDATE` in the month (e.g., received in January 2025, downloaded in June 2025), so an approach that directly compares directory names with GC reference timestamps for deletion carries a risk of erroneous deletion.
 
-### `SentAt`（`Date:` ヘッダー）をパス決定に用いる場合の問題
+### Problems with Using `SentAt` (`Date:` Header) for Path Determination
 
-`{YYYYMM}` の決定に `SentAt` を使用すると以下の問題がある。
+Using `SentAt` for `{YYYYMM}` determination has the following problems:
 
-- **外部制御値への依存**: `Date:` ヘッダーは送信側が任意に設定できる値であり信頼性が低い
-- **パス不安定性**: `Date:` ヘッダーが欠損している場合は `SavedAt` にフォールバックするが、リカバリー等で同一メールを再取得すると `SavedAt` が変わりパスが変化し、重複ファイルが生じるリスクがある
+- **Dependency on externally controlled values**: The `Date:` header is a value that the sender can set arbitrarily and is unreliable.
+- **Path instability**: When the `Date:` header is absent, the system falls back to `SavedAt`; however, if the same email is re-fetched during recovery, `SavedAt` changes and the path changes, creating a risk of duplicate files.
 
-IMAP サーバーが設定する `INTERNALDATE`（RFC 3501 必須フィールド）は常に存在し、サーバーが一度設定した後は変更されないため、フォールバック不要で安定したパス決定に適している。
+The `INTERNALDATE` set by the IMAP server (a mandatory field per RFC 3501) always exists and is not changed once the server sets it, making it suitable for stable path determination without needing a fallback.
 
-### バリデーションの責務配置
+### Responsibility Placement for Validation
 
-遠未来 `report_end_date` への対処として `internal/tlsrpt.Parse()` に `end-datetime` の上限チェックを追加する案も考えられる。しかし `internal/tlsrpt` は RFC 8460 JSON を忠実に Go 構造体へ変換する責務を持つ。「この date-range を処理するかどうか」はアプリケーションレベルの判断であり、パーサーにビジネスロジックを持ち込むと責務が混在し、`now time.Time` を注入する必要も生じてテスト容易性が低下する。この判断はエントリポイントの責務とする。
-
----
-
-## 3. 検討した選択肢
-
-### 選択肢 A: `report_end_date` と `saved_at` の両基準で GC 判定を行い、ディレクトリスイープの誤削除を防ぐ
-
-GC 判定を `report_end_date < reportCutoff`（外部制御）と `saved_at < savedAtCutoff`（ローカル制御）の 2 基準で行う。ディレクトリのスイープはサバイビングインデックスとの照合で誤削除を防ぐ形とする。
-
-**却下理由**: 送信側制御の `report_end_date` を GC 判定に使うため、遠未来日付による攻撃ベクターが残存する。2 基準の管理によりコードが複雑になる。
-
-### 選択肢 B: `{YYYYMM}` ディレクトリ名を `SavedAt`（ダウンロード日時）から導出する
-
-`{savedAt.YYYYMM}` ベースにすることで、ディレクトリ名と GC 判定日時の一貫性を保てる。
-
-**却下理由**:
-
-- **パスの安定性が `INTERNALDATE` より低い**: `SavedAt` はダウンロード日時であるため、リカバリー等で同一メールを再取得すると月が変わり別パスへ書き込まれ、重複ファイルが生じるリスクがある。`INTERNALDATE`（RFC 3501 必須フィールド）はサーバーが一度設定した後は変更されないため常に安定する。
-- **意味的な問題**: ディレクトリが「レポート期間」ではなく「ダウンロード時期」で分割されるため、特定期間のメールを手動で探しにくくなる。
-- **根本問題の未解消**: `SavedAt` はローカル制御値であり GC 基準としては適切だが、パス決定においては `INTERNALDATE` のほうが安定性・信頼性ともに優れる。
-
-### 選択肢 C: GC 基準を `INTERNALDATE` のみとし、GC 後の空ディレクトリを削除する（採択）
-
-- `DeleteEmailsBefore(cutoff time.Time)` とし、`internal_date < cutoff` のみを削除条件とする
-- メールインデックスに `report_end_date` を持たない
-- ディレクトリ名と GC 基準日時の直接比較は行わず、GC 後に空になった `{uidvalidity}/{YYYYMM}` および `{uidvalidity}` ディレクトリを削除する
-
-GC 基準に `SavedAt` ではなく `INTERNALDATE` を採用する理由：GC の目的は「古いレポートデータを削除する」ことであり、データの「古さ」は我々がダウンロードした日時（`SavedAt`）ではなく、IMAP サーバー受信日時（`INTERNALDATE`、先方の送信日時の近似値）で計測するのが意味的に正しい。`SavedAt` を基準にすると、ネットワーク障害等でフェッチが遅延した場合に実質的な保持期間が短縮される。リカバリー時に保持期間を超えた古いメールを再取得した場合は即 GC 対象となるが、これは正しい動作である（保持期間を超えたデータの再処理は不要）。
-
-真に孤立した `.eml` ファイル（インデックスに存在しないファイル）の清掃は `reprocess` サブコマンドが全 `.eml` を再帰走査するため、ディレクトリスイープがなくても自然に回収される。
-
-### 選択肢 D: `internal/tlsrpt.Parse()` に date-range バリデーションを追加する
-
-パース時点で `end-datetime <= now + 48h` などを検証する。
-
-**却下理由**: セクション 2「バリデーションの責務配置」に記載のとおり、パーサーの責務範囲を超えるためエントリポイントで対処する。
+Adding an upper-limit check on `end-datetime` to `internal/tlsrpt.Parse()` as a countermeasure against far-future `report_end_date` values is one option to consider. However, `internal/tlsrpt` is responsible for faithfully converting RFC 8460 JSON into Go structs. The decision of "whether to process this date-range" is an application-level judgment; embedding business logic in the parser mixes responsibilities and also requires injecting `now time.Time`, which reduces testability. This judgment is the responsibility of the entry point.
 
 ---
 
-## 4. 決定
+## 3. Options Considered
 
-### 4.1 GC 判定日時：選択肢 C を採択
+### Option A: Perform GC determination using both `report_end_date` and `saved_at` criteria, preventing erroneous deletion during directory sweeps
 
-**タスク 0041_store_gc_simplify として実装する**。`.eml` の GC 判定には `INTERNALDATE`（IMAP サーバー受信日時）のみを使用する。
+GC determination is performed using two criteria: `report_end_date < reportCutoff` (external control) and `saved_at < savedAtCutoff` (local control). Directory sweeps are cross-referenced against surviving indices to prevent erroneous deletion.
 
-### 4.2 パス決定日時：`INTERNALDATE` を採用
+**Reason for rejection**: Using the sender-controlled `report_end_date` for GC determination leaves an attack vector via far-future dates. Managing two criteria makes the code complex.
 
-**タスク 0041_store_gc_simplify の前提として同時に実装する**。`{YYYYMM}` の決定には `INTERNALDATE` を使用し、`SentAt`（`Date:` ヘッダー）はデータモデルに含まない。
+### Option B: Derive the `{YYYYMM}` directory name from `SavedAt` (download time)
 
-- `EmailMeta`・`internalEmailIndexEntry` は `InternalDate`（IMAP INTERNALDATE）フィールドを持ち、`SentAt` フィールドを持たない
-- `LoadedEmail` は `SentAt` フィールドを持たない（送信日時が必要な場合は `Message.Header.Get("Date")` で参照可能）
-- `Store.SaveEmail` は `internalDate` と `savedAt` を引数に取る
-- `INTERNALDATE` がゼロ値の場合はエラーを返す（`INTERNALDATE` は RFC 3501 必須フィールドであり、ゼロ値は IMAP サーバーの重大な仕様違反を示す）
+Using `{savedAt.YYYYMM}` as the base ensures consistency between directory names and GC reference timestamps.
 
-| 日時 | `.eml` GC での役割 | パス決定での役割 | レポート GC での役割 |
+**Reason for rejection**:
+
+- **Lower path stability than `INTERNALDATE`**: Since `SavedAt` is the download time, if the same email is re-fetched during recovery and the month changes, it would be written to a different path, creating a risk of duplicate files. `INTERNALDATE` (a mandatory field per RFC 3501) is set once by the server and never changed, so it is always stable.
+- **Semantic issue**: Directories are partitioned by "download period" rather than "report period," making it harder to manually locate emails for a specific period.
+- **Root problem unresolved**: Although `SavedAt` is a locally controlled value and appropriate as a GC criterion, `INTERNALDATE` is superior in both stability and reliability for path determination.
+
+### Option C: Use only `INTERNALDATE` as the GC criterion and delete empty directories after GC (Adopted)
+
+- Use `DeleteEmailsBefore(cutoff time.Time)` with `internal_date < cutoff` as the only deletion condition.
+- Do not include `report_end_date` in the email index.
+- Do not directly compare directory names with GC reference timestamps; instead, delete `{uidvalidity}/{YYYYMM}` and `{uidvalidity}` directories that become empty after GC.
+
+Reason for adopting `INTERNALDATE` rather than `SavedAt` as the GC criterion: The purpose of GC is to "delete old report data," and the "age" of data is semantically correct to measure by the IMAP server reception time (`INTERNALDATE`, an approximation of the sender's transmission time), not by when we downloaded it (`SavedAt`). Using `SavedAt` as the criterion would shorten the effective retention period when fetch is delayed due to network failures. When re-fetching old emails that have exceeded the retention period during recovery, they would immediately become GC targets, but this is the correct behavior (reprocessing data beyond the retention period is unnecessary).
+
+Cleanup of truly orphaned `.eml` files (files not present in the index) is naturally handled by the `reprocess` subcommand, which recursively traverses all `.eml` files, so no directory sweep is needed.
+
+### Option D: Add date-range validation to `internal/tlsrpt.Parse()`
+
+Validate `end-datetime <= now + 48h` or similar at parse time.
+
+**Reason for rejection**: As described in Section 2 "Responsibility Placement for Validation," this exceeds the scope of the parser's responsibility and should be handled at the entry point.
+
+---
+
+## 4. Decision
+
+### 4.1 GC Reference Timestamp: Adopt Option C
+
+**To be implemented as task 0041_store_gc_simplify**. Only `INTERNALDATE` (IMAP server reception time) is used for `.eml` GC determination.
+
+### 4.2 Path Determination Timestamp: Adopt `INTERNALDATE`
+
+**To be implemented simultaneously as a prerequisite for task 0041_store_gc_simplify**. `INTERNALDATE` is used for `{YYYYMM}` determination; `SentAt` (`Date:` header) is not included in the data model.
+
+- `EmailMeta` and `internalEmailIndexEntry` have an `InternalDate` (IMAP INTERNALDATE) field and do not have a `SentAt` field.
+- `LoadedEmail` does not have a `SentAt` field (when the sent time is needed, it can be accessed via `Message.Header.Get("Date")`).
+- `Store.SaveEmail` takes `internalDate` as an argument and does not take `savedAt` as an argument.
+- If `INTERNALDATE` is a zero value, an error is returned (`INTERNALDATE` is a mandatory field per RFC 3501, and a zero value indicates a serious specification violation by the IMAP server).
+
+| Timestamp | Role in `.eml` GC | Role in Path Determination | Role in Report GC |
 |---|---|---|---|
-| `SentAt` | 使用しない | 使用しない | 使用しない |
-| `INTERNALDATE` | **削除判定の唯一の基準** | **`{YYYYMM}` 決定の基準** | 使用しない |
-| `SavedAt` | 使用しない | 使用しない | 使用しない |
-| `report_end_date` | 使用しない（メールインデックスに含まない） | 使用しない | 削除判定の基準 |
+| `SentAt` | Not used | Not used | Not used |
+| `INTERNALDATE` | **The sole criterion for deletion determination** | **The basis for `{YYYYMM}` determination** | Not used |
+| `SavedAt` | Not used | Not used | Not used |
+| `report_end_date` | Not used (not included in email index) | Not used | Criterion for deletion determination |
 
-`report_end_date` はレポートレコード（`tlsrpt.json` の `reports` 配列）の GC（`DeleteReportsBefore`）に使用する。レポートレコードには `saved_at` 相当の日時がなく、「対象期間が終わったデータを集計対象から外す」という意味論が正しいためである。
+`report_end_date` is used for GC of report records (the `reports` array in `tlsrpt.json`) (`DeleteReportsBefore`). Report records have no `saved_at` equivalent timestamp, and the semantics of "excluding data whose target period has ended from aggregation targets" is correct.
 
-遠未来 `end-datetime` への対策はエントリポイント（タスク 0070）での保持期間上限として実装し、`internal/tlsrpt` には追加しない。
+Countermeasures against far-future `end-datetime` values are implemented as a retention period upper limit at the entry point (task 0070) and are not added to `internal/tlsrpt`.
 
 ---
 
-## 5. 結果として生じるトレードオフ
+## 5. Resulting Trade-offs
 
-| 得られるもの | 失うもの |
+| Gained | Lost |
 |---|---|
-| GC がコンテンツの年齢（`INTERNALDATE`）に基づくため、フェッチの遅延に関わらず保持期間が一定である | 真に孤立した `.eml` ファイルは `reprocess` 実行まで残る場合がある |
-| `DeleteEmailsBefore` は単一の削除条件（`internal_date`）のみを評価するため実装が単純である | — |
-| GC 後に空になった `{uidvalidity}/{YYYYMM}` ディレクトリを `DeleteEmailsBefore` が削除する | — |
-| `SaveReports` はレポートレコードのみを扱い、メールインデックスとの責務が明確に分離されている | — |
-| ディレクトリ名と GC 基準日時の直接比較を行わないため誤削除リスクがない | — |
-| `INTERNALDATE` はサーバーが設定し変更しないため、パスが常に安定し `Date:` ヘッダーの有無に依存しない | — |
-| パス決定・GC 判定ともに `INTERNALDATE` に一本化され、設計が単純である | — |
+| GC is based on content age (`INTERNALDATE`), so the retention period is consistent regardless of fetch delays | Truly orphaned `.eml` files may remain until `reprocess` is executed |
+| `DeleteEmailsBefore` evaluates only a single deletion condition (`internal_date`), making the implementation simple | — |
+| `DeleteEmailsBefore` deletes `{uidvalidity}/{YYYYMM}` directories that become empty after GC | — |
+| `SaveReports` handles only report records, with clearly separated responsibilities from the email index | — |
+| No risk of erroneous deletion since directory names and GC reference timestamps are not directly compared | — |
+| `INTERNALDATE` is set by the server and never changed, so paths are always stable and do not depend on the presence or absence of the `Date:` header | — |
+| Both path determination and GC determination are unified around `INTERNALDATE`, making the design simple | — |
