@@ -108,7 +108,8 @@ Embed test data as constants or string literals directly in the test function wh
 - Minimal TOML snippets constructed to trigger a specific validation error
 - Small JSON payloads hand-crafted to test a parser edge case
 
-**Why inline is preferred for artificial data:**
+Why inline is preferred for artificial data:
 - The test is self-contained: the reader sees the exact input without opening a separate file.
 - There is no ambiguity about whether the file represents a real-world artifact or a test fixture.
-- Write the file to `t.TempDir()` at test setup time when a file path is needed (e.g., for `os.ReadFile`-based code under test).
+
+Note: For very large artificial fixtures, consider using a file in testdata/ to keep the test code readable. If the code under test requires a file path (e.g., os.ReadFile), write the inline data to a file within t.TempDir() at test setup time.
