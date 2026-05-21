@@ -312,7 +312,7 @@ func LoadFile(path string, logger *slog.Logger) (*Config, error)
 
 - すべての検証失敗は `errors.Is` で識別可能な sentinel エラーを基底とし、コンテキスト情報（フィールド名・値・パス等）は基底エラーを保持したまま付与する。
 - TOML パースエラーはラップして `ErrConfigDecode` で包む。テストは `errors.Is(err, config.ErrConfigDecode)` を使用する。
-- 既存の `ErrInvalidAllowedHost` は `errors.go` に集約し、本タスクの他 sentinel と並べる（互換性は維持）。
+- 既存の `ErrInvalidAllowedHost` は `errors.go` に集約し、本タスクの他 sentinel と並べる（`errors.Is` が一致するレベルでの互換性を維持）。
 - 必須項目の未指定は、その項目の値検証エラーとして扱う。たとえば `imap.host` 未指定または空文字は `ErrInvalidIMAPHost`、`imap.port` 未指定または範囲外は `ErrInvalidIMAPPort` を返す。
 
 ### 4.2 sentinel 一覧
