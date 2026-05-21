@@ -12,6 +12,12 @@ services:
       - IMAP_TEST_MAILBOX=INBOX
       - IMAP_TEST_SMTP_HOST=greenmail
       - IMAP_TEST_SMTP_PORT=3025
+    # Codex and other sandboxed tooling use bubblewrap, which needs to create
+    # user namespaces inside the devcontainer. Docker's default seccomp profile
+    # can block that and cause "bwrap: No permissions to create a new namespace".
+    # Keep this scoped to the dev-env service; greenmail does not need it.
+    security_opt:
+      - seccomp=unconfined
     volumes:
       - ..:/workspaces/ubuntu:cached
       # Share SSH authentication socket/keys for Git operations
