@@ -129,7 +129,13 @@ func TestLoadConfig_EmptyPath(t *testing.T) {
 func TestLoadConfig_ValidFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
-	require.NoError(t, os.WriteFile(path, []byte("[notify.slack]\nallowed_host = \"hooks.slack.com\"\n"), 0o600))
+	require.NoError(t, os.WriteFile(path, []byte(`[imap]
+host = "imap.example.com"
+port = 993
+
+[notify.slack]
+allowed_host = "hooks.slack.com"
+`), 0o600))
 
 	cfg, err := loadConfig(path)
 	require.NoError(t, err)
