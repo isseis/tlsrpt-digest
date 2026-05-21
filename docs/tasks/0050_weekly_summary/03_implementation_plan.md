@@ -119,7 +119,7 @@
 
 `02_architecture.md` セクション 6.1 の集計フローを実装する。
 
-- [ ] **2.1** `aggregate.go` を新規作成し `GenerateSummary` を実装する
+- [x] **2.1** `aggregate.go` を新規作成し `GenerateSummary` を実装する
   - ファイル: `internal/notify/aggregate.go`
   - 作業内容:
     - シグネチャ: `func GenerateSummary(ctx context.Context, st store.Store, start, end time.Time, debugLogger *slog.Logger) (Summary, error)`
@@ -131,7 +131,7 @@
   - 確認方法: 2.2 のテストが通ること
   - 想定工数: 60 分 / 実績工数: -
 
-- [ ] **2.2** `aggregate_test.go` を新規作成し `GenerateSummary` のテストを実装する
+- [x] **2.2** `aggregate_test.go` を新規作成し `GenerateSummary` のテストを実装する
   - ファイル: `internal/notify/aggregate_test.go`（新規、`package notify_test`）
   - 作業内容（各テスト関数）:
     - `TestGenerateSummary_FiltersByPeriod`: 集計期間内外のレポートが正しく分類されることを確認（AC-01）
@@ -147,7 +147,7 @@
   - 確認方法: `go test -v ./internal/notify/` で全テストが PASS すること
   - 想定工数: 90 分 / 実績工数: -
 
-- [ ] **2.3** `make test` が通ることを確認する（M2）
+- [x] **2.3** `make test` が通ることを確認する（M2）
 
 ---
 
