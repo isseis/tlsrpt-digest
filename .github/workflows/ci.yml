@@ -206,6 +206,8 @@ jobs:
           mkdir -p ~/.config/gh
           # Claude config directory
           mkdir -p ~/.claude
+          # Codex config directory
+          mkdir -p ~/.codex
           # SSH agent socket (macOS host-services path referenced in docker-compose)
           sudo mkdir -p /run/host-services
           sudo touch /run/host-services/ssh-auth.sock

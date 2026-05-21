@@ -17,9 +17,10 @@ services:
       # Share SSH authentication socket/keys for Git operations
       - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
       - ~/.ssh/id_ed25519.pub:/home/devuser/.ssh/id_ed25519.pub:ro
-      # Share GitHub CLI and Claude credentials for seamless authentication in the container
+      # Share GitHub CLI, Claude, and Codex credentials for seamless authentication in the container
       - ~/.config/gh:/home/devuser/.config/gh
       - ~/.claude:/home/devuser/.claude
+      - ~/.codex:/home/devuser/.codex
     # Keep the container running
     command: /bin/sh -c "while sleep 1000; do :; done"
     depends_on:
