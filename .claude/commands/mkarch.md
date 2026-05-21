@@ -36,7 +36,7 @@ Work in the following order.
 8. Spawn a review subagent using the Agent tool to critically evaluate the created document.
    Construct a self-contained prompt that includes all of the following:
    - **Persona**: act as an experienced software architect and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface gaps, ambiguities, and design risks. Do not soften findings.
-   - **Files to read**: embed the resolved absolute paths of `02_architecture.md`, `01_requirements.md`, `docs/dev/developer_guide/requirements_process.md`, and `docs/dev/developer_guide/mermaid_reference.md` as literal strings in the prompt so the subagent can read them without relying on your context.
+   - **Files to read**: embed the resolved absolute paths of `02_architecture.md`, `01_requirements.md`, `docs/dev/developer_guide/requirements_process.md`, and `docs/dev/developer_guide/mermaid_reference.md` as literal strings in the prompt so the subagent can read them without relying on your context. If the feature sends notifications or handles notification destinations, also embed the resolved absolute path of `docs/dev/developer_guide/notification_security.md`.
    - **Evaluation criteria**: every item from the Technical correctness checklist and the Readability and consistency checklist below, copied verbatim.
    - **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (section name or checklist item), Problem (what is wrong or missing), and Suggestion (concrete fix). If a checklist category has no issues, state that explicitly.
 
