@@ -4,9 +4,9 @@ Work in order.
 
 1. Identify the target task per `docs/dev/developer_guide/task_identification.md`.
 
-2. Read `01_requirements.md`, `02_architecture.md`, `03_implementation_plan.md`, and `docs/dev/developer_guide/test_organization.md`.
+2. Read `03_implementation_plan.md`. If the document status is not `approved`, stop and report.
 
-3. Check the document status in `03_implementation_plan.md`. If not `approved`, stop and report.
+3. Read `01_requirements.md`, `02_architecture.md`, and `docs/dev/developer_guide/test_organization.md`.
 
 4. Select the next phase group from `03_implementation_plan.md` checkboxes (`[ ]` not started, `[x]` done, `[-]` skipped).
 - If all phases are complete, go to step 7.
