@@ -3,6 +3,8 @@ package notify
 import (
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -165,7 +167,11 @@ func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 				s.Period.End = t
 			}
 		case "organization_stats":
-			// Populated in phase 4; ignored here until then.
+			if attr.Value.Kind() == slog.KindGroup {
+				for _, stat := range attr.Value.Group() {
+					s.OrganizationStats[stat.Key] = stat.Value.Int64()
+				}
+			}
 		default:
 			warnUnknownKey(debugLogger, attr.Key, r.Message)
 		}
@@ -236,29 +242,47 @@ func formatSystemError(e SystemError, runID string) slackMessage {
 	}
 }
 
+// maxSummaryOrgFieldsPerAttachment caps organization fields per Slack attachment.
+// The final attachment also receives the Run ID field.
+const maxSummaryOrgFieldsPerAttachment = 9
+
 // formatSummary builds a slackMessage for a periodic summary.
 func formatSummary(s Summary, runID string) slackMessage {
-	return slackMessage{
-		Text: fmt.Sprintf("%s TLS Report Summary", emojiSuccess),
-		Attachments: []slackAttachment{
-			{
-				Color: colorGood,
-				Fields: []slackField{
-					{
-						Title: "Period",
-						Value: fmt.Sprintf("%s – %s",
-							s.Period.Start.Format(time.DateOnly),
-							s.Period.End.Format(time.DateOnly),
-						),
-						Short: true,
-					},
-					{Title: "Organizations", Value: fmt.Sprintf("%d", len(s.OrganizationStats)), Short: true},
-					{Title: "Reports", Value: fmt.Sprintf("%d", s.ReportCount), Short: true},
-					{Title: "Run ID", Value: runID, Short: true},
-				},
-			},
-		},
+	text := fmt.Sprintf("%s TLS Report Summary\nPeriod: %s – %s\nReports: %d\nOrganizations: %d",
+		emojiSuccess,
+		s.Period.Start.Format(time.DateOnly),
+		s.Period.End.Format(time.DateOnly),
+		s.ReportCount,
+		len(s.OrganizationStats),
+	)
+
+	keys := slices.Sorted(maps.Keys(s.OrganizationStats))
+	attachments := make([]slackAttachment, 0, max(1, (len(keys)+maxSummaryOrgFieldsPerAttachment-1)/maxSummaryOrgFieldsPerAttachment))
+	if len(keys) == 0 {
+		attachments = append(attachments, slackAttachment{
+			Color:  colorGood,
+			Fields: []slackField{{Title: "Run ID", Value: runID, Short: true}},
+		})
+		return slackMessage{Text: text, Attachments: attachments}
 	}
+
+	for i := 0; i < len(keys); i += maxSummaryOrgFieldsPerAttachment {
+		end := min(i+maxSummaryOrgFieldsPerAttachment, len(keys))
+		fields := make([]slackField, 0, maxSummaryOrgFieldsPerAttachment+1)
+		for _, organization := range keys[i:end] {
+			fields = append(fields, slackField{
+				Title: organization,
+				Value: fmt.Sprintf("%d successful sessions", s.OrganizationStats[organization]),
+				Short: true,
+			})
+		}
+		if end == len(keys) {
+			fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: true})
+		}
+		attachments = append(attachments, slackAttachment{Color: colorGood, Fields: fields})
+	}
+
+	return slackMessage{Text: text, Attachments: attachments}
 }
 
 // uniqueOrgCount returns the number of distinct OrganizationName values in alerts.
