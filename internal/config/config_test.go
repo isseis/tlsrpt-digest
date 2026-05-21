@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
@@ -39,6 +40,7 @@ webhook_url = "https://hooks.slack.com/services/xxx"
 `)
 	_, err := config.Load(data)
 	require.Error(t, err, "unknown key webhook_url should cause a decode error")
+	assert.True(t, errors.Is(err, config.ErrConfigDecode))
 }
 
 func TestNotifySlackConfig_AllowedHostValidation(t *testing.T) {
