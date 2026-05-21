@@ -143,15 +143,59 @@ func TestDebugWriterNotTriggerSlack(t *testing.T) {
 func TestSlackHandler_NoExportedLoggerField(t *testing.T) {
 	// SlackHandler should not expose an exported *slog.Logger field that could
 	// become a notification write path.
-	notifyType := reflect.TypeOf(notify.SlackHandler{})
+	notifyType := reflect.TypeFor[notify.SlackHandler]()
 	var exported []string
-	for i := range notifyType.NumField() {
-		f := notifyType.Field(i)
-		if f.IsExported() && f.Type == reflect.TypeOf((*slog.Logger)(nil)) {
+	for f := range notifyType.Fields() {
+		if f.IsExported() && f.Type == reflect.TypeFor[*slog.Logger]() {
 			exported = append(exported, f.Name)
 		}
 	}
 	assert.Empty(t, exported)
+}
+
+func TestSummary_NoSensitiveFields(t *testing.T) {
+	var spy spyHandler
+	require.NoError(t, notify.LogSummary(context.Background(), &spy, notify.Summary{
+		Period:            notify.DateRange{Start: time.Now(), End: time.Now()},
+		OrganizationStats: map[string]int64{"org-a": 10},
+		ReportCount:       1,
+	}))
+
+	require.Len(t, spy.records, 1)
+	allowed := map[string]bool{
+		"period_start":       true,
+		"period_end":         true,
+		"report_count":       true,
+		"organization_stats": true,
+	}
+	spy.records[0].Attrs(func(attr slog.Attr) bool {
+		assert.True(t, allowed[attr.Key], "unexpected attr key %q in LogSummary record", attr.Key)
+		return true
+	})
+}
+
+func TestMixedReportWarn_NotInNotifyLogger(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC)
+
+	st := fakeStoreWithReports(summaryReport("mixed", "org-mixed", start.Add(time.Hour), 42, 1))
+
+	// Wire a spy as slog.Default to simulate a notify handler being globally
+	// accessible. GenerateSummary must write warnings only to the provided
+	// debugLogger, not to slog.Default().
+	var defaultSpy spyHandler
+	prev := slog.Default()
+	slog.SetDefault(slog.New(&defaultSpy))
+	defer slog.SetDefault(prev)
+
+	var debugBuf strings.Builder
+	debugLogger := slog.New(slog.NewTextHandler(&debugBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	_, err := notify.GenerateSummary(context.Background(), st, start, end, debugLogger)
+	require.NoError(t, err)
+
+	assert.Contains(t, debugBuf.String(), "org-mixed", "warning must appear in debugLogger")
+	assert.Empty(t, defaultSpy.records, "mixed-report warning must not flow to slog.Default()")
 }
 
 func TestRedactionAlwaysEnabled(t *testing.T) {
@@ -160,11 +204,11 @@ func TestRedactionAlwaysEnabled(t *testing.T) {
 	opts := notify.SlackHandlerOptions{}
 	v := reflect.ValueOf(opts)
 	tp := v.Type()
-	for i := range tp.NumField() {
-		name := strings.ToLower(tp.Field(i).Name)
+	for field := range tp.Fields() {
+		name := strings.ToLower(field.Name)
 		assert.False(t,
 			strings.Contains(name, "disableredact") || strings.Contains(name, "noredact"),
-			"field %s looks like a redaction-disable option", tp.Field(i).Name,
+			"field %s looks like a redaction-disable option", field.Name,
 		)
 	}
 }

@@ -2,11 +2,16 @@ package notify_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
+	storetestutil "github.com/isseis/tlsrpt-digest/internal/store/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -126,6 +131,85 @@ func TestLogAlert_StructuredPayloadOnly(t *testing.T) {
 	assert.True(t, foundOrgName)
 	assert.True(t, foundPolicyType)
 	assert.True(t, foundFailureCount)
+}
+
+func TestSummaryFlow_Integration(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC)
+
+	st := fakeStoreWithReports(
+		summaryReport("r1", "org-a", start.Add(time.Hour), 100, 0),
+		summaryReport("r2", "org-b", start.Add(2*time.Hour), 200, 0),
+	)
+
+	summary, err := notify.GenerateSummary(context.Background(), st, start, end, nil)
+	require.NoError(t, err)
+
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeExactInfo, &recv)
+	defer cleanup()
+
+	require.NoError(t, notify.LogSummary(context.Background(), h, summary))
+	require.NoError(t, h.Flush(context.Background()))
+
+	msg := decodeSlackMessage(t, recv)
+	fields := flattenSlackFields(msg)
+	assert.Equal(t, "100 successful sessions", fields["org-a"])
+	assert.Equal(t, "200 successful sessions", fields["org-b"])
+	assert.Contains(t, msg.Text, "2024-01-01")
+	assert.Contains(t, msg.Text, "2024-01-07")
+	assert.Equal(t, "run-001", fields["Run ID"])
+}
+
+func TestSummaryFlow_Integration_NoReports(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 7, 0, 0, 0, 0, time.UTC)
+
+	st := storetestutil.NewFakeStore()
+	summary, err := notify.GenerateSummary(context.Background(), st, start, end, nil)
+	require.NoError(t, err)
+
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeExactInfo, &recv)
+	defer cleanup()
+
+	require.NoError(t, notify.LogSummary(context.Background(), h, summary))
+	require.NoError(t, h.Flush(context.Background()))
+
+	msg := decodeSlackMessage(t, recv)
+	require.Len(t, msg.Attachments, 1)
+	require.Len(t, msg.Attachments[0].Fields, 1)
+	assert.Equal(t, "Run ID", msg.Attachments[0].Fields[0].Title)
+	assert.Equal(t, "run-001", msg.Attachments[0].Fields[0].Value)
+}
+
+func TestSummaryFlow_FlushError(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	h, err := notify.NewSlackHandler(notify.SlackHandlerOptions{
+		WebhookURL:    config.Secret(srv.URL + "/webhook"),
+		AllowedHost:   "127.0.0.1",
+		RunID:         "test",
+		LevelMode:     notify.LevelModeExactInfo,
+		HTTPClient:    srv.Client(),
+		BackoffConfig: notify.DefaultBackoffConfig,
+	})
+	require.NoError(t, err)
+
+	summary := notify.Summary{
+		Period:            notify.DateRange{Start: time.Now(), End: time.Now()},
+		OrganizationStats: map[string]int64{"org-a": 10},
+		ReportCount:       1,
+	}
+
+	require.NoError(t, notify.LogSummary(context.Background(), h, summary))
+	flushErr := h.Flush(context.Background())
+	require.Error(t, flushErr)
+	_, ok := errors.AsType[*notify.SlackClientError](flushErr)
+	assert.True(t, ok, "Flush must propagate SlackClientError to the caller")
 }
 
 func summaryOrganizationStats(t *testing.T, record slog.Record) map[string]int64 {
