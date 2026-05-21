@@ -71,11 +71,13 @@ Your goal is to implement one task under `docs/tasks/` by following its
    - Apply Minor fixes at your discretion.
    - If any Critical or Major issue required a fix, spawn a second
      review subagent to verify the fixes. Repeat until the subagent reports
-     no Critical or Major issues, up to a maximum of three passes.
+     no Critical or Major issues.
+   - After three review passes, continue only if the remaining Critical or
+     Major issues are concrete, scoped to this phase group, and clearly
+     fixable without expanding the phase scope. Otherwise, stop and report the
+     remaining issues instead of continuing automatically.
    - Once the review loop ends with no Critical or Major issues, commit the
      entire phase group once using the `git-commit` skill guidelines.
-     If the maximum review pass is reached with remaining Critical or Major
-     issues, stop and report instead of committing.
 
 9. Phase-group checklist (use verbatim as evaluation criteria in the subagent prompt above):
    - Consistent with `02_architecture.md`.
