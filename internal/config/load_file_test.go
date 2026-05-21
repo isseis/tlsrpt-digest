@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -53,6 +54,8 @@ func TestLoadFile_NonexistentPath(t *testing.T) {
 	assert.True(t, errors.Is(err, config.ErrConfigFileRead))
 }
 
+// TestLoadFile_NilLogger confirms that passing nil for logger does not panic
+// (slog.Default() is used as the fallback per the LoadFile contract).
 func TestLoadFile_NilLogger(t *testing.T) {
 	path := writeTempConfig(t, validTOML)
 	cfg, err := config.LoadFile(path, nil)
@@ -71,6 +74,7 @@ func TestLoadFile_ValidTOML(t *testing.T) {
 	assert.Equal(t, 30, cfg.Store.RetentionDays)
 	assert.Equal(t, 30, cfg.Store.MaxEmailAgeDays)
 	assert.Equal(t, 7, cfg.Summary.WindowDays)
+	assert.Equal(t, "/tmp/store", cfg.Store.RootDir)
 }
 
 func TestLoadFile_ConsistencyWarning_RetentionGtEmailAge(t *testing.T) {
@@ -88,27 +92,42 @@ max_email_age_days = 30
 	cfg, err := config.LoadFile(path, logger)
 	require.NoError(t, err)
 	assert.NotNil(t, cfg)
+	assert.True(t, strings.Contains(buf.String(), "level=WARN"),
+		"expected WARN log level, got: %s", buf.String())
 	assert.True(t, strings.Contains(buf.String(), "retention_days > store.max_email_age_days"),
 		"expected WARN about retention_days > max_email_age_days, got: %s", buf.String())
 }
 
 func TestLoadFile_ConsistencyWarning_FetchDaysGteRetentionDays(t *testing.T) {
-	toml := `
-[imap]
-host = "imap.example.com"
-port = 993
-fetch_days = 30
-
-[store]
-retention_days = 14
-`
-	path := writeTempConfig(t, toml)
-	logger, buf := newCapturingLogger()
-	cfg, err := config.LoadFile(path, logger)
-	require.NoError(t, err)
-	assert.NotNil(t, cfg)
-	assert.True(t, strings.Contains(buf.String(), "fetch_days >= store.retention_days"),
-		"expected WARN about fetch_days >= retention_days, got: %s", buf.String())
+	tests := []struct {
+		name          string
+		fetchDays     int
+		retentionDays int
+	}{
+		{"fetch_days greater than retention_days", 30, 14},
+		{"fetch_days equal to retention_days", 14, 14},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tomlContent := strings.Join([]string{
+				"[imap]",
+				"host = \"imap.example.com\"",
+				"port = 993",
+				"fetch_days = " + strconv.Itoa(tc.fetchDays),
+				"[store]",
+				"retention_days = " + strconv.Itoa(tc.retentionDays),
+			}, "\n")
+			path := writeTempConfig(t, tomlContent)
+			logger, buf := newCapturingLogger()
+			cfg, err := config.LoadFile(path, logger)
+			require.NoError(t, err)
+			assert.NotNil(t, cfg)
+			assert.True(t, strings.Contains(buf.String(), "level=WARN"),
+				"expected WARN log level, got: %s", buf.String())
+			assert.True(t, strings.Contains(buf.String(), "fetch_days >= store.retention_days"),
+				"expected WARN about fetch_days >= retention_days, got: %s", buf.String())
+		})
+	}
 }
 
 func TestLoadFile_RelativeRootDir_Absolutized(t *testing.T) {
@@ -126,6 +145,8 @@ root_dir = "./data"
 	require.NoError(t, err)
 	assert.True(t, filepath.IsAbs(cfg.Store.RootDir),
 		"expected absolute path, got: %s", cfg.Store.RootDir)
+	assert.True(t, strings.Contains(buf.String(), "level=INFO"),
+		"expected INFO log level, got: %s", buf.String())
 	assert.True(t, strings.Contains(buf.String(), "store.root_dir converted to absolute path"),
 		"expected INFO log about absolutization, got: %s", buf.String())
 }
