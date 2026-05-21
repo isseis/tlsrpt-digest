@@ -220,7 +220,7 @@
 
 `GenerateSummary` → `LogSummary` → `Flush` の一連フローを検証する。
 
-- [ ] **5.1** 統合テストを `helpers_test.go` に追加する
+- [x] **5.1** 統合テストを `helpers_test.go` に追加する
   - ファイル: `internal/notify/helpers_test.go`
   - 作業内容（各テスト関数）:
     - `TestSummaryFlow_E2E`: `storetestutil.FakeStore` にサンプルレポートを格納し、`GenerateSummary` → `LogSummary` → `Flush` を順に呼び出す。`buildCaptureHandler` で実際の Slack HTTP ペイロードを取得し、組織名・成功セッション数・集計期間・Run ID が含まれることを確認する（AC-08）
@@ -229,7 +229,7 @@
   - 確認方法: `go test -v ./internal/notify/` で全テストが PASS すること
   - 想定工数: 60 分 / 実績工数: -
 
-- [ ] **5.2** セキュリティ検証テストを `security_test.go` に追加する
+- [x] **5.2** セキュリティ検証テストを `security_test.go` に追加する
   - ファイル: `internal/notify/security_test.go`
   - 作業内容:
     - `TestSummary_NoSensitiveFields`: `LogSummary` で記録した `slog.Record` に Webhook URL やパスワードが含まれないことを確認する（`02_architecture.md` セクション 5.2 の原則 1 に対応）
@@ -237,9 +237,9 @@
   - 確認方法: `go test -v ./internal/notify/ -run 'TestSummary_NoSensitiveFields|TestMixedReportWarn_NotInNotifyLogger'` が PASS すること
   - 想定工数: 30 分 / 実績工数: -
 
-- [ ] **5.3** `make test` と `make lint` が通ることを確認する
+- [x] **5.3** `make test` と `make lint` が通ることを確認する
 
-- [ ] **5.4** `make deadcode` で不要なコードがないことを確認する（M5）
+- [x] **5.4** `make deadcode` で不要なコードがないことを確認する（M5）
 
 ---
 
@@ -314,10 +314,10 @@
 
 ## 7. 完了条件
 
-- [ ] `make lint` がエラーなく完了する
-- [ ] `make test` がすべて成功する
-- [ ] `01_requirements.md` の全受け入れ条件（AC-01〜AC-11）に対応するテストが存在する
-- [ ] `make deadcode` で不要なコードが報告されない
+- [x] `make lint` がエラーなく完了する
+- [x] `make test` がすべて成功する
+- [x] `01_requirements.md` の全受け入れ条件（AC-01〜AC-11）に対応するテストが存在する
+- [x] `make deadcode` で不要なコードが報告されない（`GenerateSummary` は Task 0070 で cmd/ から呼び出す想定の意図的なスキャフォールディング）
 - [ ] セクション 5 の受け入れ条件トレーサビリティ表に実装ファイルの行番号が記入されている
 
 ---
