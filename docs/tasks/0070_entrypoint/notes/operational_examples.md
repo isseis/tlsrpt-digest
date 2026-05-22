@@ -67,6 +67,7 @@ Description=tlsrpt-digest record GC (one-shot)
 
 [Service]
 Type=oneshot
+# --before: JSON レポートレコードの保持期間。--max-email-age: .eml ファイルの保持期間（省略時は store.max_email_age_days の設定値）
 ExecStart=/usr/local/bin/tlsrpt-digest gc -config /etc/tlsrpt-digest/config.toml --before 30d
 EnvironmentFile=/etc/tlsrpt-digest/secrets.env
 ```

@@ -495,7 +495,7 @@ type SubcommandRunner interface {
 | 順 | 処理 | 失敗時の挙動 |
 |---|---|---|
 | 1 | `config.LoadFile(path, logger)` で設定読込 | stderr 出力 + exit 1（Slack ハンドラ未構築のため通知不可） |
-| 4s | **`summary` 専用**: `store.Open(rootDir, identity, OpenReadOnly)` でストアを read-only オープン。`{root_dir}` 不在でもエラーを返さず空ストアを返す（§2.2 の `else summary` ブランチ冒頭）。ステップ 3・5・6 はスキップする | stderr 出力 + exit 1 |
+| 4s | **`summary` 専用**: `store.Open(rootDir, identity, OpenReadOnly)` でストアを read-only オープン。`{root_dir}` 不在でもエラーを返さず空ストアを返す（§2.2 の `else summary` ブランチ冒頭）。ステップ 3・5・6 はスキップする。ただし直後の `LoadRecoveryRequired` が `found=true` を返した場合はステップ 2w・4 を追加実行して notifier を構築してから `SystemErrorKind=recovery_required` を送信する（§6.7 ステップ 2 参照） | stderr 出力 + exit 1 |
 | 3 | `{root_dir}` を `0700` で作成（不在時のみ）。ロックファイルの親ディレクトリを保証するための最小操作。**ステップ 2w より前に実行**（シークレット取得前に失敗を確定させるため） | stderr 出力 + exit 1 |
 | 2w | 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` / `TLSRPT_SLACK_WEBHOOK_URL_ERROR` を取得し、**即座に `config.Secret` でラップ**してローカル変数へ。生 `string` は `BootContext` 外へ持ち出さない。**両変数が未設定（空）の場合は "Slack 無効" モードとして扱い、ここでは失敗しない**（`notify.BuildHandlers` が `nil, nil` を返す valid な状態）。URL が設定されている場合は形式検証を行い、不正な場合のみ失敗する | stderr 出力 + exit 1（URL 形式不正の場合のみ） |
 | 2f | `fetch` のみ、recovery-required 確認後かつ IMAP 接続直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を取得し、**即座に `config.Secret` でラップ**する。`gc` / `recover` / `reprocess` / 空ストア `summary` は IMAP 認証情報を要求しない | `LogSystemError` + `Flush()` + exit 1 |
@@ -877,9 +877,10 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
   - サイズ不一致・パース失敗 WARN が `Flush()` 成功後にのみ SEEN 付与へ進むこと
   - Flush 失敗時に SEEN 不付与
   - `SaveEmailMetas`・`SaveReports` がそれぞれ全メール処理後に 1 回ずつ呼ばれること
-- **`summary.go`** — AC-07a / AC-07d / AC-10c / AC-27 / AC-27a / AC-28 / AC-29
+- **`summary.go`** — AC-07a / AC-07c / AC-07d / AC-10c / AC-27 / AC-27a / AC-28 / AC-29
   - `--window` 指定時/未指定時の動作
   - recovery-required 残存時の停止
+  - `GenerateSummary` に渡される `start` が `Duration.Cutoff(now)`（UTC 日付単位切り捨て後に指定日数遡及）であること（AC-07c）
   - `GenerateSummary` に渡される `end` が `UTCDayStart(now)`（今日の 00:00:00 UTC）であること（AC-07d）
   - 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary`）に含まれること（AC-28）
   - 空集計時の正常終了（INFO ログのみ、Slack notifier 未構築、Slack URL 未設定でも exit 0）（AC-10c）
