@@ -95,82 +95,53 @@ flowchart LR
 
 ### 2.1 パッケージ配置と依存関係
 
+**図 A: `cmd/` 内部構造**（ファイル間の呼び出し・共有関係）
+
 ```mermaid
 graph LR
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
-    subgraph pkg_cmd ["cmd/tlsrpt-digest/ (本タスクで拡張)"]
-        direction TB
-        M["main.go<br>サブコマンド振り分け"]
-        BOOT["boot.go<br>共通初期化"]
-        LOCK["lock.go<br>プロセスロック"]
-        DUR["duration.go<br>d/w 単位パーサー"]
-        FETCH["fetch.go"]
-        SUM["summary.go"]
-        REP["reprocess.go"]
-        GC["gc.go"]
-        REC["recover.go"]
-    end
+    M["main.go<br>サブコマンド振り分け"]
+    BOOT["boot.go<br>共通初期化"]
+    LOCK["lock.go<br>プロセスロック"]
+    DUR["duration.go<br>d/w 単位パーサー"]
+    FETCH["fetch.go"]
+    SUM["summary.go"]
+    REP["reprocess.go"]
+    GC["gc.go"]
+    REC["recover.go"]
 
-    subgraph pkg_imap ["internal/ IMAP・解析系"]
-        direction TB
-        IMAP_PKG["imap"]
-        TLSRPT_PKG["tlsrpt"]
-        MP_PKG["mailparse"]
-    end
-
-    subgraph pkg_infra ["internal/ 共有インフラ"]
-        direction TB
-        CFG_PKG["config"]
-        NOTIFY_PKG["notify"]
-        STORE_PKG["store"]
-    end
-
-    %% main → 各サブコマンド・共通初期化
     M --> BOOT
     M --> FETCH
     M --> SUM
     M --> REP
     M --> GC
     M --> REC
-
-    %% boot → 共有インフラ
     BOOT --> LOCK
-    BOOT --> CFG_PKG
-    BOOT --> NOTIFY_PKG
-    BOOT --> STORE_PKG
-
-    %% fetch → IMAP・解析 + 共有
-    FETCH --> IMAP_PKG
-    FETCH --> TLSRPT_PKG
-    FETCH --> MP_PKG
-    FETCH --> NOTIFY_PKG
-    FETCH --> STORE_PKG
     FETCH --> DUR
-
-    %% summary → 共有
-    SUM --> NOTIFY_PKG
-    SUM --> STORE_PKG
     SUM --> DUR
-
-    %% reprocess → 解析 + 共有（IMAP 不要）
-    REP --> TLSRPT_PKG
-    REP --> MP_PKG
-    REP --> NOTIFY_PKG
-    REP --> STORE_PKG
-
-    %% gc / recover → store のみ
-    GC --> STORE_PKG
     GC --> DUR
-    REC --> STORE_PKG
 
     class M,BOOT,LOCK,DUR,FETCH,SUM,REP,GC,REC enhanced
-    class CFG_PKG,IMAP_PKG,TLSRPT_PKG,MP_PKG,NOTIFY_PKG process
-    class STORE_PKG enhanced
 ```
 
-矢印 A → B は Go パッケージレベルの import 関係を表す。
+矢印 A → B は Go パッケージレベルの import 関係を表す（サブコマンドは `main.go` から起動され、`boot.go` が共通初期化を担う）。`duration.go` は `fetch` / `summary` / `gc` の 3 サブコマンドから共有される。
+
+**図 B: `internal/` パッケージへの依存（依存マトリクス）**
+
+`✓` は Go import あり、`*` は fetch 専用（他の書き込み系は不要）。
+
+| ファイル | `config` | `imap` | `tlsrpt` | `mailparse` | `notify` | `store` |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| `boot.go` | ✓ | | | | ✓ | ✓ |
+| `fetch.go` | | ✓\* | ✓ | ✓ | ✓ | ✓ |
+| `summary.go` | | | | | ✓ | ✓ |
+| `reprocess.go` | | | ✓ | ✓ | ✓ | ✓ |
+| `gc.go` | | | | | | ✓ |
+| `recover.go` | | | | | | ✓ |
+
+`imap` は `fetch` のみが使用（IMAP サーバへの直接接続）。`tlsrpt` / `mailparse` は `fetch` と `reprocess` が使用（`.json.gz` 添付のパース）。`notify` / `store` は書き込み系全サブコマンドが使用。`config` は `boot.go` のみが使用（設定読込責務を `boot.go` に集約）。
 
 **凡例（Legend）**
 
@@ -179,7 +150,7 @@ flowchart LR
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
-    P["既存パッケージ"]
+    P["既存パッケージ（internal/）"]
     E["本タスクで追加・拡張するファイル"]
     class P process
     class E enhanced
