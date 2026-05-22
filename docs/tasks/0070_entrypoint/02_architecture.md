@@ -25,6 +25,7 @@
 | fail closed | 完全性が保証できない場合に処理を **開始しない**こと（途中での中断ではなく事前停止） |
 | RecoveryRequired 状態 | UIDVALIDITY 不一致検出時に sentinel へ記録される状態 |
 | SaveRecoveryRequired | `internal/store` の API 名。RecoveryRequired 状態を sentinel へ永続化する操作 |
+| commit（リセット操作） | `ResetForRecovery` 内部の state machine 用語。新しい空ストアへの書き込みと sentinel の `uid_validity` 更新が完了し、操作が取り消し不能になった時点を指す。commit **前**のクラッシュは staging に旧データが残るため再実行で復旧できる。commit **後**のクラッシュは新しい空ストアがすでに有効であり、残った staging の後片付けだけが未完了な状態となる |
 
 ### 1.1 設計原則
 
