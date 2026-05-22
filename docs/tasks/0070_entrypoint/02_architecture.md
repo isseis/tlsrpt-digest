@@ -854,6 +854,16 @@ flowchart TD
 
 **再開メカニズム**: `OpenRecoverReset` で取得した store に対して `ResetForRecovery` を呼ぶと、manifest からフェーズを読み取り、未完了の操作だけを実行する（べき等再実行）。manifest が存在しない場合は ① から開始する。
 
+**異常ケース別 staging の取り扱い**
+
+| シナリオ | staging の状態 | 取り得る操作 | staging の最終的な扱い |
+|---|---|---|---|
+| ①②③ でクラッシュ（commit 前） | 旧データが残存（または未作成） | `discard-old --yes` 再実行のみ | 再実行の ⑤ で削除 |
+| ④⑤ でクラッシュ（commit 後） | 空ストア有効、staging が残存 | 次回 `Open`（任意モード） | `Open` 時の後片付けで削除 |
+| commit 前に操作を中断し `keep-old` へ切り替えたい | 旧データが staging に存在 | **不可**: `OpenReadWrite` が fail closed | `discard-old --yes` を完走させてから `keep-old` は実行できない |
+
+**commit 前の途中放棄について**: 一度 `discard-old --yes` を開始して ①②③ のいずれかでクラッシュまたは中断した場合、その後 `keep-old` へ切り替えることはできない。`OpenReadWrite` が pending reset を検出して fail closed するためである。オペレータは `discard-old --yes` を完走させて空ストアで再出発するか、または実装計画で別途定める手動 staging 削除手順を踏まなければならない。この制約はデータ安全性のためであり、旧 UIDVALIDITY エポックのデータと新エポックのデータが混在しないことを保証する。
+
 store 側の設計不変条件は以下:
 
 - 呼び出し側から見ると、`ResetForRecovery` は「旧データ保持 + recovery-required 残存」または「空ストア + current UIDVALIDITY + recovery-required 解消」のどちらかに収束する。
