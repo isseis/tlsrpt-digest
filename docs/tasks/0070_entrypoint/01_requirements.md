@@ -67,7 +67,7 @@
 **受け入れ条件（Acceptance Criteria）**:
 
 - `AC-01`: `fetch`、`summary`、`reprocess`、`gc`、`recover` のいずれかのサブコマンドを受け付ける
-- `AC-02`: サブコマンドを省略または不正な値を指定した場合、使い方を表示してエラー終了する
+- `AC-02`: サブコマンドを省略または不正な値を指定した場合（不正なフラグを含む）、使い方を **stderr** に表示して**終了コード 2** で終了する。終了コード 2 は他のエラー（終了コード 1）と区別できるよう `flag` パッケージの慣例に揃える
 - `AC-03`: `-config <path>` フラグで設定ファイルパスを指定できる（全サブコマンド共通）
 - `AC-04`: 設定ファイルパスを省略した場合、デフォルトパス（例：`./config.toml`）を使用する
 - `AC-05`: `fetch` サブコマンドは `--since <duration>` フラグを受け付ける（例：`--since 30d`）
@@ -163,8 +163,8 @@ RFC822.SIZE とローカルファイルサイズが一致しない場合は WARN
 
 - `AC-21a`: `reprocess` はストア初期化完了後、`.eml` 読み込みの前に `internal/store` の `LoadRecoveryRequired()`（0040 F-008 AC-34）で `recovery-required` 状態を確認する。`found = true` の場合は処理を一切行わず、`recover` サブコマンドの実行を案内して終了コード 1 で終了する（未解決の `UIDVALIDITY` 変化下で store への書き込みを行うと、旧 epoch のデータと新 epoch のデータが混在する可能性があるため、保守的に停止する）
 - `AC-22`: `LoadEmails`（0040 F-005）でストアの `{root_dir}/emails/` 以下の `.eml` ファイルを再帰的に列挙・読み込み、TLSRPT レポートをパースする（LoadEmails は常に `{root_dir}/emails/` 起点で動作する）
-- `AC-23`: パース成功したレポートをバッチ保存メソッドで UPSERT する（0040 F-002 AC-08a）。タスク 0041 F-001 によりメールインデックスへの `report_end_date` 更新は不要
 - `AC-23a`: `LoadEmails` で得た全エントリの `{uid, uidvalidity, internal_date}` を `SaveEmailMetas` でバッチ登録する（0040 AC-08c、タスク 0041 F-000 によりフィールド構成は `internal_date` のみ）。既登録エントリは変更されず（0040 AC-08d）、過去 fetch サイクルで未登録だった孤立 `.eml` を救済する効果を持つ
+- `AC-23`: パース成功したレポートをバッチ保存メソッドで UPSERT する（0040 F-002 AC-08a）。タスク 0041 F-001 によりメールインデックスへの `report_end_date` 更新は不要。`AC-23a`（`SaveEmailMetas`）の後に実行する。両者の間に集計上の依存関係はないが、インデックス先行の実装順序を採用する（`02_architecture.md` §6.6 参照）
 - `AC-24`: `--notify` フラグを指定した場合のみ Slack アラートを送信する（デフォルトは送信しない）。パース失敗時は AC-25 でスキップ・記録するのみで、通常 Slack 通知は行わない（`--notify` 指定時のみ通知する）
 - `AC-24a`: `--notify` を指定した場合、全ファイル処理完了後に Slack バッファの `Flush()` を呼び出す。Flush が失敗した場合は終了コード 1 で終了する。reprocess は SEEN フラグを使わないため、Flush 失敗時の自動再送は保証されない（at-least-once が不要な手動操作であるため許容）
 - `AC-25`: 失敗の種類によって挙動を分ける：

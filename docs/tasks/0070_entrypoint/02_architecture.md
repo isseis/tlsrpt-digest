@@ -193,9 +193,9 @@ sequenceDiagram
     B->>CFG: LoadFile(path)
     CFG-->>B: *Config or error
     Note over B: 失敗時: stderr 出力 + exit 1
-    Note over B: ステップ 3: root_dir 確保 (RW 系のみ)
-    B->>B: ensure {root_dir} exists (mode 0700)
     alt 書き込み系サブコマンド (fetch/gc/recover/reprocess)
+        Note over B: ステップ 3: root_dir 確保 (RW 系のみ)
+        B->>B: ensure {root_dir} exists (mode 0700)
         Note over B,ENV: ステップ 2w: Slack URL を Secret 化
         B->>ENV: read TLSRPT_SLACK_WEBHOOK_URL_*
         ENV-->>B: Slack URL（即時 config.Secret でラップ）
@@ -216,9 +216,9 @@ sequenceDiagram
         Note over B,S: recovery-required を最初に確認（[6.7] ステップ 2）
         B->>S: LoadRecoveryRequired()
         S-->>B: found / not found
-        Note over B: found = true → notifier 構築 + SystemErrorKind=recovery_required + Flush + exit 1
+        Note over B: found = true → 以降の 2w+4 も実行してから SystemErrorKind=recovery_required + Flush + exit 1
         Note over B: found = false → 空ストア/空レポートなら notifier 未構築のまま exit 0
-        Note over B,ENV: 集計送信時のみ Slack URL を Secret 化
+        Note over B,ENV: 集計送信時（および recovery_required 通知時）のみ Slack URL を Secret 化
         B->>ENV: read TLSRPT_SLACK_WEBHOOK_URL_*
         ENV-->>B: Slack URL（即時 config.Secret でラップ）
         Note over B,N: 集計送信が必要な場合のみ Slack ハンドラ構築
@@ -504,7 +504,7 @@ type SubcommandRunner interface {
 
 各フラグの値解決は [3.4 デフォルト値解決の優先順位](#34-共通初期化シーケンス書き込み系の手順) に従う。`d` / `w` の duration は `duration.go` のカスタムパーサーで処理し、共通パーサーは AC-07b に従いパース後の値が 1 日未満（0 以下含む）の場合にエラーを返す。カットオフ日時の計算は `Duration.Cutoff(now)` メソッドに委ねる（AC-07c）。
 
-**`gc` の `--before` と `--max-email-age` を独立に持つ理由**: JSON レポートレコードと `.eml` 原本では削減ポリシーの粒度が異なる。レポートレコードは集計に必須なので長めに（例: 30 日）残し、`.eml` 原本は再パース・問題解析用なので短めにする運用もある。逆に `.eml` を長く残して再現性を確保する運用も可能。両者を別フラグで切り出すことで、`reprocess` での復元能力（タスク 0060 AC-10b の WARN 参照）を運用ポリシーで調整できる。
+**`gc` の `--before` と `--max-email-age` を独立に持つ理由**: JSON レポートレコードと `.eml` 原本では削減ポリシーの粒度が異なる。レポートレコードは集計に必須なので長めに（例: 30 日）残し、`.eml` 原本は再パース・問題解析用なので短めにする運用もある。逆に `.eml` を長く残して再現性を確保する運用も可能。両者を別フラグで切り出すことで、`reprocess` での復元能力（タスク 0060 の AC-10b WARN 参照、本タスクに AC-10b は存在しない）を運用ポリシーで調整できる。
 
 **`reprocess --notify` のデフォルトを無効にする理由**: `reprocess` は過去データの再投入であり、過去の TLS failure を Slack に再送すると運用上「いま発生したアラート」と区別できず混乱を招く。デフォルト無効として安全側に倒し、`--notify` 指定時のみ通知込み動作検証を可能にする。
 
@@ -856,7 +856,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
   - サイズ不一致・パース失敗 WARN が `Flush()` 成功後にのみ SEEN 付与へ進むこと
   - Flush 失敗時に SEEN 不付与
   - `SaveEmailMetas`・`SaveReports` がそれぞれ全メール処理後に 1 回ずつ呼ばれること
-- **`summary.go`** — AC-27 / AC-27a / AC-28 / AC-29
+- **`summary.go`** — AC-07a / AC-27 / AC-27a / AC-28 / AC-29
   - `--since` 指定時/未指定時の動作
   - recovery-required 残存時の停止
   - 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary`）に含まれること
