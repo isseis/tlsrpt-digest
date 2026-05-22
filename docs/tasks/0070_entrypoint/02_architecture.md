@@ -327,7 +327,7 @@ flowchart LR
 
 以下はエントリポイント内部で導入する型と、本タスクで拡張する `internal/notify` / `internal/store` の public contract 断片を示す。既存型の全体は再掲しない。
 
-`Duration` 型を Go 標準の `time.Duration` ではなく独自の日数ベースで定義する理由は、ユーザが指定する `d` / `w` を「整数日数」として正規化し、CLI 層の入力制約（1 日以上、日/週単位のみ）を 1 か所に閉じ込めるためである。カットオフ日時は `Duration.Cutoff(now)` メソッドが現在時刻を **UTC 日付の開始時刻（00:00:00 UTC）に切り捨ててから**日数を遡って返す（AC-07c）。これにより各サブコマンドが個別に切り捨て処理を実装することなく、型システムでカットオフ計算の一貫性が保証される。
+`Duration` 型を Go 標準の `time.Duration` ではなく独自の日数ベースで定義する理由は、ユーザが指定する `d` / `w` を「整数日数」として正規化し、CLI 層の入力制約（1 日以上、日/週単位のみ）を 1 か所に閉じ込めるためである。カットオフ日時（開始側）は `Duration.Cutoff(now)` メソッドが現在時刻を **UTC 日付の開始時刻（00:00:00 UTC）に切り捨ててから**日数を遡って返す（AC-07c）。`summary` の集計窓の終端は `UTCDayStart(now)` 関数が返す「今日の 00:00:00 UTC」とする（AC-07d）。これにより開始・終端の両方が UTC 暦日境界に揃い、週次実行での重複・欠落が生じない。各サブコマンドが個別に切り捨て処理を実装する必要がなく、型システムで計算の一貫性が保証される。
 
 ```go
 // SubcommandName は受け付けるサブコマンドの識別子。
@@ -410,8 +410,13 @@ type Duration struct {
 }
 
 // Cutoff は now を UTC 日付単位で切り捨てた上で Days 日を遡ったカットオフ日時を返す（AC-07c）。
-// 各サブコマンドはこのメソッドを使ってカットオフを統一算出する。
+// 各サブコマンドはこのメソッドを使ってカットオフ（開始側）を統一算出する。
 func (d Duration) Cutoff(now time.Time) time.Time
+
+// UTCDayStart は now を UTC 日付単位で切り捨てた日時（今日の 00:00:00 UTC）を返す（AC-07d）。
+// summary サブコマンドが集計窓の終端を算出するために使用する。
+// Days フィールドに依存しないため Duration のメソッドではなくパッケージレベル関数とする。
+func UTCDayStart(now time.Time) time.Time
 
 // SubcommandRunner は各サブコマンドが満たすインターフェース。
 // internal/notify.SlackHandler との名称衝突を避け Handler ではなくこの名称とする。
@@ -428,9 +433,9 @@ type SubcommandRunner interface {
 | `cmd/tlsrpt-digest/main_test.go` | 既存エントリポイントテストを新サブコマンド振り分け、usage、exit 2 方針へ更新する。 | 変更あり |
 | `cmd/tlsrpt-digest/boot.go` | 共通初期化（設定読込・環境変数取得＋`config.Secret` ラップ・`{root_dir}` 確保・Slack ハンドラ構築・通知 facade 化・プロセスロック取得・ストアオープン）。`summary` は空ストア時に Slack 環境変数へ依存しないよう notifier を遅延構築する。`BootContext` の生成と返却。 | 新規追加 |
 | `cmd/tlsrpt-digest/lock.go` | OS 標準の advisory file lock（POSIX 環境では `flock(2)` 相当）に基づくプロセス排他ロックの取得・保持・テスト用 `Close`。 | 新規追加 |
-| `cmd/tlsrpt-digest/duration.go` | `d` / `w` 単位の `Duration` 型パース、バリデーション（1 日以上）、日数への正規化。`Cutoff(now time.Time) time.Time` メソッドにより現在時刻を UTC 日付単位で切り捨てたカットオフ日時を返す（AC-07c）。 | 新規追加 |
+| `cmd/tlsrpt-digest/duration.go` | `d` / `w` 単位の `Duration` 型パース、バリデーション（1 日以上）、日数への正規化。`Cutoff(now time.Time) time.Time` メソッドで開始カットオフ（AC-07c）、`UTCDayStart(now time.Time) time.Time` パッケージ関数で集計窓終端（AC-07d）を統一提供する。 | 新規追加 |
 | `cmd/tlsrpt-digest/fetch.go` | F-003: メタ取得・UIDVALIDITY 検証・選定・ダウンロード・パース・`NotificationSink.LogAlert` / `LogWarning` バッファリング・`SaveEmail`/`SaveEmailMetas`/`SaveReports`・`Flush()`・SEEN 付与。 | 新規追加 |
-| `cmd/tlsrpt-digest/summary.go` | F-005: 期間を解決し、recovery-required を確認し、既存 `notify.GenerateSummary(ctx, store, start, end, debugLogger)` を呼んで `NotificationSink.LogSummary` 経由で Slack へ送信する。集計ロジックは再実装しない。 | 新規追加 |
+| `cmd/tlsrpt-digest/summary.go` | F-005: 期間を解決し（`start = Duration.Cutoff(now)`、`end = UTCDayStart(now)`）、recovery-required を確認し、既存 `notify.GenerateSummary(ctx, store, start, end, debugLogger)` を呼んで `NotificationSink.LogSummary` 経由で Slack へ送信する。集計ロジックは再実装しない。 | 新規追加 |
 | `cmd/tlsrpt-digest/reprocess.go` | F-004: 保存済み `.eml` の再パースとストア再構築。`--notify` 指定時のみ `NotificationSink.LogAlert` を呼ぶ。 | 新規追加 |
 | `cmd/tlsrpt-digest/gc.go` | F-006: `Duration.Cutoff(now)` で AC-07c に従ったカットオフ日時を算出し、`DeleteReportsBefore` / `DeleteEmailsBefore` を呼び出す。削除件数の INFO ログ出力。 | 新規追加 |
 | `cmd/tlsrpt-digest/recover.go` | F-007: UIDVALIDITY 変化からの手動復旧。実行前にオペレータ向け情報（recovery-required 内容・復旧モード・データパス）を stdout に表示する。`keep-old` は `ApplyRecovery`、`discard-old --yes` は `internal/store` の破棄復旧 API を呼ぶ。 | 新規追加 |
@@ -815,7 +820,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 
 1. `summary` は Slack URL 環境変数を読む前に `store.Open(rootDir, identity, OpenReadOnly)` を呼ぶ。read-only モードのため `{root_dir}` 不在でもエラーを返さず、空ストア状態の `Store` を返す（タスク 0040 F-001 の OpenReadOnly セマンティクス）。
 2. `LoadRecoveryRequired` を必ず先に呼ぶ。`found = true` の場合は空ストア扱いにせず、`SystemErrorKind=recovery_required` の通知を試行して exit 1 とする。
-3. `found = false` の場合だけ `notify.GenerateSummary(ctx, store, start, end, debugLogger)` を呼ぶ。集計ロジックは `summary.go` で再実装しない。
+3. `found = false` の場合だけ集計窓を算出し `notify.GenerateSummary(ctx, store, start, end, debugLogger)` を呼ぶ。`start = Duration.Cutoff(now)`（AC-07c）、`end = UTCDayStart(now)`（AC-07d）。集計ロジックは `summary.go` で再実装しない。
 4. 生成された `Summary` が空の場合、Slack notifier を構築せず、`notify.LogSummary` を **呼ばずに** INFO レベル `slog` ログ「no reports to summarize」を 1 行出力する（Slack を 0 件メッセージで埋めないため）。
 5. Slack 送信直前に `LoadRecoveryRequired` を再読込し、`fetch` との並走中に recovery-required が出現していれば `SystemErrorKind=recovery_required` を通知して exit 1 とする。これにより `summary` がロックを取得しない設計でも、送信直前の fail closed 境界を持つ。
 6. exit 0。
@@ -830,13 +835,15 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 
 要件定義書 §6 のテスト方針を踏襲しつつ、AC ↔ テストのトレーサビリティを実装計画書（`03_implementation_plan.md`）の「Acceptance Criteria Verification」セクションで完成させる。本書ではテストの粒度と網羅範囲を確定する。
 
-- **`duration.go`** — AC-07 / AC-07b / AC-07c
+- **`duration.go`** — AC-07 / AC-07b / AC-07c / AC-07d
   - `7d`・`4w`・`30d` の正常パース
   - `0d`・`-1d`・`-2w`・`30h`・`abc` のエラー
   - `fetch --since`・`summary --since`・`gc --before`・`gc --max-email-age` の各フラグで共通利用されること
   - 週指定が日数へ正規化されること（`4w → Days=28`）
   - `Duration.Cutoff(now)` の UTC 切り捨て動作：現在時刻が UTC 02:01:00 のとき `Days=7` のカットオフが「7 日前の 00:00:00 UTC」となること（「7 日前の 02:01:00」ではないこと）（AC-07c）
   - 週指定（`1w`）でも同様に UTC 日付単位の切り捨てが行われること
+  - `UTCDayStart(now)` が現在時刻に関わらず「今日の 00:00:00 UTC」を返すこと（AC-07d）
+  - `--since 1w` を 2000-12-10 10:00 UTC に実行したとき `start=2000-12-03 00:00 UTC`・`end=2000-12-10 00:00 UTC` となり翌週実行と重複しないこと（AC-07d 統合確認）
 - **`lock.go`** — AC-10a
   - 1 プロセスが取得中の状態で 2 プロセス目が即時失敗（non-blocking）
   - プロセス終了で自動解放されること（テスト内では `Close()` で代替）
@@ -858,7 +865,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
   - サイズ不一致・パース失敗 WARN が `Flush()` 成功後にのみ SEEN 付与へ進むこと
   - Flush 失敗時に SEEN 不付与
   - `SaveEmailMetas`・`SaveReports` がそれぞれ全メール処理後に 1 回ずつ呼ばれること
-- **`summary.go`** — AC-07a / AC-10c / AC-27 / AC-27a / AC-28 / AC-29
+- **`summary.go`** — AC-07a / AC-07d / AC-10c / AC-27 / AC-27a / AC-28 / AC-29
   - `--since` 指定時/未指定時の動作
   - recovery-required 残存時の停止
   - 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary`）に含まれること
