@@ -819,9 +819,10 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 要件 AC-10c では「ストア未作成時は集計対象データなしとして正常終了」と規定する。具体シーケンスは以下:
 
 1. `summary` は Slack URL 環境変数を読む前に `store.Open(rootDir, identity, OpenReadOnly)` を呼ぶ。read-only モードのため `{root_dir}` 不在でもエラーを返さず、空ストア状態の `Store` を返す（タスク 0040 F-001 の OpenReadOnly セマンティクス）。
-2. `LoadRecoveryRequired` を必ず先に呼ぶ。`found = true` の場合は空ストア扱いにせず、`SystemErrorKind=recovery_required` の通知を試行して exit 1 とする。
+2. `LoadRecoveryRequired` を必ず先に呼ぶ。`found = true` の場合は空ストア扱いにせず、Slack URL 取得（ステップ 2w）と `BuildHandlers`（ステップ 4）を実行して notifier を構築してから `SystemErrorKind=recovery_required` を送信し exit 1 とする（§2.2 参照）。
 3. `found = false` の場合だけ集計窓を算出し `notify.GenerateSummary(ctx, store, start, end, debugLogger)` を呼ぶ。`start = Duration.Cutoff(now)`（AC-07c）、`end = UTCDayStart(now)`（AC-07d）。集計ロジックは `summary.go` で再実装しない。
-4. 生成された `Summary` が空の場合、Slack notifier を構築せず、`notify.LogSummary` を **呼ばずに** INFO レベル `slog` ログ「no reports to summarize」を 1 行出力する（Slack を 0 件メッセージで埋めないため）。
+4a. 生成された `Summary` が空の場合、Slack notifier を構築せず、`notify.LogSummary` を**呼ばずに** INFO レベル `slog` ログ「no reports to summarize」を 1 行出力し、**ステップ 5 をスキップしてステップ 6 へ進む**（Slack 送信がないため再確認不要）。
+4b. `Summary` が非空の場合、Slack URL 取得（ステップ 2w）と `BuildHandlers`（ステップ 4）を実行して notifier を構築する。
 5. Slack 送信直前に `LoadRecoveryRequired` を再読込し、`fetch` との並走中に recovery-required が出現していれば `SystemErrorKind=recovery_required` を通知して exit 1 とする。これにより `summary` がロックを取得しない設計でも、送信直前の fail closed 境界を持つ。
 6. exit 0。
 
@@ -868,8 +869,9 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 - **`summary.go`** — AC-07a / AC-07d / AC-10c / AC-27 / AC-27a / AC-28 / AC-29
   - `--since` 指定時/未指定時の動作
   - recovery-required 残存時の停止
-  - 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary`）に含まれること
-  - 空ストア時の正常終了（INFO ログのみ、Slack notifier 未構築、Slack URL 未設定でも exit 0）
+  - `GenerateSummary` に渡される `end` が `UTCDayStart(now)`（今日の 00:00:00 UTC）であること（AC-07d）
+  - 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary`）に含まれること（AC-28）
+  - 空ストア時の正常終了（INFO ログのみ、Slack notifier 未構築、Slack URL 未設定でも exit 0）（AC-10c）
 - **`reprocess.go`** — AC-21a / AC-22–26
   - recovery-required ガード
   - `--notify` 有無の挙動
