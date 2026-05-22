@@ -519,9 +519,25 @@ type SubcommandRunner interface {
 | W-5 | `lock.AcquireExclusive(lockPath)` でプロセス排他ロック取得 | `LogSystemError` + `Flush()` + exit 1 |
 | W-6 | `store.Open(rootDir, identity, OpenReadWrite)` でストアの完全初期化（sentinel 検証・`tlsrpt.json` 作成等） | `LogSystemError` + `Flush()` + exit 1。エラー分類は [4.2](#42-エラー伝達方針) を参照 |
 
-`summary` は (W-1) → `store.Open(..., OpenReadOnly)` → `LoadRecoveryRequired` を先に実行し、(W-2)（ディレクトリ作成）と (W-5)（ロック取得）はスキップする。recovery-required が見つかった場合は、§3.4 の W-3・W-4 を実行して notifier を構築してから `SystemErrorKind=recovery_required` を送って `Flush()` 後に exit 1 とする。recovery-required がない場合のみ `notify.GenerateSummary` を呼んで集計窓（start=`Duration.Cutoff(now)`、end=`UTCDayStart(now)`）の結果を得る。集計結果が空の場合は Slack URL を要求せず、`LoadRecoveryRequired` を再確認し（空パスの recovery-required 検出）、見つかれば stderr ERROR + exit 1、見つからなければ「集計対象なし」として INFO ログ出力後 exit 0 で正常終了する（[6.7](#67-summary-の空ストア時シーケンス) 参照）。集計結果が非空の場合は §3.4 の W-3・W-4 で notifier を構築し、Slack 送信直前に再度 `LoadRecoveryRequired` を確認し（[6.7](#67-summary-の空ストア時シーケンス) ステップ 5）、発見した場合は `SystemErrorKind=recovery_required` を通知して `Flush()` 後に exit 1 とする。recovery-required がなければ `NotificationSink.LogSummary` と `Flush()` を実行する。
+**`summary` の初期化フロー**（詳細は [§6.7](#67-summary-の空ストア時シーケンス)）
 
-**デフォルト値解決の優先順位**: フラグ未指定時の値解決は **CLI フラグ > 設定値 > 設定パッケージ既定値** の順で行う。`Duration` への正規化責務は各サブコマンドハンドラが負い、`config.IMAPConfig.FetchDays`（`int`、日数）や `config.SummaryConfig.WindowDays` などの整数日数フィールドは `Duration{Days: N}` 形式へ変換する。カットオフ日時は `Duration.Cutoff(now)` メソッドが UTC 日付単位で切り捨てた上で日数を遡って返す（AC-07c）。設定パッケージ側の既定値は 0060 の要件に従い `internal/config/defaults.go` が保持し、エントリポイント側で再定義しない。
+W-2（ディレクトリ作成）・W-5（ロック取得）はスキップし、以下の順で実行する。
+
+1. W-1（設定読込）→ `store.Open(OpenReadOnly)` → `LoadRecoveryRequired`（第 1 回確認）
+2. **recovery-required あり** → W-3・W-4 で notifier 構築 → `SystemErrorKind=recovery_required` 送信 → `Flush()` → exit 1
+3. **recovery-required なし** → `notify.GenerateSummary(start=Duration.Cutoff(now), end=UTCDayStart(now))` を呼ぶ
+   - **集計結果が空** → `LoadRecoveryRequired` を再確認（第 2 回・空パス用）
+     - 見つかった場合: stderr ERROR + exit 1（notifier 未構築のため Slack 通知なし）
+     - 見つからない場合: INFO ログ「集計対象なし」→ exit 0
+   - **集計結果が非空** → W-3・W-4 で notifier 構築 → `LoadRecoveryRequired` を再確認（第 2 回・非空パス用）
+     - 見つかった場合: `SystemErrorKind=recovery_required` 通知 → `Flush()` → exit 1
+     - 見つからない場合: `NotificationSink.LogSummary` → `Flush()` → exit 0
+
+**デフォルト値解決の優先順位**: **CLI フラグ > 設定値 > 設定パッケージ既定値**
+
+- **Duration への正規化**: `config.IMAPConfig.FetchDays`（`int`、日数）等の整数フィールドは各サブコマンドハンドラが `Duration{Days: N}` へ変換する。
+- **カットオフ計算**: `Duration.Cutoff(now)` が UTC 日付単位で切り捨てた上で日数を遡って返す（AC-07c）。
+- **既定値の置き場**: `internal/config/defaults.go` に集約する（0060 の要件に従う）。エントリポイント側で再定義しない。
 
 ### 3.5 サブコマンド別フラグ仕様
 
