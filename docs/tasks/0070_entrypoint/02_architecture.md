@@ -327,7 +327,7 @@ flowchart LR
 
 以下はエントリポイント内部で導入する型と、本タスクで拡張する `internal/notify` / `internal/store` の public contract 断片を示す。既存型の全体は再掲しない。
 
-`Duration` 型を Go 標準の `time.Duration` ではなく独自の日数ベースで定義する理由は、ユーザが指定する `d` / `w` を「整数日数」として正規化し、CLI 層の入力制約（1 日以上、日/週単位のみ）を 1 か所に閉じ込めるためである。カットオフ日時は各サブコマンドが日数から算出する。これにより「日数」を基準にした要件表現と時刻計算の責務を分離する。
+`Duration` 型を Go 標準の `time.Duration` ではなく独自の日数ベースで定義する理由は、ユーザが指定する `d` / `w` を「整数日数」として正規化し、CLI 層の入力制約（1 日以上、日/週単位のみ）を 1 か所に閉じ込めるためである。カットオフ日時は `Duration.Cutoff(now)` メソッドが現在時刻を **UTC 日付の開始時刻（00:00:00 UTC）に切り捨ててから**日数を遡って返す（AC-07c）。これにより各サブコマンドが個別に切り捨て処理を実装することなく、型システムでカットオフ計算の一貫性が保証される。
 
 ```go
 // SubcommandName は受け付けるサブコマンドの識別子。
@@ -409,6 +409,10 @@ type Duration struct {
     Days int // 内部表現は日数。週指定は ×7 で正規化する。
 }
 
+// Cutoff は now を UTC 日付単位で切り捨てた上で Days 日を遡ったカットオフ日時を返す（AC-07c）。
+// 各サブコマンドはこのメソッドを使ってカットオフを統一算出する。
+func (d Duration) Cutoff(now time.Time) time.Time
+
 // SubcommandRunner は各サブコマンドが満たすインターフェース。
 // internal/notify.SlackHandler との名称衝突を避け Handler ではなくこの名称とする。
 type SubcommandRunner interface {
@@ -424,11 +428,11 @@ type SubcommandRunner interface {
 | `cmd/tlsrpt-digest/main_test.go` | 既存エントリポイントテストを新サブコマンド振り分け、usage、exit 2 方針へ更新する。 | 変更あり |
 | `cmd/tlsrpt-digest/boot.go` | 共通初期化（設定読込・環境変数取得＋`config.Secret` ラップ・`{root_dir}` 確保・Slack ハンドラ構築・通知 facade 化・プロセスロック取得・ストアオープン）。`summary` は空ストア時に Slack 環境変数へ依存しないよう notifier を遅延構築する。`BootContext` の生成と返却。 | 新規追加 |
 | `cmd/tlsrpt-digest/lock.go` | OS 標準の advisory file lock（POSIX 環境では `flock(2)` 相当）に基づくプロセス排他ロックの取得・保持・テスト用 `Close`。 | 新規追加 |
-| `cmd/tlsrpt-digest/duration.go` | `d` / `w` 単位の `Duration` 型パース、バリデーション（1 日以上）、日数への正規化。 | 新規追加 |
+| `cmd/tlsrpt-digest/duration.go` | `d` / `w` 単位の `Duration` 型パース、バリデーション（1 日以上）、日数への正規化。`Cutoff(now time.Time) time.Time` メソッドにより現在時刻を UTC 日付単位で切り捨てたカットオフ日時を返す（AC-07c）。 | 新規追加 |
 | `cmd/tlsrpt-digest/fetch.go` | F-003: メタ取得・UIDVALIDITY 検証・選定・ダウンロード・パース・`NotificationSink.LogAlert` / `LogWarning` バッファリング・`SaveEmail`/`SaveEmailMetas`/`SaveReports`・`Flush()`・SEEN 付与。 | 新規追加 |
 | `cmd/tlsrpt-digest/summary.go` | F-005: 期間を解決し、recovery-required を確認し、既存 `notify.GenerateSummary(ctx, store, start, end, debugLogger)` を呼んで `NotificationSink.LogSummary` 経由で Slack へ送信する。集計ロジックは再実装しない。 | 新規追加 |
 | `cmd/tlsrpt-digest/reprocess.go` | F-004: 保存済み `.eml` の再パースとストア再構築。`--notify` 指定時のみ `NotificationSink.LogAlert` を呼ぶ。 | 新規追加 |
-| `cmd/tlsrpt-digest/gc.go` | F-006: `DeleteReportsBefore` / `DeleteEmailsBefore` の呼び出しと削除件数の INFO ログ出力。 | 新規追加 |
+| `cmd/tlsrpt-digest/gc.go` | F-006: `Duration.Cutoff(now)` で AC-07c に従ったカットオフ日時を算出し、`DeleteReportsBefore` / `DeleteEmailsBefore` を呼び出す。削除件数の INFO ログ出力。 | 新規追加 |
 | `cmd/tlsrpt-digest/recover.go` | F-007: UIDVALIDITY 変化からの手動復旧。実行前にオペレータ向け情報（recovery-required 内容・復旧モード・データパス）を stdout に表示する。`keep-old` は `ApplyRecovery`、`discard-old --yes` は `internal/store` の破棄復旧 API を呼ぶ。 | 新規追加 |
 | `cmd/tlsrpt-digest/duration_test.go` | `d` / `w` パーサーと日数正規化の単体テスト。 | 新規追加 |
 | `cmd/tlsrpt-digest/lock_test.go` | non-blocking ロック取得、`Close()` によるテスト内解放の単体テスト。 | 新規追加 |
@@ -483,7 +487,7 @@ type SubcommandRunner interface {
 
 `summary` は (1) → `store.Open(..., OpenReadOnly)` → `LoadRecoveryRequired` を先に実行し、(3)（ディレクトリ作成）と (5)（ロック取得）はスキップする。recovery-required が見つかった場合は、集計対象件数に関係なく notifier を構築し、`SystemErrorKind=recovery_required` を送って `Flush()` 後に exit 1 とする。recovery-required がない場合のみ空ストア/空レポート判定へ進み、ストア未作成時は Slack URL の環境変数を要求せず「集計対象なし」として INFO ログ出力後 exit 0 で正常終了する（[6.7](#67-summary-の空ストア時シーケンス) 参照）。集計対象がある場合は (2w) の Slack URL 取得と (4) の notifier 構築を行い、`notify.GenerateSummary` で既存集計ロジックを使う。Slack 送信直前に `LoadRecoveryRequired` を再確認し（[6.7](#67-summary-の空ストア時シーケンス) ステップ 5）、発見した場合は `SystemErrorKind=recovery_required` を通知して `Flush()` 後に exit 1 とする。recovery-required がなければ `NotificationSink.LogSummary` と `Flush()` を実行する。
 
-**デフォルト値解決の優先順位**: フラグ未指定時の値解決は **CLI フラグ > 設定値 > 設定パッケージ既定値** の順で行う。`Duration` への正規化責務は各サブコマンドハンドラが負い、`config.IMAPConfig.FetchDays`（`int`、日数）や `config.SummaryConfig.WindowDays` などの整数日数フィールドは `Duration{Days: N}` 形式へ変換する。カットオフ日時は各サブコマンドが日数から算出する。設定パッケージ側の既定値は 0060 の要件に従い `internal/config/defaults.go` が保持し、エントリポイント側で再定義しない。
+**デフォルト値解決の優先順位**: フラグ未指定時の値解決は **CLI フラグ > 設定値 > 設定パッケージ既定値** の順で行う。`Duration` への正規化責務は各サブコマンドハンドラが負い、`config.IMAPConfig.FetchDays`（`int`、日数）や `config.SummaryConfig.WindowDays` などの整数日数フィールドは `Duration{Days: N}` 形式へ変換する。カットオフ日時は `Duration.Cutoff(now)` メソッドが UTC 日付単位で切り捨てた上で日数を遡って返す（AC-07c）。設定パッケージ側の既定値は 0060 の要件に従い `internal/config/defaults.go` が保持し、エントリポイント側で再定義しない。
 
 ### 3.5 サブコマンド別フラグ仕様
 
@@ -498,7 +502,7 @@ type SubcommandRunner interface {
 | `recover` | `--yes` | `discard-old` 実行確認 | - |
 | `reprocess` | `--notify` | Slack 送信の有効化（デフォルト無効） | - |
 
-各フラグの値解決は [3.4 デフォルト値解決の優先順位](#34-共通初期化シーケンス書き込み系の手順) に従う。`d` / `w` の duration は `duration.go` のカスタムパーサーで処理し、共通パーサーは AC-07b に従いパース後の値が 1 日未満（0 以下含む）の場合にエラーを返す。
+各フラグの値解決は [3.4 デフォルト値解決の優先順位](#34-共通初期化シーケンス書き込み系の手順) に従う。`d` / `w` の duration は `duration.go` のカスタムパーサーで処理し、共通パーサーは AC-07b に従いパース後の値が 1 日未満（0 以下含む）の場合にエラーを返す。カットオフ日時の計算は `Duration.Cutoff(now)` メソッドに委ねる（AC-07c）。
 
 **`gc` の `--before` と `--max-email-age` を独立に持つ理由**: JSON レポートレコードと `.eml` 原本では削減ポリシーの粒度が異なる。レポートレコードは集計に必須なので長めに（例: 30 日）残し、`.eml` 原本は再パース・問題解析用なので短めにする運用もある。逆に `.eml` を長く残して再現性を確保する運用も可能。両者を別フラグで切り出すことで、`reprocess` での復元能力（タスク 0060 AC-10b の WARN 参照）を運用ポリシーで調整できる。
 
@@ -824,11 +828,13 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 
 要件定義書 §6 のテスト方針を踏襲しつつ、AC ↔ テストのトレーサビリティを実装計画書（`03_implementation_plan.md`）の「Acceptance Criteria Verification」セクションで完成させる。本書ではテストの粒度と網羅範囲を確定する。
 
-- **`duration.go`** — AC-07 / AC-07b
+- **`duration.go`** — AC-07 / AC-07b / AC-07c
   - `7d`・`4w`・`30d` の正常パース
   - `0d`・`-1d`・`-2w`・`30h`・`abc` のエラー
   - `fetch --since`・`summary --since`・`gc --before`・`gc --max-email-age` の各フラグで共通利用されること
   - 週指定が日数へ正規化されること（`4w → Days=28`）
+  - `Duration.Cutoff(now)` の UTC 切り捨て動作：現在時刻が UTC 02:01:00 のとき `Days=7` のカットオフが「7 日前の 00:00:00 UTC」となること（「7 日前の 02:01:00」ではないこと）（AC-07c）
+  - 週指定（`1w`）でも同様に UTC 日付単位の切り捨てが行われること
 - **`lock.go`** — AC-10a
   - 1 プロセスが取得中の状態で 2 プロセス目が即時失敗（non-blocking）
   - プロセス終了で自動解放されること（テスト内では `Close()` で代替）
@@ -860,7 +866,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
   - `--notify` 有無の挙動
   - ファイル単位エラー継続 / ストア書き込み失敗の中断
 - **`gc.go`** — AC-29a / AC-30–34
-  - `--before` / `--max-email-age` のカットオフ計算
+  - `--before` / `--max-email-age` のカットオフ計算が `Duration.Cutoff(now)` 経由で UTC 日付単位切り捨て済みであること（AC-07c）
   - INFO ログ出力件数
 - **`recover.go`** — AC-35–41
   - `keep-old` で `ApplyRecovery` がアトミックに呼ばれること
