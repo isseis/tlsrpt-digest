@@ -347,7 +347,7 @@ flowchart LR
 
 ### 3.1 主要型・インターフェース定義
 
-以下はエントリポイント内部で導入する型と、本タスクで拡張する `internal/notify` / `internal/store` の public contract 断片を示す。既存型の全体は再掲しない。
+以下はエントリポイント内部で導入する型と、本タスクで拡張する `internal/notify` / `internal/store` の公開仕様の断片を示す。既存型の全体は再掲しない。
 
 `Duration` 型を Go 標準の `time.Duration` ではなく独自の日数ベースで定義する理由は、ユーザが指定する `d` / `w` を「整数日数」として正規化し、CLI 層の入力制約（1 日以上、日/週単位のみ）を 1 か所に閉じ込めるためである。カットオフ日時（開始側）は `Duration.Cutoff(now)` メソッドが現在時刻を **UTC 日付の開始時刻（00:00:00 UTC）に切り捨ててから**日数を遡って返す（AC-07c）。`summary` の集計窓の終端は `UTCDayStart(now)` 関数が返す「今日の 00:00:00 UTC」とする（AC-07d）。集計窓は半開区間 `[start, end)` — start 以上 end 未満 — であり、end 自体は含まない。これにより開始・終端の両方が UTC 暦日境界に揃い、週次実行での重複・欠落が生じない。各サブコマンドが個別に切り捨て処理を実装する必要がなく、型システムで計算の一貫性が保証される。
 
@@ -419,7 +419,7 @@ type SystemError struct {
     Mailbox   string
 }
 
-// store.Store は discard-old 復旧の public contract として
+// store.Store は discard-old 復旧の公開仕様として
 // ResetForRecovery を直接持つ。recover は type assertion せず Store 経由で呼ぶ。
 type Store interface {
     ResetForRecovery(currUIDValidity uint32) error
@@ -451,7 +451,7 @@ type SubcommandRunner interface {
 
 | コンポーネント | 責務 | 変更種別 |
 |---|---|---|
-| `cmd/tlsrpt-digest/main.go` | サブコマンドの振り分け、終了コード集約、`slog` の Phase 1 セットアップ。既存の `loadConfig` / `buildIMAPConfig` / `setupNotifyHandlers` は `boot.go` へ移管する。 | 変更あり |
+| `cmd/tlsrpt-digest/main.go` | サブコマンドの振り分け、サブコマンドごとの `FlagSet` による引数解釈、終了コード集約、`slog` の Phase 1 セットアップ。既存の `loadConfig` / `buildIMAPConfig` / `setupNotifyHandlers` は `boot.go` へ移管する。 | 変更あり |
 | `cmd/tlsrpt-digest/main_test.go` | 既存エントリポイントテストを新サブコマンド振り分け、usage、exit 2 方針へ更新する。 | 変更あり |
 | `cmd/tlsrpt-digest/boot.go` | 共通初期化（設定読込・環境変数取得＋`config.Secret` ラップ・`{root_dir}` 確保・Slack ハンドラ構築・通知 facade 化・プロセスロック取得・ストアオープン）。`summary` は空ストア時に Slack 環境変数へ依存しないよう notifier を遅延構築する。`BootContext` の生成と返却。 | 新規追加 |
 | `cmd/tlsrpt-digest/lock.go` | OS 標準の advisory file lock（POSIX 環境では `flock(2)` 相当）に基づくプロセス排他ロックの取得・保持・テスト用 `Close`。 | 新規追加 |
@@ -525,6 +525,8 @@ type SubcommandRunner interface {
 
 ### 3.5 サブコマンド別フラグ仕様
 
+**引数解釈のタイミング**: `main.go` は `os.Args` からまずサブコマンド名を確定し、その後に**確定したサブコマンド専用の `flag.FlagSet`** で残り引数を解釈する。単一のグローバル `flag.Parse()` で全フラグを受理する方式は採らない。これにより `fetch` では `--since` を受理し、`summary` では `--window` のみを受理する、といったサブコマンド単位の妥当性検証を `flag` パッケージの標準的なエラー処理で実現する。共通フラグ `-config` も各サブコマンドの `FlagSet` に登録して解釈する。
+
 | サブコマンド | フラグ | 意味 | 設定上書き対象 |
 |---|---|---|---|
 | 全共通 | `-config <path>` | TOML 設定ファイルパス。省略時 `./config.toml` | - |
@@ -544,7 +546,7 @@ type SubcommandRunner interface {
 
 ### 3.6 RunID と相関 ID
 
-- **採番タイミング**: `main.go` の入口（`flag.Parse` 直後、`Bootstrap` 前）で 1 回採番する。既存 `main.go` の `ulid.Make().String()` を継続採用する。systemd の `INVOCATION_ID` を利用する余地もあるが、依存追加が必要なため本タスクではバイナリ内採番に統一する。
+- **採番タイミング**: `main.go` でサブコマンド名を確定し、対応する `FlagSet` による引数解釈が成功した直後（`Bootstrap` 前）に 1 回採番する。既存 `main.go` の `ulid.Make().String()` を継続採用する。systemd の `INVOCATION_ID` を利用する余地もあるが、依存追加が必要なため本タスクではバイナリ内採番に統一する。
 - **伝播経路**:
   - `BootContext.RunID` に格納し、すべてのサブコマンドが参照可能とする。
   - `notify.SlackHandlerOptions.RunID` に渡し、Slack 通知のすべてのメッセージへ `run_id` 属性として埋め込む（[notify タスク 0030](../0030_slack_notify/01_requirements.md) F-007 のメッセージフォーマット参照）。
@@ -561,7 +563,7 @@ type SubcommandRunner interface {
 |---|---|
 | 0 | 正常終了。サブコマンドの全処理が成功し、必要な Flush も完了 |
 | 1 | 異常終了。設定不正、ロック取得失敗、IMAP 接続失敗、UIDVALIDITY 不一致による fail closed、`recovery-required` 残存、`Flush()` 失敗、`reprocess` のストア書き込み失敗、`recover --mode discard-old` 確認不足 など |
-| 2 | サブコマンドのパース失敗（サブコマンド未指定、未知のサブコマンド、不正なフラグ）。usage を stderr へ出力し、`flag` パッケージのエラー終了に揃える |
+| 2 | サブコマンドのパース失敗（サブコマンド未指定、未知のサブコマンド、または確定したサブコマンド用 `FlagSet` に対する不正なフラグ）。usage を stderr へ出力し、`flag` パッケージのエラー終了に揃える |
 
 ### 4.2 エラー伝達方針
 
@@ -930,7 +932,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 
 ### 7.2 統合テスト
 
-- サブコマンド振り分けの結合テスト（サブコマンド未指定・未知のサブコマンド・不正フラグが usage を stderr へ出し exit 2 になることを含む）
+- サブコマンド振り分けの結合テスト（サブコマンド未指定・未知のサブコマンド・サブコマンド専用 `FlagSet` に対する不正フラグが usage を stderr へ出し exit 2 になることを含む）
 - TOML 設定読込から `BootContext` 構築までの一連
 - `testdata/` の実 `.eml` を用いた `reprocess` のラウンドトリップ
 - `fetch` 実行中に `summary` が並走できること（書き込み系どうしの直列化のみ強制）
@@ -958,7 +960,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 2. `lock.go`（プロセスロック）
 3. `NotificationSink` facade と `boot.go`（共通初期化シーケンス）
 4. `internal/store` の `ResetForRecovery(currUIDValidity)` API
-5. サブコマンド振り分け（`main.go` の `flag.Parse` 移行）
+5. サブコマンド振り分けとサブコマンド別 `FlagSet` への移行
 
 ### フェーズ 2: 主機能サブコマンド
 
