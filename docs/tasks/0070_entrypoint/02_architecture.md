@@ -96,14 +96,14 @@ flowchart LR
 ### 2.1 パッケージ配置と依存関係
 
 ```mermaid
-graph TB
-    classDef data fill:#e6f7ff,stroke:#1f77b4,stroke-width:1px,color:#0b3d91;
+graph LR
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
     subgraph pkg_cmd ["cmd/tlsrpt-digest/ (本タスクで拡張)"]
+        direction TB
         M["main.go<br>サブコマンド振り分け"]
-        BOOT["boot.go<br>共通初期化シーケンス"]
+        BOOT["boot.go<br>共通初期化"]
         LOCK["lock.go<br>プロセスロック"]
         DUR["duration.go<br>d/w 単位パーサー"]
         FETCH["fetch.go"]
@@ -113,41 +113,54 @@ graph TB
         REC["recover.go"]
     end
 
-    subgraph pkg_existing ["internal/ (既存・参照)"]
-        CFG_PKG["config"]
+    subgraph pkg_imap ["internal/ IMAP・解析系"]
+        direction TB
         IMAP_PKG["imap"]
         TLSRPT_PKG["tlsrpt"]
         MP_PKG["mailparse"]
-        NOTIFY_PKG["notify"]
     end
 
-    subgraph pkg_store ["internal/store (本タスクで最小拡張)"]
+    subgraph pkg_infra ["internal/ 共有インフラ"]
+        direction TB
+        CFG_PKG["config"]
+        NOTIFY_PKG["notify"]
         STORE_PKG["store"]
     end
 
+    %% main → 各サブコマンド・共通初期化
     M --> BOOT
     M --> FETCH
     M --> SUM
     M --> REP
     M --> GC
     M --> REC
+
+    %% boot → 共有インフラ
     BOOT --> LOCK
     BOOT --> CFG_PKG
     BOOT --> NOTIFY_PKG
     BOOT --> STORE_PKG
+
+    %% fetch → IMAP・解析 + 共有
     FETCH --> IMAP_PKG
     FETCH --> TLSRPT_PKG
     FETCH --> MP_PKG
     FETCH --> NOTIFY_PKG
     FETCH --> STORE_PKG
     FETCH --> DUR
-    SUM --> STORE_PKG
+
+    %% summary → 共有
     SUM --> NOTIFY_PKG
+    SUM --> STORE_PKG
     SUM --> DUR
-    REP --> STORE_PKG
+
+    %% reprocess → 解析 + 共有（IMAP 不要）
     REP --> TLSRPT_PKG
     REP --> MP_PKG
     REP --> NOTIFY_PKG
+    REP --> STORE_PKG
+
+    %% gc / recover → store のみ
     GC --> STORE_PKG
     GC --> DUR
     REC --> STORE_PKG
