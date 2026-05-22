@@ -475,12 +475,14 @@ type SubcommandRunner interface {
 
 ### 3.4 共通初期化シーケンス（書き込み系の手順）
 
+書き込み系サブコマンドの**実際の実行順序**は `1 → 3 → 2w → 4 → 5 → 6`（ステップ 3 はシークレットを触る前に実行）。以下のテーブルは機能グループ別のラベルを維持しているが、実装順はシーケンス図（§2.2）が正とする。
+
 | 順 | 処理 | 失敗時の挙動 |
 |---|---|---|
 | 1 | `config.LoadFile(path, logger)` で設定読込 | stderr 出力 + exit 1（Slack ハンドラ未構築のため通知不可） |
+| 3 | `{root_dir}` を `0700` で作成（不在時のみ）。ロックファイルの親ディレクトリを保証するための最小操作。**ステップ 2w より前に実行**（シークレット取得前に失敗を確定させるため） | stderr 出力 + exit 1 |
 | 2w | 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` / `TLSRPT_SLACK_WEBHOOK_URL_ERROR` を取得し、**即座に `config.Secret` でラップ**してローカル変数へ。生 `string` は `BootContext` 外へ持ち出さない。書き込み系サブコマンドはロック取得失敗などを Slack 通知するためここで要求する | stderr 出力 + exit 1 |
 | 2f | `fetch` のみ、recovery-required 確認後かつ IMAP 接続直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を取得し、**即座に `config.Secret` でラップ**する。`gc` / `recover` / `reprocess` / 空ストア `summary` は IMAP 認証情報を要求しない | `LogSystemError` + `Flush()` + exit 1 |
-| 3 | `{root_dir}` を `0700` で作成（不在時のみ）。ロックファイルの親ディレクトリを保証するための最小操作 | stderr 出力 + exit 1 |
 | 4 | `notify.BuildHandlers(env URLs, allowed_host)` で Slack ハンドラ構築。`BuildHandlers` は all-or-nothing で `[]*SlackHandler` を返す（part-success の中間状態を生じない） | stderr 出力 + exit 1 |
 | 5 | `lock.AcquireExclusive(lockPath)` でプロセス排他ロック取得 | `LogSystemError` + `Flush()` + exit 1 |
 | 6 | `store.Open(rootDir, identity, OpenReadWrite)` でストアの完全初期化（sentinel 検証・`tlsrpt.json` 作成等） | `LogSystemError` + `Flush()` + exit 1。エラー分類は [4.2](#42-エラー伝達方針) を参照 |
@@ -856,7 +858,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
   - サイズ不一致・パース失敗 WARN が `Flush()` 成功後にのみ SEEN 付与へ進むこと
   - Flush 失敗時に SEEN 不付与
   - `SaveEmailMetas`・`SaveReports` がそれぞれ全メール処理後に 1 回ずつ呼ばれること
-- **`summary.go`** — AC-07a / AC-27 / AC-27a / AC-28 / AC-29
+- **`summary.go`** — AC-07a / AC-10c / AC-27 / AC-27a / AC-28 / AC-29
   - `--since` 指定時/未指定時の動作
   - recovery-required 残存時の停止
   - 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary`）に含まれること
