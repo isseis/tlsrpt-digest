@@ -463,7 +463,7 @@ type SubcommandRunner interface {
 | `internal/imap` | メタ取得・ダウンロード・SEEN 付与（既存）。本タスクでの変更なし。 | 既存・参照のみ |
 | `internal/store/types.go` | `OpenRecoverReset` mode を追加し、pending reset を recover 専用で再開できる open contract を定義する。 | 変更あり |
 | `internal/store/store.go` | `store.Store` に `ResetForRecovery(currUIDValidity uint32) error` を追加し、破棄復旧の永続化境界を store パッケージ内へ閉じ込める。`Open` 関数で `OpenRecoverReset` mode を認識・処理する分岐を追加する。 | 変更あり |
-| `internal/store/recovery.go` | `ResetForRecovery` と pending reset の fail-closed / recover-only 再開境界を実装する。 | 変更あり |
+| `internal/store/recovery.go` | `ResetForRecovery` と pending reset の fail closed / recover-only 再開境界を実装する。 | 変更あり |
 | `internal/store/store_test.go` | `OpenRecoverReset` と通常 `OpenReadWrite` の pending reset 扱いの違いを検証する。 | 変更あり |
 | `internal/store/recovery_test.go` | `ResetForRecovery` の更新範囲、reset manifest/phase/commit、Open 時 cleanup、中間失敗時の再実行性を検証する。 | 変更あり |
 | `internal/store/testutil/mocks.go` | `store.Store` に追加される `ResetForRecovery` を fake/mock に実装する。 | 変更あり |
@@ -497,7 +497,7 @@ type SubcommandRunner interface {
 | 1 | `config.LoadFile(path, logger)` で設定読込 | stderr 出力 + exit 1（Slack ハンドラ未構築のため通知不可） |
 | 4s | **`summary` 専用**: `store.Open(rootDir, identity, OpenReadOnly)` でストアを read-only オープン。`{root_dir}` 不在でもエラーを返さず空ストアを返す（§2.2 の `else summary` ブランチ冒頭）。ステップ 3・5・6 はスキップする | stderr 出力 + exit 1 |
 | 3 | `{root_dir}` を `0700` で作成（不在時のみ）。ロックファイルの親ディレクトリを保証するための最小操作。**ステップ 2w より前に実行**（シークレット取得前に失敗を確定させるため） | stderr 出力 + exit 1 |
-| 2w | 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` / `TLSRPT_SLACK_WEBHOOK_URL_ERROR` を取得し、**即座に `config.Secret` でラップ**してローカル変数へ。生 `string` は `BootContext` 外へ持ち出さない。書き込み系サブコマンドはロック取得失敗などを Slack 通知するためここで要求する | stderr 出力 + exit 1 |
+| 2w | 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` / `TLSRPT_SLACK_WEBHOOK_URL_ERROR` を取得し、**即座に `config.Secret` でラップ**してローカル変数へ。生 `string` は `BootContext` 外へ持ち出さない。**両変数が未設定（空）の場合は "Slack 無効" モードとして扱い、ここでは失敗しない**（`notify.BuildHandlers` が `nil, nil` を返す valid な状態）。URL が設定されている場合は形式検証を行い、不正な場合のみ失敗する | stderr 出力 + exit 1（URL 形式不正の場合のみ） |
 | 2f | `fetch` のみ、recovery-required 確認後かつ IMAP 接続直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を取得し、**即座に `config.Secret` でラップ**する。`gc` / `recover` / `reprocess` / 空ストア `summary` は IMAP 認証情報を要求しない | `LogSystemError` + `Flush()` + exit 1 |
 | 4 | `notify.BuildHandlers(env URLs, allowed_host)` で Slack ハンドラ構築。`BuildHandlers` は all-or-nothing で `[]*SlackHandler` を返す（part-success の中間状態を生じない） | stderr 出力 + exit 1 |
 | 5 | `lock.AcquireExclusive(lockPath)` でプロセス排他ロック取得 | `LogSystemError` + `Flush()` + exit 1 |
@@ -559,7 +559,7 @@ type SubcommandRunner interface {
   上記いずれも exit 1。Open のエラー値は既存 `internal/store` が返す型を `errors.Is` / `errors.As` で判別する。
 - **IMAP / TLSRPT パース失敗**: 0030 の重度分類に従い `LogAlert` / `LogSystemError` を使い分け、最終 `Flush()` で Slack 配送。
 - **ファイル単位の失敗継続**: `fetch` のメール単位パース失敗は WARN ログと必要な Slack 通知を出して処理継続する。`reprocess` のファイル単位読み込み・パース失敗は WARN ログを出して対象ファイルをスキップし、`--notify` 指定時のみ `NotificationSink` 経由の通知対象に含める。`reprocess` のストア書き込み失敗（all-or-nothing）はコマンド全体を中断。
-- **エラー型**: 既存 `internal/store`・`internal/notify` のエラーを `fmt.Errorf("...: %w", err)` でラップし、`errors.Is` / `errors.As` で識別できるようにする。`cmd` レイヤー独自の sentinel エラーは原則導入せず、終了コードと Slack メッセージで挙動を表現する。
+- **エラー型**: 既存 `internal/store`・`internal/notify` のエラーをパッケージ固有のプレフィックスを含む形式（例：`fmt.Errorf("fetch: %w", err)`）でラップし、エラー発生源を特定しやすくする。`errors.Is` / `errors.As` で識別できるようにする。`cmd` レイヤー独自の sentinel エラーは原則導入せず、終了コードと Slack メッセージで挙動を表現する。
 
 ### 4.3 Flush 失敗時の取扱い
 

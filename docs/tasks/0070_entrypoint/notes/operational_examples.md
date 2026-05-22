@@ -100,15 +100,17 @@ systemctl enable --now tlsrpt-digest-gc.timer
 
 `/etc/cron.d/tlsrpt-digest` などに記述する。本質的には systemd timer と同等であり、環境変数は別ファイルで管理するか、実行前に source する。
 
+> **環境変数の引き継ぎ**: crontab の `. secrets.env` は変数をシェルに読み込むが、`export` されていないと子プロセス（`tlsrpt-digest`）に渡らない。`set -a; . secrets.env; set +a` を使うか、`secrets.env` 内の各行を `export KEY=value` 形式にする。
+
 ```crontab
 # 毎時0分に IMAP メール取得
-0 * * * *  root  . /etc/tlsrpt-digest/secrets.env && /usr/local/bin/tlsrpt-digest fetch -config /etc/tlsrpt-digest/config.toml
+0 * * * *  root  set -a; . /etc/tlsrpt-digest/secrets.env; set +a && /usr/local/bin/tlsrpt-digest fetch -config /etc/tlsrpt-digest/config.toml
 
-# 毎週月曜9時に定期サマリ
-0 9 * * 1  root  . /etc/tlsrpt-digest/secrets.env && /usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml
+# 毎週月曜9時に定期サマリ（7 日分、設定の summary.window_days で代替可）
+0 9 * * 1  root  set -a; . /etc/tlsrpt-digest/secrets.env; set +a && /usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml --since 7d
 
 # 毎日3時に古いレコードを削除（30 日以前）
-0 3 * * *  root  . /etc/tlsrpt-digest/secrets.env && /usr/local/bin/tlsrpt-digest gc -config /etc/tlsrpt-digest/config.toml --before 30d
+0 3 * * *  root  set -a; . /etc/tlsrpt-digest/secrets.env; set +a && /usr/local/bin/tlsrpt-digest gc -config /etc/tlsrpt-digest/config.toml --before 30d
 ```
 
 ---
