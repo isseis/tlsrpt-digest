@@ -213,22 +213,31 @@ sequenceDiagram
     else summary
         Note over B,S: ステップ 4s: ストア read-only オープン
         B->>S: Open(rootDir, identity, OpenReadOnly)
-        Note over B,S: recovery-required を最初に確認（[6.7] ステップ 2）
+        Note over B,S: 第 1 回 LoadRecoveryRequired（[6.7] ステップ 2）
         B->>S: LoadRecoveryRequired()
         S-->>B: found / not found
-        Note over B: found = true → 以降の 2w+4 も実行してから SystemErrorKind=recovery_required + Flush + exit 1
-        Note over B: found = false → 空ストア/空レポートなら notifier 未構築のまま exit 0
-        Note over B,ENV: 集計送信時（および recovery_required 通知時）のみ Slack URL を Secret 化
-        B->>ENV: read TLSRPT_SLACK_WEBHOOK_URL_*
-        ENV-->>B: Slack URL（即時 config.Secret でラップ）
-        Note over B,N: 集計送信が必要な場合のみ Slack ハンドラ構築
-        B->>N: BuildHandlers(env URLs, allowed_host)
-        N-->>B: []*SlackHandler or error (all-or-nothing)
-        B->>B: NotificationSink facade でラップ
-        Note over B,S: Slack 送信直前に LoadRecoveryRequired を再確認（summary.go で実行、[6.7] ステップ 5）
-        B->>S: LoadRecoveryRequired()
-        S-->>B: found / not found
-        Note over B: found = true → SystemErrorKind=recovery_required 通知 + Flush + exit 1
+        Note over B: found = true → §3.4 ステップ 2w+4 で notifier 構築 → SystemErrorKind=recovery_required + Flush + exit 1
+        Note over B,N: found = false → 集計窓算出 + GenerateSummary（[6.7] ステップ 3）
+        B->>N: GenerateSummary(ctx, store, start=Cutoff(now), end=UTCDayStart(now))
+        N-->>B: Summary（空 or 非空）
+        alt Summary が空（[6.7] ステップ 4a）
+            Note over B,S: 第 2 回 LoadRecoveryRequired（空パス用）
+            B->>S: LoadRecoveryRequired()
+            S-->>B: found / not found
+            Note over B: found=true → stderr ERROR + exit 1  /  found=false → INFO log + exit 0
+        else Summary が非空（[6.7] ステップ 4b）
+            Note over B,ENV: §3.4 ステップ 2w: Slack URL を Secret 化
+            B->>ENV: read TLSRPT_SLACK_WEBHOOK_URL_*
+            ENV-->>B: Slack URL（即時 config.Secret でラップ）
+            Note over B,N: §3.4 ステップ 4: Slack ハンドラ構築
+            B->>N: BuildHandlers(env URLs, allowed_host)
+            N-->>B: []*SlackHandler or error (all-or-nothing)
+            B->>B: NotificationSink facade でラップ
+            Note over B,S: 第 2 回 LoadRecoveryRequired・Slack 送信直前（summary.go 実行、[6.7] ステップ 5）
+            B->>S: LoadRecoveryRequired()
+            S-->>B: found / not found
+            Note over B: found = true → SystemErrorKind=recovery_required 通知 + Flush + exit 1
+        end
     end
     S-->>B: Store or error
     B-->>M: BootContext{Config, Store, Notifier, LockHandle}
