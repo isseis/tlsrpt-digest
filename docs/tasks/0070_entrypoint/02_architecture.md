@@ -337,7 +337,7 @@ flowchart LR
 
 以下はエントリポイント内部で導入する型と、本タスクで拡張する `internal/notify` / `internal/store` の public contract 断片を示す。既存型の全体は再掲しない。
 
-`Duration` 型を Go 標準の `time.Duration` ではなく独自の日数ベースで定義する理由は、ユーザが指定する `d` / `w` を「整数日数」として正規化し、CLI 層の入力制約（1 日以上、日/週単位のみ）を 1 か所に閉じ込めるためである。カットオフ日時（開始側）は `Duration.Cutoff(now)` メソッドが現在時刻を **UTC 日付の開始時刻（00:00:00 UTC）に切り捨ててから**日数を遡って返す（AC-07c）。`summary` の集計窓の終端は `UTCDayStart(now)` 関数が返す「今日の 00:00:00 UTC」とする（AC-07d）。これにより開始・終端の両方が UTC 暦日境界に揃い、週次実行での重複・欠落が生じない。各サブコマンドが個別に切り捨て処理を実装する必要がなく、型システムで計算の一貫性が保証される。
+`Duration` 型を Go 標準の `time.Duration` ではなく独自の日数ベースで定義する理由は、ユーザが指定する `d` / `w` を「整数日数」として正規化し、CLI 層の入力制約（1 日以上、日/週単位のみ）を 1 か所に閉じ込めるためである。カットオフ日時（開始側）は `Duration.Cutoff(now)` メソッドが現在時刻を **UTC 日付の開始時刻（00:00:00 UTC）に切り捨ててから**日数を遡って返す（AC-07c）。`summary` の集計窓の終端は `UTCDayStart(now)` 関数が返す「今日の 00:00:00 UTC」とする（AC-07d）。集計窓は半開区間 `[start, end)` — start 以上 end 未満 — であり、end 自体は含まない。これにより開始・終端の両方が UTC 暦日境界に揃い、週次実行での重複・欠落が生じない。各サブコマンドが個別に切り捨て処理を実装する必要がなく、型システムで計算の一貫性が保証される。
 
 ```go
 // SubcommandName は受け付けるサブコマンドの識別子。
@@ -831,7 +831,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 
 1. `summary` は Slack URL 環境変数を読む前に `store.Open(rootDir, identity, OpenReadOnly)` を呼ぶ。read-only モードのため `{root_dir}` 不在でもエラーを返さず、空ストア状態の `Store` を返す（タスク 0040 F-001 の OpenReadOnly セマンティクス）。
 2. `LoadRecoveryRequired` を必ず先に呼ぶ（第 1 回確認）。`found = true` の場合は空ストア扱いにせず、§3.4 のステップ 2w・ステップ 4 を実行して notifier を構築してから `SystemErrorKind=recovery_required` を送信し exit 1 とする（§2.2 参照）。
-3. `found = false` の場合だけ集計窓を算出し `notify.GenerateSummary(ctx, store, start, end, debugLogger)` を呼ぶ。`start = Duration.Cutoff(now)`（AC-07c）、`end = UTCDayStart(now)`（AC-07d）。集計ロジックは `summary.go` で再実装しない。
+3. `found = false` の場合だけ集計窓を算出し `notify.GenerateSummary(ctx, store, start, end, debugLogger)` を呼ぶ。`start = Duration.Cutoff(now)`（AC-07c）、`end = UTCDayStart(now)`（AC-07d）。窓は半開区間 `[start, end)`（start 以上 end 未満）。集計ロジックは `summary.go` で再実装しない。
 4a. 生成された `Summary` が空の場合、`LoadRecoveryRequired` を再確認する（第 2 回確認・空パス用）。`found = true` ならば stderr に ERROR ログを出力して exit 1（notifier 未構築のため Slack 通知なし、AC-27a 準拠）。`found = false` ならば Slack notifier を構築せず INFO レベル `slog` ログ「no reports to summarize」を 1 行出力し exit 0。
 4b. `Summary` が非空の場合、§3.4 のステップ 2w・ステップ 4 に従い Slack URL 取得と `BuildHandlers` を実行して notifier を構築する。
 5. Slack 送信直前に `LoadRecoveryRequired` を再読込する（第 2 回確認・非空パス用）。recovery-required が出現していれば `SystemErrorKind=recovery_required` を通知して exit 1 とする。これにより `summary` がロックを取得しない設計でも、送信直前の fail closed 境界を持つ。
