@@ -231,14 +231,18 @@ sequenceDiagram
     B-->>M: BootContext{Config, Store, Notifier, LockHandle}
 ```
 
-- 矢印 A → B はリクエスト、A -->> B は戻り値を表す。
-- `S-->>B: Store or error`（alt ブロック外）は書き込み系サブコマンドの `Open(OpenReadWrite)` 戻り値を示す。
-- `summary` では `Store` は else ブランチ内の `Open(OpenReadOnly)` で取得済みであり、この行は summary には適用されない。
-- `B-->>M: BootContext{…}` は書き込み系の典型形であり、`summary` では `Notifier` は空集計時に `nil`、`LockHandle` は常に `nil` となる。
-- IMAP 認証情報は `fetch` 以外では不要なため、この共通初期化では取得しない。
+矢印 A → B はリクエスト、A -->> B は戻り値を表す。
+
+**図末尾 2 行の補足**
+- `S-->>B: Store or error` は書き込み系サブコマンドの `Open(OpenReadWrite)` 戻り値を示す（alt ブロック外）。`summary` では else ブランチ内で `Open(OpenReadOnly)` が完了しており、この行は summary には適用されない。
+- `B-->>M: BootContext{…}` は書き込み系の典型形。`summary` では `Notifier` は空集計時に `nil`、`LockHandle` は常に `nil` となる。
+
+**IMAP 認証情報（fetch 専用）**
+- `fetch` 以外では不要なため、この共通初期化では取得しない。
 - `fetch` は recovery-required 確認後、IMAP 接続を作る直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を読み、即座に `config.Secret` でラップする。
-- `summary` ブランチ内の `GenerateSummary`・`LoadRecoveryRequired` 2 回目（空集計パスはステップ 4a、非空パスはステップ 5）・非空パスの notifier 構築はすべて `boot.go` ではなく `summary.go` が実行する。
-- シーケンス図では `summary` ブランチ全体の流れを示すために `boot.go` 名義で図示している（[6.7](#67-summary-の空ストア時シーケンス) 参照）。
+
+**summary ブランチの所有権**
+- `GenerateSummary`・`LoadRecoveryRequired` 2 回目（空集計パスはステップ 4a、非空パスはステップ 5）・非空パスの notifier 構築はすべて `boot.go` ではなく `summary.go` が実行する。シーケンス図では `summary` ブランチ全体の流れを示すために `boot.go` 名義で図示している（[6.7](#67-summary-の空ストア時シーケンス) 参照）。
 
 **凡例（Legend）**
 
@@ -487,13 +491,18 @@ type SubcommandRunner interface {
 
 ### 3.3 プロセスロックの設計
 
+**ロックファイルの仕様**
 - **ロックファイル**: `{store.root_dir}/.tlsrpt-digest-store.lock`、パーミッション `0600`、長さ 0 バイト。
 - **sentinel と分離する理由**: sentinel ファイル（`.tlsrpt-digest-meta.json`）は atomic rename で頻繁に置き換えるため、長寿命の fd ベース advisory lock を sentinel 自身に取得すると rename 後にロックが孤立する。専用ファイルへ分離することでロック寿命と sentinel 寿命を独立させる。
+
+**取得・解放の実装**
 - **取得方式**: POSIX 環境では Go 標準ライブラリの `syscall.Flock` を使い、`flock(2)` の排他・非ブロッキング動作（`LOCK_EX | LOCK_NB`）を利用する。追加依存は導入しない。取得できない場合は他プロセス保持中とみなし即時失敗。失敗時は `LogSystemError` + `Flush()` + exit 1。
 - **解放方式**: ロックは取得したファイルディスクリプタを `BootContext.LockHandle` で保持し続けることで維持される。プロセス終了時に OS が自動解放するため、明示的な `unlock` は不要。`LockHandle.Close()` はテスト時のみ呼ぶ。外部終了時の扱いは [4.4](#44-シグナルハンドリング) を参照。
 - **ロック前提条件**: ロック取得前に `{root_dir}` の存在を保証する必要がある（初回実行時の親ディレクトリ不在を回避）。ストアの完全初期化（sentinel 検証・`tlsrpt.json` 作成）はロック取得後に実行する。
-- **`internal/store` 側との責務分離**: ロックファイルは本タスクのオーケストレーションが管理し、`internal/store` 側は `.tlsrpt-digest-store.lock`（`.tlsrpt-digest-` プレフィックスのうち sentinel・data file 以外のファイル）をストア管理対象外として扱う（既存実装は `tlsrpt.json` と sentinel のみを参照しており、副作用はない）。
+
+**適用範囲と責務分離**
 - **適用範囲**: 書き込み系サブコマンド（`fetch` / `gc` / `recover` / `reprocess`）が対象。`summary` は read-only モードでストアを開くためロック不要であり、`fetch` 実行中でも並走できる。
+- **`internal/store` 側との責務分離**: ロックファイルは本タスクのオーケストレーションが管理し、`internal/store` 側は `.tlsrpt-digest-store.lock`（`.tlsrpt-digest-` プレフィックスのうち sentinel・data file 以外のファイル）をストア管理対象外として扱う（既存実装は `tlsrpt.json` と sentinel のみを参照しており、副作用はない）。
 - **`summary` 並走時の fail closed**: `summary` はロックを取得しない代わりに `LoadRecoveryRequired` を 2 回確認する。第 1 回は `GenerateSummary` 呼び出し前（ステップ 2）、第 2 回は集計結果判定後（ステップ 4a または 5）。空集計パス（ステップ 4a）では notifier 未構築のため stderr ERROR のみで exit 1、非空パス（ステップ 5）では Slack 通知 + exit 1 とする。どちらのパスでも古いエポックの summary を送信しないことが保証される（AC-27a）。
 
 ### 3.4 共通初期化シーケンス（書き込み系の手順）
@@ -556,16 +565,20 @@ type SubcommandRunner interface {
 
 ### 4.2 エラー伝達方針
 
-- **Boot 段階の失敗**: Slack ハンドラがまだ構築されていない可能性があるため stderr への `slog.Error` のみ。構築済み（手順 5 以降の失敗）は `LogSystemError` + `Flush()` を試行してから exit。
+**フェーズ別の失敗対処**
+- **Boot 段階の失敗**: Slack ハンドラがまだ構築されていない可能性があるため stderr への `slog.Error` のみ。構築済み（W-4 以降の失敗）は `LogSystemError` + `Flush()` を試行してから exit。
 - **IMAP 認証情報・接続失敗**: `fetch` は共通初期化で notifier と store を準備した後、recovery-required がないことを確認してから IMAP 認証情報を取得し、IMAP client を生成する。認証情報欠落、接続失敗、認証失敗はいずれも `LogSystemError` + `Flush()` + exit 1 とする。IMAP client 生成後は成功・失敗にかかわらず `Close()` を呼ぶ。
-- **SystemError payload の制約**: Slack へ送る `SystemError` は `SystemErrorKind`、`Component`、公開可能な mailbox 識別子のみを持つ。raw `err.Error()`、ローカルファイルパス、IMAP サーバの生応答、認証情報、Webhook URL、設定値は含めない。詳細な raw error は stderr/debug logger にのみ出す。
-- **`store.Open` エラーの分類**: Open は複数の失敗要因を持つ。設計書ではこれらを以下に分類し、ユーザ向けメッセージを使い分ける:
-  - **IMAP 識別子不一致**（sentinel に保存された `imap_host` / `imap_port` / `imap_mailbox` が今回の設定と異なる）: 設定ミスまたは別のメールボックス用 `root_dir` を誤って指している可能性が高い。Slack には `SystemErrorKind=store_identity_mismatch` と mailbox 識別子だけを送る。具体的な `root_dir` や raw error は stderr に出す。
-  - **パーミッション不足**: ファイル/ディレクトリパーミッション。Slack には `SystemErrorKind=store_permission` を送り、具体的なローカルパスは stderr に出す。
-  - **ファイル破損（JSON 不正等）**: 手動修復が必要。Slack には `SystemErrorKind=store_corruption` を送り、バックアップ復元の詳細は stderr/README に案内する。
-  上記いずれも exit 1。Open のエラー値は既存 `internal/store` が返す型を `errors.Is` / `errors.As` で判別する。
+- **`store.Open` エラーの分類**: Open は複数の失敗要因を持つ。以下に分類してユーザ向けメッセージを使い分ける。いずれも exit 1。Open のエラー値は `errors.Is` / `errors.As` で判別する。
+  - **IMAP 識別子不一致**（sentinel の `imap_host` / `imap_port` / `imap_mailbox` が今回の設定と異なる）: 設定ミスまたは誤った `root_dir` の可能性。Slack には `SystemErrorKind=store_identity_mismatch` と mailbox 識別子のみ、詳細は stderr へ。
+  - **パーミッション不足**: Slack には `SystemErrorKind=store_permission`、ローカルパスは stderr へ。
+  - **ファイル破損（JSON 不正等）**: Slack には `SystemErrorKind=store_corruption`、バックアップ復元の案内は stderr/README へ。
 - **IMAP / TLSRPT パース失敗**: 0030 の重度分類に従い `LogAlert` / `LogSystemError` を使い分け、最終 `Flush()` で Slack 配送。
-- **ファイル単位の失敗継続**: `fetch` のメール単位パース失敗は WARN ログと必要な Slack 通知を出して処理継続する。`reprocess` のファイル単位読み込み・パース失敗は WARN ログを出して対象ファイルをスキップし、`--notify` 指定時のみ `NotificationSink` 経由の通知対象に含める。`reprocess` のストア書き込み失敗（all-or-nothing）はコマンド全体を中断。
+- **ファイル単位の失敗継続**: `fetch` のメール単位パース失敗は WARN ログと Slack 通知を出して処理継続する。`reprocess` のファイル単位読み込み・パース失敗はスキップし（`--notify` 指定時のみ通知対象）、ストア書き込み失敗（all-or-nothing）はコマンド全体を中断。
+
+**Slack payload の安全制約**
+- **SystemError payload の制約**: `SystemError` は `SystemErrorKind`・`Component`・公開可能な mailbox 識別子のみを持つ。raw `err.Error()`・ローカルファイルパス・IMAP サーバ生応答・認証情報・Webhook URL・設定値は含めない。詳細な raw error は stderr/debug logger にのみ出す。
+
+**Go エラーの実装規則**
 - **エラー型**: 既存 `internal/store`・`internal/notify` のエラーをパッケージ固有のプレフィックスを含む形式（例：`fmt.Errorf("fetch: %w", err)`）でラップし、エラー発生源を特定しやすくする。`errors.Is` / `errors.As` で識別できるようにする。`cmd` レイヤー独自の sentinel エラーは原則導入せず、終了コードと Slack メッセージで挙動を表現する。
 
 ### 4.3 Flush 失敗時の取扱い
@@ -595,9 +608,8 @@ Slack HTTP POST のリトライ・タイムアウトは既存 `internal/notify` 
 [notification_security.md](../../dev/developer_guide/notification_security.md) Principle 1–5 への対応:
 
 - **Principle 1（型制約）**: `boot.go` は `notify.BuildHandlers` の戻り値を即座に `NotificationSink` facade へラップし、サブコマンドへ `slog.Handler` / `*notify.SlackHandler` として渡さない。facade のメソッドは `LogAlert` / `LogWarning` / `LogSystemError` / `LogSummary` / `Flush` のみであり、内部実装が `internal/notify` の型付きヘルパーを呼ぶ。エントリポイント側で `logger.Info(...)` などの非型付き API を Slack ハンドラ向けに呼ぶ箇所は型上作れない。
-- **Warning payload の制約**: `LogWarning` は `WarningKind` が `size_mismatch` または `parse_failure` のどちらかであることを検証し、UID、UIDVALIDITY、Message-ID だけを payload に含める。`error.Error()`、ローカル `.eml` パス、添付ファイル名、生メールヘッダ全文、設定値、環境変数は payload に含めない。詳細原因は stderr/debug logger 側にのみ出し、Slack には分類と公開識別子だけを送る。
-- **SystemError payload の制約**: `LogSystemError` は `SystemErrorKind` を必須にし、Slack payload には安全な分類、component、mailbox 識別子だけを含める。raw `err.Error()` や任意の message 文字列は payload に含めない。オペレータ向けの詳細診断は stderr/debug logger と README の固定文言に分離する。
-  - UIDVALIDITY 不一致は `SystemErrorKind=uidvalidity_changed`、既存 recovery-required による停止は `SystemErrorKind=recovery_required`、未 commit reset staging による `Open` fail closed は `SystemErrorKind=reset_incomplete` を使う。
+  - **Warning payload**: `LogWarning` は `WarningKind`（`size_mismatch` または `parse_failure`）・UID・UIDVALIDITY・Message-ID のみを payload に含める。`error.Error()`・ローカル `.eml` パス・添付ファイル名・生メールヘッダ・設定値・環境変数は含めない。詳細原因は stderr/debug logger のみ。
+  - **SystemError payload**: `LogSystemError` は `SystemErrorKind`・component・mailbox 識別子のみを payload に含める。raw `err.Error()` や任意の message 文字列は含めない。詳細診断は stderr/debug logger と README の固定文言に分離する。UIDVALIDITY 不一致は `uidvalidity_changed`、recovery-required 残存は `recovery_required`、未 commit reset staging は `reset_incomplete` を使う。
 - **Principle 2（stdout/stderr でも型制約維持）**: dry-run 時の標準出力出力経路でも同じ `NotificationSink` facade を用いる。`internal/notify` 側が dry-run を実装しており、エントリポイント側は単に `IsDryRun` フラグを `SlackHandlerOptions` に渡すのみ。
 - **Principle 3（redaction を無効化しない）**: エントリポイント側で `SlackHandlerOptions` から redaction 制御を行うコードを書かない。
 - **Principle 4（debug 出力先の明示的分離）**: 本タスクでは IMAP ライブラリのデバッグ出力（go-imap の `SetDebug` 相当）は**有効化しない**。将来有効化する場合は、`boot.go` で `os.Stderr` または専用ファイルを `io.Writer` として `imap.Config` 等へ渡し、Slack ハンドラとは型システムレベルで分離する。
