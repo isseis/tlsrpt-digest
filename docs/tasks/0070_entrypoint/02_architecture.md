@@ -231,7 +231,14 @@ sequenceDiagram
     B-->>M: BootContext{Config, Store, Notifier, LockHandle}
 ```
 
-矢印 A → B はリクエスト、A -->> B は戻り値を表す。`S-->>B: Store or error`（alt ブロック外）は書き込み系サブコマンドの `Open(OpenReadWrite)` 戻り値を示す。`summary` では `Store` は else ブランチ内の `Open(OpenReadOnly)` で取得済みであり、この行は summary には適用されない。`B-->>M: BootContext{…}` は書き込み系の典型形であり、`summary` では `Notifier` は空集計時に `nil`、`LockHandle` は常に `nil` となる。IMAP 認証情報は `fetch` 以外では不要なため、この共通初期化では取得しない。`fetch` は recovery-required 確認後、IMAP 接続を作る直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を読み、即座に `config.Secret` でラップする。`summary` ブランチ内の `GenerateSummary`・`LoadRecoveryRequired` 2 回目（空集計パスはステップ 4a、非空パスはステップ 5）・非空パスの notifier 構築はすべて `boot.go` ではなく `summary.go` が実行する。シーケンス図では `summary` ブランチ全体の流れを示すために `boot.go` 名義で図示している（[6.7](#67-summary-の空ストア時シーケンス) 参照）。
+- 矢印 A → B はリクエスト、A -->> B は戻り値を表す。
+- `S-->>B: Store or error`（alt ブロック外）は書き込み系サブコマンドの `Open(OpenReadWrite)` 戻り値を示す。
+- `summary` では `Store` は else ブランチ内の `Open(OpenReadOnly)` で取得済みであり、この行は summary には適用されない。
+- `B-->>M: BootContext{…}` は書き込み系の典型形であり、`summary` では `Notifier` は空集計時に `nil`、`LockHandle` は常に `nil` となる。
+- IMAP 認証情報は `fetch` 以外では不要なため、この共通初期化では取得しない。
+- `fetch` は recovery-required 確認後、IMAP 接続を作る直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を読み、即座に `config.Secret` でラップする。
+- `summary` ブランチ内の `GenerateSummary`・`LoadRecoveryRequired` 2 回目（空集計パスはステップ 4a、非空パスはステップ 5）・非空パスの notifier 構築はすべて `boot.go` ではなく `summary.go` が実行する。
+- シーケンス図では `summary` ブランチ全体の流れを示すために `boot.go` 名義で図示している（[6.7](#67-summary-の空ストア時シーケンス) 参照）。
 
 **凡例（Legend）**
 
@@ -298,7 +305,21 @@ flowchart TD
     class Fail1,ConnFail,Fail2,ExitFC problem
 ```
 
-矢印 A → B は処理の遷移を表す。IMAP 接続は recovery-required がないことを確認した後に作成し、接続または認証に失敗した場合は `NotificationSink.LogSystemError` と `Flush()` を試行して exit 1 とする。成功した IMAP client は `fetch` の処理終了時に `Close()` する。欠損 `.eml` の保存はパースより前に行い、既にローカルに存在する `.eml` は再保存せず処理対象集合へ含める。図中の `アラート通知` は `NotificationSink.LogAlert`、`WARN 通知` は `NotificationSink.LogWarning` 呼び出しを指し、実際の Slack POST は `Flush` ノードで一括実行される。`EmailMeta 一括保存` と `Report 一括保存` は全対象メールの集合に対してそれぞれ 1 回ずつ呼ぶ（[6.6](#66-saveemailmetas--savereports-の呼び出し順序) で根拠を説明）。パース失敗メールも `Flush()` 成功後の `MarkSeen` 付与対象に含まれる（`MarkSeen` は当該 `fetch` 実行で処理対象となった全メールに一括適用される）。`AlertCheck` の「今回 UNSEEN だった」は IMAP メタ取得時点での SEEN フラグが UNSEEN であったことを指し、SEEN で再ダウンロードされたメール（ローカル `.eml` 消失ケース）はアラート対象外となる。`LocalEmailSet` はローカルに `.eml` が存在するメールの UID 集合であり、`EmailMetaBatch` で一括登録される。
+矢印 A → B は処理の遷移を表す。
+
+**IMAP 接続**
+- recovery-required がないことを確認した後に接続を作成する。接続または認証に失敗した場合は `NotificationSink.LogSystemError` と `Flush()` を試行して exit 1 とする。
+- 成功した IMAP client は `fetch` の処理終了時に `Close()` する。
+
+**図ノードの補足**
+- `アラート通知` は `NotificationSink.LogAlert`、`WARN 通知` は `NotificationSink.LogWarning` 呼び出しを指す。実際の Slack POST は `Flush` ノードで一括実行される。
+- `AlertCheck` の「今回 UNSEEN だった」は IMAP メタ取得時点での SEEN フラグが UNSEEN であったことを指す。SEEN で再ダウンロードされたメール（ローカル `.eml` 消失ケース）はアラート対象外となる。
+- `LocalEmailSet` はローカルに `.eml` が存在するメールの UID 集合であり、`EmailMetaBatch` で一括登録される。
+- `EmailMeta 一括保存` と `Report 一括保存` は全対象メールの集合に対してそれぞれ 1 回ずつ呼ぶ（[6.6](#66-saveemailmetas--savereports-の呼び出し順序) で根拠を説明）。
+
+**処理順序と at-least-once 保証**
+- 欠損 `.eml` の保存はパースより前に行い、既にローカルに存在する `.eml` は再保存せず処理対象集合へ含める。
+- パース失敗メールも `Flush()` 成功後の `MarkSeen` 付与対象に含まれる（`MarkSeen` は当該 `fetch` 実行で処理対象となった全メールに一括適用される）。
 
 **凡例（Legend）**
 
