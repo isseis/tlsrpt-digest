@@ -101,17 +101,17 @@ systemctl enable --now tlsrpt-digest-gc.timer
 
 `/etc/cron.d/tlsrpt-digest` などに記述する。本質的には systemd timer と同等であり、環境変数は別ファイルで管理するか、実行前に source する。
 
-> **環境変数の引き継ぎ**: crontab の `. secrets.env` は変数をシェルに読み込むが、`export` されていないと子プロセス（`tlsrpt-digest`）に渡らない。`set -a; . secrets.env; set +a` を使うこと。`secrets.env` を systemd の `EnvironmentFile=` と共用している場合、`export KEY=value` 形式にすると systemd 側が解釈できなくなるため、ファイルは `KEY=value` 形式のまま cron 側で `set -a` を使うのが安全。
+> **環境変数の引き継ぎ**: crontab の `. secrets.env` は変数をシェルに読み込むが、`export` されていないと子プロセス（`tlsrpt-digest`）に渡らない。`set -a && . secrets.env && set +a` を使うこと（`&&` でつなぐことで `secrets.env` の読み込み失敗時に即停止する）。`secrets.env` を systemd の `EnvironmentFile=` と共用している場合、`export KEY=value` 形式にすると systemd 側が解釈できなくなるため、ファイルは `KEY=value` 形式のまま cron 側で `set -a` を使うのが安全。
 
 ```crontab
 # 毎時0分に IMAP メール取得
-0 * * * *  root  set -a; . /etc/tlsrpt-digest/secrets.env; set +a && /usr/local/bin/tlsrpt-digest fetch -config /etc/tlsrpt-digest/config.toml
+0 * * * *  root  set -a && . /etc/tlsrpt-digest/secrets.env && set +a && /usr/local/bin/tlsrpt-digest fetch -config /etc/tlsrpt-digest/config.toml
 
 # 毎週月曜9時に定期サマリ（7 日分、設定の summary.window_days で代替可）
-0 9 * * 1  root  set -a; . /etc/tlsrpt-digest/secrets.env; set +a && /usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml --window 7d
+0 9 * * 1  root  set -a && . /etc/tlsrpt-digest/secrets.env && set +a && /usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml --window 7d
 
 # 毎日3時に古いレコードを削除（30 日以前）
-0 3 * * *  root  set -a; . /etc/tlsrpt-digest/secrets.env; set +a && /usr/local/bin/tlsrpt-digest gc -config /etc/tlsrpt-digest/config.toml --before 30d
+0 3 * * *  root  set -a && . /etc/tlsrpt-digest/secrets.env && set +a && /usr/local/bin/tlsrpt-digest gc -config /etc/tlsrpt-digest/config.toml --before 30d
 ```
 
 ---
