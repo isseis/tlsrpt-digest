@@ -189,34 +189,34 @@ sequenceDiagram
 
     U->>M: tlsrpt-digest <subcmd> -config ...
     M->>B: Bootstrap(subcmd)
-    Note over B: ステップ 1: 設定読込
+    Note over B: W-1: 設定読込
     B->>CFG: LoadFile(path)
     CFG-->>B: *Config or error
     Note over B: 失敗時: stderr 出力 + exit 1
     alt 書き込み系サブコマンド (fetch/gc/recover/reprocess)
-        Note over B: ステップ 3: root_dir 確保 (RW 系のみ)
+        Note over B: W-2: root_dir 確保 (RW 系のみ)
         B->>B: ensure {root_dir} exists (mode 0700)
-        Note over B,ENV: ステップ 2w: Slack URL を Secret 化
+        Note over B,ENV: W-3: Slack URL を Secret 化
         B->>ENV: read TLSRPT_SLACK_WEBHOOK_URL_*
         ENV-->>B: Slack URL（即時 config.Secret でラップ）
-        Note over B,N: ステップ 4: Slack ハンドラ構築（all-or-nothing）
+        Note over B,N: W-4: Slack ハンドラ構築（all-or-nothing）
         B->>N: BuildHandlers(env URLs, allowed_host)
         N-->>B: []*SlackHandler or error (all-or-nothing)
         B->>B: NotificationSink facade でラップ
         Note over B: 失敗時: stderr 出力 + exit 1
-        Note over B,L: ステップ 5: プロセス排他ロック取得
+        Note over B,L: W-5: プロセス排他ロック取得
         B->>L: AcquireExclusive(lockPath)
         L-->>B: ok / locked
         Note over B,L: 取得失敗時は LogSystemError + Flush() + exit 1
-        Note over B,S: ステップ 6: ストア完全初期化
+        Note over B,S: W-6: ストア完全初期化
         B->>S: Open(rootDir, identity, OpenReadWrite)
     else summary
-        Note over B,S: ステップ 4s: ストア read-only オープン
+        Note over B,S: W-1s: ストア read-only オープン（summary 専用）
         B->>S: Open(rootDir, identity, OpenReadOnly)
         Note over B,S: 第 1 回 LoadRecoveryRequired（[6.7] ステップ 2）
         B->>S: LoadRecoveryRequired()
         S-->>B: found / not found
-        Note over B: found = true → §3.4 ステップ 2w+4 で notifier 構築 → SystemErrorKind=recovery_required + Flush + exit 1
+        Note over B: found = true → §3.4 の W-3・W-4 で notifier 構築 → SystemErrorKind=recovery_required + Flush + exit 1
         Note over B,N: found = false → 集計窓算出 + GenerateSummary（[6.7] ステップ 3）
         B->>N: GenerateSummary(ctx, store, Cutoff(now), UTCDayStart(now), debugLogger)
         N-->>B: Summary（空 or 非空）
@@ -226,10 +226,10 @@ sequenceDiagram
             S-->>B: found / not found
             Note over B: found=true → stderr ERROR + exit 1  /  found=false → INFO log + exit 0
         else Summary が非空（[6.7] ステップ 4b）
-            Note over B,ENV: §3.4 ステップ 2w: Slack URL を Secret 化
+            Note over B,ENV: §3.4 W-3: Slack URL を Secret 化
             B->>ENV: read TLSRPT_SLACK_WEBHOOK_URL_*
             ENV-->>B: Slack URL（即時 config.Secret でラップ）
-            Note over B,N: §3.4 ステップ 4: Slack ハンドラ構築
+            Note over B,N: §3.4 W-4: Slack ハンドラ構築
             B->>N: BuildHandlers(env URLs, allowed_host)
             N-->>B: []*SlackHandler or error (all-or-nothing)
             B->>B: NotificationSink facade でラップ
@@ -490,20 +490,19 @@ type SubcommandRunner interface {
 
 ### 3.4 共通初期化シーケンス（書き込み系の手順）
 
-書き込み系サブコマンドの**実際の実行順序**は `1 → 3 → 2w → 4 → 5 → 6`（ステップ 3 はシークレットを触る前に実行）。以下のテーブルは機能グループ別のラベルを維持しているが、実装順はシーケンス図（§2.2）が正とする。
+書き込み系サブコマンドの**実際の実行順序**は `W-1 → W-2 → W-3 → W-4 → W-5 → W-6`（W-2 はシークレットを触る前に実行）。`W-3f`（IMAP 認証情報）は `fetch` 専用の条件付きステップで W-3 の直後に実行する。以下のテーブルの行順は実行順と一致する。
 
 | 順 | 処理 | 失敗時の挙動 |
 |---|---|---|
-| 1 | `config.LoadFile(path, logger)` で設定読込 | stderr 出力 + exit 1（Slack ハンドラ未構築のため通知不可） |
-| 4s | **`summary` 専用**: `store.Open(rootDir, identity, OpenReadOnly)` でストアを read-only オープン。`{root_dir}` 不在でもエラーを返さず空ストアを返す（§2.2 の `else summary` ブランチ冒頭）。ステップ 3・5・6 はスキップする。ただし直後の `LoadRecoveryRequired` が `found=true` を返した場合はステップ 2w・4 を追加実行して notifier を構築してから `SystemErrorKind=recovery_required` を送信する（§6.7 ステップ 2 参照） | stderr 出力 + exit 1 |
-| 3 | `{root_dir}` を `0700` で作成（不在時のみ）。ロックファイルの親ディレクトリを保証するための最小操作。**ステップ 2w より前に実行**（シークレット取得前に失敗を確定させるため） | stderr 出力 + exit 1 |
-| 2w | 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` / `TLSRPT_SLACK_WEBHOOK_URL_ERROR` を取得し、**即座に `config.Secret` でラップ**してローカル変数へ。生 `string` は `BootContext` 外へ持ち出さない。**両変数が未設定（空）の場合は "Slack 無効" モードとして扱い、ここでは失敗しない**（`notify.BuildHandlers` が `nil, nil` を返す valid な状態）。URL が設定されている場合は形式検証を行い、不正な場合のみ失敗する | stderr 出力 + exit 1（URL 形式不正の場合のみ） |
-| 2f | `fetch` のみ、recovery-required 確認後かつ IMAP 接続直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を取得し、**即座に `config.Secret` でラップ**する。`gc` / `recover` / `reprocess` / 空ストア `summary` は IMAP 認証情報を要求しない | `LogSystemError` + `Flush()` + exit 1 |
-| 4 | `notify.BuildHandlers(env URLs, allowed_host)` で Slack ハンドラ構築。`BuildHandlers` は all-or-nothing で `[]*SlackHandler` を返す（part-success の中間状態を生じない） | stderr 出力 + exit 1 |
-| 5 | `lock.AcquireExclusive(lockPath)` でプロセス排他ロック取得 | `LogSystemError` + `Flush()` + exit 1 |
-| 6 | `store.Open(rootDir, identity, OpenReadWrite)` でストアの完全初期化（sentinel 検証・`tlsrpt.json` 作成等） | `LogSystemError` + `Flush()` + exit 1。エラー分類は [4.2](#42-エラー伝達方針) を参照 |
+| W-1 | `config.LoadFile(path, logger)` で設定読込 | stderr 出力 + exit 1（Slack ハンドラ未構築のため通知不可） |
+| W-2 | `{root_dir}` を `0700` で作成（不在時のみ）。ロックファイルの親ディレクトリを保証するための最小操作。**W-3 より前に実行**（シークレット取得前に失敗を確定させるため） | stderr 出力 + exit 1 |
+| W-3 | 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` / `TLSRPT_SLACK_WEBHOOK_URL_ERROR` を取得し、**即座に `config.Secret` でラップ**してローカル変数へ。生 `string` は `BootContext` 外へ持ち出さない。**両変数が未設定（空）の場合は "Slack 無効" モードとして扱い、ここでは失敗しない**（`notify.BuildHandlers` が `nil, nil` を返す valid な状態）。URL が設定されている場合は形式検証を行い、不正な場合のみ失敗する | stderr 出力 + exit 1（URL 形式不正の場合のみ） |
+| W-3f | `fetch` のみ、recovery-required 確認後かつ IMAP 接続直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を取得し、**即座に `config.Secret` でラップ**する。`gc` / `recover` / `reprocess` / 空ストア `summary` は IMAP 認証情報を要求しない | `LogSystemError` + `Flush()` + exit 1 |
+| W-4 | `notify.BuildHandlers(env URLs, allowed_host)` で Slack ハンドラ構築。`BuildHandlers` は all-or-nothing で `[]*SlackHandler` を返す（part-success の中間状態を生じない） | stderr 出力 + exit 1 |
+| W-5 | `lock.AcquireExclusive(lockPath)` でプロセス排他ロック取得 | `LogSystemError` + `Flush()` + exit 1 |
+| W-6 | `store.Open(rootDir, identity, OpenReadWrite)` でストアの完全初期化（sentinel 検証・`tlsrpt.json` 作成等） | `LogSystemError` + `Flush()` + exit 1。エラー分類は [4.2](#42-エラー伝達方針) を参照 |
 
-`summary` は (1) → `store.Open(..., OpenReadOnly)` → `LoadRecoveryRequired` を先に実行し、(3)（ディレクトリ作成）と (5)（ロック取得）はスキップする。recovery-required が見つかった場合は、§3.4 のステップ 2w・ステップ 4 を実行して notifier を構築してから `SystemErrorKind=recovery_required` を送って `Flush()` 後に exit 1 とする。recovery-required がない場合のみ `notify.GenerateSummary` を呼んで集計窓（start=`Duration.Cutoff(now)`、end=`UTCDayStart(now)`）の結果を得る。集計結果が空の場合は Slack URL を要求せず、`LoadRecoveryRequired` を再確認し（空パスの recovery-required 検出）、見つかれば stderr ERROR + exit 1、見つからなければ「集計対象なし」として INFO ログ出力後 exit 0 で正常終了する（[6.7](#67-summary-の空ストア時シーケンス) 参照）。集計結果が非空の場合は §3.4 のステップ 2w・ステップ 4 で notifier を構築し、Slack 送信直前に再度 `LoadRecoveryRequired` を確認し（[6.7](#67-summary-の空ストア時シーケンス) ステップ 5）、発見した場合は `SystemErrorKind=recovery_required` を通知して `Flush()` 後に exit 1 とする。recovery-required がなければ `NotificationSink.LogSummary` と `Flush()` を実行する。
+`summary` は (W-1) → `store.Open(..., OpenReadOnly)` → `LoadRecoveryRequired` を先に実行し、(W-2)（ディレクトリ作成）と (W-5)（ロック取得）はスキップする。recovery-required が見つかった場合は、§3.4 の W-3・W-4 を実行して notifier を構築してから `SystemErrorKind=recovery_required` を送って `Flush()` 後に exit 1 とする。recovery-required がない場合のみ `notify.GenerateSummary` を呼んで集計窓（start=`Duration.Cutoff(now)`、end=`UTCDayStart(now)`）の結果を得る。集計結果が空の場合は Slack URL を要求せず、`LoadRecoveryRequired` を再確認し（空パスの recovery-required 検出）、見つかれば stderr ERROR + exit 1、見つからなければ「集計対象なし」として INFO ログ出力後 exit 0 で正常終了する（[6.7](#67-summary-の空ストア時シーケンス) 参照）。集計結果が非空の場合は §3.4 の W-3・W-4 で notifier を構築し、Slack 送信直前に再度 `LoadRecoveryRequired` を確認し（[6.7](#67-summary-の空ストア時シーケンス) ステップ 5）、発見した場合は `SystemErrorKind=recovery_required` を通知して `Flush()` 後に exit 1 とする。recovery-required がなければ `NotificationSink.LogSummary` と `Flush()` を実行する。
 
 **デフォルト値解決の優先順位**: フラグ未指定時の値解決は **CLI フラグ > 設定値 > 設定パッケージ既定値** の順で行う。`Duration` への正規化責務は各サブコマンドハンドラが負い、`config.IMAPConfig.FetchDays`（`int`、日数）や `config.SummaryConfig.WindowDays` などの整数日数フィールドは `Duration{Days: N}` 形式へ変換する。カットオフ日時は `Duration.Cutoff(now)` メソッドが UTC 日付単位で切り捨てた上で日数を遡って返す（AC-07c）。設定パッケージ側の既定値は 0060 の要件に従い `internal/config/defaults.go` が保持し、エントリポイント側で再定義しない。
 
@@ -726,7 +725,7 @@ flowchart TD
     class Exit problem
 ```
 
-矢印 A → B は処理遷移を表す。初回保存をステップ 3 まで遅延させると「途中クラッシュ → 次回も found=false → UIDVALIDITY 変化を検出できない」という見落としが発生する。これを避けるため、初回保存はステップ 1.5 内で即時実行する。`found=true` の通常実行では AC-20a によりステップ 3 完了後に冪等で再保存される。「冪等」とは、`SaveUIDValidity(v)` が同じ値の再書き込み時に sentinel の atomic rename を再実行する以外の副作用を持たない（ファイル内容・タイムスタンプ以外の状態変化を起こさない）ことを指す（タスク 0040 の sentinel 実装による）。
+矢印 A → B は処理遷移を表す。初回保存をステップ 5 まで遅延させると「途中クラッシュ → 次回も found=false → UIDVALIDITY 変化を検出できない」という見落としが発生する。これを避けるため、初回保存はステップ 3 内で即時実行する。`found=true` の通常実行では AC-20a によりステップ 5 完了後に冪等で再保存される。「冪等」とは、`SaveUIDValidity(v)` が同じ値の再書き込み時に sentinel の atomic rename を再実行する以外の副作用を持たない（ファイル内容・タイムスタンプ以外の状態変化を起こさない）ことを指す（タスク 0040 の sentinel 実装による）。
 
 **凡例（Legend）**
 
@@ -830,10 +829,10 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 要件 AC-10c では「ストア未作成時は集計対象データなしとして正常終了」と規定する。具体シーケンスは以下:
 
 1. `summary` は Slack URL 環境変数を読む前に `store.Open(rootDir, identity, OpenReadOnly)` を呼ぶ。read-only モードのため `{root_dir}` 不在でもエラーを返さず、空ストア状態の `Store` を返す（タスク 0040 F-001 の OpenReadOnly セマンティクス）。
-2. `LoadRecoveryRequired` を必ず先に呼ぶ（第 1 回確認）。`found = true` の場合は空ストア扱いにせず、§3.4 のステップ 2w・ステップ 4 を実行して notifier を構築してから `SystemErrorKind=recovery_required` を送信し exit 1 とする（§2.2 参照）。
+2. `LoadRecoveryRequired` を必ず先に呼ぶ（第 1 回確認）。`found = true` の場合は空ストア扱いにせず、§3.4 の W-3・W-4 を実行して notifier を構築してから `SystemErrorKind=recovery_required` を送信し exit 1 とする（§2.2 参照）。
 3. `found = false` の場合だけ集計窓を算出し `notify.GenerateSummary(ctx, store, start, end, debugLogger)` を呼ぶ。`start = Duration.Cutoff(now)`（AC-07c）、`end = UTCDayStart(now)`（AC-07d）。窓は半開区間 `[start, end)`（start 以上 end 未満）。集計ロジックは `summary.go` で再実装しない。
 4a. 生成された `Summary` が空の場合、`LoadRecoveryRequired` を再確認する（第 2 回確認・空パス用）。`found = true` ならば stderr に ERROR ログを出力して exit 1（notifier 未構築のため Slack 通知なし、AC-27a 準拠）。`found = false` ならば Slack notifier を構築せず INFO レベル `slog` ログ「no reports to summarize」を 1 行出力し exit 0。
-4b. `Summary` が非空の場合、§3.4 のステップ 2w・ステップ 4 に従い Slack URL 取得と `BuildHandlers` を実行して notifier を構築する。
+4b. `Summary` が非空の場合、§3.4 の W-3・W-4 に従い Slack URL 取得と `BuildHandlers` を実行して notifier を構築する。
 5. Slack 送信直前に `LoadRecoveryRequired` を再読込する（第 2 回確認・非空パス用）。recovery-required が出現していれば `SystemErrorKind=recovery_required` を通知して exit 1 とする。これにより `summary` がロックを取得しない設計でも、送信直前の fail closed 境界を持つ。
 6. exit 0。
 
