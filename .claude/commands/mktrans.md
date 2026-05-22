@@ -102,7 +102,8 @@ Construct a self-contained prompt that includes all of the following:
 After receiving findings:
 - Fix all Critical and Major issues.
 - Apply Minor fixes at your discretion.
-- If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until the subagent reports no Critical or Major issues, up to a maximum of three passes.
+- If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat, subject to the three-pass limit below, until the subagent reports no Critical or Major issues.
+- After three review passes, continue only if the remaining Critical or Major issues are concrete, scoped to this document, and clearly fixable without expanding the translation scope. Otherwise, stop and report the remaining issues instead of continuing automatically.
 
 **Accuracy checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] No content from the source is missing in the translation.

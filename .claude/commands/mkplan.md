@@ -47,7 +47,8 @@ Work in the following order.
    After receiving findings:
    - Fix all Critical and Major issues.
    - Apply Minor fixes at your discretion.
-   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until the subagent reports no Critical or Major issues, up to a maximum of three passes.
+   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat, subject to the three-pass limit below, until the subagent reports no Critical or Major issues.
+   - After three review passes, continue only if the remaining Critical or Major issues are concrete, scoped to this phase group, and clearly fixable without expanding the phase scope. Otherwise, stop and report the remaining issues instead of continuing automatically.
    - Commit `03_implementation_plan.md` only after all review passes are complete and all Critical and Major issues are resolved.
 
 **Technical correctness checklist (use verbatim as evaluation criteria in the subagent prompt above):**
