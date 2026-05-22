@@ -234,7 +234,7 @@ sequenceDiagram
     B-->>M: BootContext{Config, Store, Notifier, LockHandle}
 ```
 
-矢印 A → B はリクエスト、A -->> B は戻り値を表す。IMAP 認証情報は `fetch` 以外では不要なため、この共通初期化では取得しない。`fetch` は recovery-required 確認後、IMAP 接続を作る直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を読み、即座に `config.Secret` でラップする。`summary` ブランチ内の `LoadRecoveryRequired` 2 回目（「Slack 送信直前」の確認）は `boot.go` ではなく `summary.go` が呼ぶ。シーケンス図では `summary` ブランチ全体の流れを示すために `boot.go` 名義で図示している（[6.7](#67-summary-の空ストア時シーケンス) ステップ 5 参照）。
+矢印 A → B はリクエスト、A -->> B は戻り値を表す。`S-->>B: Store or error`（alt ブロック外）は書き込み系サブコマンドの `Open(OpenReadWrite)` 戻り値を示す。`summary` では `Store` は else ブランチ内の `Open(OpenReadOnly)` で取得済みであり、この行は summary には適用されない。`B-->>M: BootContext{…}` は書き込み系の典型形であり、`summary` では `Notifier` は空集計時に `nil`、`LockHandle` は常に `nil` となる。IMAP 認証情報は `fetch` 以外では不要なため、この共通初期化では取得しない。`fetch` は recovery-required 確認後、IMAP 接続を作る直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を読み、即座に `config.Secret` でラップする。`summary` ブランチ内の `LoadRecoveryRequired` 2 回目（空集計パスはステップ 4a、非空パスはステップ 5）は `boot.go` ではなく `summary.go` が呼ぶ。シーケンス図では `summary` ブランチ全体の流れを示すために `boot.go` 名義で図示している（[6.7](#67-summary-の空ストア時シーケンス) 参照）。
 
 **凡例（Legend）**
 
@@ -476,7 +476,7 @@ type SubcommandRunner interface {
 - **ロック前提条件**: ロック取得前に `{root_dir}` の存在を保証する必要がある（初回実行時の親ディレクトリ不在を回避）。ストアの完全初期化（sentinel 検証・`tlsrpt.json` 作成）はロック取得後に実行する。
 - **`internal/store` 側との責務分離**: ロックファイルは本タスクのオーケストレーションが管理し、`internal/store` 側は `.tlsrpt-digest-store.lock`（`.tlsrpt-digest-` プレフィックスのうち sentinel・data file 以外のファイル）をストア管理対象外として扱う（既存実装は `tlsrpt.json` と sentinel のみを参照しており、副作用はない）。
 - **適用範囲**: 書き込み系サブコマンド（`fetch` / `gc` / `recover` / `reprocess`）が対象。`summary` は read-only モードでストアを開くためロック不要であり、`fetch` 実行中でも並走できる。
-- **`summary` 並走時の fail closed**: `summary` はロックを取得しない代わりに、集計前と Slack 送信直前の 2 回 `LoadRecoveryRequired` を確認する。2 回目で recovery-required が出現した場合、古いエポックの summary を送信せず exit 1 とする。
+- **`summary` 並走時の fail closed**: `summary` はロックを取得しない代わりに `LoadRecoveryRequired` を 2 回確認する。第 1 回は `GenerateSummary` 呼び出し前（ステップ 2）、第 2 回は集計結果判定後（ステップ 4a または 5）。空集計パス（ステップ 4a）では notifier 未構築のため stderr ERROR のみで exit 1、非空パス（ステップ 5）では Slack 通知 + exit 1 とする。どちらのパスでも古いエポックの summary を送信しないことが保証される（AC-27a）。
 
 ### 3.4 共通初期化シーケンス（書き込み系の手順）
 
@@ -492,7 +492,7 @@ type SubcommandRunner interface {
 | 5 | `lock.AcquireExclusive(lockPath)` でプロセス排他ロック取得 | `LogSystemError` + `Flush()` + exit 1 |
 | 6 | `store.Open(rootDir, identity, OpenReadWrite)` でストアの完全初期化（sentinel 検証・`tlsrpt.json` 作成等） | `LogSystemError` + `Flush()` + exit 1。エラー分類は [4.2](#42-エラー伝達方針) を参照 |
 
-`summary` は (1) → `store.Open(..., OpenReadOnly)` → `LoadRecoveryRequired` を先に実行し、(3)（ディレクトリ作成）と (5)（ロック取得）はスキップする。recovery-required が見つかった場合は、集計対象件数に関係なく notifier を構築し、`SystemErrorKind=recovery_required` を送って `Flush()` 後に exit 1 とする。recovery-required がない場合のみ空ストア/空レポート判定へ進み、ストア未作成時は Slack URL の環境変数を要求せず「集計対象なし」として INFO ログ出力後 exit 0 で正常終了する（[6.7](#67-summary-の空ストア時シーケンス) 参照）。集計対象がある場合は (2w) の Slack URL 取得と (4) の notifier 構築を行い、`notify.GenerateSummary` で既存集計ロジックを使う。Slack 送信直前に `LoadRecoveryRequired` を再確認し（[6.7](#67-summary-の空ストア時シーケンス) ステップ 5）、発見した場合は `SystemErrorKind=recovery_required` を通知して `Flush()` 後に exit 1 とする。recovery-required がなければ `NotificationSink.LogSummary` と `Flush()` を実行する。
+`summary` は (1) → `store.Open(..., OpenReadOnly)` → `LoadRecoveryRequired` を先に実行し、(3)（ディレクトリ作成）と (5)（ロック取得）はスキップする。recovery-required が見つかった場合は、§3.4 のステップ 2w・ステップ 4 を実行して notifier を構築してから `SystemErrorKind=recovery_required` を送って `Flush()` 後に exit 1 とする。recovery-required がない場合のみ `notify.GenerateSummary` を呼んで集計窓（start=`Duration.Cutoff(now)`、end=`UTCDayStart(now)`）の結果を得る。集計結果が空の場合は Slack URL を要求せず、`LoadRecoveryRequired` を再確認し（空パスの recovery-required 検出）、見つかれば stderr ERROR + exit 1、見つからなければ「集計対象なし」として INFO ログ出力後 exit 0 で正常終了する（[6.7](#67-summary-の空ストア時シーケンス) 参照）。集計結果が非空の場合は §3.4 のステップ 2w・ステップ 4 で notifier を構築し、Slack 送信直前に再度 `LoadRecoveryRequired` を確認し（[6.7](#67-summary-の空ストア時シーケンス) ステップ 5）、発見した場合は `SystemErrorKind=recovery_required` を通知して `Flush()` 後に exit 1 とする。recovery-required がなければ `NotificationSink.LogSummary` と `Flush()` を実行する。
 
 **デフォルト値解決の優先順位**: フラグ未指定時の値解決は **CLI フラグ > 設定値 > 設定パッケージ既定値** の順で行う。`Duration` への正規化責務は各サブコマンドハンドラが負い、`config.IMAPConfig.FetchDays`（`int`、日数）や `config.SummaryConfig.WindowDays` などの整数日数フィールドは `Duration{Days: N}` 形式へ変換する。カットオフ日時は `Duration.Cutoff(now)` メソッドが UTC 日付単位で切り捨てた上で日数を遡って返す（AC-07c）。設定パッケージ側の既定値は 0060 の要件に従い `internal/config/defaults.go` が保持し、エントリポイント側で再定義しない。
 
@@ -819,11 +819,11 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 要件 AC-10c では「ストア未作成時は集計対象データなしとして正常終了」と規定する。具体シーケンスは以下:
 
 1. `summary` は Slack URL 環境変数を読む前に `store.Open(rootDir, identity, OpenReadOnly)` を呼ぶ。read-only モードのため `{root_dir}` 不在でもエラーを返さず、空ストア状態の `Store` を返す（タスク 0040 F-001 の OpenReadOnly セマンティクス）。
-2. `LoadRecoveryRequired` を必ず先に呼ぶ。`found = true` の場合は空ストア扱いにせず、Slack URL 取得（ステップ 2w）と `BuildHandlers`（ステップ 4）を実行して notifier を構築してから `SystemErrorKind=recovery_required` を送信し exit 1 とする（§2.2 参照）。
+2. `LoadRecoveryRequired` を必ず先に呼ぶ（第 1 回確認）。`found = true` の場合は空ストア扱いにせず、§3.4 のステップ 2w・ステップ 4 を実行して notifier を構築してから `SystemErrorKind=recovery_required` を送信し exit 1 とする（§2.2 参照）。
 3. `found = false` の場合だけ集計窓を算出し `notify.GenerateSummary(ctx, store, start, end, debugLogger)` を呼ぶ。`start = Duration.Cutoff(now)`（AC-07c）、`end = UTCDayStart(now)`（AC-07d）。集計ロジックは `summary.go` で再実装しない。
-4a. 生成された `Summary` が空の場合、Slack notifier を構築せず、`notify.LogSummary` を**呼ばずに** INFO レベル `slog` ログ「no reports to summarize」を 1 行出力し、**ステップ 5 をスキップしてステップ 6 へ進む**（Slack 送信がないため再確認不要）。
-4b. `Summary` が非空の場合、Slack URL 取得（ステップ 2w）と `BuildHandlers`（ステップ 4）を実行して notifier を構築する。
-5. Slack 送信直前に `LoadRecoveryRequired` を再読込し、`fetch` との並走中に recovery-required が出現していれば `SystemErrorKind=recovery_required` を通知して exit 1 とする。これにより `summary` がロックを取得しない設計でも、送信直前の fail closed 境界を持つ。
+4a. 生成された `Summary` が空の場合、`LoadRecoveryRequired` を再確認する（第 2 回確認・空パス用）。`found = true` ならば stderr に ERROR ログを出力して exit 1（notifier 未構築のため Slack 通知なし、AC-27a 準拠）。`found = false` ならば Slack notifier を構築せず INFO レベル `slog` ログ「no reports to summarize」を 1 行出力し exit 0。
+4b. `Summary` が非空の場合、§3.4 のステップ 2w・ステップ 4 に従い Slack URL 取得と `BuildHandlers` を実行して notifier を構築する。
+5. Slack 送信直前に `LoadRecoveryRequired` を再読込する（第 2 回確認・非空パス用）。recovery-required が出現していれば `SystemErrorKind=recovery_required` を通知して exit 1 とする。これにより `summary` がロックを取得しない設計でも、送信直前の fail closed 境界を持つ。
 6. exit 0。
 
 ストアは存在するがレポート 0 件の場合（`GetAllReports` 空・`LoadRecoveryRequired` も `found = false`）も同じ挙動とする。
@@ -871,7 +871,9 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
   - recovery-required 残存時の停止
   - `GenerateSummary` に渡される `end` が `UTCDayStart(now)`（今日の 00:00:00 UTC）であること（AC-07d）
   - 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary`）に含まれること（AC-28）
-  - 空ストア時の正常終了（INFO ログのみ、Slack notifier 未構築、Slack URL 未設定でも exit 0）（AC-10c）
+  - 空集計時の正常終了（INFO ログのみ、Slack notifier 未構築、Slack URL 未設定でも exit 0）（AC-10c）
+  - Slack URL が未設定で非空の集計結果が存在する場合、`BuildHandlers` が失敗し exit 1 となること（空集計との対比）
+  - 空集計パスで recovery-required が出現した場合、Slack 通知なしで stderr ERROR + exit 1 となること（AC-27a、§6.7 ステップ 4a）
 - **`reprocess.go`** — AC-21a / AC-22–26
   - recovery-required ガード
   - `--notify` 有無の挙動
