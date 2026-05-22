@@ -218,7 +218,7 @@ sequenceDiagram
         S-->>B: found / not found
         Note over B: found = true → §3.4 ステップ 2w+4 で notifier 構築 → SystemErrorKind=recovery_required + Flush + exit 1
         Note over B,N: found = false → 集計窓算出 + GenerateSummary（[6.7] ステップ 3）
-        B->>N: GenerateSummary(ctx, store, start=Cutoff(now), end=UTCDayStart(now))
+        B->>N: GenerateSummary(ctx, store, Cutoff(now), UTCDayStart(now), debugLogger)
         N-->>B: Summary（空 or 非空）
         alt Summary が空（[6.7] ステップ 4a）
             Note over B,S: 第 2 回 LoadRecoveryRequired（空パス用）
@@ -239,11 +239,12 @@ sequenceDiagram
             Note over B: found = true → SystemErrorKind=recovery_required 通知 + Flush + exit 1
         end
     end
+    Note over B: summary パスは上記 alt 内で exit するためここに到達しない
     S-->>B: Store or error
     B-->>M: BootContext{Config, Store, Notifier, LockHandle}
 ```
 
-矢印 A → B はリクエスト、A -->> B は戻り値を表す。`S-->>B: Store or error`（alt ブロック外）は書き込み系サブコマンドの `Open(OpenReadWrite)` 戻り値を示す。`summary` では `Store` は else ブランチ内の `Open(OpenReadOnly)` で取得済みであり、この行は summary には適用されない。`B-->>M: BootContext{…}` は書き込み系の典型形であり、`summary` では `Notifier` は空集計時に `nil`、`LockHandle` は常に `nil` となる。IMAP 認証情報は `fetch` 以外では不要なため、この共通初期化では取得しない。`fetch` は recovery-required 確認後、IMAP 接続を作る直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を読み、即座に `config.Secret` でラップする。`summary` ブランチ内の `LoadRecoveryRequired` 2 回目（空集計パスはステップ 4a、非空パスはステップ 5）は `boot.go` ではなく `summary.go` が呼ぶ。シーケンス図では `summary` ブランチ全体の流れを示すために `boot.go` 名義で図示している（[6.7](#67-summary-の空ストア時シーケンス) 参照）。
+矢印 A → B はリクエスト、A -->> B は戻り値を表す。`S-->>B: Store or error`（alt ブロック外）は書き込み系サブコマンドの `Open(OpenReadWrite)` 戻り値を示す。`summary` では `Store` は else ブランチ内の `Open(OpenReadOnly)` で取得済みであり、この行は summary には適用されない。`B-->>M: BootContext{…}` は書き込み系の典型形であり、`summary` では `Notifier` は空集計時に `nil`、`LockHandle` は常に `nil` となる。IMAP 認証情報は `fetch` 以外では不要なため、この共通初期化では取得しない。`fetch` は recovery-required 確認後、IMAP 接続を作る直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を読み、即座に `config.Secret` でラップする。`summary` ブランチ内の `GenerateSummary`・`LoadRecoveryRequired` 2 回目（空集計パスはステップ 4a、非空パスはステップ 5）・非空パスの notifier 構築はすべて `boot.go` ではなく `summary.go` が実行する。シーケンス図では `summary` ブランチ全体の流れを示すために `boot.go` 名義で図示している（[6.7](#67-summary-の空ストア時シーケンス) 参照）。
 
 **凡例（Legend）**
 
@@ -494,6 +495,7 @@ type SubcommandRunner interface {
 | 順 | 処理 | 失敗時の挙動 |
 |---|---|---|
 | 1 | `config.LoadFile(path, logger)` で設定読込 | stderr 出力 + exit 1（Slack ハンドラ未構築のため通知不可） |
+| 4s | **`summary` 専用**: `store.Open(rootDir, identity, OpenReadOnly)` でストアを read-only オープン。`{root_dir}` 不在でもエラーを返さず空ストアを返す（§2.2 の `else summary` ブランチ冒頭）。ステップ 3・5・6 はスキップする | stderr 出力 + exit 1 |
 | 3 | `{root_dir}` を `0700` で作成（不在時のみ）。ロックファイルの親ディレクトリを保証するための最小操作。**ステップ 2w より前に実行**（シークレット取得前に失敗を確定させるため） | stderr 出力 + exit 1 |
 | 2w | 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` / `TLSRPT_SLACK_WEBHOOK_URL_ERROR` を取得し、**即座に `config.Secret` でラップ**してローカル変数へ。生 `string` は `BootContext` 外へ持ち出さない。書き込み系サブコマンドはロック取得失敗などを Slack 通知するためここで要求する | stderr 出力 + exit 1 |
 | 2f | `fetch` のみ、recovery-required 確認後かつ IMAP 接続直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を取得し、**即座に `config.Secret` でラップ**する。`gc` / `recover` / `reprocess` / 空ストア `summary` は IMAP 認証情報を要求しない | `LogSystemError` + `Flush()` + exit 1 |
