@@ -18,12 +18,12 @@
 
 | 用語 | 意味 |
 |---|---|
-| 外部スケジューラ | systemd timer または cron。表記は **「外部スケジューラ」** に統一する |
+| 外部スケジューラ | systemd timer または cron |
 | 書き込み系サブコマンド | `fetch` / `gc` / `recover` / `reprocess` の 4 種。ストアを `OpenReadWrite` で開きプロセス排他ロックを取得する |
 | 読み取り系サブコマンド | `summary`。ストアを `OpenReadOnly` で開き、プロセス排他ロックは取得しない |
 | SubcommandRunner | 各サブコマンドの実装が満たす Go インターフェース。`internal/notify.SlackHandler` との名称衝突を避けるため `Handler` ではなくこの名称を採用する |
-| fail closed | 完全性が保証できない場合に処理を **開始しない**こと（途中での中断ではなく事前停止）。表記は **「fail closed」**（ハイフンなし）で統一する |
-| RecoveryRequired 状態 | UIDVALIDITY 不一致検出時に sentinel へ記録される状態。状態そのものを指す場合は「RecoveryRequired 状態」と表記する |
+| fail closed | 完全性が保証できない場合に処理を **開始しない**こと（途中での中断ではなく事前停止） |
+| RecoveryRequired 状態 | UIDVALIDITY 不一致検出時に sentinel へ記録される状態 |
 | SaveRecoveryRequired | `internal/store` の API 名。RecoveryRequired 状態を sentinel へ永続化する操作 |
 
 ### 1.1 設計原則
@@ -158,8 +158,6 @@ flowchart LR
 - `tlsrpt` / `mailparse` は `fetch` と `reprocess` が使用（`.json.gz` 添付のパース）。
 - `notify` / `store` は書き込み系全サブコマンドが使用。
 - `config` は `boot.go` のみが使用（設定読込責務を `boot.go` に集約）。
-
-
 
 ### 2.2 共通初期化シーケンス
 
