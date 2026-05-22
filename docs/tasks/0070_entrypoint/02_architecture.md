@@ -855,7 +855,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
   - `Duration.Cutoff(now)` の UTC 切り捨て動作：現在時刻が UTC 02:01:00 のとき `Days=7` のカットオフが「7 日前の 00:00:00 UTC」となること（「7 日前の 02:01:00」ではないこと）（AC-07c）
   - 週指定（`1w`）でも同様に UTC 日付単位の切り捨てが行われること
   - `UTCDayStart(now)` が現在時刻に関わらず「今日の 00:00:00 UTC」を返すこと（AC-07d）
-  - `--since 1w` を 2000-12-10 10:00 UTC に実行したとき `start=2000-12-03 00:00 UTC`・`end=2000-12-10 00:00 UTC` となり翌週実行と重複しないこと（AC-07d 統合確認）
+  - `summary --window 1w` を 2000-12-10 10:00 UTC に実行したとき `start=2000-12-03 00:00 UTC`・`end=2000-12-10 00:00 UTC` となり翌週実行と重複しないこと（AC-07d 統合確認）
 - **`lock.go`** — AC-10a
   - 1 プロセスが取得中の状態で 2 プロセス目が即時失敗（non-blocking）
   - プロセス終了で自動解放されること（テスト内では `Close()` で代替）
@@ -878,7 +878,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
   - Flush 失敗時に SEEN 不付与
   - `SaveEmailMetas`・`SaveReports` がそれぞれ全メール処理後に 1 回ずつ呼ばれること
 - **`summary.go`** — AC-07a / AC-07d / AC-10c / AC-27 / AC-27a / AC-28 / AC-29
-  - `--since` 指定時/未指定時の動作
+  - `--window` 指定時/未指定時の動作
   - recovery-required 残存時の停止
   - `GenerateSummary` に渡される `end` が `UTCDayStart(now)`（今日の 00:00:00 UTC）であること（AC-07d）
   - 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary`）に含まれること（AC-28）

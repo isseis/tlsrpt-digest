@@ -41,7 +41,7 @@ Description=tlsrpt-digest periodic summary (one-shot)
 
 [Service]
 Type=oneshot
-# --since の値（または設定ファイルの集計期間）はタイマーの送信頻度と整合させる。
+# --window の値（または設定ファイルの集計期間 summary.window_days）はタイマーの送信頻度と整合させる。
 # 下のタイマー例は毎週月曜のため --window 7d 相当。日次運用なら --window 1d。
 ExecStart=/usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml --window 7d
 EnvironmentFile=/etc/tlsrpt-digest/secrets.env
