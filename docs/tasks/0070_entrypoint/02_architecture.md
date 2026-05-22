@@ -128,6 +128,19 @@ graph LR
 
 矢印 A → B は Go パッケージレベルの import 関係を表す（サブコマンドは `main.go` から起動され、`boot.go` が共通初期化を担う）。`duration.go` は `fetch` / `summary` / `gc` の 3 サブコマンドから共有される。
 
+**凡例（Legend）**
+
+```mermaid
+flowchart LR
+    classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
+    classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
+
+    P["既存パッケージ（internal/）"]
+    E["本タスクで追加・拡張するファイル"]
+    class P process
+    class E enhanced
+```
+
 **図 B: `internal/` パッケージへの依存（依存マトリクス）**
 
 `✓` は Go import あり、`*` は fetch 専用（他の書き込み系は不要）。
@@ -141,20 +154,12 @@ graph LR
 | `gc.go` | | | | | | ✓ |
 | `recover.go` | | | | | | ✓ |
 
-`imap` は `fetch` のみが使用（IMAP サーバへの直接接続）。`tlsrpt` / `mailparse` は `fetch` と `reprocess` が使用（`.json.gz` 添付のパース）。`notify` / `store` は書き込み系全サブコマンドが使用。`config` は `boot.go` のみが使用（設定読込責務を `boot.go` に集約）。
+- `imap` は `fetch` のみが使用（IMAP サーバへの直接接続）。
+- `tlsrpt` / `mailparse` は `fetch` と `reprocess` が使用（`.json.gz` 添付のパース）。
+- `notify` / `store` は書き込み系全サブコマンドが使用。
+- `config` は `boot.go` のみが使用（設定読込責務を `boot.go` に集約）。
 
-**凡例（Legend）**
 
-```mermaid
-flowchart LR
-    classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
-    classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
-
-    P["既存パッケージ（internal/）"]
-    E["本タスクで追加・拡張するファイル"]
-    class P process
-    class E enhanced
-```
 
 ### 2.2 共通初期化シーケンス
 
