@@ -806,6 +806,54 @@ flowchart LR
 
 `discard-old --yes` は複数ファイルにまたがる破壊的操作であるため、永続化境界は `internal/store` に閉じ込める。`cmd/tlsrpt-digest/recover.go` は `store.Store.ResetForRecovery(currUIDValidity uint32) error` を 1 回呼ぶだけにし、`tlsrpt.json`、`emails/`、sentinel、reset staging のパスやファイル形式を直接扱わない。
 
+**`ResetForRecovery` 内部 state machine**
+
+`ResetForRecovery` は 5 フェーズのファイル操作を順に実行し、manifest ファイルに現在フェーズを記録することで中断後の再開を可能にする。
+
+```mermaid
+flowchart TD
+    classDef phase fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
+    classDef commitnode fill:#fff9c4,stroke:#f9a825,stroke-width:2px,color:#5a3e00;
+    classDef done fill:#e6f7ff,stroke:#1f77b4,stroke-width:1px,color:#0b3d91;
+    classDef problem fill:#ffe6e6,stroke:#d62728,stroke-width:2px,color:#7b0000;
+
+    START(["ResetForRecovery 呼び出し"])
+    P1["①prepared<br>manifest 書き込み<br>（再開の起点）"]
+    P2["②moved<br>旧 tlsrpt.json・emails/<br>を staging へ退避"]
+    P3["③empty_created<br>空 tlsrpt.json・空 emails/<br>を新規作成"]
+    COMMIT["④committed ← commit 点<br>sentinel 更新<br>uid_validity = current<br>recovery_required 除去"]
+    DONE["⑤complete<br>staging 削除"]
+    END(["exit 0<br>空ストア確定・復旧完了"])
+
+    CRASH_PRE["クラッシュ（commit 前）<br>recovery-required 残存<br>通常 Open → fail closed<br>OpenRecoverReset → 再開可"]
+    CRASH_POST["クラッシュ（commit 後）<br>空ストア有効<br>staging cleanup のみ未完<br>次回 Open 時に後片付け"]
+
+    START --> P1 --> P2 --> P3 --> COMMIT --> DONE --> END
+    P1 & P2 & P3 -.->|"クラッシュ"| CRASH_PRE
+    COMMIT & DONE -.->|"クラッシュ"| CRASH_POST
+
+    class P1,P2,P3 phase
+    class COMMIT commitnode
+    class DONE,END done
+    class CRASH_PRE,CRASH_POST problem
+```
+
+矢印 A → B は正常実行時のフェーズ遷移、破線矢印はクラッシュ発生時の到達状態を表す。
+
+**フェーズごとの詳細**
+
+| フェーズ | 操作 | crash 後の状態 | `Open` の挙動 |
+|---|---|---|---|
+| ① prepared | manifest を書き込む（再開起点を記録） | recovery-required 残存 / staging なし | `OpenReadWrite`: fail closed / `OpenRecoverReset`: 再開用 store を返す |
+| ② moved | 旧 `tlsrpt.json` と `emails/` を staging ディレクトリへ退避 | recovery-required 残存 / 旧データは staging に存在 | 同上 |
+| ③ empty\_created | 空の `tlsrpt.json` と空の `emails/` を新規作成 | recovery-required 残存 / 旧データは staging に存在 | 同上 |
+| ④ committed | sentinel の `uid_validity` を current に更新し `recovery_required` フィールドを除去（**commit 点**） | 空ストア有効 / staging 残存 | `OpenReadWrite`: staging cleanup 後に正常進行 |
+| ⑤ complete | staging ディレクトリを削除 | − | 通常状態 |
+
+**commit 点の意義**: ④ が完了した時点で「空ストア + 新 UIDVALIDITY + recovery-required 解消」という一貫した状態が確定する。この前後でクラッシュ時の復旧戦略が大きく異なる。
+
+**再開メカニズム**: `OpenRecoverReset` で取得した store に対して `ResetForRecovery` を呼ぶと、manifest からフェーズを読み取り、未完了の操作だけを実行する（べき等再実行）。manifest が存在しない場合は ① から開始する。
+
 store 側の設計不変条件は以下:
 
 - 呼び出し側から見ると、`ResetForRecovery` は「旧データ保持 + recovery-required 残存」または「空ストア + current UIDVALIDITY + recovery-required 解消」のどちらかに収束する。
@@ -813,7 +861,6 @@ store 側の設計不変条件は以下:
 - `recover --mode discard-old --yes` だけは `store.Open(rootDir, identity, OpenRecoverReset)` を使い、pending reset を再開できる store を取得する。`fetch` / `gc` / `reprocess` / `summary` はこの mode を使わない。
 - `OpenRecoverReset` で得た store が許可する破壊的操作は `ResetForRecovery(currUIDValidity)` のみとする。
 - commit 後の cleanup 失敗は通常データパスへ影響させず、後続の `Open` または `ResetForRecovery` で再 cleanup 可能にする。
-- reset の内部 state machine、staging 名、manifest 形式、phase 境界ごとの再開手順は実装計画で定義する。
 
 `recover --mode keep-old` は既存 `ApplyRecovery(curr)` を使い、`discard-old --yes` はデータ破棄を伴うため `ResetForRecovery(currUIDValidity)` を使う。
 
