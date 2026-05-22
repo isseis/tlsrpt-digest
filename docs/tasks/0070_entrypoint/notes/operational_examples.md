@@ -100,7 +100,7 @@ systemctl enable --now tlsrpt-digest-gc.timer
 
 `/etc/cron.d/tlsrpt-digest` などに記述する。本質的には systemd timer と同等であり、環境変数は別ファイルで管理するか、実行前に source する。
 
-> **環境変数の引き継ぎ**: crontab の `. secrets.env` は変数をシェルに読み込むが、`export` されていないと子プロセス（`tlsrpt-digest`）に渡らない。`set -a; . secrets.env; set +a` を使うか、`secrets.env` 内の各行を `export KEY=value` 形式にする。
+> **環境変数の引き継ぎ**: crontab の `. secrets.env` は変数をシェルに読み込むが、`export` されていないと子プロセス（`tlsrpt-digest`）に渡らない。`set -a; . secrets.env; set +a` を使うこと。`secrets.env` を systemd の `EnvironmentFile=` と共用している場合、`export KEY=value` 形式にすると systemd 側が解釈できなくなるため、ファイルは `KEY=value` 形式のまま cron 側で `set -a` を使うのが安全。
 
 ```crontab
 # 毎時0分に IMAP メール取得
