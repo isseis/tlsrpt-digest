@@ -513,7 +513,7 @@ type SubcommandRunner interface {
 |---|---|---|---|
 | 全共通 | `-config <path>` | TOML 設定ファイルパス。省略時 `./config.toml` | - |
 | `fetch` | `--since <duration>` | フェッチ対象期間（d / w 単位） | `imap.fetch_days` |
-| `summary` | `--since <duration>` | 集計期間（d / w 単位） | `summary.window_days` |
+| `summary` | `--window <duration>` | 集計窓の期間（d / w 単位）。`fetch --since` との意味的混同を避けるため異なる名前を採用 | `summary.window_days` |
 | `gc` | `--before <duration>` | レポートレコード保持期間 | `store.retention_days` |
 | `gc` | `--max-email-age <duration>` | `.eml` 最大保持期間 | `store.max_email_age_days` |
 | `recover` | `--mode <keep-old\|discard-old>` | 復旧モード | - |
@@ -850,7 +850,7 @@ commit 前にクラッシュした場合は recovery-required を残し、通常
 - **`duration.go`** — AC-07 / AC-07b / AC-07c / AC-07d
   - `7d`・`4w`・`30d` の正常パース
   - `0d`・`-1d`・`-2w`・`30h`・`abc` のエラー
-  - `fetch --since`・`summary --since`・`gc --before`・`gc --max-email-age` の各フラグで共通利用されること
+  - `fetch --since`・`summary --window`・`gc --before`・`gc --max-email-age` の各フラグで共通利用されること
   - 週指定が日数へ正規化されること（`4w → Days=28`）
   - `Duration.Cutoff(now)` の UTC 切り捨て動作：現在時刻が UTC 02:01:00 のとき `Days=7` のカットオフが「7 日前の 00:00:00 UTC」となること（「7 日前の 02:01:00」ではないこと）（AC-07c）
   - 週指定（`1w`）でも同様に UTC 日付単位の切り捨てが行われること

@@ -42,8 +42,8 @@ Description=tlsrpt-digest periodic summary (one-shot)
 [Service]
 Type=oneshot
 # --since の値（または設定ファイルの集計期間）はタイマーの送信頻度と整合させる。
-# 下のタイマー例は毎週月曜のため --since 7d 相当。日次運用なら --since 1d。
-ExecStart=/usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml --since 7d
+# 下のタイマー例は毎週月曜のため --window 7d 相当。日次運用なら --window 1d。
+ExecStart=/usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml --window 7d
 EnvironmentFile=/etc/tlsrpt-digest/secrets.env
 ```
 
@@ -107,7 +107,7 @@ systemctl enable --now tlsrpt-digest-gc.timer
 0 * * * *  root  set -a; . /etc/tlsrpt-digest/secrets.env; set +a && /usr/local/bin/tlsrpt-digest fetch -config /etc/tlsrpt-digest/config.toml
 
 # 毎週月曜9時に定期サマリ（7 日分、設定の summary.window_days で代替可）
-0 9 * * 1  root  set -a; . /etc/tlsrpt-digest/secrets.env; set +a && /usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml --since 7d
+0 9 * * 1  root  set -a; . /etc/tlsrpt-digest/secrets.env; set +a && /usr/local/bin/tlsrpt-digest summary -config /etc/tlsrpt-digest/config.toml --window 7d
 
 # 毎日3時に古いレコードを削除（30 日以前）
 0 3 * * *  root  set -a; . /etc/tlsrpt-digest/secrets.env; set +a && /usr/local/bin/tlsrpt-digest gc -config /etc/tlsrpt-digest/config.toml --before 30d
