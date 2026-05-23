@@ -1,0 +1,787 @@
+# 実装計画書：エントリポイントとサブコマンド
+
+## ドキュメントステータス
+
+| 項目 | 内容 |
+|---|---|
+| ステータス | `draft` |
+| 作成日 | 2026-05-23 |
+| レビュー日 | - |
+| レビュアー | - |
+| コメント | - |
+
+---
+
+## 1. 実装概要
+
+### 1.1 目的
+
+`cmd/tlsrpt-digest/main.go` を 5 サブコマンド（`fetch` / `summary` / `reprocess` / `gc` / `recover`）による one-shot 実行アーキテクチャへ移行する。  
+詳細設計は [`02_architecture.md`](02_architecture.md) を参照。
+
+### 1.2 実装方針
+
+- 既存 `internal/{config,imap,tlsrpt,mailparse,notify,store}` パッケージの責務を再実装しない
+- `cmd` レイヤーは薄いオーケストレーションに徹する
+- 各フェーズ完了後に `make test && make lint` が通ることを確認してから次フェーズへ進む
+- Go ソースのコメント・識別子・文字列リテラルに日本語を含めない
+
+---
+
+## 2. 実装ステップ
+
+### フェーズ 1: 共通基盤
+
+#### ステップ 1-1: `internal/notify` 型拡張
+
+**変更ファイル**: `internal/notify/types.go`, `internal/notify/helpers.go`, `internal/notify/format.go`, `internal/notify/message.go`
+
+- [ ] `internal/notify/types.go` に `WarningKind` 型（許容値 `size_mismatch` / `parse_failure`）と `Warning` 構造体（`Kind WarningKind`, `UID uint32`, `UIDValidity uint32`, `MessageID string`）を追加する
+- [ ] `internal/notify/types.go` の `SystemError` 構造体を更新する: フィールドを `Kind SystemErrorKind`, `Component string`, `Mailbox string` に変更し、既存の `ErrorType string` と `Message string` を削除する
+- [ ] `internal/notify/types.go` に `SystemErrorKind` 型と許容値（`lock_held`, `store_identity_mismatch`, `store_permission`, `store_corruption`, `imap_credentials_missing`, `imap_connect_failed`, `imap_auth_failed`, `uidvalidity_changed`, `recovery_required`, `reset_incomplete`, `notification_flush_failed`）を定義する
+- [ ] `internal/notify/helpers.go` の `LogSystemError` を新 `SystemError` 構造（`Kind` フィールド）に対応させる
+- [ ] `internal/notify/helpers.go` に `LogWarning(ctx context.Context, h slog.Handler, warning Warning) error` を追加する（WARN レベルで error webhook バッファへ積む）
+- [ ] `internal/notify/format.go` に `fetch_warning` レコードの整形処理を追加する（`tls_failure_alert` 集約に混入させず専用レコードとして扱う）
+- [ ] `internal/notify/message.go` に `fetch_warning` の Slack 表示文（`kind`, `uid`, `uidvalidity`, `message_id`, `run_id` のみ表示）を追加する
+
+**テスト変更**:
+
+- [ ] `internal/notify/helpers_test.go`: `LogWarning` が WARN レベルで typed fields のみを出力することを確認するテストを追加する
+- [ ] `internal/notify/format_test.go`: `fetch_warning` が TLS failure alert に集約されないことを確認するテストを追加する
+- [ ] `internal/notify/security_test.go`: `LogWarning` / `LogSystemError` が raw error・secret を payload に含めないことを確認するテストを追加する
+- [ ] `cmd/tlsrpt-digest/main_test.go` の `primeNotifyHandlers` 経由の `LogSystemError` 呼び出しを削除する（`primeNotifyHandlers` はステップ 1-6 で `main.go` 再構成時に削除する）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+#### ステップ 1-2: `duration.go` の作成
+
+**新規ファイル**: `cmd/tlsrpt-digest/duration.go`, `cmd/tlsrpt-digest/duration_test.go`
+
+- [ ] `duration.go` に `Duration` 型（`Days int`）を定義する（`02_architecture.md` §3.1 参照）
+- [ ] `ParseDuration(s string) (Duration, error)` を実装する: `d` / `w` 単位のみ受け付け、週は日数（`×7`）に正規化する。パース後の値が 1 以下の場合はエラーを返す（AC-07b）
+- [ ] `(d Duration) Cutoff(now time.Time) time.Time` を実装する: `now` を UTC 日付の開始時刻（`00:00:00 UTC`）に切り捨ててから `d.Days` 日遡る（AC-07c）
+- [ ] `UTCDayStart(now time.Time) time.Time` を実装する: 「今日の `00:00:00 UTC`」を返す（AC-07d）
+- [ ] `duration_test.go` に以下のテストを追加する:
+  - [ ] 正常パース: `7d`（Days=7）・`4w`（Days=28）・`30d`（Days=30）（AC-07）
+  - [ ] エラー: `0d`・`-1d`・`-2w`・`30h`・`abc`・空文字（AC-07b）
+  - [ ] `Cutoff(now)` の UTC 切り捨て: UTC 02:01:00 に `Days=7` のカットオフが「7 日前の 00:00:00 UTC」になること（「7 日前の 02:01:00」ではないこと）（AC-07c）
+  - [ ] 週指定（`1w`）でも UTC 日付単位の切り捨てが行われること（AC-07c）
+  - [ ] `UTCDayStart(now)` が任意の時刻に対して「今日の 00:00:00 UTC」を返すこと（AC-07d）
+  - [ ] `--window 1w` を 2000-12-10 10:00 UTC に実行したとき `start=2000-12-03 00:00 UTC`・`end=2000-12-10 00:00 UTC` となり重複・欠落がないこと（AC-07d 統合確認）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+#### ステップ 1-3: `lock.go` の作成
+
+**新規ファイル**: `cmd/tlsrpt-digest/lock.go`, `cmd/tlsrpt-digest/lock_test.go`
+
+OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
+
+- [ ] `lock.go` に `LockHandle` インターフェース（`Close() error`）を定義する
+- [ ] `AcquireExclusive(lockPath string) (LockHandle, error)` を実装する: `golang.org/x/sys/unix` の `unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)` を使い non-blocking 排他ロックを取得する。取得失敗時は即時エラーを返す（待機しない）
+- [ ] `lock_test.go` に以下のテストを追加する:
+  - [ ] 同一パスに対して 2 回目の `AcquireExclusive` が即時失敗すること（AC-10a）
+  - [ ] `Close()` 後に同パスへのロック再取得が成功すること（解放確認）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+#### ステップ 1-4: `internal/store` の拡張
+
+**変更ファイル**: `internal/store/types.go`, `internal/store/store.go`, `internal/store/recovery.go`, `internal/store/errors.go`, `internal/store/store_test.go`, `internal/store/recovery_test.go`, `internal/store/testutil/mocks.go`
+
+破壊的復旧の不変条件・エラー境界・更新範囲の詳細は `02_architecture.md` §6.4 を参照。
+
+- [ ] `internal/store/types.go` に `OpenRecoverReset` モードを追加する
+- [ ] `internal/store/types.go` に `SummaryConsistencyGuard` インターフェース（`CheckRecoveryRequired(ctx context.Context) (found bool, err error)` / `Close() error`）を定義する
+- [ ] `internal/store/store.go` の `Store` インターフェースに以下のメソッドを追加する:
+  - `ResetForRecovery(currUIDValidity uint32) error`
+  - `AbortReset() error`
+  - `AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)`
+- [ ] `internal/store/store.go` の `Open` に `OpenRecoverReset` 分岐を追加する: pending reset が存在する場合に通常 `OpenReadWrite` を fail closed（エラー返却）させ、`OpenRecoverReset` だけを通過させる
+- [ ] `internal/store/recovery.go` に `ResetForRecovery(currUIDValidity uint32) error` を実装する:
+  - recovery-required 不在、または引数 `currUIDValidity` が sentinel の `curr_uid_validity` と異なる場合はエラーを返す
+  - pending reset manifest を作成し旧データを staging へ移動する（commit 前）
+  - commit を実行する（sentinel の `uid_validity` を current へ更新・`recovery_required` フィールドを除去・アトミック書き込み）
+  - commit 後に staging ディレクトリを削除する（cleanup）
+  - 中間クラッシュ後の再実行で「空ストア + current UIDVALIDITY + recovery-required 解消」へ収束することを保証する（AC-41）
+- [ ] `internal/store/recovery.go` に `AbortReset() error` を実装する:
+  - pending reset がない場合、または commit 後の状態では変更せずエラーを返す（AC-43）
+  - pending reset（manifest あり・sentinel 未更新）の場合: staging から旧データを元の位置へ戻し manifest を削除する。完了後も recovery-required は残す
+  - 再実行で「旧データ保持 + recovery-required 残存」へ収束すること（AC-44）
+- [ ] `internal/store/recovery.go` に `AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)` を実装する: `CheckRecoveryRequired` は呼び出しごとにストアのセンチネルファイルを再読み込みして recovery-required の有無を確認する（取得時点の状態をキャッシュしない）。これにより guard 有効期間中に recovery-required が書き込まれた場合も次の `CheckRecoveryRequired` 呼び出しで検出できることを保証する（`02_architecture.md` §3.3 参照）
+- [ ] `internal/store/errors.go` に必要な新規エラー定義を追加する（pending reset 存在による fail closed、recovery-required 不在時のエラー等）
+- [ ] `internal/store/store_test.go` に以下のテストを追加する:
+  - [ ] pending reset がある状態で `OpenReadWrite` がエラーを返すこと
+  - [ ] `OpenRecoverReset` が pending reset を扱える store を返すこと
+- [ ] `internal/store/recovery_test.go` に以下のテストを追加する:
+  - [ ] `ResetForRecovery` が recovery-required 不在・curr 不一致時にエラーを返すこと
+  - [ ] `ResetForRecovery` の中間クラッシュ後の再実行で最終状態へ収束すること（AC-41）
+  - [ ] `AbortReset` が commit 前の pending reset を取り消し旧データを保持すること（AC-43）
+  - [ ] `AbortReset` が commit 後・pending reset なしでエラーを返すこと（AC-43）
+  - [ ] `AbortReset` の再実行が同じ最終状態へ収束すること（AC-44）
+  - [ ] commit 後の cleanup 未完了が通常データパス（空ストア一貫性）に影響しないこと
+  - [ ] `OpenRecoverReset` が通常 `OpenReadWrite` で fail closed する pending reset を再開できること
+- [ ] `internal/store/testutil/mocks.go` の `FakeStore` に `ResetForRecovery`・`AbortReset`・`AcquireSummaryConsistencyGuard` を実装する
+- [ ] `internal/store/testutil/mocks.go` に `FakeSummaryConsistencyGuard` 構造体（`CheckRecoveryRequired` の戻り値を外部から注入可能）を追加する
+
+**完了確認**: `make test && make lint` がパスする。`var _ store.Store = (*storetestutil.FakeStore)(nil)` コンパイルチェックが通ること
+
+---
+
+#### ステップ 1-5: `GenerateSummary` 集計区間修正
+
+**変更ファイル**: `internal/notify/aggregate.go`, `internal/notify/aggregate_test.go`
+
+変更理由は `02_architecture.md` §3.1 の Duration 型設計判断「半開区間 `[start, end)`」を参照。
+
+- [ ] `internal/notify/aggregate.go` の `inSummaryPeriod` を `(start, end]`（start 除外・end 含む）から `[start, end)`（start 含む・end 除外）へ変更する: `reportEnd.After(start) && (reportEnd.Equal(end) || reportEnd.Before(end))` を `!reportEnd.Before(start) && reportEnd.Before(end)` に変更する
+- [ ] `internal/notify/aggregate_test.go` の境界値テストを `[start, end)` セマンティクスに合わせて更新する（start と等しい `reportEnd` が含まれ、`end` と等しい `reportEnd` が除外されることを確認する）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+#### ステップ 1-6: `boot.go` と `main.go` の再構成
+
+**変更ファイル**: `cmd/tlsrpt-digest/main.go`, `cmd/tlsrpt-digest/main_test.go`  
+**新規ファイル**: `cmd/tlsrpt-digest/boot.go`, `cmd/tlsrpt-digest/boot_test.go`, `cmd/tlsrpt-digest/test_helpers.go`
+
+初期化順序（W-1〜W-6）と `summary` 専用フローの詳細は `02_architecture.md` §2.2・§3.4 を参照。
+
+- [ ] `boot.go` に以下の型を定義する: `SubcommandName`・`BootContext`・`IMAPCredentials`・`SubcommandRunner`・`NotificationSink`（`02_architecture.md` §3.1 参照）
+- [ ] `boot.go` に `notificationSinkImpl` 構造体を実装する: `NotificationSink` インターフェースの具体実装として、内部に `[]*notify.SlackHandler` を保持し、`LogAlert` / `LogWarning` / `LogSystemError` / `LogSummary` / `Flush` / `IsDryRun` を型付きヘルパー経由で委譲する。`SlackHandler` を `cmd` 外部へ直接公開しない
+- [ ] `boot.go` に `Bootstrap(subcmd SubcommandName, configPath string, runID string) (*BootContext, error)` を実装する: 書き込み系サブコマンドは W-1（設定読込）→ W-2（`{root_dir}` 確保・検証）→ W-3（Slack URL 取得・即時 Secret 化）→ W-4（`BuildHandlers` all-or-nothing）→ W-5（プロセスロック取得）→ W-6（`store.Open(OpenReadWrite)`）の順で実行する。`summary` 専用フローは `02_architecture.md` §3.4 および §6.7 参照
+- [ ] `main.go` を再構成する:
+  - `os.Args` からサブコマンド名を確定し、各サブコマンド専用の `flag.FlagSet` で残り引数を解釈する（グローバル `flag.Parse()` を廃止する）
+  - サブコマンド未指定・未知サブコマンド・`FlagSet` 解析エラー時は usage を stderr へ出力し exit 2 とする（AC-02）
+  - `flag.FlagSet` 解析成功直後に `ulid.Make().String()` で RunID を採番する（`02_architecture.md` §3.6 参照）
+  - 既存の `loadConfig`・`setupNotifyHandlers`・`buildIMAPConfig`・`primeNotifyHandlers`・`storeOpenMode`・`openStoreForSubcommand` を `boot.go` へ移管する（`primeNotifyHandlers` は削除する）
+  - 各サブコマンド用の `SubcommandRunner` スタブを追加する（`Run` は後続フェーズで実装する）
+- [ ] `cmd/tlsrpt-digest/test_helpers.go` を新規作成する（`//go:build test` タグ）: `SpyNotificationSink` 構造体（`NotificationSink` を実装し呼び出し記録・エラー注入を提供する）を定義する。`package main` 内部型（`NotificationSink`）を使用するため `testutil/` サブディレクトリではなく同パッケージのこのファイルに配置する（`test_organization.md` Classification B）
+- [ ] `boot_test.go` を新規作成する（`package main`、`_test.go` サフィックスによりテストファイルと認識されるため `//go:build test` タグは不要）: 以下のテストを追加する:
+  - [ ] 設定読込失敗 → stderr 出力のみで exit 1 となること（AC-08）
+  - [ ] Slack URL が取得直後に `config.Secret` でラップされること（生文字列がログに出ないこと）
+  - [ ] `gc` / `recover` / `reprocess` サブコマンドで IMAP 認証情報を要求しないこと
+  - [ ] `BuildHandlers` の all-or-nothing 動作: 一方の URL が不正な場合に全体がエラーになること
+  - [ ] `summary` が空ストア時に `BuildHandlers` を呼ばず Slack URL 未設定でも exit 0 になること（AC-10c）
+  - [ ] ロック取得失敗時に `LogSystemError(lock_held)` + `Flush()` が呼ばれ exit 1 となること（AC-10a）
+  - [ ] ストアオープン失敗（identity mismatch / permission / corruption）が分類別の `SystemErrorKind` でレポートされること（AC-09）
+  - [ ] W-2 境界: `{root_dir}` が symlink の場合に exit 1 となること（TOCTOU 対策。`02_architecture.md` §3.4 W-2 参照）
+  - [ ] W-2 境界: `{root_dir}` のパーミッションが不足している場合に exit 1 となること
+- [ ] `main_test.go` を更新する:
+  - [ ] 移管した `buildIMAPConfig`・`loadConfig`・`setupNotifyHandlers` のテストを `boot_test.go` へ移動する
+  - [ ] `fetch` / `summary` / `reprocess` / `gc` / `recover` の 5 サブコマンドそれぞれが対応する `SubcommandRunner` へ振り分けられることを確認するテストを追加する（AC-01）
+  - [ ] サブコマンド未指定・未知サブコマンド・不正フラグで usage が stderr に出力され exit 2 となることを確認するテストを追加する（AC-02）
+  - [ ] `-config` フラグが全サブコマンド（`fetch` / `summary` / `reprocess` / `gc` / `recover`）で受け付けられることを確認するテストを追加する（AC-03）
+  - [ ] `-config` フラグのデフォルトパスが `./config.toml` であることを確認するテストを追加する（AC-04）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+### フェーズ 2: 主機能サブコマンド
+
+#### ステップ 2-1: `fetch.go` の作成
+
+**新規ファイル**: `cmd/tlsrpt-digest/fetch.go`, `cmd/tlsrpt-digest/fetch_test.go`
+
+at-least-once 保証・ダウンロード対象選定の詳細は `02_architecture.md` §6.1・§6.2 を参照。処理フロー全体は `02_architecture.md` §2.3 を参照。
+
+- [ ] `fetch.go` に `fetchRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [ ] `main.go` のスタブを `fetchRunner` で置き換える
+- [ ] 処理フローを以下の順で実装する:
+  1. `LoadRecoveryRequired` で recovery-required 確認。`found=true` → `LogSystemError(recovery_required)` + `Flush()` + exit 1（AC-10d / AC-10e）
+  2. `TLSRPT_IMAP_USERNAME`（string）・`TLSRPT_IMAP_PASSWORD`（即時 `config.Secret` 化）を取得する（W-6f）。欠落時は `LogSystemError(imap_credentials_missing)` + `Flush()` + exit 1
+  3. IMAP client を作成する（`imap.NewClient`）。失敗時は `LogSystemError(imap_connect_failed)` + `Flush()` + exit 1（AC-10）。成功・失敗いずれのパスでも最終的に `Close()` を呼ぶ
+  4. `FetchMeta(since=Duration.Cutoff(now))` でメタ情報を取得する（AC-11）
+  5. `LoadUIDValidity` で前回値を取得し現在の UIDVALIDITY と比較する（AC-11a）:
+     - `found=false`: 現在の UIDVALIDITY を `SaveUIDValidity` で即時保存してフェッチ継続（AC-11b）
+     - `found=true` かつ一致: フェッチ継続（AC-11b-cont）
+     - `found=true` かつ不一致: `SaveRecoveryRequired` + `LogSystemError(uidvalidity_changed)` + `Flush()` + exit 1（AC-11c）
+  6. ダウンロード対象を選定する（SEEN × ローカル `.eml` の 4 通り。`02_architecture.md` §6.2 テーブル参照）（AC-12）。RFC822.SIZE 不一致が検出された場合は、SEEN + `.eml` あり（スキップ対象）であっても `LogWarning(size_mismatch)` をバッファへ積んでから当該メールをスキップする（AC-13 / AC-14）
+  7. ダウンロード対象メールを `imap.Download` で取得し `store.SaveEmail` で保存する（アトミック・冪等）（AC-15）
+  8. ローカルに `.eml` が存在する全 UID（今回ダウンロード分＋既存分）を `SaveEmailMetas` で一括登録する（AC-15 / AC-15a）
+  9. 各メールの添付 `.json.gz` をパースする（AC-16）。パース失敗時は `LogWarning(parse_failure)` をバッファへ積み、当該メールのレポート保存をスキップする（AC-16a）
+  10. UNSEEN だったメールで `failure_session_count > 0` の場合は `LogAlert` をバッファへ積む（AC-17）
+  11. パース成功レポートを `SaveReports` で一括 UPSERT する（AC-18）
+  12. `Flush()` を呼ぶ。失敗時は exit 1（SEEN 付与しない）（AC-18a）
+  13. `Flush()` 成功後に `MarkSeen` で UNSEEN だった全メールに SEEN を付与する（AC-19）
+  14. `SaveUIDValidity(currentUIDVALIDITY)` を冪等保存する（AC-20a）
+- [ ] `fetch_test.go` に以下のテストを追加する（既存 `imaptestutil.FakeMailFetcher`・`storetestutil.FakeStore`・`SpyNotificationSink` を使用）:
+  - [ ] `FetchMeta` が UIDVALIDITY・UID・RFC822.SIZE・SEEN・Message-ID・INTERNALDATE を取得し、since 引数として `Duration.Cutoff(now)` が渡されること（AC-11）
+  - [ ] `--since` フラグが `FlagSet` に登録されており、`Duration.Cutoff(now)` として `FetchMeta` へ渡されること（AC-05）
+  - [ ] `--since` 指定時に `imap.fetch_days` 設定値が無視されること（AC-06）
+  - [ ] SEEN + `.eml` あり → スキップされること（AC-12）
+  - [ ] UNSEEN + `.eml` なし → ダウンロード・処理・SEEN 付与が行われること
+  - [ ] UNSEEN + `.eml` あり → ダウンロードせず既存ファイルを処理・SEEN 付与が行われること
+  - [ ] SEEN + `.eml` なし → ダウンロードされること（SEEN 変更なし）
+  - [ ] SEEN + `.eml` なし + `failure_session_count > 0` → `LogAlert` が呼ばれないこと（SEEN 済みメールへの再アラート防止）（AC-17）
+  - [ ] RFC822.SIZE 不一致 + UNSEEN + `.eml` なし → `LogWarning(size_mismatch)` が積まれること（AC-13）
+  - [ ] RFC822.SIZE 不一致 + SEEN + `.eml` あり → `LogWarning(size_mismatch)` が積まれた上でスキップされること（AC-14）
+  - [ ] `failure_session_count > 0` + UNSEEN → `LogAlert` が積まれること（AC-17）
+  - [ ] `failure_session_count == 0` → `LogAlert` が積まれないこと
+  - [ ] UIDVALIDITY 初回（`found=false`）→ 即時 `SaveUIDValidity` 後にフェッチ継続（AC-11b）
+  - [ ] UIDVALIDITY 不一致 → `SaveRecoveryRequired` + `LogSystemError(uidvalidity_changed)` + `Flush()` + exit 1（AC-11c）
+  - [ ] recovery-required 残存 → `fetch` が即座に停止すること（AC-10d / AC-10e / AC-11d）
+  - [ ] パース失敗 → `LogWarning(parse_failure)` + レポート保存スキップ + SEEN 付与は継続（AC-16a / AC-20）
+  - [ ] `Flush()` 失敗 → SEEN が付与されないこと（AC-18a）
+  - [ ] `SaveEmailMetas` と `SaveReports` が全メール処理後にそれぞれ 1 回ずつ呼ばれること（AC-15 / AC-18）
+  - [ ] 正常完了 → exit 0、UIDVALIDITY 不一致 / `Flush()` 失敗 / recovery-required 残存 → exit 1 となること（AC-21）
+  - [ ] IMAP 接続失敗 → `LogSystemError(imap_connect_failed)` + `Flush()` + exit 1（AC-10）
+  - [ ] IMAP client が成功・失敗のどちらのパスでも `Close()` されること（AC-10）
+  - [ ] 1 件のメール処理失敗（パース失敗）が他のメールの処理・SEEN 付与に影響しないこと（AC-20）
+  - [ ] 全メール処理完了後に `SaveUIDValidity(currentUIDVALIDITY)` が 1 回呼ばれること（AC-20a）
+  - [ ] ロック取得失敗 → `LogSystemError(lock_held)` + `Flush()` + exit 1（AC-10a）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+#### ステップ 2-2: `summary.go` の作成
+
+**新規ファイル**: `cmd/tlsrpt-digest/summary.go`, `cmd/tlsrpt-digest/summary_test.go`
+
+空ストア時の詳細シーケンスは `02_architecture.md` §6.7 を参照。
+
+- [ ] `summary.go` に `summaryRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [ ] `main.go` のスタブを `summaryRunner` で置き換える
+- [ ] 処理フローを以下の順で実装する（`02_architecture.md` §6.7 参照）:
+  1. `store.Open(rootDir, identity, OpenReadOnly)` を呼ぶ（`{root_dir}` 不在でも空ストアとして成功する）（AC-10c）
+  2. summary consistency guard を取得し、第 1 回 `CheckRecoveryRequired` を呼ぶ。`found=true` → W-3・W-4 で notifier を構築してから `LogSystemError(recovery_required)` + `Flush()` + exit 1（AC-27a）
+  3. `notify.GenerateSummary(ctx, store, start=Duration.Cutoff(now), end=UTCDayStart(now), debugLogger)` を呼ぶ（AC-27）
+  4a. Summary が空の場合: guard の第 2 回 `CheckRecoveryRequired` を呼ぶ。`found=true` → stderr ERROR + exit 1（notifier 未構築のため Slack 通知なし）。`found=false` → `slog.Info("no reports to summarize")` を出力し exit 0（AC-10c）
+  4b. Summary が非空の場合: W-3・W-4 で notifier を構築する
+  5. guard の第 2 回 `CheckRecoveryRequired`（Slack 送信直前）を呼ぶ。`found=true` → `LogSystemError(recovery_required)` + `Flush()` + exit 1（AC-27a）。`found=false` → `LogSummary` + `Flush()` + exit 0（AC-28）
+- [ ] `summary_test.go` に以下のテストを追加する（`storetestutil.FakeStore`・`FakeSummaryConsistencyGuard`・`SpyNotificationSink` を使用）:
+  - [ ] `--window 7d` 指定時に `Duration.Cutoff(now)` が `start` として `GenerateSummary` へ渡されること（AC-07a / AC-07c）
+  - [ ] `--window` 未指定 + 設定値ありで設定値が `start` として使われること（AC-07a）
+  - [ ] `GenerateSummary` に渡される `end` が `UTCDayStart(now)` であること（AC-07d）
+  - [ ] 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary.Period`）に含まれること（AC-28）
+  - [ ] recovery-required 残存（第 1 回確認）→ 集計・送信せず exit 1（AC-27a）
+  - [ ] 空集計 + recovery-required なし → `slog.Info` で「集計対象なし」メッセージが出力され notifier 未構築・Slack URL 未設定でも exit 0（AC-10c）
+  - [ ] 空集計 + 第 2 回 `CheckRecoveryRequired` が `found=true` → stderr ERROR + exit 1（notifier 未構築のため Slack 通知なし）
+  - [ ] 非空集計 + Slack URL 未設定 → `BuildHandlers` 失敗で exit 1（空集計との対比）
+  - [ ] 非空集計 + 送信直前 recovery-required 出現 → 送信せず exit 1（AC-27a）
+  - [ ] `notify.GenerateSummary` を呼び、集計ロジックを `summary.go` で再実装しないこと
+  - [ ] 空集計 / 正常送信 → exit 0、recovery-required 残存 / `Flush()` 失敗 → exit 1 となること（AC-29）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+### フェーズ 3: 運用サブコマンド
+
+#### ステップ 3-1: `gc.go` の作成
+
+**新規ファイル**: `cmd/tlsrpt-digest/gc.go`, `cmd/tlsrpt-digest/gc_test.go`
+
+カットオフ計算と各 API の呼び出し方針は `02_architecture.md` §3.2 の `gc.go` 行を参照。
+
+- [ ] `gc.go` に `gcRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [ ] `main.go` のスタブを `gcRunner` で置き換える
+- [ ] 処理フローを以下の順で実装する:
+  1. `LoadRecoveryRequired` で recovery-required 確認。`found=true` → exit 1（AC-29a）
+  2. `--before` の `Duration.Cutoff(now)` を `DeleteReportsBefore(cutoff)` に渡す（AC-32）
+  3. `--max-email-age` の `Duration.Cutoff(now)` を `DeleteEmailsBefore(cutoff)` に渡す（AC-32b）
+  4. JSON レコードと `.eml` それぞれの削除件数を `slog.Info` で出力する（AC-33）
+- [ ] `gc_test.go` に以下のテストを追加する（`storetestutil.FakeStore` を使用）:
+  - [ ] `--before` フラグが `FlagSet` に登録されており、`ParseDuration` でパースされること（AC-30）
+  - [ ] `--before` 指定時に `DeleteReportsBefore` が AC-07c に従った UTC 日付単位切り捨て済みカットオフで呼ばれること（AC-32）
+  - [ ] `--before` 未指定で設定値（`store.retention_days`）が使われること（AC-31）
+  - [ ] `--max-email-age` フラグが `FlagSet` に登録されており、`ParseDuration` でパースされること（AC-32a）
+  - [ ] `--max-email-age` 指定時に `DeleteEmailsBefore` が AC-07c に従ったカットオフで呼ばれること（AC-32b）
+  - [ ] `--max-email-age` 未指定で設定値（`store.max_email_age_days`）が使われること（AC-32a）
+  - [ ] JSON レコードと `.eml` それぞれの削除件数が INFO ログに出力されること（AC-33）
+  - [ ] recovery-required 残存 → 削除処理を行わず exit 1（AC-29a）
+  - [ ] `gc` を同じカットオフで 2 回連続実行しても 2 回目の削除件数が 0 件となること（冪等性確認）
+  - [ ] 正常完了 → exit 0、recovery-required 残存 / `DeleteReportsBefore` 失敗 → exit 1 となること（AC-34）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+#### ステップ 3-2: `recover.go` の作成
+
+**新規ファイル**: `cmd/tlsrpt-digest/recover.go`, `cmd/tlsrpt-digest/recover_test.go`
+
+オペレータ向け表示内容・モード別挙動・エラー境界は `02_architecture.md` §6.4 を参照。
+
+- [ ] `recover.go` に `recoverRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [ ] `main.go` のスタブを `recoverRunner` で置き換える
+- [ ] 実行前に stdout へオペレータ向け情報を表示する: previous UIDVALIDITY・current UIDVALIDITY・mailbox 識別子・local data path・選択 mode・pending reset 状態（AC-36 / AC-45）
+- [ ] `keep-old` モード: 旧エポックデータ混入リスクの警告を表示してから `ApplyRecovery(currUIDValidity)` を呼ぶ（AC-37）
+- [ ] `discard-old --yes` モード: 更新予定内容を表示してから `store.Open(OpenRecoverReset)` で store を取得し `ResetForRecovery(currUIDValidity)` を呼ぶ（AC-38）
+- [ ] `discard-old`（`--yes` なし）: 実行予定内容を表示するのみで破壊的変更を行わず exit 1 とする（AC-39）
+- [ ] `--abort-reset --yes` フラグの組み合わせ: `store.Open(OpenRecoverReset)` で store を取得し `AbortReset()` を呼ぶ（AC-42 / AC-43）
+- [ ] `--abort-reset` 単独・`--yes` 単独はエラーメッセージを出力して exit 1 とする（AC-42）
+- [ ] recovery-required 不在 → 説明付きで exit 1（変更しない）（AC-40）
+- [ ] pending reset 検出時に利用可能な選択肢（`discard-old --yes` の継続・`abort-reset --yes` のロールバック）を stdout に追加表示する（AC-45）
+- [ ] `recover_test.go` に以下のテストを追加する（`storetestutil.FakeStore` を使用）:
+  - [ ] `--mode` フラグが `FlagSet` に登録されており、`keep-old` / `discard-old` のいずれかが受け付けられること（AC-35）
+  - [ ] `keep-old` で `ApplyRecovery` が呼ばれること。stdout に previous/current UIDVALIDITY・mailbox・mode・旧エポックデータ混入警告が表示されること（AC-36 / AC-37 / AC-45）
+  - [ ] `discard-old --yes` で `ResetForRecovery` が呼ばれること（AC-38）
+  - [ ] `discard-old`（`--yes` なし）が破壊的変更を行わず exit 1 となること。stdout に「レポート store と `.eml` store が空状態へ置き換わること・sentinel の `uid_validity` が current へ更新されること」が表示されていること（`02_architecture.md` §6.4 参照）（AC-39）
+  - [ ] `--abort-reset --yes` で `AbortReset` が呼ばれること（AC-42 / AC-43）
+  - [ ] `--abort-reset` 単独・`--yes` 単独 → exit 1（破壊的変更なし）（AC-42）
+  - [ ] pending reset 検出時に `discard-old --yes` と `abort-reset --yes` の選択肢が stdout に表示されること（AC-45）
+  - [ ] recovery-required 不在 → 説明付きで exit 1（AC-40）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+#### ステップ 3-3: `reprocess.go` の作成
+
+**新規ファイル**: `cmd/tlsrpt-digest/reprocess.go`, `cmd/tlsrpt-digest/reprocess_test.go`
+
+`SaveEmailMetas` と `SaveReports` の呼び出し順序の根拠は `02_architecture.md` §6.6 を参照。
+
+- [ ] `reprocess.go` に `reprocessRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [ ] `main.go` のスタブを `reprocessRunner` で置き換える
+- [ ] 処理フローを以下の順で実装する:
+  1. `LoadRecoveryRequired` で recovery-required 確認。`found=true` → exit 1（AC-21a）
+  2. `LoadEmails` で `{root_dir}/emails/` 以下の `.eml` を再帰的に列挙する（AC-22）
+  3. `SaveEmailMetas` でバッチ登録する（AC-23a）
+  4. 各メールの添付 `.json.gz` をパースする。読み込み・パース失敗はスキップし記録して継続する（`--notify` 指定時のみ `LogWarning` 通知）（AC-25）
+  5. パース成功レポートを `SaveReports` で一括 UPSERT する（AC-23）。失敗時はコマンド全体を中断して exit 1（AC-25）
+  6. `--notify` 指定時のみ `Flush()` を呼ぶ。失敗時は exit 1（AC-24a）
+- [ ] `reprocess_test.go` に以下のテストを追加する（`testdata/` の実 `.eml` と `storetestutil.FakeStore` を使用）:
+  - [ ] recovery-required 残存 → `LoadEmails` もストア書き込みも行わず exit 1（AC-21a）
+  - [ ] `--notify` なしで `LogAlert` が呼ばれないこと（AC-24）
+  - [ ] `--notify` あり + TLS failure → `LogAlert` が呼ばれること（AC-24）
+  - [ ] `--notify` あり + ファイル単位パース失敗 → `LogWarning` が呼ばれ残りのファイル処理が継続すること（AC-25）
+  - [ ] ストア書き込み失敗（`SaveReports`）→ コマンド全体中断・exit 1（AC-25）
+  - [ ] 正常完了 → exit 0、recovery-required 残存 / `SaveReports` 失敗 / `Flush()` 失敗 → exit 1 となること（AC-26）
+  - [ ] `SaveEmailMetas` が `SaveReports` より前に呼ばれること（AC-23a / AC-23）
+  - [ ] 重複実行しても結果が変わらないこと（冪等性）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+### フェーズ 4: 仕上げ
+
+#### ステップ 4-1: セキュリティテスト・統合テスト
+
+**新規ファイル**: `cmd/tlsrpt-digest/security_test.go`  
+**変更ファイル**: `cmd/tlsrpt-digest/main_test.go`
+
+セキュリティテスト要件の詳細は `02_architecture.md` §7.3 および `docs/dev/developer_guide/notification_security.md` §5 を参照。
+
+- [ ] `security_test.go` に以下のテストを追加する（`package main`、`_test.go` サフィックスによりテストファイルと認識されるため `//go:build test` タグは不要）:
+  - [ ] `NotificationSink` から `*notify.SlackHandler` / `slog.Handler` を直接取得できないことを確認する（型アサーション不可）
+  - [ ] `LogWarning` と `LogSystemError` の payload に raw error 文字列・ローカルファイルパス・IMAP パスワード・Slack Webhook URL が含まれないことを確認する
+  - [ ] `BootContext` をログ出力した場合に `config.Secret` フィールドが `[REDACTED]` になることを確認する
+  - [ ] IMAP デバッグ用 `io.Writer` が Slack ハンドラと型システムレベルで分離されていることを確認する（将来 IMAP デバッグを有効化する際の検証ポイント）
+- [ ] `main_test.go` に以下の統合テストを追加する:
+  - [ ] サブコマンド未指定・未知サブコマンド・不正フラグで usage が stderr に出力され exit 2 となること（AC-02）
+  - [ ] TOML 設定読込から `BootContext` 構築までの一連フロー
+  - [ ] `testdata/` の実 `.eml` を用いた `reprocess` のラウンドトリップ
+  - [ ] `fetch` 実行中に `summary` が並走できること（書き込み系どうしはロックで直列化）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+#### ステップ 4-2: ドキュメント整備
+
+**変更ファイル**: `README.md`  
+**新規ファイル**: `docs/tasks/0070_entrypoint/notes/operational_examples.md`
+
+- [ ] `docs/tasks/0070_entrypoint/notes/operational_examples.md` を作成する: systemd timer 設定例・cron 例・`run_id` による重複通知判別手順・`discard-old --yes` 実行前の外部スケジューラ停止手順・クラッシュ時の復旧フローチャート（`recover` で状態確認 → `discard-old --yes` 再実行 または `abort-reset --yes` でロールバック）を記載する
+- [ ] `README.md` を更新する: 各サブコマンドの使用例・重複通知への対処（`run_id` による判別方法）・外部スケジューラ設定例（systemd timer / cron）を追加する
+
+**完了確認**: ドキュメントのレビュー完了
+
+---
+
+## 3. 実装順序とマイルストーン
+
+| マイルストーン | 内容 | 成果物 |
+|---|---|---|
+| M1 | フェーズ 1 完了 | `duration` / `lock` / `notify` 型拡張 / `store` 拡張 / `boot` / `main` 再構成が完成し `make test` がグリーン |
+| M2 | フェーズ 2 完了 | `fetch` / `summary` が実際のワークフローを処理できる状態 |
+| M3 | フェーズ 3 完了 | 全 5 サブコマンドが動作する状態 |
+| M4 | フェーズ 4 完了 | セキュリティテスト・統合テスト・ドキュメントが揃い、リリース可能な状態 |
+
+---
+
+## 4. テスト戦略
+
+### 4.1 単体テスト目標
+
+| ファイル | 主な検証対象 AC |
+|---|---|
+| `duration_test.go` | AC-07 / AC-07b / AC-07c / AC-07d |
+| `lock_test.go` | AC-10a（排他・解放） |
+| `main_test.go` | AC-01 / AC-02 / AC-03 / AC-04 |
+| `boot_test.go` | AC-08 / AC-09 / AC-10a |
+| `fetch_test.go` | AC-05 / AC-06 / AC-10 / AC-10d / AC-10e / AC-11〜AC-21 |
+| `summary_test.go` | AC-07a / AC-10c / AC-27〜AC-29 |
+| `reprocess_test.go` | AC-21a〜AC-26 |
+| `gc_test.go` | AC-29a〜AC-34 |
+| `recover_test.go` | AC-35〜AC-45 |
+| `internal/store/recovery_test.go` | AC-38 / AC-41 / AC-43 / AC-44 |
+
+### 4.2 テストダブル利用方針
+
+- **`FakeMailFetcher`**: 既存 `internal/imap/testutil/mocks.go` を再利用する
+- **`FakeStore`**: 既存 `internal/store/testutil/mocks.go` を再利用する。ステップ 1-4 で `ResetForRecovery`・`AbortReset`・`AcquireSummaryConsistencyGuard` を追加する
+- **`FakeSummaryConsistencyGuard`**: `internal/store/testutil/mocks.go` に新規追加する（`CheckRecoveryRequired` の戻り値を注入可能にする）。`SummaryConsistencyGuard` は `internal/store` の公開インターフェースであるため `testutil/mocks.go`（Classification A）へ配置する
+- **`SpyHandler`**: 既存 `internal/notify/testutil/mocks.go` を再利用する
+- **`SpyNotificationSink`**: `cmd/tlsrpt-digest/test_helpers.go`（`//go:build test`、`package main`）に定義する。`NotificationSink` は `package main` 内のインターフェースのため `testutil/` サブディレクトリではなく同パッケージに配置する
+
+### 4.3 テストデータ
+
+- `reprocess` ラウンドトリップテストには既存 `testdata/` の `.eml` ファイルを再利用する
+- `fetch` メール処理テストには `FakeMailFetcher` で人工データを渡す（`testdata/` の追加は不要）
+
+### 4.4 後方互換テスト
+
+- フェーズ移行時に常に `make test` がグリーンであること
+- `Store` インターフェース変更後、`var _ store.Store = (*storetestutil.FakeStore)(nil)` コンパイルチェックが継続して通ること
+
+---
+
+## 5. リスク管理
+
+| リスク | 影響度 | 緩和策 |
+|---|---|---|
+| `Store` インターフェース拡張による既存テストへの影響 | 中 | ステップ 1-4 で `FakeStore` を同時更新しコンパイルエラーで即座に検出する |
+| `notify.SystemError` 型変更（`ErrorType`→`Kind`）による既存コードへの影響 | 中 | ステップ 1-1 と 1-6 を連続して実施し、`primeNotifyHandlers` を main 再構成時に削除する |
+| `GenerateSummary` の区間変更（`(start, end]` → `[start, end)`）による既存動作への影響 | 低 | ステップ 1-5 でテストを先に更新し、境界値テストで変更前後の動作差異を明確にする |
+| `unix.Flock` の OS 互換性（Linux 固定） | 低 | 要件定義書の対象 OS は Linux のみ。必要に応じて `//go:build linux` タグを付与する |
+| `recover.go` の複数フェーズ破壊的操作の複雑性 | 高 | `internal/store.ResetForRecovery`・`AbortReset` にロジックを閉じ込め、`recover.go` は API 呼び出しのみに留める |
+
+---
+
+## 6. 実装チェックリスト
+
+### フェーズ 1
+
+- [ ] ステップ 1-1: `internal/notify` 型拡張完了
+- [ ] ステップ 1-2: `duration.go` と単体テスト完了
+- [ ] ステップ 1-3: `lock.go` と単体テスト完了
+- [ ] ステップ 1-4: `internal/store` 拡張と単体テスト完了
+- [ ] ステップ 1-5: `GenerateSummary` 区間修正と既存テスト更新完了
+- [ ] ステップ 1-6: `boot.go` と `main.go` 再構成・単体テスト完了
+- [ ] フェーズ 1 全体: `make test && make lint` がパスすること
+
+### フェーズ 2
+
+- [ ] ステップ 2-1: `fetch.go` と単体テスト完了
+- [ ] ステップ 2-2: `summary.go` と単体テスト完了
+- [ ] フェーズ 2 全体: `make test && make lint` がパスすること
+
+### フェーズ 3
+
+- [ ] ステップ 3-1: `gc.go` と単体テスト完了
+- [ ] ステップ 3-2: `recover.go` と単体テスト完了
+- [ ] ステップ 3-3: `reprocess.go` と単体テスト完了
+- [ ] フェーズ 3 全体: `make test && make lint` がパスすること
+
+### フェーズ 4
+
+- [ ] ステップ 4-1: セキュリティテスト・統合テスト完了
+- [ ] ステップ 4-2: ドキュメント整備完了
+- [ ] フェーズ 4 全体: `make test && make lint` がパスすること
+
+---
+
+## 7. 完了基準
+
+### 7.1 機能的完成基準
+
+- 全 5 サブコマンド（`fetch` / `summary` / `reprocess` / `gc` / `recover`）が動作し、`01_requirements.md` の全 AC（AC-01〜AC-45）に対応するテストが存在しパスすること
+
+### 7.2 品質基準
+
+- `make test && make lint` が全フェーズ完了後にグリーンであること
+- `var _ store.Store = (*storetestutil.FakeStore)(nil)` コンパイルチェックが継続して通ること
+- セキュリティテスト（`security_test.go`）の全項目がパスすること
+
+### 7.3 セキュリティ検証
+
+- `02_architecture.md` §7.3 に記載されたセキュリティ制約が実装されていることをテストで確認する:
+  - `config.Secret` ラップが `os.Getenv` 直後に行われること
+  - `NotificationSink` から `*notify.SlackHandler` が取得できないこと
+  - Slack payload に raw error・credentials・file path が含まれないこと
+
+### 7.4 ドキュメント完成基準
+
+- `README.md` の各サブコマンド使用例が追記済みであること
+- `docs/tasks/0070_entrypoint/notes/operational_examples.md` が作成済みであること
+
+---
+
+## 8. 受け入れ条件検証
+
+### F-001 サブコマンドとコマンドライン引数
+
+**AC-01**: 5 サブコマンドの受付
+- テスト: `cmd/tlsrpt-digest/main_test.go::TestSubcommandDispatch`
+- 実装: `cmd/tlsrpt-digest/main.go`（サブコマンド振り分け）
+
+**AC-02**: サブコマンド省略・不正フラグで usage 出力 + exit 2
+- テスト: `cmd/tlsrpt-digest/main_test.go::TestInvalidSubcommand`
+- 実装: `cmd/tlsrpt-digest/main.go`（`FlagSet` の `ContinueOnError` + usage 出力）
+
+**AC-03**: `-config` フラグで設定ファイルパス指定（全サブコマンド）
+- テスト: `cmd/tlsrpt-digest/main_test.go::TestConfigFlag`
+- 実装: 全サブコマンドの `FlagSet` への `-config` 登録
+
+**AC-04**: デフォルトパス `./config.toml`
+- テスト: `cmd/tlsrpt-digest/main_test.go::TestConfigDefaultPath`
+- 実装: `cmd/tlsrpt-digest/main.go`（`FlagSet` デフォルト値）
+
+**AC-05**: `fetch --since <duration>` フラグ
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetchSinceFlag`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（`FlagSet` への `--since` 登録）
+
+**AC-06**: `--since` が `imap.fetch_days` を上書きする
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetchSinceOverridesConfig`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（Duration フラグ解決の優先順位）
+
+**AC-07**: duration の `d`/`w` 単位共通パーサー
+- テスト: `cmd/tlsrpt-digest/duration_test.go::TestParseDuration`
+- 実装: `cmd/tlsrpt-digest/duration.go::ParseDuration`
+
+**AC-07a**: `summary --window` フラグ
+- テスト: `cmd/tlsrpt-digest/summary_test.go::TestSummaryWindowFlag`
+- 実装: `cmd/tlsrpt-digest/summary.go`（`FlagSet` への `--window` 登録）
+
+**AC-07b**: duration ≤ 0 でエラー
+- テスト: `cmd/tlsrpt-digest/duration_test.go::TestParseDurationInvalid`
+- 実装: `cmd/tlsrpt-digest/duration.go::ParseDuration`
+
+**AC-07c**: UTC 日付単位切り捨てカットオフ
+- テスト: `cmd/tlsrpt-digest/duration_test.go::TestCutoff`
+- 実装: `cmd/tlsrpt-digest/duration.go::Duration.Cutoff`
+
+**AC-07d**: summary 集計窓終端 = 今日の 00:00:00 UTC
+- テスト: `cmd/tlsrpt-digest/duration_test.go::TestUTCDayStart`
+- 実装: `cmd/tlsrpt-digest/duration.go::UTCDayStart`
+
+### F-002 コンポーネントの初期化
+
+**AC-08**: 設定読込失敗 → exit 1
+- テスト: `cmd/tlsrpt-digest/boot_test.go::TestBootstrap_ConfigLoadFail`
+- 実装: `cmd/tlsrpt-digest/boot.go::Bootstrap`（W-1）
+
+**AC-09**: ストア初期化失敗 → exit 1
+- テスト: `cmd/tlsrpt-digest/boot_test.go::TestBootstrap_StoreOpenFail`
+- 実装: `cmd/tlsrpt-digest/boot.go::Bootstrap`（W-6）
+
+**AC-10**: `fetch` IMAP 接続失敗 → exit 1
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_IMAPConnectFail`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（IMAP client 生成失敗時の `LogSystemError`）
+
+**AC-10a**: 書き込み系サブコマンドのプロセス排他ロック
+- テスト: `cmd/tlsrpt-digest/lock_test.go::TestAcquireExclusive_Concurrent`, `boot_test.go::TestBootstrap_LockFail`
+- 実装: `cmd/tlsrpt-digest/lock.go::AcquireExclusive`, `boot.go`（W-5）
+
+**AC-10c**: `summary` はロック不要・read-only・空ストア正常終了
+- テスト: `cmd/tlsrpt-digest/summary_test.go::TestSummary_EmptyStore`
+- 実装: `cmd/tlsrpt-digest/summary.go`（`OpenReadOnly` 使用・空集計 exit 0）
+
+### F-003 `fetch` サブコマンド
+
+**AC-10d / AC-10e**: `fetch` 起動直後の recovery-required 確認
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_RecoveryRequiredStops`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（ステップ 1 の `LoadRecoveryRequired`）
+
+**AC-11**: IMAP メタ情報取得（UID / RFC822.SIZE / SEEN / Message-ID / INTERNALDATE / UIDVALIDITY）
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_MetaFetch`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（`FetchMeta` 呼び出し）
+
+**AC-11a**: `LoadUIDValidity` で前回値取得・比較
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_UIDValidity_FirstRun`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（ステップ 3）
+
+**AC-11b**: `found=false` のとき即時 `SaveUIDValidity`
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_UIDValidity_FirstSave`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（ステップ 3 の `found=false` 分岐）
+
+**AC-11b-cont**: `found=true` かつ一致でフェッチ継続
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_UIDValidity_Match`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（ステップ 3 の一致分岐）
+
+**AC-11c / AC-11d**: UIDVALIDITY 不一致 → recovery-required 記録 + fail closed
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_UIDValidity_Mismatch`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（ステップ 3 の不一致分岐）
+
+**AC-12**: SEEN + `.eml` ありでスキップ
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_Skip_SeenWithLocalFile`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（ダウンロード対象選定テーブル）
+
+**AC-13 / AC-14**: RFC822.SIZE 不一致 WARN・処理継続
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_SizeMismatchWarn`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（`LogWarning(size_mismatch)` バッファリング）
+
+**AC-15 / AC-15a**: `.eml` 保存と `SaveEmailMetas` 一括登録
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_SaveEmailMetas`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（ステップ 5 の `SaveEmail`→`SaveEmailMetas`）
+
+**AC-16 / AC-16a**: パース・パース失敗時の WARN + スキップ + SEEN 継続
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_ParseFailWarn`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（`LogWarning(parse_failure)` バッファリング）
+
+**AC-17**: failure > 0 → `LogAlert`
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_AlertOnFailure`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（`NotificationSink.LogAlert` 呼び出し）
+
+**AC-18**: `SaveReports` 一括 UPSERT
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_SaveReports`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（ステップ 5）
+
+**AC-18a**: `Flush()` → SEEN の順序（at-least-once）
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_AtLeastOnceOrder`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（ステップ 12〜13 の順序）
+
+**AC-19**: `Flush()` 成功後に SEEN 付与
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_SeenAfterFlush`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（`MarkSeen` 呼び出し順序）
+
+**AC-20**: 1 件失敗が他に影響しない
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_PerEmailFailureIsolation`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（メール単位エラー継続処理）
+
+**AC-20a**: ステップ 5 完了後に `SaveUIDValidity` 冪等保存
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_SaveUIDValidity_AfterProcess`
+- 実装: `cmd/tlsrpt-digest/fetch.go`（ステップ 14）
+
+**AC-21**: exit 0 / exit 1
+- テスト: `cmd/tlsrpt-digest/fetch_test.go::TestFetch_ExitCodes`（正常完了 → exit 0、UIDVALIDITY 不一致 / Flush 失敗 / recovery-required 残存 → exit 1 を列挙）
+- 実装: `cmd/tlsrpt-digest/fetch.go`
+
+### F-004 `reprocess` サブコマンド
+
+**AC-21a**: recovery-required 確認 → 停止
+- テスト: `cmd/tlsrpt-digest/reprocess_test.go::TestReprocess_RecoveryRequiredStops`
+- 実装: `cmd/tlsrpt-digest/reprocess.go`
+
+**AC-22**: `LoadEmails` で `.eml` を列挙
+- テスト: `cmd/tlsrpt-digest/reprocess_test.go::TestReprocess_LoadEmails`
+- 実装: `cmd/tlsrpt-digest/reprocess.go`
+
+**AC-23a / AC-23**: `SaveEmailMetas` → `SaveReports` の順序
+- テスト: `cmd/tlsrpt-digest/reprocess_test.go::TestReprocess_CallOrder`
+- 実装: `cmd/tlsrpt-digest/reprocess.go`（`02_architecture.md` §6.6 参照）
+
+**AC-24 / AC-24a**: `--notify` フラグと `Flush()` 呼び出し
+- テスト: `cmd/tlsrpt-digest/reprocess_test.go::TestReprocess_NotifyFlag`
+- 実装: `cmd/tlsrpt-digest/reprocess.go`
+
+**AC-25**: 失敗種別による挙動の違い（スキップ継続 vs. コマンド中断）
+- テスト: `cmd/tlsrpt-digest/reprocess_test.go::TestReprocess_FailureHandling`
+- 実装: `cmd/tlsrpt-digest/reprocess.go`
+
+**AC-26**: exit 0 / exit 1
+- テスト: `cmd/tlsrpt-digest/reprocess_test.go::TestReprocess_ExitCodes`（正常完了 → exit 0、recovery-required 残存 / SaveReports 失敗 / Flush 失敗 → exit 1 を列挙）
+- 実装: `cmd/tlsrpt-digest/reprocess.go`
+
+### F-005 `summary` サブコマンド
+
+**AC-27**: `[start, end)` 区間で集計
+- テスト: `cmd/tlsrpt-digest/summary_test.go::TestSummary_Window`, `internal/notify/aggregate_test.go`（境界値テスト更新）
+- 実装: `cmd/tlsrpt-digest/summary.go` + `internal/notify/aggregate.go`（`inSummaryPeriod` 修正）
+
+**AC-27a**: recovery-required → 集計・送信なし exit 1
+- テスト: `cmd/tlsrpt-digest/summary_test.go::TestSummary_RecoveryRequired`
+- 実装: `cmd/tlsrpt-digest/summary.go`（第 1 回・第 2 回 `CheckRecoveryRequired`）
+
+**AC-28**: 送信メッセージに集計対象期間を含める
+- テスト: `cmd/tlsrpt-digest/summary_test.go::TestSummary_PeriodInMessage`
+- 実装: `cmd/tlsrpt-digest/summary.go`（`LogSummary` へ渡す `notify.Summary.Period`）
+
+**AC-29**: exit 0 / exit 1
+- テスト: `cmd/tlsrpt-digest/summary_test.go::TestSummary_ExitCodes`（空集計 / 正常送信 → exit 0、recovery-required 残存 / Flush 失敗 → exit 1 を列挙）
+- 実装: `cmd/tlsrpt-digest/summary.go`
+
+### F-006 `gc` サブコマンド
+
+**AC-29a**: recovery-required → 削除なし exit 1
+- テスト: `cmd/tlsrpt-digest/gc_test.go::TestGC_RecoveryRequiredStops`
+- 実装: `cmd/tlsrpt-digest/gc.go`
+
+**AC-30**: `--before` フラグ
+- テスト: `cmd/tlsrpt-digest/gc_test.go::TestGC_BeforeFlag`
+- 実装: `cmd/tlsrpt-digest/gc.go`（`FlagSet` への `--before` 登録）
+
+**AC-31**: `--before` 省略時のデフォルト設定値
+- テスト: `cmd/tlsrpt-digest/gc_test.go::TestGC_BeforeDefault`
+- 実装: `cmd/tlsrpt-digest/gc.go`（`store.retention_days` フォールバック）
+
+**AC-32**: `DeleteReportsBefore` へ UTC 切り捨て済みカットオフを渡す
+- テスト: `cmd/tlsrpt-digest/gc_test.go::TestGC_ReportsCutoff`
+- 実装: `cmd/tlsrpt-digest/gc.go`（`Duration.Cutoff(now)` → `DeleteReportsBefore`）
+
+**AC-32a / AC-32b**: `--max-email-age` フラグと `DeleteEmailsBefore` 呼び出し
+- テスト: `cmd/tlsrpt-digest/gc_test.go::TestGC_EmailsCutoff`
+- 実装: `cmd/tlsrpt-digest/gc.go`（`Duration.Cutoff(now)` → `DeleteEmailsBefore`）
+
+**AC-33**: 削除件数 INFO ログ
+- テスト: `cmd/tlsrpt-digest/gc_test.go::TestGC_DeleteCountLog`
+- 実装: `cmd/tlsrpt-digest/gc.go`（`slog.Info` 出力）
+
+**AC-34**: exit 0 / exit 1
+- テスト: `cmd/tlsrpt-digest/gc_test.go::TestGC_ExitCodes`（正常完了 → exit 0、recovery-required 残存 / DeleteReportsBefore 失敗 → exit 1 を列挙）
+- 実装: `cmd/tlsrpt-digest/gc.go`
+
+### F-007 `recover` サブコマンド
+
+**AC-35**: `--mode` フラグ
+- テスト: `cmd/tlsrpt-digest/recover_test.go::TestRecover_ModeFlag`
+- 実装: `cmd/tlsrpt-digest/recover.go`（`FlagSet` への `--mode` 登録）
+
+**AC-36**: recovery-required 内容の stdout 表示
+- テスト: `cmd/tlsrpt-digest/recover_test.go::TestRecover_DisplayInfo`
+- 実装: `cmd/tlsrpt-digest/recover.go`（stdout 出力ロジック）
+
+**AC-37**: `keep-old` で `ApplyRecovery` 呼び出し
+- テスト: `cmd/tlsrpt-digest/recover_test.go::TestRecover_KeepOld`
+- 実装: `cmd/tlsrpt-digest/recover.go`
+
+**AC-38**: `discard-old --yes` で `ResetForRecovery` 呼び出し
+- テスト: `cmd/tlsrpt-digest/recover_test.go::TestRecover_DiscardOldWithYes`
+- 実装: `cmd/tlsrpt-digest/recover.go` + `internal/store/recovery.go`
+
+**AC-39**: `discard-old`（`--yes` なし）は変更なし exit 1
+- テスト: `cmd/tlsrpt-digest/recover_test.go::TestRecover_DiscardOldWithoutYes`
+- 実装: `cmd/tlsrpt-digest/recover.go`
+
+**AC-40**: recovery-required 不在 → 説明付き exit 1
+- テスト: `cmd/tlsrpt-digest/recover_test.go::TestRecover_NoRecoveryRequired`
+- 実装: `cmd/tlsrpt-digest/recover.go`
+
+**AC-41**: 中途半端な状態を残さない
+- テスト: `internal/store/recovery_test.go::TestResetForRecovery_CrashRecovery`
+- 実装: `internal/store/recovery.go::ResetForRecovery`
+
+**AC-42**: `--abort-reset`/`--yes` 単独はエラー
+- テスト: `cmd/tlsrpt-digest/recover_test.go::TestRecover_AbortReset_FlagCombination`
+- 実装: `cmd/tlsrpt-digest/recover.go`（フラグ組み合わせ検証）
+
+**AC-43**: `--abort-reset --yes` は commit 前 pending reset でのみ有効
+- テスト: `cmd/tlsrpt-digest/recover_test.go::TestRecover_AbortReset_CommitBoundary`, `internal/store/recovery_test.go::TestAbortReset_Preconditions`
+- 実装: `cmd/tlsrpt-digest/recover.go` + `internal/store/recovery.go::AbortReset`
+
+**AC-44**: `--abort-reset --yes` の再実行冪等性
+- テスト: `internal/store/recovery_test.go::TestAbortReset_Idempotent`
+- 実装: `internal/store/recovery.go::AbortReset`
+
+**AC-45**: pending reset 検出時の選択肢表示
+- テスト: `cmd/tlsrpt-digest/recover_test.go::TestRecover_PendingReset_DisplayOptions`
+- 実装: `cmd/tlsrpt-digest/recover.go`
+
+---
+
+## 9. 次のステップ
+
+実装計画書が `approved` になったら、`02_architecture.md` §8 の順序（フェーズ 1 → 2 → 3 → 4）に従い実装を開始する。各フェーズ完了後に `make test && make lint` が通ることを確認してから次フェーズへ進む。
