@@ -19,12 +19,23 @@
 `cmd/tlsrpt-digest/main.go` を 5 サブコマンド（`fetch` / `summary` / `reprocess` / `gc` / `recover`）による one-shot 実行アーキテクチャへ移行する。
 詳細設計は [`02_architecture.md`](02_architecture.md) を参照。
 
-### 1.2 実装方針
+### 1.2 実装原則
 
-- 既存 `internal/{config,imap,tlsrpt,mailparse,notify,store}` パッケージの責務を再実装しない
-- `cmd` レイヤーは薄いオーケストレーションに徹する
-- 各フェーズ完了後に `make test && make lint` が通ることを確認してから次フェーズへ進む
-- Go ソースのコメント・識別子・文字列リテラルに日本語を含めない
+- `cmd` レイヤーはオーケストレーションに限定し、IMAP、TLSRPT パース、Slack 送信、ストア永続化の既存実装を再実装しない。
+- 書き込み系サブコマンドは `02_architecture.md` §3.3 のプロセス排他ロックを使う。store open mode は `02_architecture.md` §6.5 に従い、通常の書き込み系は `OpenReadWrite`、pending reset を扱う `recover --mode discard-old --yes` と `recover --abort-reset --yes` は `OpenRecoverReset`、`summary` は `OpenReadOnly` を使う。
+- 通知は `NotificationSink` facade に閉じ込め、Go ソース内のコメント、識別子、固定メッセージは英語で記述する。日本語は本計画書とユーザー向け文書に限定する。
+- 各ステップ完了後に `make test && make lint` が通ることを確認してから次ステップへ進む。
+- 新規テストヘルパーは必要なものだけ追加する。`cmd/tlsrpt-digest` 内で未公開型を扱うものは `test_helpers.go` または `test_helpers_<category>.go` に `//go:build test` を付ける。これらに依存する `_test.go` も同じ `//go:build test` を付ける。plain `go test ./...` では production build と tag なしテストのコンパイルを確認し、`go test ./... -tags test` で acceptance test を実行する。既存の cross-package fake は `internal/imap/testutil/mocks.go`、`internal/store/testutil/mocks.go` を拡張して再利用する。
+
+### 1.3 既存コード調査結果
+
+- `cmd/tlsrpt-digest/main.go` には Phase 1 logging、既存 Slack handler 構築、`loadConfig`、`buildIMAPConfig`、`storeOpenMode` の足場がある。これらは `boot.go` へ移管またはサブコマンド dispatch に接続する。
+- `cmd/tlsrpt-digest/main_test.go` には Slack handler 非接続、設定読込、store open mode の既存テストがある。重複を避け、サブコマンド parse と boot のテストへ再配置する。
+- `internal/imap/testutil.FakeMailFetcher` は `FetchMeta` / `Download` / `MarkSeen` / `Close` の呼び出し記録を持つため、`fetch` テストで再利用する。
+- `internal/store/testutil.FakeStore` は `SaveReports`、`SaveEmailMetas`、`SaveEmail`、UIDVALIDITY、recovery-required、GC API を持つため、追加 store API と summary guard のみ拡張する。
+- `internal/notify.GenerateSummary` は現状 `(start, end]` 判定なので、`02_architecture.md` §3.1 に従い `[start, end)` へ変更し、既存 `aggregate_test.go` を更新する。
+- `internal/notify` には `LogAlert` / `LogSystemError` / `LogSummary` があるが、`LogWarning`、`Warning`、安全化された `SystemErrorKind` は未実装のため追加する。
+- `internal/store` には `ApplyRecovery` まで実装済みだが、`ResetForRecovery`、`AbortReset`、`OpenRecoverReset`、summary consistency guard、pending reset の状態管理は未実装である。
 
 ---
 
