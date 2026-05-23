@@ -511,8 +511,8 @@ type SubcommandRunner interface {
 - **sentinel と分離する理由**: sentinel ファイル（`.tlsrpt-digest-meta.json`）は store の整合性管理対象であり、復旧処理で更新される。専用ファイルへ分離することでロックの責務と store データの責務を独立させる。
 
 **取得・解放の契約**
-- **取得方式**: 書き込み系サブコマンドは store 単位の排他ロックを取得する。取得できない場合は他プロセス保持中とみなし、待機せず `LogSystemError` + `Flush()` + exit 1 とする。具体的な OS API は実装計画で確定する。
-- **解放方式**: ロックは `BootContext.LockHandle` で保持し、サブコマンド完了時に解放する。`LockHandle.Close()` は明示的な解放境界を表す。
+- **取得方式**: 書き込み系サブコマンドは store 単位の排他ロックを取得する。取得できない場合は他プロセス保持中とみなし、待機せず `LogSystemError` + `Flush()` + exit 1 とする。複数プロセスが同時にロック取得を試みた場合、それぞれが独立して `lock_held` 通知を Slack へ送信し得る（重複は許容する）。具体的な OS API は実装計画で確定する。
+- **解放方式**: ロックは `BootContext.LockHandle` で保持し、サブコマンド完了時に解放する。`LockHandle.Close()` は明示的な解放境界を表す。`boot.go` はロック取得（W-5）直後に `defer LockHandle.Close()` を登録し、W-6（`store.Open`）失敗を含む以降のすべての異常終了パスでロックが確実に解放されることを保証する。
 - **ロック前提条件**: ロック取得前に `{root_dir}` の存在を保証する必要がある（初回実行時の親ディレクトリ不在を回避）。ストアの完全初期化（sentinel 検証・`tlsrpt.json` 作成）はロック取得後に実行する。
 
 **適用範囲と責務分離**
@@ -522,17 +522,17 @@ type SubcommandRunner interface {
 
 ### 3.4 共通初期化シーケンス（書き込み系の手順）
 
-書き込み系サブコマンドの**実際の実行順序**は `W-1 → W-2 → W-3 → W-4 → W-5 → W-6`（W-2 はシークレットを触る前に実行）。`W-3f`（IMAP 認証情報）は `fetch` 専用の条件付きステップで W-3 の直後に実行する。以下のテーブルの行順は実行順と一致する。
+書き込み系サブコマンドの**実際の実行順序**は `W-1 → W-2 → W-3 → W-4 → W-5 → W-6`、`fetch` のみさらに `W-6f`（IMAP 認証情報取得）が続く。以下のテーブルの行順は実行順と一致する。
 
 | 順 | 処理 | 失敗時の挙動 |
 |---|---|---|
 | W-1 | `config.LoadFile(path, logger)` で設定読込 | stderr 出力 + exit 1（Slack ハンドラ未構築のため通知不可） |
-| W-2 | `{root_dir}` を `0700` で作成（不在時のみ）。ロックファイルの親ディレクトリを保証するための最小操作。**W-3 より前に実行**（シークレット取得前に失敗を確定させるため） | stderr 出力 + exit 1 |
+| W-2 | `{root_dir}` を `0700` で作成（不在時のみ）。ロックファイルの親ディレクトリを保証するための最小操作。**W-3 より前に実行**（シークレット取得前に失敗を確定させるため）。既存パスが存在する場合は「通常ディレクトリかつ許容パーミッション（`0700` または `0750`）であること」を検証し、symlink・通常ファイル・パーミッション不足はエラーとする（symlink 経由で意図しないパスに lock/store を作成する TOCTOU を防ぐ） | stderr 出力 + exit 1 |
 | W-3 | 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` / `TLSRPT_SLACK_WEBHOOK_URL_ERROR` を取得し、**即座に `config.Secret` でラップ**してローカル変数へ。生 `string` は `BootContext` 外へ持ち出さない。通知が発生し得るサブコマンドでは URL 未設定を boot error とする。`summary` の空集計パスだけは notifier を構築しないため URL 未設定でも exit 0 とする | stderr 出力 + exit 1 |
-| W-3f | `fetch` のみ、recovery-required 確認後かつ IMAP 接続直前に `TLSRPT_IMAP_USERNAME` を `string` として、`TLSRPT_IMAP_PASSWORD` を即座に `config.Secret` でラップして取得する（ADR-0002 §4.3）。`gc` / `recover` / `reprocess` / 空ストア `summary` は IMAP 認証情報を要求しない | `LogSystemError` + `Flush()` + exit 1 |
 | W-4 | `notify.BuildHandlers(env URLs, allowed_host)` で Slack ハンドラ構築。`BuildHandlers` は all-or-nothing で `[]*SlackHandler` を返す（part-success の中間状態を生じない） | stderr 出力 + exit 1 |
 | W-5 | store 単位のプロセス排他ロック取得 | `LogSystemError` + `Flush()` + exit 1 |
 | W-6 | `store.Open(rootDir, identity, OpenReadWrite)` でストアの完全初期化（sentinel 検証・`tlsrpt.json` 作成等） | `LogSystemError` + `Flush()` + exit 1。エラー分類は [4.2](#42-エラー伝達方針) を参照 |
+| W-6f | `fetch` のみ、recovery-required 確認後かつ IMAP 接続直前に `TLSRPT_IMAP_USERNAME` を `string` として、`TLSRPT_IMAP_PASSWORD` を即座に `config.Secret` でラップして取得する（ADR-0002 §4.3）。`gc` / `recover` / `reprocess` / 空ストア `summary` は IMAP 認証情報を要求しない | `LogSystemError` + `Flush()` + exit 1 |
 
 **`summary` の初期化フロー**（詳細は [§6.7](#67-summary-の空ストア時シーケンス)）
 
