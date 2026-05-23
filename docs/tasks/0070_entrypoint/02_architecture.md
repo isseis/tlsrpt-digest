@@ -19,7 +19,7 @@
 | 用語 | 意味 |
 |---|---|
 | 外部スケジューラ | systemd timer または cron |
-| 書き込み系サブコマンド | `fetch` / `gc` / `recover` / `reprocess` の 4 種。ストアを `OpenReadWrite` で開きプロセス排他ロックを取得する |
+| 書き込み系サブコマンド | `fetch` / `gc` / `recover` / `reprocess` の 4 種。プロセス排他ロックを取得してからストアを `OpenReadWrite` で開く |
 | 読み取り系サブコマンド | `summary`。ストアを `OpenReadOnly` で開き、プロセス排他ロックは取得しない |
 | SubcommandRunner | 各サブコマンドの実装が満たす Go インターフェース。`internal/notify.SlackHandler` との名称衝突を避けるため `Handler` ではなくこの名称を採用する |
 | fail closed | 完全性が保証できない場合に処理を **開始しない**こと（途中での中断ではなく事前停止） |
@@ -243,7 +243,7 @@ sequenceDiagram
 
 **IMAP 認証情報（fetch 専用）**
 - `fetch` 以外では不要なため、この共通初期化では取得しない。
-- `fetch` は recovery-required 確認後、IMAP 接続を作る直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を読み、即座に `config.Secret` でラップする。
+- `fetch` は recovery-required 確認後、IMAP 接続を作る直前に `TLSRPT_IMAP_USERNAME` を `string` として、`TLSRPT_IMAP_PASSWORD` を即座に `config.Secret` でラップして取得する（ADR-0002 §4.3）。
 
 **summary ブランチの所有権**
 - `GenerateSummary`・summary consistency guard による `CheckRecoveryRequired` 2 回目（空集計パスはステップ 4a、非空パスはステップ 5）・非空パスの notifier 構築はすべて `boot.go` ではなく `summary.go` が実行する。シーケンス図では `summary` ブランチ全体の流れを示すために `boot.go` 名義で図示している（[6.7](#67-summary-の空ストア時シーケンス) 参照）。
@@ -377,9 +377,10 @@ type BootContext struct {
 }
 
 // IMAPCredentials は環境変数 TLSRPT_IMAP_USERNAME / TLSRPT_IMAP_PASSWORD を
-// fetch の IMAP 接続直前に取得し Secret 化したもの。生 string を関数境界外には漏らさない。
+// fetch の IMAP 接続直前に取得したもの。Username はデバッグ可視性のため string、
+// Password は config.Secret でラップして関数境界外へ漏らさない（ADR-0002 §4.3）。
 type IMAPCredentials struct {
-    Username config.Secret
+    Username string
     Password config.Secret
 }
 
@@ -522,7 +523,7 @@ type SubcommandRunner interface {
 | W-1 | `config.LoadFile(path, logger)` で設定読込 | stderr 出力 + exit 1（Slack ハンドラ未構築のため通知不可） |
 | W-2 | `{root_dir}` を `0700` で作成（不在時のみ）。ロックファイルの親ディレクトリを保証するための最小操作。**W-3 より前に実行**（シークレット取得前に失敗を確定させるため） | stderr 出力 + exit 1 |
 | W-3 | 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` / `TLSRPT_SLACK_WEBHOOK_URL_ERROR` を取得し、**即座に `config.Secret` でラップ**してローカル変数へ。生 `string` は `BootContext` 外へ持ち出さない。通知が発生し得るサブコマンドでは URL 未設定を boot error とする。`summary` の空集計パスだけは notifier を構築しないため URL 未設定でも exit 0 とする | stderr 出力 + exit 1 |
-| W-3f | `fetch` のみ、recovery-required 確認後かつ IMAP 接続直前に `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` を取得し、**即座に `config.Secret` でラップ**する。`gc` / `recover` / `reprocess` / 空ストア `summary` は IMAP 認証情報を要求しない | `LogSystemError` + `Flush()` + exit 1 |
+| W-3f | `fetch` のみ、recovery-required 確認後かつ IMAP 接続直前に `TLSRPT_IMAP_USERNAME` を `string` として、`TLSRPT_IMAP_PASSWORD` を即座に `config.Secret` でラップして取得する（ADR-0002 §4.3）。`gc` / `recover` / `reprocess` / 空ストア `summary` は IMAP 認証情報を要求しない | `LogSystemError` + `Flush()` + exit 1 |
 | W-4 | `notify.BuildHandlers(env URLs, allowed_host)` で Slack ハンドラ構築。`BuildHandlers` は all-or-nothing で `[]*SlackHandler` を返す（part-success の中間状態を生じない） | stderr 出力 + exit 1 |
 | W-5 | store 単位のプロセス排他ロック取得 | `LogSystemError` + `Flush()` + exit 1 |
 | W-6 | `store.Open(rootDir, identity, OpenReadWrite)` でストアの完全初期化（sentinel 検証・`tlsrpt.json` 作成等） | `LogSystemError` + `Flush()` + exit 1。エラー分類は [4.2](#42-エラー伝達方針) を参照 |
