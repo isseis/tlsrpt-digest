@@ -20,11 +20,13 @@ Work in the following order.
 - Check the relevant packages, tests, and test helpers under `cmd/` and `internal/`.
 - Identify existing functions, tests, and helper utilities that should be reused.
 - Do not plan to re-implement logic or add duplicate tests when the repository already has suitable coverage or reusable helpers.
+- Identify and prepare findings for the `既存コード調査結果` subsection to be included in `03_implementation_plan.md` (see step 6). This is a sequential preparation step. For each relevant area, note: what already exists, what is missing, and what needs to change. Omit areas where the existing code requires no attention.
 
 6. Create `03_implementation_plan.md` in the same task directory.
 - Write in Japanese.
 - Set the document status to `draft`.
 - Include all required sections defined in `docs/dev/developer_guide/requirements_process.md`.
+- Add a `既存コード調査結果` subsection under the implementation overview (§1), incorporating the detailed findings from step 5. If no findings were identified in step 5, explicitly state that no existing code changes are required.
 - Organize work into small, phase-based steps with checkboxes.
 - Explicitly map each acceptance criterion to the tasks and tests that will verify it.
 - Include at least one concrete test task for each acceptance criterion.
