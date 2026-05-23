@@ -359,7 +359,7 @@ flowchart LR
 - **独自型の理由**: `d` / `w` 単位を「整数日数」として正規化し、CLI 入力制約（1 日以上・日/週単位のみ）を 1 か所に閉じ込めるため。Go 標準の `time.Duration` では `d`/`w` 単位をネイティブに扱えない。
 - **`Cutoff(now)` の動作**: `Duration` が保持する日数をレシーバとして受け取り、`now` を UTC 日付の開始時刻（00:00:00 UTC）に切り捨ててからその日数を遡った時刻を返す。スケジューラ起動タイミングのジッターが集計窓・保持期間の境界に影響しないようにするため（AC-07c）。
 - **`UTCDayStart(now)` の動作**: `summary` 集計窓の終端として使用する「今日の 00:00:00 UTC」を返す（AC-07d）。
-- **半開区間 `[start, end)`**: `end` 自体は含まない。開始・終端が両方 UTC 暦日境界に揃うため、週次実行での重複・欠落が生じない。
+- **半開区間 `[start, end)`**: `end` 自体は含まない。開始・終端が両方 UTC 暦日境界に揃うため、週次実行での重複・欠落が生じない。現行の `internal/notify.GenerateSummary` は `(start, end]`（start 除外・end 含む）で実装されているため、本タスクの実装時に `[start, end)` へ変更する（`inSummaryPeriod` の条件式と対応するテストを更新する）。
 - **公開ヘルパー**: 実装では `Duration.Cutoff(now time.Time) time.Time` と `UTCDayStart(now time.Time) time.Time` を提供し、サブコマンド間で期間算出を統一する。
 
 ```go
