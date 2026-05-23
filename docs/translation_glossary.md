@@ -290,6 +290,7 @@
 | 優先順位 | priority order | |
 | 優先規則 | priority rules | 複数の選択肢から優先適用する規則 |
 | プロセス | process | |
+| 公開仕様 | public contract | API や振る舞いの対外的な約束 |
 | 処理 | processing | |
 | プロジェクト | project | |
 | プログラムによる処理 | programmatic processing | |
