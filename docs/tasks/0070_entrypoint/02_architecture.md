@@ -180,7 +180,7 @@ sequenceDiagram
     U->>M: tlsrpt-digest <subcmd> -config ...
     M->>B: Bootstrap(subcmd)
     Note over B: W-1: 設定読込
-    B->>CFG: LoadFile(path)
+    B->>CFG: LoadFile(path, logger)
     CFG-->>B: *Config or error
     Note over B: 失敗時: stderr 出力 + exit 1
     alt 書き込み系サブコマンド (fetch/gc/recover/reprocess)
@@ -209,7 +209,7 @@ sequenceDiagram
         S-->>B: found / not found
         Note over B: found = true → §3.4 の W-3・W-4 で notifier 構築 → SystemErrorKind=recovery_required + Flush + exit 1
         Note over B,N: found = false → 集計窓算出 + GenerateSummary（[6.7] ステップ 3）
-        B->>N: GenerateSummary(ctx, store, Cutoff(now), UTCDayStart(now), debugLogger)
+        B->>N: GenerateSummary(ctx, store, window.Cutoff(now), UTCDayStart(now), debugLogger)
         N-->>B: Summary（空 or 非空）
         alt Summary が空（[6.7] ステップ 4a）
             Note over B,S: 第 2 回 CheckRecoveryRequired（空パス用）
