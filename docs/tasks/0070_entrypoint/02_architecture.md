@@ -355,8 +355,9 @@ flowchart LR
 
 `Duration` 型と関連関数の設計判断：
 
+- **型の意味**: 「過去 7 日間」「過去 4 週間」のように、現在から遡る相対的な日数（整数）を表す。`fetch --since 7d` や `summary --window 1w` などの CLI フラグ値を保持するために使う。
 - **独自型の理由**: `d` / `w` 単位を「整数日数」として正規化し、CLI 入力制約（1 日以上・日/週単位のみ）を 1 か所に閉じ込めるため。Go 標準の `time.Duration` では `d`/`w` 単位をネイティブに扱えない。
-- **`Cutoff(now)` の動作**: 現在時刻を UTC 日付単位で切り捨ててから指定日数を遡って返す。これがすべての duration フラグのカットオフ（開始側）となる（AC-07c）。
+- **`Cutoff(now)` の動作**: `Duration` が保持する日数をレシーバとして受け取り、`now` を UTC 日付の開始時刻（00:00:00 UTC）に切り捨ててからその日数を遡った時刻を返す。スケジューラ起動タイミングのジッターが集計窓・保持期間の境界に影響しないようにするため（AC-07c）。
 - **`UTCDayStart(now)` の動作**: `summary` 集計窓の終端として使用する「今日の 00:00:00 UTC」を返す（AC-07d）。
 - **半開区間 `[start, end)`**: `end` 自体は含まない。開始・終端が両方 UTC 暦日境界に揃うため、週次実行での重複・欠落が生じない。
 - **公開ヘルパー**: 実装では `Duration.Cutoff(now time.Time) time.Time` と `UTCDayStart(now time.Time) time.Time` を提供し、サブコマンド間で期間算出を統一する。
@@ -448,6 +449,11 @@ type SummaryConsistencyGuard interface {
 type Duration struct {
     Days int // 内部表現は日数。週指定は ×7 で正規化する。
 }
+
+// Cutoff は now を UTC 日付の開始時刻（00:00:00 UTC）に切り捨ててから
+// レシーバが保持する日数（Days）を遡った時刻を返す（AC-07c）。
+// 「指定日数」はレシーバ自身が保持しており、now は基準時刻のみを担う。
+func (d Duration) Cutoff(now time.Time) time.Time
 
 // SubcommandRunner は各サブコマンドが満たすインターフェース。
 // internal/notify.SlackHandler との名称衝突を避け Handler ではなくこの名称とする。
