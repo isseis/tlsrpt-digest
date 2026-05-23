@@ -69,49 +69,7 @@
 
 ---
 
-#### ステップ 1-2: `duration.go` の作成
-
-**新規ファイル**: `cmd/tlsrpt-digest/duration.go`, `cmd/tlsrpt-digest/duration_test.go`
-
-**見積工数**: 0.5 日
-**実績工数**: -
-
-- [ ] `duration.go` に `Duration` 型（`Days int`）を定義する（`02_architecture.md` §3.1 参照）
-- [ ] `ParseDuration(s string) (Duration, error)` を実装する: `d` / `w` 単位のみ受け付け、週は日数（`×7`）に正規化する。パース後の値が 0 以下の場合はエラーを返す（AC-07b）
-- [ ] `(d Duration) Cutoff(now time.Time) time.Time` を実装する: `now` を UTC 日付の開始時刻（`00:00:00 UTC`）に切り捨ててから `d.Days` 日遡る（AC-07c）
-- [ ] `UTCDayStart(now time.Time) time.Time` を実装する: 「今日の `00:00:00 UTC`」を返す（AC-07d）
-- [ ] `duration_test.go` に以下のテストを追加する:
-  - [ ] 正常パース: `1d`（Days=1）・`7d`（Days=7）・`1w`（Days=7）・`4w`（Days=28）・`30d`（Days=30）（AC-07 / AC-07b）
-  - [ ] エラー: `0d`・`-1d`・`-2w`・`30h`・`abc`・空文字（AC-07b）
-  - [ ] `Cutoff(now)` の UTC 切り捨て: UTC 02:01:00 に `Days=7` のカットオフが「7 日前の 00:00:00 UTC」になること（「7 日前の 02:01:00」ではないこと）（AC-07c）
-  - [ ] 週指定（`1w`）でも UTC 日付単位の切り捨てが行われること（AC-07c）
-  - [ ] `UTCDayStart(now)` が任意の時刻に対して「今日の 00:00:00 UTC」を返すこと（AC-07d）
-  - [ ] `--window 1w` を 2000-12-10 10:00 UTC に実行したとき `start=2000-12-03 00:00 UTC`・`end=2000-12-10 00:00 UTC` となり重複・欠落がないこと（AC-07d 統合確認）
-
-**完了確認**: `make test && make lint` がパスする
-
----
-
-#### ステップ 1-3: `lock.go` の作成
-
-**新規ファイル**: `cmd/tlsrpt-digest/lock.go`, `cmd/tlsrpt-digest/lock_test.go`
-
-**見積工数**: 0.5 日
-**実績工数**: -
-
-OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
-
-- [ ] `lock.go` に `LockHandle` インターフェース（`Close() error`）を定義する
-- [ ] `AcquireExclusive(lockPath string) (LockHandle, error)` を実装する: `golang.org/x/sys/unix` の `unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)` を使い non-blocking 排他ロックを取得する。取得失敗時は即時エラーを返す（待機しない）
-- [ ] `lock_test.go` に以下のテストを追加する:
-  - [ ] 同一パスに対して 2 回目の `AcquireExclusive` が即時失敗すること（AC-10a）
-  - [ ] `Close()` 後に同パスへのロック再取得が成功すること（解放確認）
-
-**完了確認**: `make test && make lint` がパスする
-
----
-
-#### ステップ 1-4: `internal/store` の拡張
+#### ステップ 1-2: `internal/store` の拡張
 
 **変更ファイル**: `internal/store/types.go`, `internal/store/store.go`, `internal/store/recovery.go`, `internal/store/errors.go`, `internal/store/store_test.go`, `internal/store/recovery_test.go`, `internal/store/testutil/mocks.go`
 
@@ -158,7 +116,7 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
 
 ---
 
-#### ステップ 1-5: `GenerateSummary` 集計区間修正
+#### ステップ 1-3: `GenerateSummary` 集計区間修正
 
 **変更ファイル**: `internal/notify/aggregate.go`, `internal/notify/aggregate_test.go`
 
@@ -169,6 +127,63 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
 
 - [ ] `internal/notify/aggregate.go` の `inSummaryPeriod` を `(start, end]`（start 除外・end 含む）から `[start, end)`（start 含む・end 除外）へ変更する: `reportEnd.After(start) && (reportEnd.Equal(end) || reportEnd.Before(end))` を `!reportEnd.Before(start) && reportEnd.Before(end)` に変更する
 - [ ] `internal/notify/aggregate_test.go` の境界値テストを `[start, end)` セマンティクスに合わせて更新する（start と等しい `reportEnd` が含まれ、`end` と等しい `reportEnd` が除外されることを確認する）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+### PR-1 作成ポイント: `internal` API 拡張
+
+**対象ステップ**: 1-1 / 1-2 / 1-3
+
+**推奨タイトル**: `feat(task 0070): extend internal notify/store APIs for entrypoint`
+
+**レビュー観点**: `internal/store` recovery API の不変条件 / `internal/notify` payload 安全性 / `[start, end)` 区間変更
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（ステップ 1-4 以降は新しいブランチで作業する）
+
+---
+
+#### ステップ 1-4: `duration.go` の作成
+
+**新規ファイル**: `cmd/tlsrpt-digest/duration.go`, `cmd/tlsrpt-digest/duration_test.go`
+
+**見積工数**: 0.5 日
+**実績工数**: -
+
+- [ ] `duration.go` に `Duration` 型（`Days int`）を定義する（`02_architecture.md` §3.1 参照）
+- [ ] `ParseDuration(s string) (Duration, error)` を実装する: `d` / `w` 単位のみ受け付け、週は日数（`×7`）に正規化する。パース後の値が 0 以下の場合はエラーを返す（AC-07b）
+- [ ] `(d Duration) Cutoff(now time.Time) time.Time` を実装する: `now` を UTC 日付の開始時刻（`00:00:00 UTC`）に切り捨ててから `d.Days` 日遡る（AC-07c）
+- [ ] `UTCDayStart(now time.Time) time.Time` を実装する: 「今日の `00:00:00 UTC`」を返す（AC-07d）
+- [ ] `duration_test.go` に以下のテストを追加する:
+  - [ ] 正常パース: `1d`（Days=1）・`7d`（Days=7）・`1w`（Days=7）・`4w`（Days=28）・`30d`（Days=30）（AC-07 / AC-07b）
+  - [ ] エラー: `0d`・`-1d`・`-2w`・`30h`・`abc`・空文字（AC-07b）
+  - [ ] `Cutoff(now)` の UTC 切り捨て: UTC 02:01:00 に `Days=7` のカットオフが「7 日前の 00:00:00 UTC」になること（「7 日前の 02:01:00」ではないこと）（AC-07c）
+  - [ ] 週指定（`1w`）でも UTC 日付単位の切り捨てが行われること（AC-07c）
+  - [ ] `UTCDayStart(now)` が任意の時刻に対して「今日の 00:00:00 UTC」を返すこと（AC-07d）
+  - [ ] `--window 1w` を 2000-12-10 10:00 UTC に実行したとき `start=2000-12-03 00:00 UTC`・`end=2000-12-10 00:00 UTC` となり重複・欠落がないこと（AC-07d 統合確認）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+#### ステップ 1-5: `lock.go` の作成
+
+**新規ファイル**: `cmd/tlsrpt-digest/lock.go`, `cmd/tlsrpt-digest/lock_test.go`
+
+**見積工数**: 0.5 日
+**実績工数**: -
+
+OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
+
+- [ ] `lock.go` に `LockHandle` インターフェース（`Close() error`）を定義する
+- [ ] `AcquireExclusive(lockPath string) (LockHandle, error)` を実装する: `golang.org/x/sys/unix` の `unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)` を使い non-blocking 排他ロックを取得する。取得失敗時は即時エラーを返す（待機しない）
+- [ ] `lock_test.go` に以下のテストを追加する:
+  - [ ] 同一パスに対して 2 回目の `AcquireExclusive` が即時失敗すること（AC-10a）
+  - [ ] `Close()` 後に同パスへのロック再取得が成功すること（解放確認）
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -217,6 +232,21 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
   - [ ] `-config` フラグのデフォルトパスが `./config.toml` であることを確認するテストを追加する（AC-04）
 
 **完了確認**: `make test && make lint` がパスする
+
+---
+
+### PR-2 作成ポイント: CLI 共通基盤
+
+**対象ステップ**: 1-4 / 1-5 / 1-6
+
+**推奨タイトル**: `feat(task 0070): add CLI infrastructure (duration, lock, boot, main)`
+
+**レビュー観点**: 初期化順序 W-1〜W-6 / ロック解放タイミング / `NotificationSink` facade の境界
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（フェーズ 2 は新しいブランチで作業する）
 
 ---
 
@@ -293,6 +323,21 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 ---
 
+### PR-3 作成ポイント: `fetch` サブコマンド
+
+**対象ステップ**: 2-1
+
+**推奨タイトル**: `feat(task 0070): implement fetch subcommand with at-least-once guarantee`
+
+**レビュー観点**: `Flush()` → `MarkSeen` 順序 / UIDVALIDITY 比較と fail-closed / SEEN × `.eml` 4 象限
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（ステップ 2-2 は新しいブランチで作業する）
+
+---
+
 #### ステップ 2-2: `summary.go` の作成
 
 **新規ファイル**: `cmd/tlsrpt-digest/summary.go`, `cmd/tlsrpt-digest/summary_test.go`
@@ -327,6 +372,21 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
   - [ ] 空集計 / 正常送信 → exit 0、recovery-required 残存 / `Flush()` 失敗 → exit 1 となること（AC-29）
 
 **完了確認**: `make test && make lint` がパスする
+
+---
+
+### PR-4 作成ポイント: `summary` サブコマンド
+
+**対象ステップ**: 2-2
+
+**推奨タイトル**: `feat(task 0070): implement summary subcommand with consistency guard`
+
+**レビュー観点**: `SummaryConsistencyGuard` の 2 回確認ロジック / 空ストア時の notifier 遅延構築
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（フェーズ 3 は新しいブランチで作業する）
 
 ---
 
@@ -367,7 +427,57 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 ---
 
-#### ステップ 3-2: `recover.go` の作成
+#### ステップ 3-2: `reprocess.go` の作成
+
+**新規ファイル**: `cmd/tlsrpt-digest/reprocess.go`, `cmd/tlsrpt-digest/reprocess_test.go`
+
+**見積工数**: 1.0 日
+**実績工数**: -
+
+`SaveEmailMetas` と `SaveReports` の呼び出し順序の根拠は `02_architecture.md` §6.6 を参照。
+
+- [ ] `reprocess.go` に `reprocessRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [ ] `main.go` のスタブを `reprocessRunner` で置き換える
+- [ ] 処理フローを以下の順で実装する:
+  1. `LoadRecoveryRequired` で recovery-required 確認。`found=true` → stderr に英語の `recover` 実行案内を出力し、`.eml` 読み込みとストア書き込みを行わず exit 1。`LoadRecoveryRequired` 自体が失敗した場合も fail closed とし、`LoadEmails` へ進まず `LogSystemError(store_corruption)` + `Flush()` + exit 1（AC-21a）
+  2. `LoadEmails` で `{root_dir}/emails/` 以下の `.eml` を再帰的に列挙する。列挙全体の失敗はコマンド全体を中断して exit 1、ファイル単位の読み込み失敗は記録して残りを継続する（AC-22 / AC-25）
+  3. `SaveEmailMetas` でバッチ登録する（AC-23a）
+  4. 各メールの添付 `.json.gz` をパースする。読み込み・パース失敗はスキップし記録して継続する（`--notify` 指定時のみ `LogWarning` 通知）（AC-25）
+  5. パース成功レポートを `SaveReports` で一括 UPSERT する（AC-23）。失敗時はコマンド全体を中断して exit 1（AC-25）
+  6. `--notify` 指定時のみ `Flush()` を呼ぶ。失敗時は exit 1（AC-24a）
+- [ ] `reprocess_test.go` に以下のテストを追加する（`testdata/` の実 `.eml` と `storetestutil.FakeStore` を使用）:
+  - [ ] recovery-required 残存 → stderr に英語の `recover` 実行案内を出力し、`LoadEmails` もストア書き込みも行わず exit 1（AC-21a）
+  - [ ] `LoadRecoveryRequired` 失敗 → `LoadEmails` もストア書き込みも行わず `LogSystemError(store_corruption)` + `Flush()` + exit 1（AC-21a）
+  - [ ] `--notify` なしで `LogAlert` が呼ばれないこと（AC-24）
+  - [ ] `--notify` あり + TLS failure → `LogAlert` が呼ばれること（AC-24）
+  - [ ] `--notify` あり + ファイル単位パース失敗 → `LogWarning` が呼ばれ残りのファイル処理が継続すること（AC-25）
+  - [ ] ファイル単位読み込み失敗 → 当該ファイルを記録してスキップし、残りのファイル処理が継続すること（AC-25）
+  - [ ] ストア書き込み失敗（`SaveReports`）→ コマンド全体中断・exit 1（AC-25）
+  - [ ] ストア書き込み失敗（`SaveEmailMetas`）→ パースと `SaveReports` を行わずコマンド全体中断・exit 1（AC-25）
+  - [ ] 正常完了 → exit 0、recovery-required 残存 / `SaveReports` 失敗 / `Flush()` 失敗 → exit 1 となること（AC-26）
+  - [ ] `SaveEmailMetas` が `SaveReports` より前に呼ばれること（AC-23a / AC-23）
+  - [ ] 重複実行しても結果が変わらないこと（冪等性）
+
+**完了確認**: `make test && make lint` がパスする
+
+---
+
+### PR-5a 作成ポイント: `gc` + `reprocess` サブコマンド
+
+**対象ステップ**: 3-1 / 3-2
+
+**推奨タイトル**: `feat(task 0070): implement gc and reprocess subcommands`
+
+**レビュー観点**: カットオフ計算 / recovery-required ガード / `SaveEmailMetas` → `SaveReports` 呼び出し順序
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（ステップ 3-3 は新しいブランチで作業する）
+
+---
+
+#### ステップ 3-3: `recover.go` の作成
 
 **新規ファイル**: `cmd/tlsrpt-digest/recover.go`, `cmd/tlsrpt-digest/recover_test.go`
 
@@ -406,38 +516,18 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 ---
 
-#### ステップ 3-3: `reprocess.go` の作成
+### PR-5b 作成ポイント: `recover` サブコマンド
 
-**新規ファイル**: `cmd/tlsrpt-digest/reprocess.go`, `cmd/tlsrpt-digest/reprocess_test.go`
+**対象ステップ**: 3-3
 
-**見積工数**: 1.0 日
-**実績工数**: -
+**推奨タイトル**: `feat(task 0070): implement recover subcommand`
 
-`SaveEmailMetas` と `SaveReports` の呼び出し順序の根拠は `02_architecture.md` §6.6 を参照。
+**レビュー観点**: `--mode` / `--yes` / `--abort-reset` のフラグ組み合わせ / `OpenRecoverReset` 選択 / 破壊的操作の fail-safe
 
-- [ ] `reprocess.go` に `reprocessRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
-- [ ] `main.go` のスタブを `reprocessRunner` で置き換える
-- [ ] 処理フローを以下の順で実装する:
-  1. `LoadRecoveryRequired` で recovery-required 確認。`found=true` → stderr に英語の `recover` 実行案内を出力し、`.eml` 読み込みとストア書き込みを行わず exit 1。`LoadRecoveryRequired` 自体が失敗した場合も fail closed とし、`LoadEmails` へ進まず `LogSystemError(store_corruption)` + `Flush()` + exit 1（AC-21a）
-  2. `LoadEmails` で `{root_dir}/emails/` 以下の `.eml` を再帰的に列挙する。列挙全体の失敗はコマンド全体を中断して exit 1、ファイル単位の読み込み失敗は記録して残りを継続する（AC-22 / AC-25）
-  3. `SaveEmailMetas` でバッチ登録する（AC-23a）
-  4. 各メールの添付 `.json.gz` をパースする。読み込み・パース失敗はスキップし記録して継続する（`--notify` 指定時のみ `LogWarning` 通知）（AC-25）
-  5. パース成功レポートを `SaveReports` で一括 UPSERT する（AC-23）。失敗時はコマンド全体を中断して exit 1（AC-25）
-  6. `--notify` 指定時のみ `Flush()` を呼ぶ。失敗時は exit 1（AC-24a）
-- [ ] `reprocess_test.go` に以下のテストを追加する（`testdata/` の実 `.eml` と `storetestutil.FakeStore` を使用）:
-  - [ ] recovery-required 残存 → stderr に英語の `recover` 実行案内を出力し、`LoadEmails` もストア書き込みも行わず exit 1（AC-21a）
-  - [ ] `LoadRecoveryRequired` 失敗 → `LoadEmails` もストア書き込みも行わず `LogSystemError(store_corruption)` + `Flush()` + exit 1（AC-21a）
-  - [ ] `--notify` なしで `LogAlert` が呼ばれないこと（AC-24）
-  - [ ] `--notify` あり + TLS failure → `LogAlert` が呼ばれること（AC-24）
-  - [ ] `--notify` あり + ファイル単位パース失敗 → `LogWarning` が呼ばれ残りのファイル処理が継続すること（AC-25）
-  - [ ] ファイル単位読み込み失敗 → 当該ファイルを記録してスキップし、残りのファイル処理が継続すること（AC-25）
-  - [ ] ストア書き込み失敗（`SaveReports`）→ コマンド全体中断・exit 1（AC-25）
-  - [ ] ストア書き込み失敗（`SaveEmailMetas`）→ パースと `SaveReports` を行わずコマンド全体中断・exit 1（AC-25）
-  - [ ] 正常完了 → exit 0、recovery-required 残存 / `SaveReports` 失敗 / `Flush()` 失敗 → exit 1 となること（AC-26）
-  - [ ] `SaveEmailMetas` が `SaveReports` より前に呼ばれること（AC-23a / AC-23）
-  - [ ] 重複実行しても結果が変わらないこと（冪等性）
-
-**完了確認**: `make test && make lint` がパスする
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（フェーズ 4 は新しいブランチで作業する）
 
 ---
 
@@ -484,16 +574,46 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 ---
 
+### PR-6 作成ポイント: セキュリティテスト・統合テスト・ドキュメント
+
+**対象ステップ**: 4-1 / 4-2
+
+**推奨タイトル**: `feat(task 0070): add security tests, integration tests, and documentation`
+
+**レビュー観点**: `NotificationSink` API 境界の reflection チェック / `reprocess` ラウンドトリップ / README 運用例の網羅性
+
+- [ ] `go test ./...` と `go test ./... -tags test` が両方グリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+
+---
+
 ## 3. 実装順序とマイルストーン
+
+### 3.1 マイルストーン
 
 | マイルストーン | 内容 | 成果物 |
 |---|---|---|
-| M1 | フェーズ 1 完了 | `duration` / `lock` / `notify` 型拡張 / `store` 拡張 / `boot` / `main` 再構成が完成し `make test` がグリーン |
+| M1 | フェーズ 1 完了 | `notify` 型拡張 / `store` 拡張 / `duration` / `lock` / `boot` / `main` 再構成が完成し `make test` がグリーン |
 | M2 | フェーズ 2 完了 | `fetch` / `summary` が実際のワークフローを処理できる状態 |
 | M3 | フェーズ 3 完了 | 全 5 サブコマンドが動作する状態 |
 | M4 | フェーズ 4 完了 | セキュリティテスト・統合テスト・ドキュメントが揃い、リリース可能な状態 |
 
 **総見積**: 約 13 日（レビュー対応・バッファ 1 日を含む）
+
+### 3.2 PR 構成
+
+`runplan` で実装する際は、以下の各 PR 作成ポイントでいったん作業を中断し、PR を作成してマージを待ってから次のブランチで続行する。
+
+| PR | 対象ステップ | 内容 | リスク | レビュー観点 |
+|---|---|---|---|---|
+| PR-1 | 1-1 / 1-2 / 1-3 | `internal` API 拡張（notify・store・aggregate） | 高（store recovery 不変条件） | 不変条件・再実行性・payload 安全性 |
+| PR-2 | 1-4 / 1-5 / 1-6 | CLI 共通基盤（duration・lock・boot・main） | 中 | 初期化順序・ロック解放 |
+| PR-3 | 2-1 | `fetch` サブコマンド | 高（at-least-once） | Flush→SEEN 順序・fail-closed |
+| PR-4 | 2-2 | `summary` サブコマンド | 中 | 2 回 guard・遅延構築 |
+| PR-5a | 3-1 / 3-2 | `gc` + `reprocess` サブコマンド | 低 | カットオフ・呼び出し順序 |
+| PR-5b | 3-3 | `recover` サブコマンド | 高（状態機械） | フラグ組み合わせ・破壊的操作 |
+| PR-6 | 4-1 / 4-2 | セキュリティテスト・統合テスト・ドキュメント | 低 | 網羅性 |
 
 ---
 
@@ -517,7 +637,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 ### 4.2 テストダブル利用方針
 
 - **`FakeMailFetcher`**: 既存 `internal/imap/testutil/mocks.go` を再利用する
-- **`FakeStore`**: 既存 `internal/store/testutil/mocks.go` を再利用する。ステップ 1-4 で `ResetForRecovery`・`AbortReset`・`AcquireSummaryConsistencyGuard` を追加する
+- **`FakeStore`**: 既存 `internal/store/testutil/mocks.go` を再利用する。ステップ 1-2 で `ResetForRecovery`・`AbortReset`・`AcquireSummaryConsistencyGuard` を追加する
 - **`FakeSummaryConsistencyGuard`**: `internal/store/testutil/mocks.go` に新規追加する（`CheckRecoveryRequired` の戻り値を注入可能にする）。`SummaryConsistencyGuard` は `internal/store` の公開インターフェースであるため `testutil/mocks.go`（Classification A）へ配置する
 - **`SpyHandler`**: 既存 `internal/notify/testutil/mocks.go` を再利用する
 - **`SpyNotificationSink`**: `cmd/tlsrpt-digest/test_helpers.go`（`//go:build test`、`package main`）に定義する。`NotificationSink` は `package main` 内のインターフェースのため `testutil/` サブディレクトリではなく同パッケージに配置する
@@ -538,9 +658,9 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 | リスク | 影響度 | 緩和策 |
 |---|---|---|
-| `Store` インターフェース拡張による既存テストへの影響 | 中 | ステップ 1-4 で `FakeStore` を同時更新しコンパイルエラーで即座に検出する |
+| `Store` インターフェース拡張による既存テストへの影響 | 中 | ステップ 1-2 で `FakeStore` を同時更新しコンパイルエラーで即座に検出する |
 | `notify.SystemError` 型変更（`ErrorType`→`Kind`）による既存コードへの影響 | 中 | ステップ 1-1 で `primeNotifyHandlers` 呼び出しも同時更新し、各ステップ完了時のコンパイル可能性を維持する |
-| `GenerateSummary` の区間変更（`(start, end]` → `[start, end)`）による既存動作への影響 | 低 | ステップ 1-5 でテストを先に更新し、境界値テストで変更前後の動作差異を明確にする |
+| `GenerateSummary` の区間変更（`(start, end]` → `[start, end)`）による既存動作への影響 | 低 | ステップ 1-3 でテストを先に更新し、境界値テストで変更前後の動作差異を明確にする |
 | `unix.Flock` の OS 互換性（Linux 固定） | 低 | 要件定義書の対象 OS は Linux のみ。必要に応じて `//go:build linux` タグを付与する |
 | `recover.go` の複数フェーズ破壊的操作の複雑性 | 高 | `internal/store.ResetForRecovery`・`AbortReset` にロジックを閉じ込め、`recover.go` は API 呼び出しのみに留める |
 
@@ -548,34 +668,46 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 ## 6. 実装チェックリスト
 
-### フェーズ 1
+### PR-1: `internal` API 拡張（ステップ 1-1 / 1-2 / 1-3）
 
 - [ ] ステップ 1-1: `internal/notify` 型拡張完了
-- [ ] ステップ 1-2: `duration.go` と単体テスト完了
-- [ ] ステップ 1-3: `lock.go` と単体テスト完了
-- [ ] ステップ 1-4: `internal/store` 拡張と単体テスト完了
-- [ ] ステップ 1-5: `GenerateSummary` 区間修正と既存テスト更新完了
-- [ ] ステップ 1-6: `boot.go` と `main.go` 再構成・単体テスト完了
-- [ ] フェーズ 1 全体: `make test && make lint` がパスすること
+- [ ] ステップ 1-2: `internal/store` 拡張と単体テスト完了
+- [ ] ステップ 1-3: `GenerateSummary` 区間修正と既存テスト更新完了
+- [ ] PR-1 作成・マージ完了
 
-### フェーズ 2
+### PR-2: CLI 共通基盤（ステップ 1-4 / 1-5 / 1-6）
+
+- [ ] ステップ 1-4: `duration.go` と単体テスト完了
+- [ ] ステップ 1-5: `lock.go` と単体テスト完了
+- [ ] ステップ 1-6: `boot.go` と `main.go` 再構成・単体テスト完了
+- [ ] PR-2 作成・マージ完了
+
+### PR-3: `fetch` サブコマンド（ステップ 2-1）
 
 - [ ] ステップ 2-1: `fetch.go` と単体テスト完了
-- [ ] ステップ 2-2: `summary.go` と単体テスト完了
-- [ ] フェーズ 2 全体: `make test && make lint` がパスすること
+- [ ] PR-3 作成・マージ完了
 
-### フェーズ 3
+### PR-4: `summary` サブコマンド（ステップ 2-2）
+
+- [ ] ステップ 2-2: `summary.go` と単体テスト完了
+- [ ] PR-4 作成・マージ完了
+
+### PR-5a: `gc` + `reprocess` サブコマンド（ステップ 3-1 / 3-2）
 
 - [ ] ステップ 3-1: `gc.go` と単体テスト完了
-- [ ] ステップ 3-2: `recover.go` と単体テスト完了
-- [ ] ステップ 3-3: `reprocess.go` と単体テスト完了
-- [ ] フェーズ 3 全体: `make test && make lint` がパスすること
+- [ ] ステップ 3-2: `reprocess.go` と単体テスト完了
+- [ ] PR-5a 作成・マージ完了
 
-### フェーズ 4
+### PR-5b: `recover` サブコマンド（ステップ 3-3）
+
+- [ ] ステップ 3-3: `recover.go` と単体テスト完了
+- [ ] PR-5b 作成・マージ完了
+
+### PR-6: セキュリティテスト・統合テスト・ドキュメント（ステップ 4-1 / 4-2）
 
 - [ ] ステップ 4-1: セキュリティテスト・統合テスト完了
 - [ ] ステップ 4-2: ドキュメント整備完了
-- [ ] フェーズ 4 全体: `make test && make lint` がパスすること
+- [ ] PR-6 作成・マージ完了
 
 ---
 
