@@ -419,7 +419,7 @@ func (s *storeImpl) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, e
 		return noopSummaryConsistencyGuard{}, nil
 	}
 	guardPath := guardFilePath(s.rootDir)
-	f, err := os.OpenFile(guardPath, os.O_RDWR, filePerm) //nolint:gosec
+	f, err := os.OpenFile(guardPath, os.O_RDONLY, filePerm) //nolint:gosec
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return noopSummaryConsistencyGuard{}, nil
