@@ -213,6 +213,43 @@ func TestRedactionAlwaysEnabled(t *testing.T) {
 	}
 }
 
+func TestLogWarning_NoRawErrorOrSecret(t *testing.T) {
+	var spy spyHandler
+	require.NoError(t, notify.LogWarning(context.Background(), &spy, notify.Warning{
+		Kind:        notify.WarningKindSizeMismatch,
+		UID:         1,
+		UIDValidity: 2,
+		MessageID:   "<safe@example.com>",
+	}))
+	require.Len(t, spy.records, 1)
+
+	allowed := map[string]bool{
+		"kind": true, "uid": true, "uidvalidity": true, "message_id": true,
+	}
+	spy.records[0].Attrs(func(attr slog.Attr) bool {
+		assert.True(t, allowed[attr.Key], "unexpected attr key %q in LogWarning record", attr.Key)
+		return true
+	})
+}
+
+func TestLogSystemError_NoRawErrorOrSecret(t *testing.T) {
+	var spy spyHandler
+	require.NoError(t, notify.LogSystemError(context.Background(), &spy, notify.SystemError{
+		Kind:      notify.SystemErrorKindStoreCorruption,
+		Component: "store",
+		Mailbox:   "INBOX",
+	}))
+	require.Len(t, spy.records, 1)
+
+	allowed := map[string]bool{
+		"kind": true, "component": true, "mailbox": true,
+	}
+	spy.records[0].Attrs(func(attr slog.Attr) bool {
+		assert.True(t, allowed[attr.Key], "unexpected attr key %q in LogSystemError record", attr.Key)
+		return true
+	})
+}
+
 // Verify JSON shape doesn't contain webhook URL using the same helper as above.
 func TestSecretNotInMessage_JSONCheck(t *testing.T) {
 	var recv []byte
@@ -235,8 +272,7 @@ func TestSecretNotInMessage_JSONCheck(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, notify.LogSystemError(context.Background(), h, notify.SystemError{
-		ErrorType: "StorageError",
-		Message:   "disk full",
+		Kind:      notify.SystemErrorKindStoreCorruption,
 		Component: "storage",
 	}))
 	require.NoError(t, h.Flush(context.Background()))

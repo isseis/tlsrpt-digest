@@ -200,10 +200,10 @@ func TestFormatSystemError_Title(t *testing.T) {
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
 	defer cleanup()
 	require.NoError(t, notify.LogSystemError(context.Background(), h, notify.SystemError{
-		ErrorType: "IMAPAuthFailure", Message: "invalid credentials", Component: "imap",
+		Kind: notify.SystemErrorKindIMAPAuthFailed, Component: "imap",
 	}))
 	require.NoError(t, h.Flush(context.Background()))
-	assert.Contains(t, string(recv), "IMAPAuthFailure")
+	assert.Contains(t, string(recv), "imap_auth_failed")
 }
 
 func TestFormatSystemError_Fields(t *testing.T) {
@@ -211,11 +211,11 @@ func TestFormatSystemError_Fields(t *testing.T) {
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
 	defer cleanup()
 	require.NoError(t, notify.LogSystemError(context.Background(), h, notify.SystemError{
-		ErrorType: "StorageError", Message: "disk full", Component: "storage",
+		Kind: notify.SystemErrorKindStoreCorruption, Component: "storage",
 	}))
 	require.NoError(t, h.Flush(context.Background()))
 	body := string(recv)
-	assert.Contains(t, body, "disk full")
+	assert.Contains(t, body, "store_corruption")
 	assert.Contains(t, body, "storage")
 	assert.Contains(t, body, "run-001")
 }
@@ -225,7 +225,7 @@ func TestFormatSystemError_Color(t *testing.T) {
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
 	defer cleanup()
 	require.NoError(t, notify.LogSystemError(context.Background(), h, notify.SystemError{
-		ErrorType: "Test", Message: "test", Component: "test",
+		Kind: notify.SystemErrorKindLockHeld, Component: "test",
 	}))
 	require.NoError(t, h.Flush(context.Background()))
 	body := string(recv)
@@ -534,4 +534,41 @@ func summaryOrgStats(count int) map[string]int64 {
 		stats[fmt.Sprintf("org-%02d", i)] = int64(i)
 	}
 	return stats
+}
+
+func TestFetchWarning_NotAggregatedWithAlerts(t *testing.T) {
+	var spy spyHandler
+
+	ctx := context.Background()
+	require.NoError(t, notify.LogAlert(ctx, &spy, sampleAlert()))
+	require.NoError(t, notify.LogWarning(ctx, &spy, notify.Warning{
+		Kind:        notify.WarningKindSizeMismatch,
+		UID:         10,
+		UIDValidity: 1,
+		MessageID:   "<warn@example.com>",
+	}))
+
+	require.Len(t, spy.records, 2)
+	// Alert and warning must be separate records with different messages.
+	messages := make(map[string]bool)
+	for _, r := range spy.records {
+		messages[r.Message] = true
+	}
+	assert.True(t, messages["tls_failure_alert"], "expected tls_failure_alert record")
+	assert.True(t, messages["fetch_warning"], "expected fetch_warning record")
+}
+
+func TestFetchWarning_DistinctSlackMessage(t *testing.T) {
+	var spy spyHandler
+
+	ctx := context.Background()
+	require.NoError(t, notify.LogWarning(ctx, &spy, notify.Warning{
+		Kind:        notify.WarningKindParseFailure,
+		UID:         5,
+		UIDValidity: 99,
+		MessageID:   "<parse@example.com>",
+	}))
+	require.Len(t, spy.records, 1)
+	assert.Equal(t, slog.LevelWarn, spy.records[0].Level)
+	assert.Equal(t, "fetch_warning", spy.records[0].Message)
 }

@@ -30,10 +30,29 @@ func LogSystemError(ctx context.Context, h slog.Handler, e SystemError) error {
 	if !h.Enabled(ctx, slog.LevelError) {
 		return nil
 	}
-	r := slog.NewRecord(time.Now(), slog.LevelError, e.ErrorType, 0)
+	r := slog.NewRecord(time.Now(), slog.LevelError, "system_error", 0)
 	r.AddAttrs(
-		slog.String("message", e.Message),
+		slog.String("kind", string(e.Kind)),
 		slog.String("component", e.Component),
+	)
+	if e.Mailbox != "" {
+		r.AddAttrs(slog.String("mailbox", e.Mailbox))
+	}
+	return h.Handle(ctx, r)
+}
+
+// LogWarning buffers a fetch warning record into h for delivery by Flush().
+// It uses WARN level so it is routed to the error webhook buffer alongside alerts.
+func LogWarning(ctx context.Context, h slog.Handler, warning Warning) error {
+	if !h.Enabled(ctx, slog.LevelWarn) {
+		return nil
+	}
+	r := slog.NewRecord(time.Now(), slog.LevelWarn, "fetch_warning", 0)
+	r.AddAttrs(
+		slog.String("kind", string(warning.Kind)),
+		slog.Uint64("uid", uint64(warning.UID)),
+		slog.Uint64("uidvalidity", uint64(warning.UIDValidity)),
+		slog.String("message_id", warning.MessageID),
 	)
 	return h.Handle(ctx, r)
 }

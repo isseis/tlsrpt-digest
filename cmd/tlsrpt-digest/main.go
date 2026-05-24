@@ -121,8 +121,7 @@ func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, d
 			return err
 		}
 		if err := notify.LogSystemError(ctx, h, notify.SystemError{
-			ErrorType: "bootstrap_probe",
-			Message:   "handler wiring probe",
+			Kind:      notify.SystemErrorKindStoreCorruption,
 			Component: "notify",
 		}); err != nil {
 			return err
