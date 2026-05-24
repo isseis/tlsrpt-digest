@@ -4,6 +4,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -288,6 +289,9 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 
 	// Load existing manifest to detect an in-progress reset.
 	mfst, manifestErr := readResetManifest(manifestPath)
+	if manifestErr != nil && !errors.Is(manifestErr, os.ErrNotExist) {
+		return fmt.Errorf("ResetForRecovery: read manifest: %w", manifestErr)
+	}
 	manifestExists := manifestErr == nil
 
 	if !manifestExists {
