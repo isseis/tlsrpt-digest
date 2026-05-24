@@ -385,8 +385,11 @@ func (s *storeImpl) AbortReset() error {
 	manifestPath := resetManifestPath(s.rootDir)
 	stagingPath := resetStagingPath(s.rootDir)
 
-	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
-		return ErrResetNotPending
+	if _, err := os.Stat(manifestPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrResetNotPending
+		}
+		return fmt.Errorf("AbortReset: stat manifest: %w", err)
 	}
 
 	// If the commit already happened (recovery-required is gone), abort is no longer possible.
