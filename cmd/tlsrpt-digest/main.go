@@ -120,12 +120,6 @@ func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, d
 		}); err != nil {
 			return err
 		}
-		if err := notify.LogSystemError(ctx, h, notify.SystemError{
-			Kind:      notify.SystemErrorKindStoreCorruption,
-			Component: "notify",
-		}); err != nil {
-			return err
-		}
 	}
 
 	for _, h := range handlers {

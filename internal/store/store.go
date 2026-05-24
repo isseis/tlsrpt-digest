@@ -177,6 +177,15 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 		if err := initDataFile(rootDir); err != nil {
 			return nil, fmt.Errorf("Open: init data file: %w", err)
 		}
+
+		// Create the guard file so that read-only opens can acquire a shared lock
+		// without needing O_CREATE (which would be a write on a read-only mount).
+		guardPath := guardFilePath(rootDir)
+		f, err := os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, filePerm) //nolint:gosec
+		if err != nil {
+			return nil, fmt.Errorf("Open: create guard file: %w", err)
+		}
+		_ = f.Close()
 	}
 
 	// Load or initialize sentinel
