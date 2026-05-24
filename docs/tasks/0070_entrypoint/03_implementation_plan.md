@@ -141,7 +141,7 @@
 **レビュー観点**: `internal/store` recovery API の不変条件 / `internal/notify` payload 安全性 / `[start, end)` 区間変更
 
 - [x] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/85）
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（ステップ 1-4 以降は新しいブランチで作業する）
 
