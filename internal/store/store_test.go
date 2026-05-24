@@ -358,6 +358,41 @@ func TestOpenMode_Constants(t *testing.T) {
 	assert.NotEqual(t, OpenReadWrite, OpenReadOnly)
 }
 
+// TestOpen_PendingReset_FailsClosedForReadWrite verifies that OpenReadWrite returns
+// ErrPendingReset when a pending reset manifest exists.
+func TestOpen_PendingReset_FailsClosedForReadWrite(t *testing.T) {
+	rootDir := t.TempDir()
+	identity := makeTestIdentity()
+
+	_, err := Open(rootDir, identity, OpenReadWrite)
+	require.NoError(t, err)
+
+	// Plant a manifest file to simulate a pending reset.
+	mfstPath := filepath.Join(rootDir, manifestFilename)
+	require.NoError(t, os.WriteFile(mfstPath, []byte(`{"version":1,"curr_uid_validity":42}`), filePerm))
+
+	_, err = Open(rootDir, identity, OpenReadWrite)
+	assert.ErrorIs(t, err, ErrPendingReset)
+}
+
+// TestOpen_PendingReset_OpenRecoverResetSucceeds verifies that OpenRecoverReset succeeds
+// when a pending reset manifest exists, returning a usable store.
+func TestOpen_PendingReset_OpenRecoverResetSucceeds(t *testing.T) {
+	rootDir := t.TempDir()
+	identity := makeTestIdentity()
+
+	_, err := Open(rootDir, identity, OpenReadWrite)
+	require.NoError(t, err)
+
+	// Plant a manifest to simulate an in-progress reset.
+	mfstPath := filepath.Join(rootDir, manifestFilename)
+	require.NoError(t, os.WriteFile(mfstPath, []byte(`{"version":1,"curr_uid_validity":42}`), filePerm))
+
+	s, err := Open(rootDir, identity, OpenRecoverReset)
+	require.NoError(t, err)
+	assert.NotNil(t, s)
+}
+
 // TestOpen_WarnOnLaxDataFilePermissions verifies that Open emits a WARN when
 // tlsrpt.json already exists with permissions broader than 0600 (AC-39).
 func TestOpen_WarnOnLaxDataFilePermissions(t *testing.T) {

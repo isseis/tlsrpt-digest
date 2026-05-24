@@ -103,3 +103,29 @@ func (e *ErrDeleteEmailFailed) Error() string {
 func (e *ErrDeleteEmailFailed) Unwrap() error {
 	return e.Err
 }
+
+// ErrPendingReset is returned by Open(OpenReadWrite) when a pending reset manifest
+// exists. Use OpenRecoverReset to open the store and resume or abort the reset.
+var ErrPendingReset = errors.New("store: pending reset detected; use OpenRecoverReset to continue or abort")
+
+// ErrRecoveryRequiredMissing is returned by ResetForRecovery when the sentinel
+// does not contain a recovery-required entry.
+var ErrRecoveryRequiredMissing = errors.New("store: recovery-required not present in sentinel")
+
+// ErrRecoveryUIDValidityMismatch is returned by ResetForRecovery when the supplied
+// currUIDValidity does not match the current UIDVALIDITY recorded in recovery-required.
+type ErrRecoveryUIDValidityMismatch struct {
+	Got      uint32
+	Expected uint32
+}
+
+func (e *ErrRecoveryUIDValidityMismatch) Error() string {
+	return fmt.Sprintf(
+		"store: recovery uid_validity mismatch: got=%d expected=%d",
+		e.Got, e.Expected,
+	)
+}
+
+// ErrResetNotPending is returned by AbortReset when there is no pending reset
+// (manifest absent) or when the reset has already been committed.
+var ErrResetNotPending = errors.New("store: no pending reset to abort")

@@ -79,6 +79,26 @@ type Store interface {
 	// method when both fields must change together.
 	ApplyRecovery(newUIDValidity uint32) error
 
+	// ResetForRecovery discards old data and advances uid_validity to currUIDValidity.
+	// It requires recovery-required to be present in the sentinel with a matching current
+	// UIDVALIDITY. The operation is crash-safe: re-running after a partial failure
+	// converges to "empty store + current UIDVALIDITY + recovery-required cleared".
+	// Only valid on stores opened with OpenRecoverReset.
+	ResetForRecovery(currUIDValidity uint32) error
+
+	// AbortReset cancels a pending (pre-commit) reset and restores old data.
+	// Returns ErrResetNotPending if there is no pending reset or if the commit
+	// has already been applied. After abort, recovery-required remains in the sentinel.
+	// Only valid on stores opened with OpenRecoverReset.
+	AbortReset() error
+
+	// AcquireSummaryConsistencyGuard acquires a shared flock on the guard file and
+	// returns a SummaryConsistencyGuard. While held, writer processes updating
+	// recovery-required in the sentinel must wait for the exclusive lock, ensuring
+	// that CheckRecoveryRequired results are consistent through LogSummary/Flush.
+	// The caller must call Close() on the returned guard after use.
+	AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)
+
 	// DeleteReportsBefore deletes all report records whose date-range.end-datetime < cutoff
 	// and returns the number of deleted records. Returns deleted=0 without error if no
 	// records match. The updated JSON is written atomically (temp file + rename).
@@ -128,6 +148,14 @@ type storeImpl struct {
 func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 	// Determine if read-only based on mode
 	readOnly := mode == OpenReadOnly
+
+	// Fail-closed: OpenReadWrite must not proceed when a pending reset manifest exists.
+	// OpenRecoverReset bypasses this check so recover subcommand can resume or abort.
+	if mode == OpenReadWrite {
+		if _, err := os.Stat(resetManifestPath(rootDir)); err == nil {
+			return nil, ErrPendingReset
+		}
+	}
 
 	// In read-write mode, ensure directories exist
 	if !readOnly {
