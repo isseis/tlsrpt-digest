@@ -76,7 +76,7 @@ Work in order.
 
 6. Run `make deadcode`. Remove functions made unreachable by this phase
    group; keep intentional scaffolding for future phases or tasks.
-   If changes were made, run `make fmt && make test && make lint` and commit.
+   If changes were made, run make fmt && make test && make lint and commit using the git-commit skill guidelines.
 
 7. Spawn a review subagent using the Agent tool to critically evaluate this
    phase group's changes.
