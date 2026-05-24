@@ -6,17 +6,34 @@ Work in order.
 
 2. Read `03_implementation_plan.md`. If the document status is not `approved`, stop and report.
 
+2.5. Check whether PR boundary design is needed.
+- Count `### フェーズ` headers in the plan. If there are 2 or more and no `### PR-` sections exist, invoke the `/mkpr` skill to design PR boundaries before proceeding.
+- After `/mkpr` completes, re-read `03_implementation_plan.md` so the updated content (with PR markers) is in context.
+- If PR markers already exist, skip this step and continue.
+
 3. Read `01_requirements.md`, `02_architecture.md` (both in the target task directory), and `docs/dev/developer_guide/test_organization.md`.
 
-4. Select the next phase group from `03_implementation_plan.md` checkboxes (`[ ]` not started, `[x]` done, `[-]` skipped).
-- If all phases are complete, skip to step 8 and follow the "If all phases are complete" bullet.
-- Otherwise, use one phase unless it cannot pass `make test` alone (e.g. stub-only or tightly coupled); then extend the group until it can pass. Briefly note the reason for grouping before starting work.
+4. Select the next unit of work from `03_implementation_plan.md` checkboxes (`[ ]` not started, `[x]` done, `[-]` skipped).
+- If all phases and all PR markers are complete, skip to step 8 and follow the "If all phases are complete" bullet.
+- Scan forward from the last completed item. If the next unchecked items are inside a `### PR-N 作成ポイント` section (PR checkpoint checkboxes), treat this as a PR checkpoint — go to step 5a instead of step 5.
+- Otherwise, select the next implementation group: use one phase by default unless it cannot pass `make test` alone (e.g. stub-only or tightly coupled); then extend the group until it can pass. Stop the group at the next `### PR-N 作成ポイント` boundary — do not include the PR checkpoint checkboxes in the implementation group. Briefly note the reason for any grouping before starting work.
 
 5. Implement the selected phase group.
 - Follow the design in `02_architecture.md`.
 - Place test helpers per `docs/dev/developer_guide/test_organization.md`: cross-package helpers under `testutil/`; package-internal helpers in `test_helpers.go` (or `test_helpers_<category>.go`) with `//go:build test`.
 - After each Go file change, run `make fmt && make test && make lint`; fix errors before continuing. Exception: errors caused by the phase group's incomplete state (e.g. build or test failures from missing implementations that stubs depend on) need not be fixed until the group is complete; fix only errors unrelated to the in-progress group.
 - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
+
+5a. **PR checkpoint** (reached when step 4 directed you here instead of step 5).
+- Verify `make test && make lint` is green. Fix any failures before continuing.
+- Mark the first PR checkpoint checkbox (`make test && make lint がグリーンであることを確認した`) as `[x]` and commit.
+- Run `gh pr create --title "<推奨タイトル>" --body "<レビュー観点を含む本文>"`, using the `推奨タイトル` value from the `### PR-N 作成ポイント` section as `--title` and including the `レビュー観点` items in `--body`. Use explicit flags to avoid interactive prompts.
+- Output the PR URL and mark the second checkbox (`PR を作成した`) as `[x]` and commit.
+- Pause and ask the user: "PR-N を作成しました: <URL>。マージされたらお知らせください。"
+- Wait for the user to confirm the PR is merged. Then:
+  - Create a new branch for the next group of work (e.g. `git checkout -b <feature-branch>-<N+1>`).
+  - Mark the remaining PR checkpoint checkboxes (`PR がマージされた` and `次のブランチへ切り替えた`) as `[x]` and commit.
+- Return to step 4.
 
 6. Run `make deadcode`. Remove functions made unreachable by this phase group; keep intentional scaffolding for future phases or tasks. If changes were made, run `make fmt && make test && make lint` and commit.
 
