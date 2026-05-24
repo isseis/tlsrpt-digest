@@ -344,6 +344,48 @@ func TestSummaryConsistencyGuard_CheckRecoveryRequired(t *testing.T) {
 	assert.True(t, found)
 }
 
+// TestResetForRecovery_CleanupFailureNoDataPathImpact verifies that if cleanup is
+// incomplete after a successful commit (manifest still present, staging dir still exists)
+// the store opened via OpenRecoverReset presents an empty data set (empty store consistency).
+func TestResetForRecovery_CleanupFailureNoDataPathImpact(t *testing.T) {
+	rootDir := t.TempDir()
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s.SaveUIDValidity(100))
+	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// Simulate committed state: update sentinel, but leave manifest and staging dir intact.
+	sentinel, _, err := loadSentinel(rootDir)
+	require.NoError(t, err)
+	uid := uint32(200)
+	sentinel.UIDValidity = &uid
+	sentinel.RecoveryRequired = nil
+	require.NoError(t, saveSentinel(rootDir, sentinel))
+	// Leave manifest and staging dir intact to simulate cleanup failure.
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, os.WriteFile(resetManifestPath(rootDir), []byte(`{"version":1,"curr_uid_validity":200}`), filePerm))
+
+	// Normal OpenReadWrite is blocked by the manifest (fail-closed).
+	_, err = Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	assert.ErrorIs(t, err, ErrPendingReset)
+
+	// OpenRecoverReset succeeds and creates empty data files.
+	s2, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+
+	// Data path is empty (consistent with a clean reset).
+	reports, err := s2.GetAllReports()
+	require.NoError(t, err)
+	assert.Empty(t, reports)
+
+	// Calling ResetForRecovery again completes the cleanup.
+	require.NoError(t, s2.ResetForRecovery(200))
+
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.True(t, os.IsNotExist(err), "manifest should be gone after re-running ResetForRecovery")
+}
+
 // TestSummaryConsistencyGuard_BlocksExclusiveWriter verifies that a shared guard lock
 // blocks an exclusive writer (simulating a concurrent fetch) until Close is called.
 func TestSummaryConsistencyGuard_BlocksExclusiveWriter(t *testing.T) {
