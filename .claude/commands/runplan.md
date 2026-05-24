@@ -27,7 +27,7 @@ Work in order.
 5a. **PR checkpoint** (reached when step 4 directed you here instead of step 5).
 - Verify `make test && make lint` is green. Fix any failures before continuing.
 - Mark the first PR checkpoint checkbox (`make test && make lint がグリーンであることを確認した`) as `[x]` and commit.
-- Run `gh pr create` using the `推奨タイトル` value from the `### PR-N 作成ポイント` section as the title and including the `レビュー観点` items in the PR body.
+- Run `gh pr create --title "<推奨タイトル>" --body "<レビュー観点を含む本文>"`, using the `推奨タイトル` value from the `### PR-N 作成ポイント` section as `--title` and including the `レビュー観点` items in `--body`. Use explicit flags to avoid interactive prompts.
 - Output the PR URL and mark the second checkbox (`PR を作成した`) as `[x]` and commit.
 - Pause and ask the user: "PR-N を作成しました: <URL>。マージされたらお知らせください。"
 - Wait for the user to confirm the PR is merged. Then:
