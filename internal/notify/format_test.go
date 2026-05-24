@@ -572,3 +572,27 @@ func TestFetchWarning_DistinctSlackMessage(t *testing.T) {
 	assert.Equal(t, slog.LevelWarn, spy.records[0].Level)
 	assert.Equal(t, "fetch_warning", spy.records[0].Message)
 }
+
+// TestFormatWarning_SlackPayloadFields verifies that LogWarning+Flush produces a Slack
+// JSON payload containing all expected fields: kind, uid, uidvalidity, message_id, run_id.
+func TestFormatWarning_SlackPayloadFields(t *testing.T) {
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
+	defer cleanup()
+
+	ctx := context.Background()
+	require.NoError(t, notify.LogWarning(ctx, h, notify.Warning{
+		Kind:        notify.WarningKindSizeMismatch,
+		UID:         123,
+		UIDValidity: 456,
+		MessageID:   "<abc@example.com>",
+	}))
+	require.NoError(t, h.Flush(ctx))
+
+	body := string(recv)
+	assert.Contains(t, body, "size_mismatch", "kind field should appear in payload")
+	assert.Contains(t, body, "123", "uid value should appear in payload")
+	assert.Contains(t, body, "456", "uidvalidity value should appear in payload")
+	assert.Contains(t, body, "abc@example.com", "message_id should appear in payload")
+	assert.Contains(t, body, "run-001", "run_id should appear in payload")
+}

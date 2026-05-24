@@ -11,7 +11,7 @@ import (
 )
 
 // GenerateSummary aggregates successful TLSRPT reports in the period
-// start < report.DateRange.EndDatetime <= end.
+// start <= report.DateRange.EndDatetime < end.
 func GenerateSummary(ctx context.Context, st store.Store, start, end time.Time, debugLogger *slog.Logger) (Summary, error) {
 	summary := Summary{
 		Period:            DateRange{Start: start, End: end},

@@ -259,14 +259,19 @@ func (f *FakeStore) AcquireSummaryConsistencyGuard() (store.SummaryConsistencyGu
 }
 
 // FakeSummaryConsistencyGuard is a test double for store.SummaryConsistencyGuard.
-// Set RecoveryRequiredFound to control the return value of CheckRecoveryRequired.
+// Set RecoveryRequiredFound to control the found return value of CheckRecoveryRequired.
+// Set CheckError to inject an error return from CheckRecoveryRequired.
 type FakeSummaryConsistencyGuard struct {
 	RecoveryRequiredFound bool
+	CheckError            error
 	Closed                bool
 }
 
 // CheckRecoveryRequired implements store.SummaryConsistencyGuard.
 func (g *FakeSummaryConsistencyGuard) CheckRecoveryRequired(_ context.Context) (bool, error) {
+	if g.CheckError != nil {
+		return false, g.CheckError
+	}
 	return g.RecoveryRequiredFound, nil
 }
 

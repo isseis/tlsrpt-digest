@@ -313,6 +313,26 @@ func TestAbortReset_Idempotent(t *testing.T) {
 	assert.ErrorIs(t, s.AbortReset(), ErrResetNotPending)
 }
 
+// TestSummaryConsistencyGuard_NoopOnMissingRootDir verifies that AcquireSummaryConsistencyGuard
+// returns a no-op guard (not an error) when rootDir does not exist, as required for the
+// empty-store OpenReadOnly path used by the summary subcommand on first run.
+func TestSummaryConsistencyGuard_NoopOnMissingRootDir(t *testing.T) {
+	rootDir := t.TempDir()
+	nonexistentRoot := filepath.Join(rootDir, "nonexistent")
+	s, err := Open(nonexistentRoot, makeTestIdentity(), OpenReadOnly)
+	require.NoError(t, err)
+
+	guard, err := s.AcquireSummaryConsistencyGuard()
+	require.NoError(t, err, "AcquireSummaryConsistencyGuard must not fail when rootDir is absent")
+	require.NotNil(t, guard)
+
+	found, err := guard.CheckRecoveryRequired(context.Background())
+	require.NoError(t, err)
+	assert.False(t, found, "no-op guard must return found=false")
+
+	assert.NoError(t, guard.Close())
+}
+
 // TestSummaryConsistencyGuard_CheckRecoveryRequired verifies that CheckRecoveryRequired
 // reads the sentinel on each call and reflects the current state.
 func TestSummaryConsistencyGuard_CheckRecoveryRequired(t *testing.T) {

@@ -103,6 +103,17 @@ func (g *summaryConsistencyGuardImpl) Close() error {
 	return g.f.Close()
 }
 
+// noopSummaryConsistencyGuard is returned when rootDir does not exist (empty store,
+// OpenReadOnly). Recovery-required can never be set without a store directory, so
+// CheckRecoveryRequired always returns false. Close is a no-op.
+type noopSummaryConsistencyGuard struct{}
+
+func (noopSummaryConsistencyGuard) CheckRecoveryRequired(_ context.Context) (bool, error) {
+	return false, nil
+}
+
+func (noopSummaryConsistencyGuard) Close() error { return nil }
+
 // ---- staging helpers ----
 
 // stageOldData moves tlsrpt.json and emails/ into stagingPath (must already exist).
@@ -381,7 +392,13 @@ func (s *storeImpl) AbortReset() error {
 }
 
 // AcquireSummaryConsistencyGuard implements Store.AcquireSummaryConsistencyGuard.
+// When rootDir does not exist (empty-store OpenReadOnly path), a no-op guard is
+// returned: recovery-required cannot be set without a store directory, so
+// CheckRecoveryRequired always returns false and Close is a no-op.
 func (s *storeImpl) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error) {
+	if _, err := os.Stat(s.rootDir); os.IsNotExist(err) {
+		return noopSummaryConsistencyGuard{}, nil
+	}
 	guardPath := guardFilePath(s.rootDir)
 	f, err := os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, filePerm) //nolint:gosec
 	if err != nil {
