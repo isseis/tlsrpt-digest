@@ -64,7 +64,7 @@ Work in order.
      `--title` and including the `レビュー観点` items in `--body`. Use explicit
      flags to avoid interactive prompts.
    - Output the PR URL, mark the second checkpoint checkbox (`PR を作成した`) as
-     `[x]`, and commit.
+     [x], and commit using the git-commit skill guidelines.
    - Pause and ask the user:
      `PR-N を作成しました: <URL>。マージされたらお知らせください。`
    - Wait for the user to confirm the PR is merged. Then:
