@@ -52,7 +52,7 @@
 
 - [ ] `internal/notify/types.go` に `WarningKind` 型（許容値 `size_mismatch` / `parse_failure`）と `Warning` 構造体（`Kind WarningKind`, `UID uint32`, `UIDValidity uint32`, `MessageID string`）を追加する
 - [ ] `internal/notify/types.go` の `SystemError` 構造体を更新する: フィールドを `Kind SystemErrorKind`, `Component string`, `Mailbox string` に変更し、既存の `ErrorType string` と `Message string` を削除する
-- [ ] `internal/notify/types.go` に `SystemErrorKind` 型と許容値（`lock_held`, `store_identity_mismatch`, `store_permission`, `store_corruption`, `imap_credentials_missing`, `imap_connect_failed`, `imap_auth_failed`, `imap_operation_failed`, `uidvalidity_changed`, `recovery_required`, `reset_incomplete`, `notification_flush_failed`）を定義する
+- [ ] `internal/notify/types.go` に `SystemErrorKind` 型と許容値（`lock_held`, `store_identity_mismatch`, `store_permission`, `store_corruption`, `imap_credentials_missing`, `imap_connect_failed`, `imap_auth_failed`, `imap_operation_failed`, `uidvalidity_changed`, `recovery_required`, `reset_incomplete`, `notification_flush_failed`）を定義する。`notification_flush_failed` は `Flush()` 自体が失敗した場合に使用する種別であり、Slack 配送はすでに失敗しているため `slog.Error` による stderr 出力のみで報告する（`Flush()` による Slack 送信は行わない）
 - [ ] `internal/notify/helpers.go` の `LogSystemError` を新 `SystemError` 構造（`Kind` フィールド）に対応させる
 - [ ] `internal/notify/helpers.go` に `LogWarning(ctx context.Context, h slog.Handler, warning Warning) error` を追加する（WARN レベルで error webhook バッファへ積む）
 - [ ] `internal/notify/format.go` に `fetch_warning` レコードの整形処理を追加する（`tls_failure_alert` 集約に混入させず専用レコードとして扱う）
@@ -95,7 +95,7 @@
   - pending reset がない場合、または commit 後の状態では変更せずエラーを返す（AC-43）
   - pending reset（manifest あり・sentinel 未更新）の場合: staging から旧データを元の位置へ戻し manifest を削除する。完了後も recovery-required は残す
   - 再実行で「旧データ保持 + recovery-required 残存」へ収束すること（AC-44）
-- [ ] `internal/store/recovery.go` に `AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)` を実装する: guard は sentinel 用の同期境界を保持し、`CheckRecoveryRequired` は呼び出しごとにストアのセンチネルファイルを再読み込みして recovery-required の有無を確認する（取得時点の状態をキャッシュしない）。writer 側の `SaveRecoveryRequired` / `ResetForRecovery` / `AbortReset` / `ApplyRecovery` は同じ同期境界の排他側を通ることで、第 2 回 `CheckRecoveryRequired(found=false)` から `LogSummary` / `Flush()` 開始までの間に recovery-required が作成される false negative を防ぐ（`02_architecture.md` §3.3 / §6.7 参照）
+- [ ] `internal/store/recovery.go` に `AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)` を実装する: guard はプロセス間の同期境界として専用ガードファイル（例: `{root_dir}/.tlsrpt-digest-summary.lock`）に対して `unix.Flock(fd, unix.LOCK_SH|unix.LOCK_NB)` で共有ロックを取得する。`CheckRecoveryRequired` は呼び出しごとにセンチネルファイルを再読み込みして recovery-required の有無を確認する（取得時点の状態をキャッシュしない）。writer 側（`SaveRecoveryRequired` / `ResetForRecovery` / `AbortReset` / `ApplyRecovery`）は同じガードファイルに対して `unix.Flock(fd, unix.LOCK_EX)` で排他ロックを取得してからセンチネルを更新することで、第 2 回 `CheckRecoveryRequired(found=false)` から `LogSummary` / `Flush()` 開始までの間に recovery-required が作成される false negative を防ぐ。`summary` がプロセス排他ロック（`lock.go` の `AcquireExclusive`）を取得しない設計でも fail closed 境界を持つ（`02_architecture.md` §3.3 / §6.7 参照）
 - [ ] `internal/store/errors.go` に `ErrPendingReset`, `ErrRecoveryRequiredMissing`, `ErrRecoveryUIDValidityMismatch`, `ErrResetNotPending` を追加し、pending reset の fail closed・recovery-required 不在・curr UIDVALIDITY 不一致・abort 不可状態を分類できるようにする
 - [ ] `internal/store/store_test.go` に以下のテストを追加する:
   - [ ] pending reset がある状態で `OpenReadWrite` がエラーを返すこと
@@ -212,7 +212,7 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
   - 各サブコマンド用の `SubcommandRunner` スタブを追加する（`Run` は後続フェーズで実装する）
   - `main` は `Bootstrap` 成功後に `defer boot.Close()` を設定し、`SubcommandRunner.Run` 完了までロックを保持する。`Bootstrap` は初期化途中のエラー時だけ取得済みリソースを閉じ、成功パスでは `LockHandle` を閉じない
 - [ ] `cmd/tlsrpt-digest/test_helpers.go` を新規作成する（`//go:build test` タグ）: `SpyNotificationSink` 構造体（`NotificationSink` を実装し呼び出し記録・エラー注入を提供する）を定義する。`package main` 内部型（`NotificationSink`）を使用するため `testutil/` サブディレクトリではなく同パッケージのこのファイルに配置する（`test_organization.md` Classification B）
-- [ ] `boot_test.go` を新規作成する（`package main`、`_test.go` サフィックスによりテストファイルと認識されるため `//go:build test` タグは不要）: 以下のテストを追加する:
+- [ ] `boot_test.go` を新規作成する（`package main`、`//go:build test` タグ必須）: `test_helpers.go` の `SpyNotificationSink`（`//go:build test`）を参照するため、このファイルも同じビルドタグを付ける。タグなしの plain `go test ./...` でコンパイル対象外となり、`go test ./... -tags test` でのみ実行される。以下のテストを追加する:
   - [ ] 設定読込失敗 → stderr 出力のみで exit 1 となること（AC-08）
   - [ ] Slack URL が取得直後に `config.Secret` でラップされること（生文字列がログに出ないこと）
   - [ ] `gc` / `recover` / `reprocess` サブコマンドで IMAP 認証情報を要求しないこと
@@ -259,7 +259,7 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
 **見積工数**: 2.0 日
 **実績工数**: -
 
-at-least-once 保証・ダウンロード対象選定の詳細は `02_architecture.md` §6.1・§6.2 を参照。処理フロー全体は `02_architecture.md` §2.3 を参照。
+at-least-once 保証・ダウンロード対象選定の詳細は `02_architecture.md` §6.1・§6.2 を参照。処理フロー全体は `02_architecture.md` §2.3 を参照。センチネルエラー変数（`var ErrFoo = errors.New("...")`）のメッセージ文字列にはパッケージプレフィックス（例: `"fetch: "`, `"store: "`）を含めない。呼び出し元で `fmt.Errorf("fetch: %w", err)` のようにプレフィックスを付与するため、二重プレフィックスを避けるためである。
 
 - [ ] `fetch.go` に `fetchRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
 - [ ] `main.go` のスタブを `fetchRunner` で置き換える
@@ -272,7 +272,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
      - `found=false`: 現在の UIDVALIDITY を `SaveUIDValidity` で即時保存してフェッチ継続（AC-11b）
      - `found=true` かつ一致: フェッチ継続（AC-11b-cont）
      - `found=true` かつ不一致: `SaveRecoveryRequired` + `LogSystemError(uidvalidity_changed)` + `Flush()` + exit 1（AC-11c）。`LoadUIDValidity` または `SaveRecoveryRequired` が失敗した場合はメール処理へ進まず stderr 診断 + `LogSystemError(store_corruption)` + `Flush()` + exit 1
-  6. ダウンロード対象を選定する（SEEN × ローカル `.eml` の 4 通り。`02_architecture.md` §6.2 テーブル参照）（AC-12）。RFC822.SIZE 不一致が検出された場合は、SEEN + `.eml` あり（スキップ対象）であっても `LogWarning(size_mismatch)` をバッファへ積んでから当該メールをスキップする（AC-13 / AC-14）
+  6. ダウンロード対象を選定する（SEEN × ローカル `.eml` の 4 通り。`02_architecture.md` §6.2 テーブル参照）（AC-12）。RFC822.SIZE 不一致はダウンロード判定に影響しない（Exchange 等のサイズ不正確実装への耐性）。不一致を検出した場合は `LogWarning(size_mismatch)` をバッファへ積むのみとし、SEEN × `.eml` の選定結果はそのまま適用する。たとえば SEEN + `.eml` あり（通常のスキップ対象）でも、スキップ自体は SIZE 不一致ではなく選定テーブルによるものである（AC-13 / AC-14）
   7. ダウンロード対象メールを `imap.Download` で取得し `store.SaveEmail` で保存する（アトミック・冪等）（AC-15）
   8. ローカルに `.eml` が存在する全 UID（今回ダウンロード分＋既存分）を `SaveEmailMetas` で一括登録する（AC-15 / AC-15a）
   9. 各メールの添付 `.json.gz` をパースする（AC-16）。パース失敗時は `LogWarning(parse_failure)` をバッファへ積み、当該メールのレポート保存をスキップする（AC-16a）
@@ -406,7 +406,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 - [ ] 処理フローを以下の順で実装する:
   1. `LoadRecoveryRequired` で recovery-required 確認。`found=true` → stderr に英語の `recover` 実行案内を出力し、削除処理を行わず exit 1。`LoadRecoveryRequired` 自体が失敗した場合も fail closed とし、削除処理を行わず `LogSystemError(store_corruption)` + `Flush()` + exit 1（AC-29a）
   2. `--before` の `Duration.Cutoff(now)` を `DeleteReportsBefore(cutoff)` に渡す。失敗時は `LogSystemError(store_permission)` + `Flush()` + exit 1（AC-32 / AC-33）
-  3. `--max-email-age` の `Duration.Cutoff(now)` を `DeleteEmailsBefore(cutoff)` に渡す。失敗時は `LogSystemError(store_permission)` + `Flush()` + exit 1（AC-32b / AC-33）
+  3. `--max-email-age` の `Duration.Cutoff(now)` を `DeleteEmailsBefore(cutoff)` に渡す。失敗時は `LogSystemError(store_permission)` + `Flush()` + exit 1（AC-32b / AC-33）。`DeleteEmailsBefore` の実装では、`.eml` ファイル削除後に親ディレクトリが空になった場合に限りディレクトリを削除する（事前に `os.ReadDir` で空確認。空でない場合は削除せず、エラーにもしない）
   4. JSON レコードと `.eml` それぞれの削除件数を `slog.Info` で出力する（AC-33）
 - [ ] `gc_test.go` に以下のテストを追加する（`storetestutil.FakeStore` を使用）:
   - [ ] `--before` フラグが `FlagSet` に登録されており、`ParseDuration` でパースされること（AC-30）
