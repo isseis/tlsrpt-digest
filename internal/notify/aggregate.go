@@ -59,7 +59,7 @@ func GenerateSummary(ctx context.Context, st store.Store, start, end time.Time, 
 
 func inSummaryPeriod(report tlsrpt.Report, start, end time.Time) bool {
 	reportEnd := report.DateRange.EndDatetime
-	return reportEnd.After(start) && (reportEnd.Equal(end) || reportEnd.Before(end))
+	return !reportEnd.Before(start) && reportEnd.Before(end)
 }
 
 func successfulSessionCount(report tlsrpt.Report) int64 {
