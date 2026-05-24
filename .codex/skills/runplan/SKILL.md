@@ -101,7 +101,7 @@ Work in order.
 
    After receiving findings:
    - Fix all Critical and Major issues, then run
-     `make fmt && make test && make lint` and commit.
+     make fmt && make test && make lint and commit using the git-commit skill guidelines.
    - Apply Minor fixes at your discretion.
    - If any Critical or Major issue required a fix, spawn a second
      review subagent to verify the fixes. Repeat, subject to the
