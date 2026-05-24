@@ -124,12 +124,16 @@ func stageOldData(rootDir, stagingPath string) error {
 		if err := os.Rename(dataPath, filepath.Join(stagingPath, "tlsrpt.json")); err != nil {
 			return fmt.Errorf("stageOldData: move data file: %w", err)
 		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("stageOldData: stat data file: %w", err)
 	}
 	emailsDir := emailsPath(rootDir)
 	if _, err := os.Stat(emailsDir); err == nil {
 		if err := os.Rename(emailsDir, filepath.Join(stagingPath, "emails")); err != nil {
 			return fmt.Errorf("stageOldData: move emails dir: %w", err)
 		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("stageOldData: stat emails dir: %w", err)
 	}
 	return nil
 }
@@ -141,12 +145,16 @@ func restoreFromStaging(rootDir, stagingPath string) error {
 		if err := os.Rename(stagedData, dataFilePath(rootDir)); err != nil {
 			return fmt.Errorf("restoreFromStaging: restore data file: %w", err)
 		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("restoreFromStaging: stat staged data file: %w", err)
 	}
 	stagedEmails := filepath.Join(stagingPath, "emails")
 	if _, err := os.Stat(stagedEmails); err == nil {
 		if err := os.Rename(stagedEmails, emailsPath(rootDir)); err != nil {
 			return fmt.Errorf("restoreFromStaging: restore emails dir: %w", err)
 		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("restoreFromStaging: stat staged emails dir: %w", err)
 	}
 	return nil
 }
@@ -280,8 +288,8 @@ func (s *storeImpl) ApplyRecovery(newUIDValidity uint32) error {
 // The operation is crash-safe: re-running after any intermediate failure converges
 // to "empty store + current UIDVALIDITY + recovery-required cleared".
 func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
-	if s.readOnly {
-		return ErrReadOnly
+	if s.mode != OpenRecoverReset {
+		return ErrInvalidStoreMode
 	}
 
 	manifestPath := resetManifestPath(s.rootDir)
@@ -293,6 +301,9 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 		return fmt.Errorf("ResetForRecovery: read manifest: %w", manifestErr)
 	}
 	manifestExists := manifestErr == nil
+	if manifestExists && mfst.Version != resetManifestVersion {
+		return &ErrResetManifestVersionMismatch{Got: mfst.Version, Want: resetManifestVersion}
+	}
 
 	if !manifestExists {
 		// Fresh start: check preconditions.
@@ -353,18 +364,22 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 		}
 	}
 
-	// Cleanup staging (best-effort; a crash here leaves a stale staging dir
-	// which is harmless to normal data paths and cleaned up on next run).
+	// Staging dir cleanup is best-effort: a stale staging dir is harmless to
+	// normal data paths and is cleaned up on the next run.
 	_ = os.RemoveAll(stagingPath)
-	_ = os.Remove(manifestPath)
+	// Manifest removal is not best-effort: if the manifest survives, Open(OpenReadWrite)
+	// will permanently return ErrPendingReset.
+	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("ResetForRecovery: remove manifest: %w", err)
+	}
 	return nil
 }
 
 // AbortReset implements Store.AbortReset.
 // Only valid when a pre-commit pending reset manifest exists.
 func (s *storeImpl) AbortReset() error {
-	if s.readOnly {
-		return ErrReadOnly
+	if s.mode != OpenRecoverReset {
+		return ErrInvalidStoreMode
 	}
 
 	manifestPath := resetManifestPath(s.rootDir)

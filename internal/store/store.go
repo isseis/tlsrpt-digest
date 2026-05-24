@@ -3,6 +3,7 @@ package store
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -152,8 +153,12 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 	// Fail-closed: OpenReadWrite must not proceed when a pending reset manifest exists.
 	// OpenRecoverReset bypasses this check so recover subcommand can resume or abort.
 	if mode == OpenReadWrite {
-		if _, err := os.Stat(resetManifestPath(rootDir)); err == nil {
+		_, err := os.Stat(resetManifestPath(rootDir))
+		if err == nil {
 			return nil, ErrPendingReset
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("Open: stat reset manifest: %w", err)
 		}
 	}
 

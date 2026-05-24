@@ -129,3 +129,18 @@ func (e *ErrRecoveryUIDValidityMismatch) Error() string {
 // ErrResetNotPending is returned by AbortReset when there is no pending reset
 // (manifest absent) or when the reset has already been committed.
 var ErrResetNotPending = errors.New("store: no pending reset to abort")
+
+// ErrInvalidStoreMode is returned when an operation is called on a store opened
+// in an incompatible mode (e.g., calling ResetForRecovery on an OpenReadWrite store).
+var ErrInvalidStoreMode = errors.New("store: operation not valid for current open mode")
+
+// ErrResetManifestVersionMismatch is returned by ResetForRecovery when the on-disk
+// manifest was written by a different (unsupported) version of the reset protocol.
+type ErrResetManifestVersionMismatch struct {
+	Got  int
+	Want int
+}
+
+func (e *ErrResetManifestVersionMismatch) Error() string {
+	return fmt.Sprintf("store: unexpected reset manifest version: got=%d want=%d", e.Got, e.Want)
+}
