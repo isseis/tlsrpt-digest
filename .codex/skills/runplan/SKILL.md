@@ -71,7 +71,7 @@ Work in order.
      - Create a new branch for the next group of work, for example
        `git checkout -b <feature-branch>-<N+1>`.
      - Mark the remaining PR checkpoint checkboxes (`PR がマージされた` and
-       `次のブランチへ切り替えた`) as `[x]` and commit.
+       次のブランチへ切り替えた) as [x] and commit using the git-commit skill guidelines.
    - Return to step 4.
 
 6. Run `make deadcode`. Remove functions made unreachable by this phase
