@@ -25,7 +25,7 @@
 - 書き込み系サブコマンドは `02_architecture.md` §3.3 のプロセス排他ロックを使う。store open mode は `02_architecture.md` §6.5 に従い、通常の書き込み系は `OpenReadWrite`、pending reset を扱う `recover --mode discard-old --yes` と `recover --abort-reset --yes` は `OpenRecoverReset`、`summary` は `OpenReadOnly` を使う。
 - 通知は `NotificationSink` facade に閉じ込め、Go ソース内のコメント、識別子、固定メッセージは英語で記述する。日本語は本計画書とユーザー向け文書に限定する。
 - 各ステップ完了後に `make test && make lint` が通ることを確認してから次ステップへ進む。
-- 新規テストヘルパーは必要なものだけ追加する。`cmd/tlsrpt-digest` 内で未公開型を扱うものは `test_helpers.go` または `test_helpers_<category>.go` に `//go:build test` を付ける。これらに依存する `_test.go` も同じ `//go:build test` を付ける。plain `go test ./...` では production build と tag なしテストのコンパイルを確認し、`go test ./... -tags test` で acceptance test を実行する。既存の cross-package fake は `internal/imap/testutil/mocks.go`、`internal/store/testutil/mocks.go` を拡張して再利用する。
+- 新規テストヘルパーは必要なものだけ追加する。`cmd/tlsrpt-digest` 内で未公開型を扱うものは `test_helpers.go` または `test_helpers_<category>.go` に `//go:build test` を付ける。これらに依存する `_test.go` も同じ `//go:build test` を付ける。plain `go test ./...` では production build と tag なしテストのコンパイルを確認し、`go test -tags test ./...` で acceptance test を実行する。既存の cross-package fake は `internal/imap/testutil/mocks.go`、`internal/store/testutil/mocks.go` を拡張して再利用する。
 
 ### 1.3 既存コード調査結果
 
@@ -212,7 +212,7 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
   - 各サブコマンド用の `SubcommandRunner` スタブを追加する（`Run` は後続フェーズで実装する）
   - `main` は `Bootstrap` 成功後に `defer boot.Close()` を設定し、`SubcommandRunner.Run` 完了までロックを保持する。`Bootstrap` は初期化途中のエラー時だけ取得済みリソースを閉じ、成功パスでは `LockHandle` を閉じない
 - [ ] `cmd/tlsrpt-digest/test_helpers.go` を新規作成する（`//go:build test` タグ）: `SpyNotificationSink` 構造体（`NotificationSink` を実装し呼び出し記録・エラー注入を提供する）を定義する。`package main` 内部型（`NotificationSink`）を使用するため `testutil/` サブディレクトリではなく同パッケージのこのファイルに配置する（`test_organization.md` Classification B）
-- [ ] `boot_test.go` を新規作成する（`package main`、`//go:build test` タグ必須）: `test_helpers.go` の `SpyNotificationSink`（`//go:build test`）を参照するため、このファイルも同じビルドタグを付ける。タグなしの plain `go test ./...` でコンパイル対象外となり、`go test ./... -tags test` でのみ実行される。以下のテストを追加する:
+- [ ] `boot_test.go` を新規作成する（`package main`、`//go:build test` タグ必須）: `test_helpers.go` の `SpyNotificationSink`（`//go:build test`）を参照するため、このファイルも同じビルドタグを付ける。タグなしの plain `go test ./...` でコンパイル対象外となり、`go test -tags test ./...` でのみ実行される。以下のテストを追加する:
   - [ ] 設定読込失敗 → stderr 出力のみで exit 1 となること（AC-08）
   - [ ] Slack URL が取得直後に `config.Secret` でラップされること（生文字列がログに出ないこと）
   - [ ] `gc` / `recover` / `reprocess` サブコマンドで IMAP 認証情報を要求しないこと
@@ -582,7 +582,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 **レビュー観点**: `NotificationSink` API 境界の reflection チェック / `reprocess` ラウンドトリップ / README 運用例の網羅性
 
-- [ ] `go test ./...` と `go test ./... -tags test` が両方グリーンであることを確認した
+- [ ] `go test ./...` と `go test -tags test ./...` が両方グリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 
