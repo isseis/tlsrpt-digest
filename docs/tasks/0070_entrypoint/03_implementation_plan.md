@@ -543,7 +543,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 セキュリティテスト要件の詳細は `02_architecture.md` §7.3 および `docs/dev/developer_guide/notification_security.md` §5 を参照。
 
-- [ ] `security_test.go` に以下のテストを追加する（`package main`、`_test.go` サフィックスによりテストファイルと認識されるため `//go:build test` タグは不要）:
+- [ ] `security_test.go` に以下のテストを追加する（`package main`、このファイルは `//go:build test` タグ付きのヘルパーに依存しないため `//go:build test` タグは不要）:
   - [ ] `NotificationSink` の公開メソッド集合を reflection で検査し、`*notify.SlackHandler` / `slog.Handler` / `*slog.Logger` を返すメソッドが存在しないことを確認する
   - [ ] `LogWarning` と `LogSystemError` の payload に raw error 文字列・ローカルファイルパス・IMAP パスワード・Slack Webhook URL が含まれないことを確認する
   - [ ] `BootContext` をログ出力した場合に `config.Secret` フィールドが `[REDACTED]` になることを確認する
