@@ -144,3 +144,14 @@ type ErrResetManifestVersionMismatch struct {
 func (e *ErrResetManifestVersionMismatch) Error() string {
 	return fmt.Sprintf("store: unexpected reset manifest version: got=%d want=%d", e.Got, e.Want)
 }
+
+// ErrResetManifestPhaseUnknown is returned when the on-disk manifest carries a
+// phase value outside the known range.  Treated as fail-closed so callers must
+// resolve the inconsistency manually rather than risk silent cleanup.
+type ErrResetManifestPhaseUnknown struct {
+	Got int
+}
+
+func (e *ErrResetManifestPhaseUnknown) Error() string {
+	return fmt.Sprintf("store: unknown reset manifest phase: got=%d", e.Got)
+}

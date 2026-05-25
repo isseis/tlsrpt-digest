@@ -290,6 +290,159 @@ func TestResetForRecovery_CrashAtPhaseManifestWritten(t *testing.T) {
 	assert.Empty(t, reports, "store must be empty after ResetForRecovery")
 }
 
+// TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate simulates a crash
+// in the window between stageEmailsDir (rename completed) and writeResetManifest(phase=3).
+// The manifest is still at phase=2 but emails/ is already in staging.
+// Re-running must skip the rename (emails/ absent in root) and converge cleanly.
+func TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate(t *testing.T) {
+	rootDir := t.TempDir()
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, s.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(s, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// Simulate crash: both tlsrpt.json and emails/ already in staging, manifest still
+	// at phase=2 (emails rename completed but manifest not yet advanced to phase=3).
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, os.Rename(dataFilePath(rootDir), filepath.Join(stagingPath, "tlsrpt.json")))
+	require.NoError(t, os.Rename(emailsPath(rootDir), filepath.Join(stagingPath, "emails")))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseDataStaged, // not yet advanced to 3
+	}))
+
+	s2, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s2.ResetForRecovery(200))
+
+	v, found, err := s2.LoadUIDValidity()
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, uint32(200), v)
+
+	_, _, _, recFound, err := s2.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.False(t, recFound)
+
+	s3, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	reports, err := s3.GetAllReports()
+	require.NoError(t, err)
+	assert.Empty(t, reports)
+}
+
+// TestResetForRecovery_UnknownPhaseFailsClosed verifies that a manifest with an
+// out-of-range phase is rejected and neither the manifest nor the staging dir are
+// touched, so the inconsistency can be resolved manually.
+func TestResetForRecovery_UnknownPhaseFailsClosed(t *testing.T) {
+	rootDir := t.TempDir()
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	manifestPath := resetManifestPath(rootDir)
+	require.NoError(t, os.WriteFile(manifestPath, []byte(`{"version":1,"curr_uid_validity":200,"phase":99}`), filePerm))
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+
+	err = s.ResetForRecovery(200)
+	var phaseErr *ErrResetManifestPhaseUnknown
+	require.ErrorAs(t, err, &phaseErr)
+	assert.Equal(t, 99, phaseErr.Got)
+
+	// Manifest and staging dir must remain untouched.
+	_, err = os.Stat(manifestPath)
+	assert.NoError(t, err, "manifest must be preserved on unknown phase")
+	_, err = os.Stat(stagingPath)
+	assert.NoError(t, err, "staging dir must be preserved on unknown phase")
+}
+
+// TestAbortReset_UnknownPhaseFailsClosed mirrors the ResetForRecovery check on the
+// abort path.  An unknown phase must not be silently treated as committed or
+// pre-commit; instead, fail closed for manual resolution.
+func TestAbortReset_UnknownPhaseFailsClosed(t *testing.T) {
+	rootDir := t.TempDir()
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	manifestPath := resetManifestPath(rootDir)
+	require.NoError(t, os.WriteFile(manifestPath, []byte(`{"version":1,"curr_uid_validity":200,"phase":99}`), filePerm))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+
+	err = s.AbortReset()
+	var phaseErr *ErrResetManifestPhaseUnknown
+	require.ErrorAs(t, err, &phaseErr)
+
+	// Manifest must remain.
+	_, err = os.Stat(manifestPath)
+	assert.NoError(t, err)
+}
+
+// TestAbortReset_CrashDuringCommitRefusesAbort simulates the narrow window where
+// commit has saved the sentinel (recovery_required cleared, new UIDValidity set)
+// but the manifest has not yet been advanced to resetPhaseCommitted.  Allowing
+// abort here would restore stale data on top of the committed sentinel, producing
+// an inconsistent store; AbortReset must refuse via ErrResetNotPending so the
+// caller resumes with ResetForRecovery instead.
+func TestAbortReset_CrashDuringCommitRefusesAbort(t *testing.T) {
+	rootDir := t.TempDir()
+
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// Stage data, then simulate "sentinel committed, manifest not yet phase=4".
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, os.Rename(dataFilePath(rootDir), filepath.Join(stagingPath, "tlsrpt.json")))
+	require.NoError(t, os.Rename(emailsPath(rootDir), filepath.Join(stagingPath, "emails")))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseEmailsStaged, // commit saved sentinel but manifest still phase=3
+	}))
+
+	// Commit the sentinel by hand (bypassing commitReset to keep manifest at phase=3).
+	sentinel, _, err := loadSentinel(rootDir)
+	require.NoError(t, err)
+	newUID := uint32(200)
+	sentinel.UIDValidity = &newUID
+	sentinel.RecoveryRequired = nil
+	require.NoError(t, saveSentinel(rootDir, sentinel))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+
+	// AbortReset must refuse: the commit barrier (recovery_required) has been crossed.
+	assert.ErrorIs(t, s.AbortReset(), ErrResetNotPending)
+
+	// Manifest must remain so a follow-up ResetForRecovery can finalise.
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.NoError(t, err, "manifest must remain after refused abort")
+
+	// ResetForRecovery resumes correctly: idempotent commit + cleanup.
+	require.NoError(t, s.ResetForRecovery(200))
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.True(t, os.IsNotExist(err))
+}
+
 // TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate simulates a crash in the
 // window between stageDataFile (rename completed) and writeResetManifest(phase=2).
 // The manifest is still at phase=1 but tlsrpt.json is already in staging.

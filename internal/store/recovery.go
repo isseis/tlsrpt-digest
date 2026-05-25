@@ -58,6 +58,17 @@ type resetManifest struct {
 
 const resetManifestVersion = 1
 
+// validateManifestPhase ensures the manifest's phase is in the known range.
+// Phase=0 (legacy, written by old code without the field) is accepted and resolved
+// by callers; any other unknown value is rejected fail-closed so manifest/staging
+// are preserved for manual inspection.
+func validateManifestPhase(p resetPhase) error {
+	if p < 0 || p > resetPhaseCommitted {
+		return &ErrResetManifestPhaseUnknown{Got: int(p)}
+	}
+	return nil
+}
+
 // writeResetManifest atomically writes the reset manifest.
 func writeResetManifest(path string, m resetManifest) error {
 	data, err := json.Marshal(m)
@@ -330,8 +341,13 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 		return fmt.Errorf("ResetForRecovery: read manifest: %w", manifestErr)
 	}
 	manifestExists := manifestErr == nil
-	if manifestExists && mfst.Version != resetManifestVersion {
-		return &ErrResetManifestVersionMismatch{Got: mfst.Version, Want: resetManifestVersion}
+	if manifestExists {
+		if mfst.Version != resetManifestVersion {
+			return &ErrResetManifestVersionMismatch{Got: mfst.Version, Want: resetManifestVersion}
+		}
+		if err := validateManifestPhase(mfst.Phase); err != nil {
+			return err
+		}
 	}
 
 	if !manifestExists {
@@ -474,23 +490,25 @@ func (s *storeImpl) AbortReset() error {
 	if mfst.Version != resetManifestVersion {
 		return &ErrResetManifestVersionMismatch{Got: mfst.Version, Want: resetManifestVersion}
 	}
-
-	// Determine whether the reset is still pre-commit.
-	// Legacy manifests (Phase=0) were written by old code after staging but before commit;
-	// fall back to the recovery_required sentinel field to distinguish.
-	phase := mfst.Phase
-	if phase == 0 {
-		_, _, _, found, err := s.LoadRecoveryRequired()
-		if err != nil {
-			return fmt.Errorf("AbortReset: check recovery-required: %w", err)
-		}
-		if !found {
-			return ErrResetNotPending
-		}
-		phase = resetPhaseEmailsStaged
+	if err := validateManifestPhase(mfst.Phase); err != nil {
+		return err
 	}
 
-	if phase >= resetPhaseCommitted {
+	if mfst.Phase >= resetPhaseCommitted {
+		return ErrResetNotPending
+	}
+
+	// Even for pre-commit phases, the actual commit barrier is sentinel.recovery_required.
+	// Commit writes the sentinel first and then advances the manifest to phase=4; a crash
+	// in between leaves the manifest at phase=3 but the sentinel already committed.
+	// Treating that state as abortable would restore stale data on top of the new sentinel,
+	// producing a "new UIDValidity + cleared recovery-required + old data" inconsistency.
+	// Therefore: if recovery_required is gone, the commit happened — refuse to abort.
+	_, _, _, found, err := s.LoadRecoveryRequired()
+	if err != nil {
+		return fmt.Errorf("AbortReset: check recovery-required: %w", err)
+	}
+	if !found {
 		return ErrResetNotPending
 	}
 
