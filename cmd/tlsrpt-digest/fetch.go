@@ -54,6 +54,9 @@ func newFetchRunner() *fetchRunner {
 				}
 				return 0, false, err
 			}
+			if !info.Mode().IsRegular() {
+				return 0, false, nil
+			}
 			return info.Size(), true, nil
 		},
 		loadLocalEML: func(rootDir string, uid, uidValidity uint32, internalDate time.Time) ([]byte, error) {
