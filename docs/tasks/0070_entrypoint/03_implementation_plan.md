@@ -266,9 +266,9 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
 
 at-least-once 保証・ダウンロード対象選定の詳細は `02_architecture.md` §6.1・§6.2 を参照。処理フロー全体は `02_architecture.md` §2.3 を参照。センチネルエラー変数（`var ErrFoo = errors.New("...")`）のメッセージ文字列にはパッケージプレフィックス（例: `"fetch: "`, `"store: "`）を含めない。呼び出し元で `fmt.Errorf("fetch: %w", err)` のようにプレフィックスを付与するため、二重プレフィックスを避けるためである。
 
-- [ ] `fetch.go` に `fetchRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
-- [ ] `main.go` のスタブを `fetchRunner` で置き換える
-- [ ] 処理フローを以下の順で実装する:
+- [x] `fetch.go` に `fetchRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [x] `main.go` のスタブを `fetchRunner` で置き換える
+- [x] 処理フローを以下の順で実装する:
   1. `LoadRecoveryRequired` で recovery-required 確認。`found=true` → stderr に英語の `recover` 実行案内を出力し、`LogSystemError(recovery_required)` + `Flush()` + exit 1。`LoadRecoveryRequired` 自体が失敗した場合も fail closed とし、IMAP 接続へ進まず `LogSystemError(store_corruption)` + `Flush()` + exit 1（AC-10d / AC-10e）
   2. `TLSRPT_IMAP_USERNAME`（string）・`TLSRPT_IMAP_PASSWORD`（即時 `config.Secret` 化）を取得する（W-6f）。欠落時は `LogSystemError(imap_credentials_missing)` + `Flush()` + exit 1
   3. IMAP client を作成する（`imap.NewClient`）。接続失敗は `LogSystemError(imap_connect_failed)`、認証失敗は `LogSystemError(imap_auth_failed)` に分類し、いずれも `Flush()` + exit 1 とする（AC-10）。成功・失敗いずれのパスでも最終的に `Close()` を呼ぶ
@@ -286,43 +286,43 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
   12. `Flush()` を呼ぶ。失敗時は exit 1（SEEN 付与しない）（AC-18a）
   13. `Flush()` 成功後に `MarkSeen` で UNSEEN だった全メールに SEEN を付与する（AC-19）
   14. `SaveUIDValidity(currentUIDVALIDITY)` を冪等保存する（AC-20a）
-- [ ] `fetch_test.go` に以下のテストを追加する（既存 `imaptestutil.FakeMailFetcher`・`storetestutil.FakeStore`・`SpyNotificationSink` を使用）:
-  - [ ] `FetchMeta` が UIDVALIDITY・UID・RFC822.SIZE・SEEN・Message-ID・INTERNALDATE を取得し、since 引数として `Duration.Cutoff(now)` が渡されること（AC-11）
-  - [ ] `LoadRecoveryRequired` 失敗 → IMAP 接続を行わず `LogSystemError(store_corruption)` + `Flush()` + exit 1 となること
-  - [ ] `FetchMeta` 失敗 → `LogSystemError(imap_operation_failed)` + `Flush()` + SEEN 未付与 + exit 1 となること
-  - [ ] `--since` フラグが `FlagSet` に登録されており、`Duration.Cutoff(now)` として `FetchMeta` へ渡されること（AC-05）
-  - [ ] `--since` 指定時に `imap.fetch_days` 設定値が無視されること（AC-06）
-  - [ ] SEEN + `.eml` あり → スキップされること（AC-12）
-  - [ ] UNSEEN + `.eml` なし → ダウンロード・処理・SEEN 付与が行われること
-  - [ ] `imap.Download` 失敗 → 当該メールを保存・通知・SEEN 付与せず exit 1 となること
-  - [ ] `store.SaveEmail` 失敗 → `SaveEmailMetas` / `SaveReports` / `MarkSeen` を呼ばず exit 1 となること
-  - [ ] UNSEEN + `.eml` あり → ダウンロードせず既存ファイルを処理・SEEN 付与が行われること
-  - [ ] SEEN + `.eml` なし → ダウンロードされること（SEEN 変更なし）
-  - [ ] SEEN + `.eml` なし + `failure_session_count > 0` → `LogAlert` が呼ばれないこと（SEEN 済みメールへの再アラート防止）（AC-17）
-  - [ ] RFC822.SIZE 不一致 + UNSEEN + `.eml` なし → `LogWarning(size_mismatch)` が積まれること（AC-13）
-  - [ ] RFC822.SIZE 不一致 + SEEN + `.eml` あり → `LogWarning(size_mismatch)` が積まれた上でスキップされること（AC-14）
-  - [ ] `failure_session_count > 0` + UNSEEN → `LogAlert` が積まれること（AC-17）
-  - [ ] `failure_session_count == 0` → `LogAlert` が積まれないこと
-  - [ ] UIDVALIDITY 初回（`found=false`）→ 即時 `SaveUIDValidity` 後にフェッチ継続（AC-11b）
-  - [ ] `LoadUIDValidity` 失敗 → ダウンロードへ進まず `LogSystemError(store_corruption)` + `Flush()` + exit 1 となること
-  - [ ] UIDVALIDITY 初回保存（AC-11b の `SaveUIDValidity`）失敗 → メール取得・処理へ進まず exit 1 となること
-  - [ ] UIDVALIDITY 不一致 → `SaveRecoveryRequired` + `LogSystemError(uidvalidity_changed)` + `Flush()` + exit 1（AC-11c）
-  - [ ] UIDVALIDITY 不一致時の `SaveRecoveryRequired` 失敗 → ダウンロードへ進まず stderr 診断 + `LogSystemError(store_corruption)` + `Flush()` + exit 1 となること
-  - [ ] recovery-required 残存 → `fetch` が即座に停止すること（AC-10d / AC-10e / AC-11d）
-  - [ ] パース失敗 → `LogWarning(parse_failure)` + レポート保存スキップ + SEEN 付与は継続（AC-16a / AC-20）
-  - [ ] `Flush()` 失敗 → SEEN が付与されないこと（AC-18a）
-  - [ ] `SaveEmailMetas` と `SaveReports` が全メール処理後にそれぞれ 1 回ずつ呼ばれること（AC-15 / AC-18）
-  - [ ] `SaveEmailMetas` 失敗 → `SaveReports` / `MarkSeen` を呼ばず exit 1 となること
-  - [ ] `SaveReports` 失敗 → `Flush()` / `MarkSeen` を呼ばず exit 1 となること
-  - [ ] 正常完了 → exit 0、UIDVALIDITY 不一致 / `Flush()` 失敗 / recovery-required 残存 → exit 1 となること（AC-21）
-  - [ ] IMAP 接続失敗 → `LogSystemError(imap_connect_failed)` + `Flush()` + exit 1（AC-10）
-  - [ ] IMAP 認証失敗 → `LogSystemError(imap_auth_failed)` + `Flush()` + exit 1（AC-10）
-  - [ ] IMAP client が成功・失敗のどちらのパスでも `Close()` されること（AC-10）
-  - [ ] 1 件のメール処理失敗（パース失敗）が他のメールの処理・SEEN 付与に影響しないこと（AC-20）
-  - [ ] 全メール処理完了後に `SaveUIDValidity(currentUIDVALIDITY)` が 1 回呼ばれること（AC-20a）
-  - [ ] `MarkSeen` 失敗 → exit 1 となり、`SaveUIDValidity(currentUIDVALIDITY)` を呼ばないこと
-  - [ ] 最終 `SaveUIDValidity(currentUIDVALIDITY)` 失敗 → exit 1 となること
-  - [ ] ロック取得失敗 → `LogSystemError(lock_held)` + `Flush()` + exit 1（AC-10a）
+- [x] `fetch_test.go` に以下のテストを追加する（既存 `imaptestutil.FakeMailFetcher`・`storetestutil.FakeStore`・`SpyNotificationSink` を使用）:
+  - [x] `FetchMeta` が UIDVALIDITY・UID・RFC822.SIZE・SEEN・Message-ID・INTERNALDATE を取得し、since 引数として `Duration.Cutoff(now)` が渡されること（AC-11）
+  - [x] `LoadRecoveryRequired` 失敗 → IMAP 接続を行わず `LogSystemError(store_corruption)` + `Flush()` + exit 1 となること
+  - [x] `FetchMeta` 失敗 → `LogSystemError(imap_operation_failed)` + `Flush()` + SEEN 未付与 + exit 1 となること
+  - [x] `--since` フラグが `FlagSet` に登録されており、`Duration.Cutoff(now)` として `FetchMeta` へ渡されること（AC-05）
+  - [x] `--since` 指定時に `imap.fetch_days` 設定値が無視されること（AC-06）
+  - [x] SEEN + `.eml` あり → スキップされること（AC-12）
+  - [x] UNSEEN + `.eml` なし → ダウンロード・処理・SEEN 付与が行われること
+  - [x] `imap.Download` 失敗 → 当該メールを保存・通知・SEEN 付与せず exit 1 となること
+  - [x] `store.SaveEmail` 失敗 → `SaveEmailMetas` / `SaveReports` / `MarkSeen` を呼ばず exit 1 となること
+  - [x] UNSEEN + `.eml` あり → ダウンロードせず既存ファイルを処理・SEEN 付与が行われること
+  - [x] SEEN + `.eml` なし → ダウンロードされること（SEEN 変更なし）
+  - [x] SEEN + `.eml` なし + `failure_session_count > 0` → `LogAlert` が呼ばれないこと（SEEN 済みメールへの再アラート防止）（AC-17）
+  - [x] RFC822.SIZE 不一致 + UNSEEN + `.eml` なし → `LogWarning(size_mismatch)` が積まれること（AC-13）
+  - [x] RFC822.SIZE 不一致 + SEEN + `.eml` あり → `LogWarning(size_mismatch)` が積まれた上でスキップされること（AC-14）
+  - [x] `failure_session_count > 0` + UNSEEN → `LogAlert` が積まれること（AC-17）
+  - [x] `failure_session_count == 0` → `LogAlert` が積まれないこと
+  - [x] UIDVALIDITY 初回（`found=false`）→ 即時 `SaveUIDValidity` 後にフェッチ継続（AC-11b）
+  - [x] `LoadUIDValidity` 失敗 → ダウンロードへ進まず `LogSystemError(store_corruption)` + `Flush()` + exit 1 となること
+  - [x] UIDVALIDITY 初回保存（AC-11b の `SaveUIDValidity`）失敗 → メール取得・処理へ進まず exit 1 となること
+  - [x] UIDVALIDITY 不一致 → `SaveRecoveryRequired` + `LogSystemError(uidvalidity_changed)` + `Flush()` + exit 1（AC-11c）
+  - [x] UIDVALIDITY 不一致時の `SaveRecoveryRequired` 失敗 → ダウンロードへ進まず stderr 診断 + `LogSystemError(store_corruption)` + `Flush()` + exit 1 となること
+  - [x] recovery-required 残存 → `fetch` が即座に停止すること（AC-10d / AC-10e / AC-11d）
+  - [x] パース失敗 → `LogWarning(parse_failure)` + レポート保存スキップ + SEEN 付与は継続（AC-16a / AC-20）
+  - [x] `Flush()` 失敗 → SEEN が付与されないこと（AC-18a）
+  - [x] `SaveEmailMetas` と `SaveReports` が全メール処理後にそれぞれ 1 回ずつ呼ばれること（AC-15 / AC-18）
+  - [x] `SaveEmailMetas` 失敗 → `SaveReports` / `MarkSeen` を呼ばず exit 1 となること
+  - [x] `SaveReports` 失敗 → `Flush()` / `MarkSeen` を呼ばず exit 1 となること
+  - [x] 正常完了 → exit 0、UIDVALIDITY 不一致 / `Flush()` 失敗 / recovery-required 残存 → exit 1 となること（AC-21）
+  - [x] IMAP 接続失敗 → `LogSystemError(imap_connect_failed)` + `Flush()` + exit 1（AC-10）
+  - [x] IMAP 認証失敗 → `LogSystemError(imap_auth_failed)` + `Flush()` + exit 1（AC-10）
+  - [x] IMAP client が成功・失敗のどちらのパスでも `Close()` されること（AC-10）
+  - [x] 1 件のメール処理失敗（パース失敗）が他のメールの処理・SEEN 付与に影響しないこと（AC-20）
+  - [x] 全メール処理完了後に `SaveUIDValidity(currentUIDVALIDITY)` が 1 回呼ばれること（AC-20a）
+  - [x] `MarkSeen` 失敗 → exit 1 となり、`SaveUIDValidity(currentUIDVALIDITY)` を呼ばないこと
+  - [x] 最終 `SaveUIDValidity(currentUIDVALIDITY)` 失敗 → exit 1 となること
+  - [-] ロック取得失敗 → `LogSystemError(lock_held)` + `Flush()` + exit 1（AC-10a）: lock acquisition happens in Bootstrap (boot.go), not in fetchRunner.Run; covered by bootstrap-level tests
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -336,7 +336,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 **レビュー観点**: `Flush()` → `MarkSeen` 順序 / UIDVALIDITY 比較と fail-closed / SEEN × `.eml` 4 象限
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（ステップ 2-2 は新しいブランチで作業する）
