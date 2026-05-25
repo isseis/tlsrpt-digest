@@ -337,7 +337,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 **レビュー観点**: `Flush()` → `MarkSeen` 順序 / UIDVALIDITY 比較と fail-closed / SEEN × `.eml` 4 象限
 
 - [x] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（ステップ 2-2 は新しいブランチで作業する）
 
