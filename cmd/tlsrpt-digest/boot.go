@@ -79,9 +79,6 @@ type BootstrapOptions struct {
 	OpenStore          func(rootDir string, identity store.IMAPIdentity, mode store.OpenMode) (store.Store, error)
 	Getenv             func(key string) string
 	Stderr             *os.File
-	SkipStoreOpen      bool
-	SkipNotifierBuild  bool
-	SkipWriterLock     bool
 	SummaryGuardOpened func(store.SummaryConsistencyGuard)
 }
 
@@ -123,13 +120,10 @@ func (n *notificationSink) Flush(ctx context.Context) error {
 }
 
 func (n *notificationSink) IsDryRun() bool {
-	return n != nil && n.dryRun
+	return n.dryRun
 }
 
 func (n *notificationSink) each(fn func(*notify.SlackHandler) error) error {
-	if n == nil {
-		return nil
-	}
 	var errs []error
 	for _, h := range n.handlers {
 		errs = append(errs, fn(h))
@@ -170,56 +164,46 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 
 	identity := storeIdentityFromConfig(cfg)
 	if subcmd == subcommandSummary {
-		if !opts.SkipStoreOpen {
-			boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, store.OpenReadOnly)
-			if err != nil {
-				return nil, fmt.Errorf("open summary store: %w", err)
-			}
-			boot.SummaryGuard, err = boot.Store.AcquireSummaryConsistencyGuard()
-			if err != nil {
-				return nil, fmt.Errorf("acquire summary consistency guard: %w", err)
-			}
-			if opts.SummaryGuardOpened != nil {
-				opts.SummaryGuardOpened(boot.SummaryGuard)
-			}
+		boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, store.OpenReadOnly)
+		if err != nil {
+			return nil, fmt.Errorf("open summary store: %w", err)
+		}
+		boot.SummaryGuard, err = boot.Store.AcquireSummaryConsistencyGuard()
+		if err != nil {
+			return nil, fmt.Errorf("acquire summary consistency guard: %w", err)
+		}
+		if opts.SummaryGuardOpened != nil {
+			opts.SummaryGuardOpened(boot.SummaryGuard)
 		}
 		return boot, nil
 	}
 
-	if !opts.SkipWriterLock {
-		if err = validateAndEnsureRootDir(cfg.Store.RootDir); err != nil {
-			return nil, fmt.Errorf("prepare store root: %w", err)
-		}
+	if err = validateAndEnsureRootDir(cfg.Store.RootDir); err != nil {
+		return nil, fmt.Errorf("prepare store root: %w", err)
 	}
 
-	if !opts.SkipNotifierBuild {
-		successURL := config.Secret(opts.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"))
-		errorURL := config.Secret(opts.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR"))
-		boot.Notifier, err = opts.BuildNotifier(successURL, errorURL, cfg, runID, opts.DryRun)
-		if err != nil {
-			return nil, fmt.Errorf("build notifier: %w", err)
-		}
+	successURL := config.Secret(opts.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"))
+	errorURL := config.Secret(opts.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR"))
+	boot.Notifier, err = opts.BuildNotifier(successURL, errorURL, cfg, runID, opts.DryRun)
+	if err != nil {
+		return nil, fmt.Errorf("build notifier: %w", err)
 	}
 
-	if !opts.SkipWriterLock {
-		boot.LockHandle, err = opts.AcquireWriterLock(cfg.Store.RootDir)
-		if err != nil {
-			_ = notifyBootSystemError(context.Background(), boot.Notifier, notify.SystemErrorKindLockHeld, cfg)
-			return nil, fmt.Errorf("acquire store writer lock: %w", err)
-		}
+	boot.LockHandle, err = opts.AcquireWriterLock(cfg.Store.RootDir)
+	if err != nil {
+		_ = notifyBootSystemError(context.Background(), boot.Notifier, notify.SystemErrorKindLockHeld, cfg)
+		return nil, fmt.Errorf("acquire store writer lock: %w", err)
 	}
 
-	if !opts.SkipStoreOpen {
-		mode := storeOpenModeForBootstrap(subcmd, opts)
-		boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
-		if err != nil {
-			kind := classifyStoreOpenError(err)
-			_ = notifyBootSystemError(context.Background(), boot.Notifier, kind, cfg)
-			if errors.Is(err, store.ErrPendingReset) {
-				return nil, fmt.Errorf("store reset is incomplete; run recover --mode discard-old --yes to continue or recover --abort-reset --yes to roll back: %w", err)
-			}
-			return nil, fmt.Errorf("open store: %w", err)
+	mode := storeOpenModeForBootstrap(subcmd, opts)
+	boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
+	if err != nil {
+		kind := classifyStoreOpenError(err)
+		_ = notifyBootSystemError(context.Background(), boot.Notifier, kind, cfg)
+		if errors.Is(err, store.ErrPendingReset) {
+			return nil, fmt.Errorf("store reset is incomplete; run recover --mode discard-old --yes to continue or recover --abort-reset --yes to roll back: %w", err)
 		}
+		return nil, fmt.Errorf("open store: %w", err)
 	}
 
 	return boot, nil
