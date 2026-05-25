@@ -52,18 +52,22 @@
 | キャッシュ | cache | |
 | キャプチャ | capture | |
 | CI/CD | CI/CD | |
+| チェックポイント | checkpoint | |
 | 循環参照 | circular reference | |
 | クリーンアップ | cleanup | |
 | コードパス | code path | 実行経路の文脈 |
 | カラー出力 | color output | |
 | コマンド | command | |
 | コマンドライン | command-line / command line | ハイフンあり/なし両方使用 |
+| コミット | commit | |
 | コミュニティ | community | |
 | コンパイル | compile | |
 | 完了 | complete / completion | |
+| 確定 | finalize / finalization | コミット状態の文脈 |
 | 複雑さ | complexity | |
 | 包括的 | comprehensive | |
 | 一貫性 | consistency | |
+| 集約 | consolidate / consolidation | データを一箇所にまとめる文脈 |
 | 設定 | configuration | |
 | 設定ファイル | configuration file | |
 | 制約 | constraint | |
@@ -178,6 +182,8 @@
 | 日本語 | English | 備考 |
 |--------|---------|------|
 | 識別子 | identifier | タスク ID などの一意の識別子 |
+| 冪等 | idempotent | |
+| 冪等性 | idempotence | |
 | インジェクション | injection | コマンドインジェクションの文脈では "injection" |
 | 整合性 | integrity | |
 | インターフェース | interface | |
@@ -186,6 +192,7 @@
 | インポート | import | |
 | 影響 | impact | |
 | 整数 | integer | |
+| 不変条件 | invariant | |
 
 ### K
 
@@ -201,6 +208,7 @@
 | 活用 | leverage / leveraging | |
 | 学習 | learn / learning | |
 | ライセンス | license | |
+| 台帳 | ledger | |
 | 制限 | limit | |
 | リスト | list | |
 | リテラル | literal | Literal string value |
@@ -303,6 +311,7 @@
 |--------|---------|------|
 | 読み取り | read | |
 | README | README | |
+| RDBMS | RDBMS | |
 | 理由 | reason | |
 | Redaction | redaction | 機密情報の削除・マスク処理 |
 | 推奨 | recommend / recommended | |
@@ -332,6 +341,8 @@
 | リスク | risk | |
 | 堅牢性 | robustness | |
 | 役割 | role | |
+| ロールバック | rollback | |
+| rollback journal mode | rollback journal mode | SQLite のジャーナルモード |
 | ルート | root | |
 | 根本原因 | root cause | |
 | ランタイム | runtime | |
@@ -352,6 +363,7 @@
 | 検索 | search | |
 | Secret | secret | 機密情報・秘密情報 |
 | Self-signed certificate | self-signed certificate | 自己署名証明書 |
+| センチネル | sentinel | |
 | Sensitive data | sensitive data | 機密データ |
 | セキュリティ | security | |
 | セキュアデフォルト | secure default | |
@@ -374,11 +386,14 @@
 | スペル | spelling | |
 | 具体的 | specific | |
 | 仕様 | specification | |
+| SQLite | SQLite | |
 | スタックオーバーフロー | stack overflow | |
 | 単独 | standalone | |
 | 標準 | standard | |
 | スタート | start | |
 | 静的 | static | |
+| ステージング | staging | |
+| ステージングディレクトリ | staging directory | |
 | 文字列 | string | |
 | 構造体 | struct | Go言語の文脈 |
 | シンボリックリンク | symlink | "symbolic link" の略 |
@@ -408,6 +423,7 @@
 | トレーサビリティ | traceability | AC とテストの対応付けの文脈 |
 | トラブルシューティング | troubleshooting | |
 | 切り詰め | truncation | |
+| 二相コミット | two-phase commit | |
 | 典型的 | typical | |
 | 型 | type | |
 | 型安全性 | type safety | |
@@ -450,8 +466,10 @@
 | ウェブ | web | |
 | Webhook | webhook | |
 | ようこそ | welcome | |
+| WAL | WAL | Write-Ahead Logging |
 | ワークフロー | workflow | |
 | 回避策 | workaround | |
+| 先書き | write-ahead | |
 | 作業ディレクトリ | working directory | |
 | ワークスペース | workspace | |
 | Wrapper | wrapper | ラッパー |
