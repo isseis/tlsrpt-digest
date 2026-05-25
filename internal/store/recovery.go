@@ -35,6 +35,8 @@ func resetStagingPath(rootDir string) string {
 }
 
 // resetPhase records how far a discard-old reset has progressed.
+// See docs/dev/adr/0003_reset_phase_design.md for the crash-safety
+// rationale behind the phase values and commit/abort boundaries.
 //
 // Forward (commit) progression: 1 → 2 → 3 → 4.
 // Phase 1 (manifest_written) is a write-ahead log entry written before any
