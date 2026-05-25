@@ -154,17 +154,17 @@
 **見積工数**: 0.5 日
 **実績工数**: -
 
-- [ ] `duration.go` に `Duration` 型（`Days int`）を定義する（`02_architecture.md` §3.1 参照）
-- [ ] `ParseDuration(s string) (Duration, error)` を実装する: `d` / `w` 単位のみ受け付け、週は日数（`×7`）に正規化する。パース後の値が 0 以下の場合はエラーを返す（AC-07b）
-- [ ] `(d Duration) Cutoff(now time.Time) time.Time` を実装する: `now` を UTC 日付の開始時刻（`00:00:00 UTC`）に切り捨ててから `d.Days` 日遡る（AC-07c）
-- [ ] `UTCDayStart(now time.Time) time.Time` を実装する: 「今日の `00:00:00 UTC`」を返す（AC-07d）
-- [ ] `duration_test.go` に以下のテストを追加する:
-  - [ ] 正常パース: `1d`（Days=1）・`7d`（Days=7）・`1w`（Days=7）・`4w`（Days=28）・`30d`（Days=30）（AC-07 / AC-07b）
-  - [ ] エラー: `0d`・`-1d`・`-2w`・`30h`・`abc`・空文字（AC-07b）
-  - [ ] `Cutoff(now)` の UTC 切り捨て: UTC 02:01:00 に `Days=7` のカットオフが「7 日前の 00:00:00 UTC」になること（「7 日前の 02:01:00」ではないこと）（AC-07c）
-  - [ ] 週指定（`1w`）でも UTC 日付単位の切り捨てが行われること（AC-07c）
-  - [ ] `UTCDayStart(now)` が任意の時刻に対して「今日の 00:00:00 UTC」を返すこと（AC-07d）
-  - [ ] `--window 1w` を 2000-12-10 10:00 UTC に実行したとき `start=2000-12-03 00:00 UTC`・`end=2000-12-10 00:00 UTC` となり重複・欠落がないこと（AC-07d 統合確認）
+- [x] `duration.go` に `Duration` 型（`Days int`）を定義する（`02_architecture.md` §3.1 参照）
+- [x] `ParseDuration(s string) (Duration, error)` を実装する: `d` / `w` 単位のみ受け付け、週は日数（`×7`）に正規化する。パース後の値が 0 以下の場合はエラーを返す（AC-07b）
+- [x] `(d Duration) Cutoff(now time.Time) time.Time` を実装する: `now` を UTC 日付の開始時刻（`00:00:00 UTC`）に切り捨ててから `d.Days` 日遡る（AC-07c）
+- [x] `UTCDayStart(now time.Time) time.Time` を実装する: 「今日の `00:00:00 UTC`」を返す（AC-07d）
+- [x] `duration_test.go` に以下のテストを追加する:
+  - [x] 正常パース: `1d`（Days=1）・`7d`（Days=7）・`1w`（Days=7）・`4w`（Days=28）・`30d`（Days=30）（AC-07 / AC-07b）
+  - [x] エラー: `0d`・`-1d`・`-2w`・`30h`・`abc`・空文字（AC-07b）
+  - [x] `Cutoff(now)` の UTC 切り捨て: UTC 02:01:00 に `Days=7` のカットオフが「7 日前の 00:00:00 UTC」になること（「7 日前の 02:01:00」ではないこと）（AC-07c）
+  - [x] 週指定（`1w`）でも UTC 日付単位の切り捨てが行われること（AC-07c）
+  - [x] `UTCDayStart(now)` が任意の時刻に対して「今日の 00:00:00 UTC」を返すこと（AC-07d）
+  - [x] `--window 1w` を 2000-12-10 10:00 UTC に実行したとき `start=2000-12-03 00:00 UTC`・`end=2000-12-10 00:00 UTC` となり重複・欠落がないこと（AC-07d 統合確認）
 
 **完了確認**: `make test && make lint` がパスする
 
