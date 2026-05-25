@@ -9,7 +9,10 @@ import (
 	"github.com/isseis/tlsrpt-digest/internal/storelock"
 )
 
-const rootDirPerm = 0o700
+const (
+	rootDirPerm      = 0o700
+	rootDirGroupPerm = 0o750
+)
 
 var (
 	errRootDirSymlink      = errors.New("store root directory is a symlink")
@@ -35,8 +38,8 @@ func acquireStoreWriterLock(rootDir string) (storelock.LockHandle, error) {
 }
 
 // validateAndEnsureRootDir checks that rootDir is safe to use as a store root:
-// rejects symlinks and non-directories, warns on loose permissions, and creates
-// the directory (with parents) if it does not yet exist.
+// rejects symlinks, non-directories, and unexpected permissions, and creates the
+// directory (with parents) if it does not yet exist.
 func validateAndEnsureRootDir(rootDir string) error {
 	fi, err := os.Lstat(rootDir)
 	if err != nil {
@@ -61,13 +64,13 @@ func validateAndEnsureRootDir(rootDir string) error {
 	if !fi.IsDir() {
 		return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirNotDirectory)
 	}
-	if fi.Mode().Perm()&rootDirPerm != rootDirPerm {
-		return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirPermission)
-	}
-	if fi.Mode().Perm()&^rootDirPerm != 0 {
-		slog.Warn("acquireStoreWriterLock: directory has loose permissions, consider running chmod 0700",
+	perm := fi.Mode().Perm()
+	if perm != rootDirPerm && perm != rootDirGroupPerm {
+		slog.Warn("acquireStoreWriterLock: directory has unsupported permissions",
 			slog.String("path", rootDir),
-			slog.String("current_mode", fmt.Sprintf("%04o", fi.Mode().Perm())))
+			slog.String("current_mode", fmt.Sprintf("%04o", perm)),
+			slog.String("allowed_modes", "0700,0750"))
+		return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirPermission)
 	}
 	return nil
 }

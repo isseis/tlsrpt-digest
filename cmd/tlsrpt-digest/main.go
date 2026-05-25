@@ -57,24 +57,26 @@ func runCLI(ctx context.Context, args []string, stderr io.Writer, bootOpts Boots
 	}
 
 	runID := ulid.Make().String()
-	slog.Info("tlsrpt-digest starting", "run_id", runID, "subcommand", inv.Subcommand, "dry_run", inv.Options.DryRun)
+	logger := slog.Default().With("run_id", runID)
+	logger.Info("tlsrpt-digest starting", "subcommand", inv.Subcommand, "dry_run", inv.Options.DryRun)
 
 	bootOpts.DryRun = inv.Options.DryRun
 	bootOpts.RecoverResetMode = inv.Options.RecoverYes && (inv.Options.RecoverMode == "discard-old" || inv.Options.RecoverAbort)
 	boot, err := Bootstrap(inv.Subcommand, inv.Options.ConfigPath, runID, bootOpts)
 	if err != nil {
-		slog.Error("bootstrap failed", "error", err)
+		logger.Error("bootstrap failed", "error", err)
 		return exitError
 	}
+	boot.Options = inv.Options
 	defer func() {
 		if err := boot.Close(); err != nil {
-			slog.Error("failed to close bootstrap resources", "error", err)
+			logger.Error("failed to close bootstrap resources", "error", err)
 		}
 	}()
 
 	exitCode, err := inv.Runner.Run(ctx, boot)
 	if err != nil {
-		slog.Error("subcommand failed", "error", err)
+		logger.Error("subcommand failed", "error", err)
 		if exitCode == exitOK {
 			return exitError
 		}
@@ -178,7 +180,7 @@ type stubRunner struct {
 	name SubcommandName
 }
 
-func (r stubRunner) Run(_ context.Context, _ *BootContext) (int, error) {
-	slog.Info("subcommand runner is not implemented yet", "subcommand", r.name)
+func (r stubRunner) Run(_ context.Context, boot *BootContext) (int, error) {
+	slog.Info("subcommand runner is not implemented yet", "run_id", boot.RunID, "subcommand", r.name)
 	return exitOK, nil
 }

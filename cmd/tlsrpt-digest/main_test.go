@@ -30,7 +30,7 @@ func TestRunCLI_DispatchesSubcommands(t *testing.T) {
 			exitCode := runCLI(context.Background(), []string{string(subcmd), "-config", "custom.toml"}, io.Discard, BootstrapOptions{
 				LoadConfig: func(path string) (*config.Config, error) {
 					assert.Equal(t, "custom.toml", path)
-					return configForRoot(t.TempDir()), nil
+					return configForRoot(secureStoreRoot(t)), nil
 				},
 				BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
 					return &SpyNotificationSink{}, nil
@@ -42,6 +42,89 @@ func TestRunCLI_DispatchesSubcommands(t *testing.T) {
 
 			assert.Equal(t, 0, exitCode)
 			assert.True(t, called)
+		})
+	}
+}
+
+func TestRunCLI_PassesParsedOptionsAndDryRun(t *testing.T) {
+	withCommandRunners(t, map[SubcommandName]SubcommandRunner{
+		subcommandFetch: runnerFunc(func(_ context.Context, boot *BootContext) (int, error) {
+			assert.True(t, boot.Options.DryRun)
+			assert.Equal(t, "7d", boot.Options.Since)
+			return 0, nil
+		}),
+	})
+	gotDryRun := false
+
+	exitCode := runCLI(context.Background(), []string{"fetch", "-dry-run", "-since", "7d"}, io.Discard, BootstrapOptions{
+		LoadConfig: func(string) (*config.Config, error) {
+			return configForRoot(secureStoreRoot(t)), nil
+		},
+		BuildNotifier: func(_ config.Secret, _ config.Secret, _ *config.Config, _ string, dryRun bool) (NotificationSink, error) {
+			gotDryRun = dryRun
+			return &SpyNotificationSink{}, nil
+		},
+		OpenStore: func(string, store.IMAPIdentity, store.OpenMode) (store.Store, error) {
+			return storetestutil.NewFakeStore(), nil
+		},
+	})
+
+	assert.Equal(t, 0, exitCode)
+	assert.True(t, gotDryRun)
+}
+
+func TestRunCLI_RecoverResetOpenMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantMode store.OpenMode
+	}{
+		{
+			name:     "discard old confirmed",
+			args:     []string{"recover", "-mode", "discard-old", "-yes"},
+			wantMode: store.OpenRecoverReset,
+		},
+		{
+			name:     "abort reset confirmed",
+			args:     []string{"recover", "-abort-reset", "-yes"},
+			wantMode: store.OpenRecoverReset,
+		},
+		{
+			name:     "keep old confirmed",
+			args:     []string{"recover", "-mode", "keep-old", "-yes"},
+			wantMode: store.OpenReadWrite,
+		},
+		{
+			name:     "discard old unconfirmed",
+			args:     []string{"recover", "-mode", "discard-old"},
+			wantMode: store.OpenReadWrite,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withCommandRunners(t, map[SubcommandName]SubcommandRunner{
+				subcommandRecover: runnerFunc(func(context.Context, *BootContext) (int, error) {
+					return 0, nil
+				}),
+			})
+			gotMode := store.OpenMode(-1)
+
+			exitCode := runCLI(context.Background(), tt.args, io.Discard, BootstrapOptions{
+				LoadConfig: func(string) (*config.Config, error) {
+					return configForRoot(secureStoreRoot(t)), nil
+				},
+				BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
+					return &SpyNotificationSink{}, nil
+				},
+				OpenStore: func(_ string, _ store.IMAPIdentity, mode store.OpenMode) (store.Store, error) {
+					gotMode = mode
+					return storetestutil.NewFakeStore(), nil
+				},
+			})
+
+			assert.Equal(t, 0, exitCode)
+			assert.Equal(t, tt.wantMode, gotMode)
 		})
 	}
 }

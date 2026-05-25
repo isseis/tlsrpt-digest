@@ -81,3 +81,13 @@ func TestAcquireStoreWriterLock_Allows0750(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, h.Close())
 }
+
+func TestAcquireStoreWriterLock_RejectsUnsupportedPermissions(t *testing.T) {
+	rootDir := filepath.Join(t.TempDir(), "store")
+	require.NoError(t, os.Mkdir(rootDir, 0o755)) // #nosec G301 -- intentionally unsupported permission fixture.
+
+	h, err := acquireStoreWriterLock(rootDir)
+
+	assert.Nil(t, h)
+	assert.ErrorIs(t, err, errRootDirPermission)
+}

@@ -50,6 +50,13 @@ func configForRoot(rootDir string) *config.Config {
 	return cfg
 }
 
+func secureStoreRoot(t *testing.T) string {
+	t.Helper()
+	rootDir := filepath.Join(t.TempDir(), "store")
+	require.NoError(t, os.Mkdir(rootDir, 0o700))
+	return rootDir
+}
+
 func TestBootstrap_Phase1_NoSlackHandler(t *testing.T) {
 	orig := slog.Default()
 	t.Cleanup(func() {
@@ -148,10 +155,18 @@ func TestSetupNotifyHandlers_DryRunNoURLs(t *testing.T) {
 	}
 }
 
+func TestSetupNotifyHandlers_RequiresWebhookURLOutsideDryRun(t *testing.T) {
+	cfg := newConfigWithAllowedHost(testAllowedHost)
+
+	_, err := setupNotifyHandlers("", "", cfg, "run-required", false)
+
+	require.ErrorIs(t, err, errSlackWebhookURLRequired)
+}
+
 func TestBootstrap_SlackURLsSecretWrappedImmediately(t *testing.T) {
 	var gotSuccess config.Secret
 	var gotError config.Secret
-	cfg := configForRoot(t.TempDir())
+	cfg := configForRoot(secureStoreRoot(t))
 	_, err := Bootstrap(subcommandFetch, "config.toml", "run-secret", BootstrapOptions{
 		LoadConfig: func(string) (*config.Config, error) { return cfg, nil },
 		Getenv: func(key string) string {
@@ -185,7 +200,7 @@ func TestBootstrap_NonFetchSubcommandsDoNotReadIMAPCredentials(t *testing.T) {
 		t.Run(string(subcmd), func(t *testing.T) {
 			getenvKeys := make([]string, 0)
 			_, err := Bootstrap(subcmd, "config.toml", "run-no-imap", BootstrapOptions{
-				LoadConfig: func(string) (*config.Config, error) { return configForRoot(t.TempDir()), nil },
+				LoadConfig: func(string) (*config.Config, error) { return configForRoot(secureStoreRoot(t)), nil },
 				Getenv: func(key string) string {
 					getenvKeys = append(getenvKeys, key)
 					return ""
@@ -264,7 +279,7 @@ func TestBootstrap_RejectsRootDirWithoutOwnerWrite(t *testing.T) {
 func TestBootstrap_LockFailureNotifiesAndFlushes(t *testing.T) {
 	spy := &SpyNotificationSink{}
 	_, err := Bootstrap(subcommandFetch, "config.toml", "run-lock", BootstrapOptions{
-		LoadConfig: func(string) (*config.Config, error) { return configForRoot(t.TempDir()), nil },
+		LoadConfig: func(string) (*config.Config, error) { return configForRoot(secureStoreRoot(t)), nil },
 		BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
 			return spy, nil
 		},
@@ -325,7 +340,7 @@ func TestBootstrap_StoreOpenFailureClassifiesSystemErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			spy := &SpyNotificationSink{}
 			_, err := Bootstrap(subcommandFetch, "config.toml", "run-open-fail", BootstrapOptions{
-				LoadConfig: func(string) (*config.Config, error) { return configForRoot(t.TempDir()), nil },
+				LoadConfig: func(string) (*config.Config, error) { return configForRoot(secureStoreRoot(t)), nil },
 				BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
 					return spy, nil
 				},
@@ -344,7 +359,7 @@ func TestBootstrap_StoreOpenFailureClassifiesSystemErrors(t *testing.T) {
 func TestBootstrap_PendingResetAdvice(t *testing.T) {
 	spy := &SpyNotificationSink{}
 	_, err := Bootstrap(subcommandGC, "config.toml", "run-pending", BootstrapOptions{
-		LoadConfig: func(string) (*config.Config, error) { return configForRoot(t.TempDir()), nil },
+		LoadConfig: func(string) (*config.Config, error) { return configForRoot(secureStoreRoot(t)), nil },
 		BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
 			return spy, nil
 		},

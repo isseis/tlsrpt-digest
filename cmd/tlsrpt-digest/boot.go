@@ -30,6 +30,7 @@ type BootContext struct {
 	LockHandle   LockHandle
 	SummaryGuard store.SummaryConsistencyGuard
 	Subcommand   SubcommandName
+	Options      cliOptions
 	RunID        string
 }
 
@@ -81,6 +82,8 @@ type BootstrapOptions struct {
 	SkipWriterLock     bool
 	SummaryGuardOpened func(store.SummaryConsistencyGuard)
 }
+
+var errSlackWebhookURLRequired = errors.New("at least one Slack webhook URL is required")
 
 type notificationSinkImpl struct {
 	handlers []*notify.SlackHandler
@@ -293,6 +296,10 @@ func buildIMAPConfig(cfg *config.Config, creds IMAPCredentials) imap.Config {
 }
 
 func setupNotifyHandlers(successURL, errorURL config.Secret, cfg *config.Config, runID string, dryRun bool) (NotificationSink, error) {
+	if !dryRun && successURL.Value() == "" && errorURL.Value() == "" {
+		return nil, errSlackWebhookURLRequired
+	}
+
 	debugLevel := slog.LevelWarn
 	if dryRun {
 		debugLevel = slog.LevelDebug
