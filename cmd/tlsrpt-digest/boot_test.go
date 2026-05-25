@@ -446,14 +446,14 @@ port = 993
 allowed_host = "hooks.slack.com"
 `), 0o600))
 
-	cfg, err := loadConfig(path)
+	cfg, err := loadConfig(path, slog.Default())
 	require.NoError(t, err)
 	assert.Equal(t, "hooks.slack.com", cfg.Notify.Slack.AllowedHost)
 
-	_, err = loadConfig("")
+	_, err = loadConfig("", slog.Default())
 	assert.True(t, errors.Is(err, config.ErrConfigPathEmpty))
 
-	_, err = loadConfig("/nonexistent/path/config.toml")
+	_, err = loadConfig("/nonexistent/path/config.toml", slog.Default())
 	assert.True(t, errors.Is(err, config.ErrConfigFileRead))
 }
 

@@ -71,6 +71,7 @@ type NotificationSink interface {
 type BootstrapOptions struct {
 	DryRun             bool
 	RecoverResetMode   bool
+	Logger             *slog.Logger
 	LoadConfig         func(path string) (*config.Config, error)
 	BuildNotifier      func(successURL, errorURL config.Secret, cfg *config.Config, runID string, dryRun bool) (NotificationSink, error)
 	AcquireWriterLock  func(rootDir string) (LockHandle, error)
@@ -137,7 +138,20 @@ func (n *notificationSinkImpl) each(fn func(*notify.SlackHandler) error) error {
 
 func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts BootstrapOptions) (*BootContext, error) {
 	opts = opts.withDefaults()
-	cfg, err := opts.LoadConfig(configPath)
+	logger := opts.Logger
+	if logger == nil {
+		logger = slog.Default().With("run_id", runID)
+	}
+
+	var (
+		cfg *config.Config
+		err error
+	)
+	if opts.LoadConfig != nil {
+		cfg, err = opts.LoadConfig(configPath)
+	} else {
+		cfg, err = loadConfig(configPath, logger)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("load configuration: %w", err)
 	}
@@ -211,9 +225,6 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 }
 
 func (o BootstrapOptions) withDefaults() BootstrapOptions {
-	if o.LoadConfig == nil {
-		o.LoadConfig = loadConfig
-	}
 	if o.BuildNotifier == nil {
 		o.BuildNotifier = setupNotifyHandlers
 	}
@@ -303,7 +314,7 @@ func setupNotifyHandlers(successURL, errorURL config.Secret, cfg *config.Config,
 	if dryRun {
 		debugLevel = slog.LevelDebug
 	}
-	debugLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: debugLevel}))
+	debugLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: debugLevel})).With("run_id", runID)
 
 	opts := notify.SlackHandlerOptions{
 		AllowedHost:   cfg.Notify.Slack.AllowedHost,
@@ -319,6 +330,9 @@ func setupNotifyHandlers(successURL, errorURL config.Secret, cfg *config.Config,
 	return &notificationSinkImpl{handlers: handlers, dryRun: dryRun}, nil
 }
 
-func loadConfig(path string) (*config.Config, error) {
-	return config.LoadFile(path, slog.Default())
+func loadConfig(path string, logger *slog.Logger) (*config.Config, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return config.LoadFile(path, logger)
 }

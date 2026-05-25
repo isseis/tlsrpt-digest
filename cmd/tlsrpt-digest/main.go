@@ -24,8 +24,8 @@ const (
 )
 
 var (
-	errInvalidRecoverMode  = errors.New("invalid recovery mode")
-	errSubcommandNotImpl   = errors.New("subcommand not yet implemented")
+	errInvalidRecoverMode = errors.New("invalid recovery mode")
+	errSubcommandNotImpl  = errors.New("subcommand not yet implemented")
 )
 
 type cliOptions struct {
@@ -65,6 +65,7 @@ func runCLI(ctx context.Context, args []string, stderr io.Writer, bootOpts Boots
 
 	bootOpts.DryRun = inv.Options.DryRun
 	bootOpts.RecoverResetMode = inv.Options.RecoverYes && (inv.Options.RecoverMode == "discard-old" || inv.Options.RecoverAbort)
+	bootOpts.Logger = logger
 	boot, err := Bootstrap(inv.Subcommand, inv.Options.ConfigPath, runID, bootOpts)
 	if err != nil {
 		logger.Error("bootstrap failed", "error", err)
