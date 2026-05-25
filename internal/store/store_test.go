@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -359,13 +360,17 @@ func TestOpenMode_Constants(t *testing.T) {
 }
 
 // TestOpen_PendingReset_FailsClosedForReadWrite verifies that OpenReadWrite returns
-// ErrPendingReset when a pending reset manifest exists.
+// ErrPendingReset when a pre-commit reset is in progress (manifest present and
+// recovery_required still set in the sentinel).
 func TestOpen_PendingReset_FailsClosedForReadWrite(t *testing.T) {
 	rootDir := t.TempDir()
 	identity := makeTestIdentity()
 
-	_, err := Open(rootDir, identity, OpenReadWrite)
+	s, err := Open(rootDir, identity, OpenReadWrite)
 	require.NoError(t, err)
+
+	// Set recovery_required so the sentinel shows the reset is pre-commit.
+	require.NoError(t, s.SaveRecoveryRequired(41, 42, time.Now()))
 
 	// Plant a manifest file to simulate a pending reset.
 	mfstPath := filepath.Join(rootDir, manifestFilename)

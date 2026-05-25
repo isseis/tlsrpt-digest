@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -102,6 +103,68 @@ func readResetManifest(path string) (resetManifest, error) {
 		return resetManifest{}, fmt.Errorf("readResetManifest: unmarshal: %w", err)
 	}
 	return m, nil
+}
+
+// cleanupCompletedReset removes a leftover reset manifest (and any staging dir)
+// when the underlying commit has already been applied to the sentinel.  It is
+// called from Open(OpenReadWrite) so a crash between commit and final cleanup
+// does not permanently fail-close the normal data path.
+//
+// Invariants used here:
+//   - The sentinel's recovery_required field is the TRUE commit barrier.
+//     commitReset always saves the sentinel BEFORE advancing the manifest to
+//     phase=committed, so once recovery_required is nil the user-visible reset
+//     is complete and the manifest/staging are leftover bookkeeping.
+//   - The remaining staging contents (if any) are old data the operator
+//     explicitly asked to discard via ResetForRecovery, so RemoveAll is safe.
+//
+// Returns:
+//   - nil if there is no manifest, or the manifest was cleaned up.
+//   - ErrPendingReset if the manifest exists and recovery_required is still set
+//     (i.e. a forward reset is genuinely in progress, or an AbortReset is
+//     partially applied — both must be resolved via OpenRecoverReset).
+//   - A *ErrResetManifestVersionMismatch / *ErrResetManifestPhaseUnknown for
+//     unreadable or out-of-range manifests (fail closed for manual handling).
+func cleanupCompletedReset(rootDir string) error {
+	manifestPath := resetManifestPath(rootDir)
+	mfst, err := readResetManifest(manifestPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("cleanupCompletedReset: read manifest: %w", err)
+	}
+	if mfst.Version != resetManifestVersion {
+		return &ErrResetManifestVersionMismatch{Got: mfst.Version, Want: resetManifestVersion}
+	}
+	if err := validateManifestPhase(mfst.Phase); err != nil {
+		return err
+	}
+
+	sentinel, exists, err := loadSentinel(rootDir)
+	if err != nil {
+		return fmt.Errorf("cleanupCompletedReset: load sentinel: %w", err)
+	}
+	// Sentinel missing while a manifest is present is unexpected — refuse to
+	// guess the commit state and let the operator resolve via recover.
+	if !exists || sentinel == nil {
+		return ErrPendingReset
+	}
+	if sentinel.RecoveryRequired != nil {
+		return ErrPendingReset
+	}
+
+	// Commit happened (recovery_required cleared); the manifest is leftover.
+	// Best-effort cleanup mirrors the tail of ResetForRecovery.
+	slog.Warn("store: cleaning up leftover reset manifest after committed reset",
+		slog.String("root_dir", rootDir),
+		slog.Int("manifest_phase", int(mfst.Phase)),
+	)
+	_ = os.RemoveAll(resetStagingPath(rootDir))
+	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("cleanupCompletedReset: remove manifest: %w", err)
+	}
+	return nil
 }
 
 // ---- guard file locking ----

@@ -3,7 +3,6 @@ package store
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -150,15 +149,17 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 	// Determine if read-only based on mode
 	readOnly := mode == OpenReadOnly
 
-	// Fail-closed: OpenReadWrite must not proceed when a pending reset manifest exists.
-	// OpenRecoverReset bypasses this check so recover subcommand can resume or abort.
+	// OpenReadWrite must fail closed while a forward-progressing reset is still
+	// in flight, but a manifest left behind AFTER commit must not permanently
+	// block the normal data path (see 02_architecture.md, "commit 後の cleanup
+	// 失敗は通常データパスへ影響させず").  cleanupCompletedReset distinguishes
+	// the two cases by inspecting sentinel.recovery_required (the true commit
+	// barrier): if it is cleared, the leftover manifest/staging are removed
+	// here; otherwise ErrPendingReset is returned for the operator to resolve
+	// via OpenRecoverReset.
 	if mode == OpenReadWrite {
-		_, err := os.Stat(resetManifestPath(rootDir))
-		if err == nil {
-			return nil, ErrPendingReset
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("Open: stat reset manifest: %w", err)
+		if err := cleanupCompletedReset(rootDir); err != nil {
+			return nil, err
 		}
 	}
 
