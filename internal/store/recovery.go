@@ -36,17 +36,17 @@ func resetStagingPath(rootDir string) string {
 
 // resetPhase records how far a discard-old reset has progressed.
 //
-// Forward (commit) progression: manifest_written → data_staged → emails_staged → committed.
-// The initial phase=manifest_written is a write-ahead log entry written before any
-// destructive operation, so a crash from then on is recoverable.  Subsequent phases
-// are checkpoints written after each (idempotent) operation; a crash before the
-// checkpoint is safe to resume by re-running the operation.
+// Forward (commit) progression: 1 → 2 → 3 → 4.
+// Phase 1 (manifest_written) is a write-ahead log entry written before any
+// destructive operation, making the reset visible to Open and AbortReset from
+// that point on.  Phases 2–4 are checkpoints written after each idempotent
+// operation; a crash before a checkpoint is safe to resume by re-running the
+// (idempotent) operation.
 //
-// Backward (abort) progression: aborting.  AbortReset writes phase=aborting before
-// moving any file back to root, so a crash mid-restore is recoverable and cannot be
-// confused with a forward-progressing reset.  Once phase=aborting is written, the
-// only valid resume path is AbortReset; ResetForRecovery refuses with
-// ErrResetAbortInProgress to avoid committing on top of restored old data.
+// Backward (abort) progression: → 5 (aborting).
+// AbortReset writes phase=aborting before moving any file back to root, so a
+// crash mid-restore cannot be confused with a forward-progressing reset.
+// ResetForRecovery refuses phase=aborting with ErrResetAbortInProgress.
 type resetPhase int
 
 const (
@@ -72,12 +72,11 @@ type resetManifest struct {
 
 const resetManifestVersion = 1
 
-// validateManifestPhase ensures the manifest's phase is in the known range.
-// Phase=0 (legacy, written by old code without the field) is accepted and resolved
-// by callers; any other unknown value is rejected fail-closed so manifest/staging
-// are preserved for manual inspection.
+// validateManifestPhase ensures the manifest's phase is in the known range
+// (1–5).  Unknown values are rejected fail-closed so manifest/staging are
+// preserved for manual inspection.
 func validateManifestPhase(p resetPhase) error {
-	if p < 0 || p > resetPhaseAborting {
+	if p < resetPhaseManifestWritten || p > resetPhaseAborting {
 		return &ErrResetManifestPhaseUnknown{Got: int(p)}
 	}
 	return nil
@@ -479,14 +478,7 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 	// Use CurrUIDValidity from manifest for idempotency on resume.
 	currUIDValidity = mfst.CurrUIDValidity
 
-	// Legacy manifests written by old code have Phase=0 (field absent in JSON).
-	// They were written after staging completed but before commit, so treat as emails_staged.
-	phase := mfst.Phase
-	if phase == 0 {
-		phase = resetPhaseEmailsStaged
-	}
-
-	if err := s.advanceResetPhases(phase, currUIDValidity, stagingPath, manifestPath); err != nil {
+	if err := s.advanceResetPhases(mfst.Phase, currUIDValidity, stagingPath, manifestPath); err != nil {
 		return err
 	}
 

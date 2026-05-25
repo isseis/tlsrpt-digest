@@ -218,11 +218,12 @@ func TestResetForRecovery_IdempotentAfterCrashBeforeCommit(t *testing.T) {
 	require.NoError(t, s1.SaveUIDValidity(100))
 	require.NoError(t, s1.SaveRecoveryRequired(100, 200, time.Now()))
 
-	// Simulate crash after staging: plant manifest and staging dir but skip commit.
+	// Simulate crash after staging: plant manifest at phase=emails_staged and staging dir but skip commit.
 	stagingPath := resetStagingPath(rootDir)
 	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
-	mfstData := `{"version":1,"curr_uid_validity":200}`
-	require.NoError(t, os.WriteFile(resetManifestPath(rootDir), []byte(mfstData), filePerm))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhaseEmailsStaged,
+	}))
 
 	// Re-open with OpenRecoverReset (manifest present, so OpenReadWrite would fail).
 	s2, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
@@ -544,9 +545,10 @@ func TestAbortReset_AfterCommit(t *testing.T) {
 	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
 	require.NoError(t, err)
 
-	// Plant a manifest but no recovery-required (simulating committed state).
-	mfstData := `{"version":1,"curr_uid_validity":200}`
-	require.NoError(t, os.WriteFile(resetManifestPath(rootDir), []byte(mfstData), filePerm))
+	// Plant a manifest at phase=committed but no recovery-required (simulating committed state).
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhaseCommitted,
+	}))
 
 	assert.ErrorIs(t, s.AbortReset(), ErrResetNotPending)
 }
@@ -565,13 +567,14 @@ func TestAbortReset_RestoresOldData(t *testing.T) {
 	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
 	require.NoError(t, err)
 
-	// Simulate pre-commit pending reset: move data file to staging and write manifest.
+	// Simulate pre-commit pending reset: move data file to staging and write manifest at phase=data_staged.
 	stagingPath := resetStagingPath(rootDir)
 	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
 	dataPath := dataFilePath(rootDir)
 	require.NoError(t, os.Rename(dataPath, filepath.Join(stagingPath, "tlsrpt.json")))
-	mfstData := `{"version":1,"curr_uid_validity":200}`
-	require.NoError(t, os.WriteFile(resetManifestPath(rootDir), []byte(mfstData), filePerm))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhaseDataStaged,
+	}))
 
 	require.NoError(t, s.AbortReset())
 
@@ -598,10 +601,12 @@ func TestAbortReset_Idempotent(t *testing.T) {
 	require.NoError(t, s.SaveUIDValidity(100))
 	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
 
-	// Set up pre-commit pending reset.
+	// Set up pre-commit pending reset at phase=manifest_written (nothing staged yet).
 	stagingPath := resetStagingPath(rootDir)
 	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
-	require.NoError(t, os.WriteFile(resetManifestPath(rootDir), []byte(`{"version":1,"curr_uid_validity":200}`), filePerm))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhaseManifestWritten,
+	}))
 
 	require.NoError(t, s.AbortReset())
 	// Second call should return ErrResetNotPending.
@@ -848,43 +853,6 @@ func TestSummaryConsistencyGuard_CheckRecoveryRequired(t *testing.T) {
 	found, err = guard.CheckRecoveryRequired(context.Background())
 	require.NoError(t, err)
 	assert.True(t, found)
-}
-
-// TestOpen_CleansUpCommittedManifest_LegacyPhase verifies that a leftover reset
-// manifest with legacy phase=0 (written by old code after staging but before the
-// phase field was introduced) does not block OpenReadWrite when the sentinel shows
-// the commit has already happened (recovery_required cleared).  Open cleans up the
-// manifest and staging dir and proceeds normally.
-func TestOpen_CleansUpCommittedManifest_LegacyPhase(t *testing.T) {
-	rootDir := t.TempDir()
-	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
-	require.NoError(t, err)
-	require.NoError(t, s.SaveUIDValidity(100))
-	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
-
-	// Committed sentinel (recovery_required cleared), leftover legacy manifest + staging.
-	sentinel, _, err := loadSentinel(rootDir)
-	require.NoError(t, err)
-	uid := uint32(200)
-	sentinel.UIDValidity = &uid
-	sentinel.RecoveryRequired = nil
-	require.NoError(t, saveSentinel(rootDir, sentinel))
-	stagingPath := resetStagingPath(rootDir)
-	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
-	require.NoError(t, os.WriteFile(resetManifestPath(rootDir), []byte(`{"version":1,"curr_uid_validity":200}`), filePerm))
-
-	// OpenReadWrite must detect committed state and clean up, NOT return ErrPendingReset.
-	s2, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
-	require.NoError(t, err)
-
-	_, err = os.Stat(resetManifestPath(rootDir))
-	assert.True(t, os.IsNotExist(err), "manifest must be removed by Open")
-	_, err = os.Stat(stagingPath)
-	assert.True(t, os.IsNotExist(err), "staging dir must be removed by Open")
-
-	reports, err := s2.GetAllReports()
-	require.NoError(t, err)
-	assert.Empty(t, reports, "store must be empty after committed reset cleanup")
 }
 
 // TestOpen_CleansUpCommittedManifest_PhaseCommitted verifies cleanup when the manifest

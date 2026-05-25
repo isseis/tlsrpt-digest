@@ -372,9 +372,10 @@ func TestOpen_PendingReset_FailsClosedForReadWrite(t *testing.T) {
 	// Set recovery_required so the sentinel shows the reset is pre-commit.
 	require.NoError(t, s.SaveRecoveryRequired(41, 42, time.Now()))
 
-	// Plant a manifest file to simulate a pending reset.
-	mfstPath := filepath.Join(rootDir, manifestFilename)
-	require.NoError(t, os.WriteFile(mfstPath, []byte(`{"version":1,"curr_uid_validity":42}`), filePerm))
+	// Plant a manifest at phase=emails_staged to simulate a pending reset.
+	require.NoError(t, writeResetManifest(filepath.Join(rootDir, manifestFilename), resetManifest{
+		Version: resetManifestVersion, CurrUIDValidity: 42, Phase: resetPhaseEmailsStaged,
+	}))
 
 	_, err = Open(rootDir, identity, OpenReadWrite)
 	assert.ErrorIs(t, err, ErrPendingReset)
@@ -389,9 +390,10 @@ func TestOpen_PendingReset_OpenRecoverResetSucceeds(t *testing.T) {
 	_, err := Open(rootDir, identity, OpenReadWrite)
 	require.NoError(t, err)
 
-	// Plant a manifest to simulate an in-progress reset.
-	mfstPath := filepath.Join(rootDir, manifestFilename)
-	require.NoError(t, os.WriteFile(mfstPath, []byte(`{"version":1,"curr_uid_validity":42}`), filePerm))
+	// Plant a manifest at phase=emails_staged to simulate an in-progress reset.
+	require.NoError(t, writeResetManifest(filepath.Join(rootDir, manifestFilename), resetManifest{
+		Version: resetManifestVersion, CurrUIDValidity: 42, Phase: resetPhaseEmailsStaged,
+	}))
 
 	s, err := Open(rootDir, identity, OpenRecoverReset)
 	require.NoError(t, err)
