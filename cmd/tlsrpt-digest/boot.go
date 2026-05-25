@@ -214,7 +214,7 @@ func (o BootstrapOptions) withDefaults() BootstrapOptions {
 		o.BuildNotifier = setupNotifyHandlers
 	}
 	if o.AcquireWriterLock == nil {
-		// W-2 (validateAndEnsureRootDir) already ran before W-5; only acquire the lock here.
+		// Bootstrap calls validateAndEnsureRootDir before invoking AcquireWriterLock, so only acquire the lock here.
 		o.AcquireWriterLock = func(rootDir string) (LockHandle, error) {
 			return storelock.Acquire(storelock.LockPath(rootDir))
 		}
