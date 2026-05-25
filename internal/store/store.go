@@ -168,14 +168,19 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 			return nil, fmt.Errorf("Open: ensure root dir: %w", err)
 		}
 
-		emailsDir := emailsPath(rootDir)
-		if err := ensureDirExists(emailsDir); err != nil {
-			return nil, fmt.Errorf("Open: ensure emails dir: %w", err)
-		}
+		// OpenRecoverReset skips emails dir creation and data file initialisation:
+		// these files may have been moved to staging by an interrupted ResetForRecovery,
+		// and re-creating them here would clobber the staged old data on the next rename.
+		if mode != OpenRecoverReset {
+			emailsDir := emailsPath(rootDir)
+			if err := ensureDirExists(emailsDir); err != nil {
+				return nil, fmt.Errorf("Open: ensure emails dir: %w", err)
+			}
 
-		// Initialize the data file with empty content if it does not exist.
-		if err := initDataFile(rootDir); err != nil {
-			return nil, fmt.Errorf("Open: init data file: %w", err)
+			// Initialize the data file with empty content if it does not exist.
+			if err := initDataFile(rootDir); err != nil {
+				return nil, fmt.Errorf("Open: init data file: %w", err)
+			}
 		}
 
 		// Create the guard file so that read-only opens can acquire a shared lock

@@ -241,6 +241,143 @@ func TestResetForRecovery_IdempotentAfterCrashBeforeCommit(t *testing.T) {
 	assert.False(t, recFound)
 }
 
+// TestResetForRecovery_CrashAtPhaseManifestWritten simulates a crash that occurs
+// after the manifest is written (phase=1) but before the data file is moved to staging.
+// Files are still in rootDir; re-running must stage them and converge to the clean state.
+func TestResetForRecovery_CrashAtPhaseManifestWritten(t *testing.T) {
+	rootDir := t.TempDir()
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, s.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(s, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// Simulate crash: manifest written at phase=1, staging dir exists, no files moved.
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseManifestWritten,
+	}))
+
+	// OpenReadWrite must fail with ErrPendingReset even at phase=1.
+	_, err = Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	assert.ErrorIs(t, err, ErrPendingReset, "OpenReadWrite must fail closed when manifest exists at phase=1")
+
+	s2, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s2.ResetForRecovery(200))
+
+	v, found, err := s2.LoadUIDValidity()
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, uint32(200), v)
+
+	_, _, _, recFound, err := s2.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.False(t, recFound)
+
+	s3, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	reports, err := s3.GetAllReports()
+	require.NoError(t, err)
+	assert.Empty(t, reports, "store must be empty after ResetForRecovery")
+}
+
+// TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate simulates a crash in the
+// window between stageDataFile (rename completed) and writeResetManifest(phase=2).
+// The manifest is still at phase=1 but tlsrpt.json is already in staging.
+// Re-running must detect the missing root file, skip the rename, and converge cleanly.
+func TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate(t *testing.T) {
+	rootDir := t.TempDir()
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, s.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(s, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// Simulate crash: manifest at phase=1, tlsrpt.json already in staging (rename completed
+	// but manifest not yet advanced to phase=2).
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, os.Rename(dataFilePath(rootDir), filepath.Join(stagingPath, "tlsrpt.json")))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseManifestWritten, // not yet advanced to 2
+	}))
+
+	// OpenReadWrite must fail closed (manifest present).
+	_, err = Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	assert.ErrorIs(t, err, ErrPendingReset)
+
+	s2, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s2.ResetForRecovery(200))
+
+	v, found, err := s2.LoadUIDValidity()
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, uint32(200), v)
+
+	_, _, _, recFound, err := s2.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.False(t, recFound)
+
+	s3, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	reports, err := s3.GetAllReports()
+	require.NoError(t, err)
+	assert.Empty(t, reports, "old data must be discarded (was in staging, removed by cleanup)")
+}
+
+// TestAbortReset_PhaseManifestWritten verifies AbortReset succeeds when the manifest
+// is at phase=1 (files not yet moved to staging).  The files must remain in rootDir.
+func TestAbortReset_PhaseManifestWritten(t *testing.T) {
+	rootDir := t.TempDir()
+
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseManifestWritten,
+	}))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s.AbortReset())
+
+	// tlsrpt.json must still be in rootDir (it was never moved).
+	_, err = os.Stat(dataFilePath(rootDir))
+	assert.NoError(t, err, "data file must remain in rootDir after abort at phase=1")
+
+	// Manifest must be gone.
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.True(t, os.IsNotExist(err))
+
+	// Recovery-required must still be present.
+	_, _, _, recFound, err := s.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.True(t, recFound)
+}
+
 // TestAbortReset_NoPendingReset returns ErrResetNotPending when no manifest exists.
 func TestAbortReset_NoPendingReset(t *testing.T) {
 	s, _ := openRecoverResetStore(t)
@@ -265,10 +402,15 @@ func TestAbortReset_AfterCommit(t *testing.T) {
 // removes the manifest while leaving recovery-required in the sentinel.
 func TestAbortReset_RestoresOldData(t *testing.T) {
 	rootDir := t.TempDir()
+
+	// Use OpenReadWrite first so initDataFile creates tlsrpt.json, then set recovery state.
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
 	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
 	require.NoError(t, err)
-	require.NoError(t, s.SaveUIDValidity(100))
-	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
 
 	// Simulate pre-commit pending reset: move data file to staging and write manifest.
 	stagingPath := resetStagingPath(rootDir)
