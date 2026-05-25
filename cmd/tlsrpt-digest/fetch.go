@@ -125,7 +125,10 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	}
 
 	// Steps 9–11: Parse TLSRPT attachments, buffer alerts, accumulate reports.
-	reports := r.fetchCollectReports(ctx, boot, states, currentUID, rootDir)
+	reports, err := r.fetchCollectReports(ctx, boot, states, currentUID, rootDir)
+	if err != nil {
+		return exitError, err
+	}
 
 	// Step 11: Persist all parsed reports.
 	if err := boot.Store.SaveReports(reports); err != nil {
@@ -238,7 +241,7 @@ func (r *fetchRunner) fetchDownloadAndSave(ctx context.Context, boot *BootContex
 
 // fetchCollectReports parses TLSRPT attachments, buffers alerts for UNSEEN messages,
 // and returns the accumulated report inputs.
-func (r *fetchRunner) fetchCollectReports(ctx context.Context, boot *BootContext, states []fetchMsgState, currentUID uint32, rootDir string) []store.ReportInput {
+func (r *fetchRunner) fetchCollectReports(ctx context.Context, boot *BootContext, states []fetchMsgState, currentUID uint32, rootDir string) ([]store.ReportInput, error) {
 	var reports []store.ReportInput
 	for i := range states {
 		// SEEN + pre-existing: already fully processed in a prior run.
@@ -254,8 +257,7 @@ func (r *fetchRunner) fetchCollectReports(ctx context.Context, boot *BootContext
 			rawEML, err := r.loadLocalEML(rootDir, states[i].meta.UID, currentUID, states[i].meta.Date)
 			if err != nil {
 				slog.Error("fetch: load local eml", "uid", states[i].meta.UID, "error", err)
-				logWarnFetch(ctx, boot.Notifier, notify.WarningKindParseFailure, states[i].meta.UID, currentUID, states[i].meta.MessageID)
-				continue
+				return nil, fmt.Errorf("fetch: load local eml %d: %w", states[i].meta.UID, err)
 			}
 			states[i].rawEML = rawEML
 		}
@@ -271,7 +273,7 @@ func (r *fetchRunner) fetchCollectReports(ctx context.Context, boot *BootContext
 		}
 		reports = r.processAttachments(ctx, boot, reports, attachments, &states[i], currentUID)
 	}
-	return reports
+	return reports, nil
 }
 
 // processAttachments parses TLSRPT attachments from one message and appends valid reports.

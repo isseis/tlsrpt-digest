@@ -462,7 +462,7 @@ func TestFetch_UNSEENEMLExists_NoDownloadProcessedAndMarkedSeen(t *testing.T) {
 	assert.Equal(t, []uint32{testUID1}, bed.fetcher.MarkSeenCalls[0])
 }
 
-func TestFetch_UNSEENEMLExists_DiskReadFails_LogsWarningAndContinues(t *testing.T) {
+func TestFetch_UNSEENEMLExists_DiskReadFails_ExitsWithoutMarkSeen(t *testing.T) {
 	bed := newFetchTestBed(t)
 	raw := tlsrptRawEML("Corp2", "r2", 0)
 	// msg1: UNSEEN + EML in store, but loadLocalEML will fail for it
@@ -484,18 +484,11 @@ func TestFetch_UNSEENEMLExists_DiskReadFails_LogsWarningAndContinues(t *testing.
 	}
 
 	code, err := bed.runner.Run(context.Background(), bed.boot)
-	require.NoError(t, err)
-	assert.Equal(t, exitOK, code)
-	// parse_failure warning for msg1
-	require.Len(t, bed.notif.Warnings, 1)
-	assert.Equal(t, notify.WarningKindParseFailure, bed.notif.Warnings[0].Kind)
-	assert.Equal(t, testUID1, bed.notif.Warnings[0].UID)
-	// msg2 still processed and report saved
-	assert.Len(t, bed.store.Reports, 1)
-	// both UIDs still marked seen
-	require.Len(t, bed.fetcher.MarkSeenCalls, 1)
-	assert.Contains(t, bed.fetcher.MarkSeenCalls[0], testUID1)
-	assert.Contains(t, bed.fetcher.MarkSeenCalls[0], testUID2)
+	require.Error(t, err)
+	assert.Equal(t, exitError, code)
+	assert.Empty(t, bed.notif.Warnings)
+	assert.Empty(t, bed.store.Reports)
+	assert.Empty(t, bed.fetcher.MarkSeenCalls)
 }
 
 func TestFetch_SEENNoEML_DownloadedNoMarkSeen(t *testing.T) {
