@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -356,6 +357,47 @@ func TestSentinelPath(t *testing.T) {
 // TestOpenMode_Constants tests OpenMode constants are distinct.
 func TestOpenMode_Constants(t *testing.T) {
 	assert.NotEqual(t, OpenReadWrite, OpenReadOnly)
+}
+
+// TestOpen_PendingReset_FailsClosedForReadWrite verifies that OpenReadWrite returns
+// ErrPendingReset when a pre-commit reset is in progress (manifest present and
+// recovery_required still set in the sentinel).
+func TestOpen_PendingReset_FailsClosedForReadWrite(t *testing.T) {
+	rootDir := t.TempDir()
+	identity := makeTestIdentity()
+
+	s, err := Open(rootDir, identity, OpenReadWrite)
+	require.NoError(t, err)
+
+	// Set recovery_required so the sentinel shows the reset is pre-commit.
+	require.NoError(t, s.SaveRecoveryRequired(41, 42, time.Now()))
+
+	// Plant a manifest at phase=emails_staged to simulate a pending reset.
+	require.NoError(t, writeResetManifest(filepath.Join(rootDir, manifestFilename), resetManifest{
+		Version: resetManifestVersion, CurrUIDValidity: 42, Phase: resetPhaseEmailsStaged,
+	}))
+
+	_, err = Open(rootDir, identity, OpenReadWrite)
+	assert.ErrorIs(t, err, ErrPendingReset)
+}
+
+// TestOpen_PendingReset_OpenRecoverResetSucceeds verifies that OpenRecoverReset succeeds
+// when a pending reset manifest exists, returning a usable store.
+func TestOpen_PendingReset_OpenRecoverResetSucceeds(t *testing.T) {
+	rootDir := t.TempDir()
+	identity := makeTestIdentity()
+
+	_, err := Open(rootDir, identity, OpenReadWrite)
+	require.NoError(t, err)
+
+	// Plant a manifest at phase=emails_staged to simulate an in-progress reset.
+	require.NoError(t, writeResetManifest(filepath.Join(rootDir, manifestFilename), resetManifest{
+		Version: resetManifestVersion, CurrUIDValidity: 42, Phase: resetPhaseEmailsStaged,
+	}))
+
+	s, err := Open(rootDir, identity, OpenRecoverReset)
+	require.NoError(t, err)
+	assert.NotNil(t, s)
 }
 
 // TestOpen_WarnOnLaxDataFilePermissions verifies that Open emits a WARN when

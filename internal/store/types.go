@@ -2,6 +2,7 @@
 package store
 
 import (
+	"context"
 	"net/mail"
 	"time"
 
@@ -14,10 +15,16 @@ type OpenMode int
 const (
 	// OpenReadWrite opens the store in read-write mode.
 	// Creates root_dir, emails/, tlsrpt.json, and sentinel if they don't exist.
+	// Returns ErrPendingReset if a pending reset manifest exists.
 	OpenReadWrite OpenMode = iota
 	// OpenReadOnly opens the store in read-only mode.
 	// Does not create any files; returns empty state if files don't exist.
 	OpenReadOnly
+	// OpenRecoverReset opens the store in read-write mode and allows
+	// ResetForRecovery and AbortReset even when a pending reset manifest exists.
+	// Only recover subcommand (discard-old --yes / --abort-reset --yes) may use this mode.
+	// The caller must hold the process-level store writer lock for the whole operation.
+	OpenRecoverReset
 )
 
 // IMAPIdentity represents the IMAP server and mailbox identity.
@@ -87,6 +94,20 @@ const SentinelFormatVersion = 1
 
 // DataFileVersion is the current tlsrpt.json format version.
 const DataFileVersion = 1
+
+// SummaryConsistencyGuard provides a fail-closed boundary for the summary subcommand.
+// While the guard is held (shared flock on the guard file), writer processes that
+// need to update recovery-required in the sentinel must acquire an exclusive flock
+// on the same file, ensuring that CheckRecoveryRequired results remain consistent
+// up to the point LogSummary/Flush is called.
+// The guard must be closed after use to release the shared lock.
+type SummaryConsistencyGuard interface {
+	// CheckRecoveryRequired re-reads the sentinel on each call and returns
+	// found=true if recovery-required is present.
+	CheckRecoveryRequired(ctx context.Context) (found bool, err error)
+	// Close releases the shared lock. Must be called after use.
+	Close() error
+}
 
 // emailKey is an internal composite key used to identify an email by its
 // IMAP UID and UIDVALIDITY.

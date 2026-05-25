@@ -51,7 +51,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := primeNotifyHandlers(context.Background(), handlers, *dryRun); err != nil {
+	ctx := context.Background()
+	if err := primeNotifyHandlers(ctx, handlers, *dryRun); err != nil {
 		slog.Error("failed to prime Slack handlers", "error", err)
 		os.Exit(1)
 	}
@@ -120,13 +121,6 @@ func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, d
 		}); err != nil {
 			return err
 		}
-		if err := notify.LogSystemError(ctx, h, notify.SystemError{
-			ErrorType: "bootstrap_probe",
-			Message:   "handler wiring probe",
-			Component: "notify",
-		}); err != nil {
-			return err
-		}
 	}
 
 	for _, h := range handlers {
@@ -147,13 +141,6 @@ func storeOpenMode(subcommand string) store.OpenMode {
 		return store.OpenReadOnly
 	}
 	return store.OpenReadWrite
-}
-
-// openStoreForSubcommand opens the store with the mode appropriate for subcommand.
-// It is the wiring point between subcommand dispatch and store.Open; task 0070
-// will call this from each subcommand handler.
-func openStoreForSubcommand(rootDir string, identity store.IMAPIdentity, subcommand string) (store.Store, error) {
-	return store.Open(rootDir, identity, storeOpenMode(subcommand))
 }
 
 // loadConfig reads the TOML configuration from path via config.LoadFile.

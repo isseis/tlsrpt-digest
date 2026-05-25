@@ -103,3 +103,62 @@ func (e *ErrDeleteEmailFailed) Error() string {
 func (e *ErrDeleteEmailFailed) Unwrap() error {
 	return e.Err
 }
+
+// ErrPendingReset is returned by Open(OpenReadWrite) when a pending reset manifest
+// exists. Use OpenRecoverReset to open the store and resume or abort the reset.
+var ErrPendingReset = errors.New("store: pending reset detected; use OpenRecoverReset to continue or abort")
+
+// ErrRecoveryRequiredMissing is returned by ResetForRecovery when the sentinel
+// does not contain a recovery-required entry.
+var ErrRecoveryRequiredMissing = errors.New("store: recovery-required not present in sentinel")
+
+// ErrRecoveryUIDValidityMismatch is returned by ResetForRecovery when the supplied
+// currUIDValidity does not match the current UIDVALIDITY recorded in recovery-required.
+type ErrRecoveryUIDValidityMismatch struct {
+	Got      uint32
+	Expected uint32
+}
+
+func (e *ErrRecoveryUIDValidityMismatch) Error() string {
+	return fmt.Sprintf(
+		"store: recovery uid_validity mismatch: got=%d expected=%d",
+		e.Got, e.Expected,
+	)
+}
+
+// ErrResetNotPending is returned by AbortReset when there is no pending reset
+// (manifest absent) or when the reset has already been committed.
+var ErrResetNotPending = errors.New("store: no pending reset to abort")
+
+// ErrInvalidStoreMode is returned when an operation is called on a store opened
+// in an incompatible mode (e.g., calling ResetForRecovery on an OpenReadWrite store).
+var ErrInvalidStoreMode = errors.New("store: operation not valid for current open mode")
+
+// ErrResetManifestVersionMismatch is returned by ResetForRecovery when the on-disk
+// manifest was written by a different (unsupported) version of the reset protocol.
+type ErrResetManifestVersionMismatch struct {
+	Got  int
+	Want int
+}
+
+func (e *ErrResetManifestVersionMismatch) Error() string {
+	return fmt.Sprintf("store: unexpected reset manifest version: got=%d want=%d", e.Got, e.Want)
+}
+
+// ErrResetManifestPhaseUnknown is returned when the on-disk manifest carries a
+// phase value outside the known range.  Treated as fail-closed so callers must
+// resolve the inconsistency manually rather than risk silent cleanup.
+type ErrResetManifestPhaseUnknown struct {
+	Got int
+}
+
+func (e *ErrResetManifestPhaseUnknown) Error() string {
+	return fmt.Sprintf("store: unknown reset manifest phase: got=%d", e.Got)
+}
+
+// ErrResetAbortInProgress is returned by ResetForRecovery when the on-disk
+// manifest indicates that an AbortReset is partially applied (phase=aborting).
+// In this state, AbortReset must be re-run to complete the restore and clean
+// up the manifest; continuing the original reset would commit on top of data
+// that AbortReset has already moved back to the root.
+var ErrResetAbortInProgress = errors.New("store: abort reset in progress; re-run AbortReset to finish")

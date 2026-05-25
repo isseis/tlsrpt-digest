@@ -57,6 +57,7 @@ linters:
             - github.com/stretchr/testify/mock
             - github.com/emersion/go-imap
             - github.com/emersion/go-imap/client
+            - golang.org/x/sys/unix
 
 
         main:
@@ -76,6 +77,7 @@ linters:
             - github.com/oklog/ulid/v2
             - github.com/emersion/go-imap
             - github.com/emersion/go-imap/client
+            - golang.org/x/sys/unix
 
     mnd:
       checks:

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +16,7 @@ import (
 	"github.com/isseis/tlsrpt-digest/internal/notify"
 	"github.com/isseis/tlsrpt-digest/internal/store"
 	storetestutil "github.com/isseis/tlsrpt-digest/internal/store/testutil"
-	"github.com/isseis/tlsrpt-digest/internal/tlsrpt"
+	"github.com/isseis/tlsrpt-digest/internal/storelock"
 )
 
 const (
@@ -186,44 +185,62 @@ func TestStoreOpenMode(t *testing.T) {
 	assert.Equal(t, store.OpenReadOnly, storeOpenMode("summary"))
 }
 
-// TestOpenStoreForSubcommand verifies that openStoreForSubcommand wires
-// storeOpenMode into store.Open correctly.  Write-capable subcommands must
-// succeed on SaveReport; the summary subcommand must be refused with ErrReadOnly.
-func TestOpenStoreForSubcommand(t *testing.T) {
-	identity := store.IMAPIdentity{Host: "imap.example.com", Port: 993, Mailbox: "INBOX"}
-	endDate := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
-	probe := store.ReportInput{
-		Report: tlsrpt.Report{
-			ReportID:  "probe",
-			DateRange: tlsrpt.DateRange{EndDatetime: endDate},
-		},
-		UID: 1, UIDValidity: 1,
-	}
+func TestAcquireStoreWriterLock_CreatesRootAndHoldsLock(t *testing.T) {
+	rootDir := filepath.Join(t.TempDir(), "store")
 
-	cases := []struct {
-		subcommand   string
-		wantReadOnly bool
-	}{
-		{"fetch", false},
-		{"gc", false},
-		{"reprocess", false},
-		{"recover", false},
-		{"summary", true},
-	}
+	h, err := acquireStoreWriterLock(rootDir)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, h.Close()) }()
 
-	for _, tc := range cases {
-		t.Run(tc.subcommand, func(t *testing.T) {
-			s, err := openStoreForSubcommand(t.TempDir(), identity, tc.subcommand)
-			require.NoError(t, err)
+	info, err := os.Stat(rootDir)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
 
-			writeErr := store.SaveReport(s, probe)
-			if tc.wantReadOnly {
-				assert.ErrorIs(t, writeErr, store.ErrReadOnly,
-					"summary must use OpenReadOnly")
-			} else {
-				assert.NoError(t, writeErr,
-					"%s must use OpenReadWrite", tc.subcommand)
-			}
-		})
-	}
+	second, err := storelock.Acquire(storelock.LockPath(rootDir))
+	assert.Nil(t, second)
+	assert.ErrorIs(t, err, storelock.ErrLockHeld)
+}
+
+func TestAcquireStoreWriterLock_ReleasesLock(t *testing.T) {
+	rootDir := t.TempDir()
+
+	h, err := acquireStoreWriterLock(rootDir)
+	require.NoError(t, err)
+	require.NoError(t, h.Close())
+
+	second, err := storelock.Acquire(storelock.LockPath(rootDir))
+	require.NoError(t, err)
+	require.NoError(t, second.Close())
+}
+
+func TestAcquireStoreWriterLock_RejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real")
+	require.NoError(t, os.Mkdir(target, 0o700))
+	link := filepath.Join(dir, "link")
+	require.NoError(t, os.Symlink(target, link))
+
+	h, err := acquireStoreWriterLock(link)
+	assert.Nil(t, h)
+	assert.ErrorIs(t, err, errRootDirSymlink)
+}
+
+func TestAcquireStoreWriterLock_RejectsNonDirectory(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "notadir")
+	require.NoError(t, os.WriteFile(file, []byte{}, 0o600))
+
+	h, err := acquireStoreWriterLock(file)
+	assert.Nil(t, h)
+	assert.ErrorIs(t, err, errRootDirNotDirectory)
+}
+
+func TestAcquireStoreWriterLock_LoosePermissionsSucceeds(t *testing.T) {
+	dir := t.TempDir()
+	rootDir := filepath.Join(dir, "store")
+	require.NoError(t, os.Mkdir(rootDir, 0o750))
+
+	h, err := acquireStoreWriterLock(rootDir)
+	require.NoError(t, err)
+	require.NoError(t, h.Close())
 }

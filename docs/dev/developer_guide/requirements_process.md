@@ -103,6 +103,7 @@ Include the following section at the top of `01_requirements.md`, `02_architectu
    - Security design patterns
    - Threat models with Mermaid diagrams
    - For features involving notification, follow the [Notification Security Guidelines](notification_security.md)
+   - For features involving multiple processes reading and writing the same persistent data, follow the [Inter-Process Locking Design Guidelines](process_locking.md)
 
 6. **Processing Flow Details**
    - Key processing flows with sequence/flowchart diagrams
@@ -143,15 +144,12 @@ Include the following section at the top of `01_requirements.md`, `02_architectu
      - **Files to modify**: Specific file paths
      - **Work content**: What to do (with checkboxes)
      - **Success criteria**: How to verify completion
-     - **Estimated effort**: Time estimate
-     - **Actual effort**: Time spent (filled in after completion)
    - Use checkboxes `[ ]` for tracking: `- [ ] Task description`
    - Mark completed items: `- [x] Completed task`
    - Mark partially completed: `- [-] Partially done (with note)`
 
 3. **Implementation Order and Milestones**
    - Milestone definitions with deliverables
-   - Total estimated timeline
 
 4. **Test Strategy**
    - Unit test coverage goals

@@ -4,10 +4,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | `draft` |
+| ステータス | `approved` |
 | 作成日 | 2026-05-23 |
-| レビュー日 | - |
-| レビュアー | - |
+| レビュー日 | 2026-05-24 |
+| レビュアー | isseis |
 | コメント | - |
 
 ---
@@ -50,20 +50,20 @@
 **見積工数**: 0.5 日
 **実績工数**: -
 
-- [ ] `internal/notify/types.go` に `WarningKind` 型（許容値 `size_mismatch` / `parse_failure`）と `Warning` 構造体（`Kind WarningKind`, `UID uint32`, `UIDValidity uint32`, `MessageID string`）を追加する
-- [ ] `internal/notify/types.go` の `SystemError` 構造体を更新する: フィールドを `Kind SystemErrorKind`, `Component string`, `Mailbox string` に変更し、既存の `ErrorType string` と `Message string` を削除する
-- [ ] `internal/notify/types.go` に `SystemErrorKind` 型と許容値（`lock_held`, `store_identity_mismatch`, `store_permission`, `store_corruption`, `imap_credentials_missing`, `imap_connect_failed`, `imap_auth_failed`, `imap_operation_failed`, `uidvalidity_changed`, `recovery_required`, `reset_incomplete`, `notification_flush_failed`）を定義する。`notification_flush_failed` は `Flush()` 自体が失敗した場合に使用する種別であり、Slack 配送はすでに失敗しているため `slog.Error` による stderr 出力のみで報告する（`Flush()` による Slack 送信は行わない）
-- [ ] `internal/notify/helpers.go` の `LogSystemError` を新 `SystemError` 構造（`Kind` フィールド）に対応させる
-- [ ] `internal/notify/helpers.go` に `LogWarning(ctx context.Context, h slog.Handler, warning Warning) error` を追加する（WARN レベルで error webhook バッファへ積む）
-- [ ] `internal/notify/format.go` に `fetch_warning` レコードの整形処理を追加する（`tls_failure_alert` 集約に混入させず専用レコードとして扱う）
-- [ ] `internal/notify/message.go` に `fetch_warning` の Slack 表示文（`kind`, `uid`, `uidvalidity`, `message_id`, `run_id` のみ表示）を追加する
+- [x] `internal/notify/types.go` に `WarningKind` 型（許容値 `size_mismatch` / `parse_failure`）と `Warning` 構造体（`Kind WarningKind`, `UID uint32`, `UIDValidity uint32`, `MessageID string`）を追加する
+- [x] `internal/notify/types.go` の `SystemError` 構造体を更新する: フィールドを `Kind SystemErrorKind`, `Component string`, `Mailbox string` に変更し、既存の `ErrorType string` と `Message string` を削除する
+- [x] `internal/notify/types.go` に `SystemErrorKind` 型と許容値（`lock_held`, `store_identity_mismatch`, `store_permission`, `store_corruption`, `imap_credentials_missing`, `imap_connect_failed`, `imap_auth_failed`, `imap_operation_failed`, `uidvalidity_changed`, `recovery_required`, `reset_incomplete`, `notification_flush_failed`）を定義する。`notification_flush_failed` は `Flush()` 自体が失敗した場合に使用する種別であり、Slack 配送はすでに失敗しているため `slog.Error` による stderr 出力のみで報告する（`Flush()` による Slack 送信は行わない）
+- [x] `internal/notify/helpers.go` の `LogSystemError` を新 `SystemError` 構造（`Kind` フィールド）に対応させる
+- [x] `internal/notify/helpers.go` に `LogWarning(ctx context.Context, h slog.Handler, warning Warning) error` を追加する（WARN レベルで error webhook バッファへ積む）
+- [x] `internal/notify/format.go` に `fetch_warning` レコードの整形処理を追加する（`tls_failure_alert` 集約に混入させず専用レコードとして扱う）
+- [x] `internal/notify/message.go` に `fetch_warning` の Slack 表示文（`kind`, `uid`, `uidvalidity`, `message_id`, `run_id` のみ表示）を追加する
 
 **テスト変更**:
 
-- [ ] `internal/notify/helpers_test.go`: `LogWarning` が WARN レベルで typed fields のみを出力することを確認するテストを追加する
-- [ ] `internal/notify/format_test.go`: `fetch_warning` が TLS failure alert に集約されないことを確認するテストを追加する
-- [ ] `internal/notify/security_test.go`: `LogWarning` / `LogSystemError` が raw error・secret を payload に含めないことを確認するテストを追加する
-- [ ] `cmd/tlsrpt-digest/main.go` / `main_test.go` の `primeNotifyHandlers` 経由の `LogSystemError` 呼び出しを新 `SystemError{Kind: ...}` 形式へ更新する。ステップ 1-1 完了時点で `make test && make lint` がコンパイルエラーなく通る状態にする
+- [x] `internal/notify/helpers_test.go`: `LogWarning` が WARN レベルで typed fields のみを出力することを確認するテストを追加する
+- [x] `internal/notify/format_test.go`: `fetch_warning` が TLS failure alert に集約されないことを確認するテストを追加する
+- [x] `internal/notify/security_test.go`: `LogWarning` / `LogSystemError` が raw error・secret を payload に含めないことを確認するテストを追加する
+- [x] `cmd/tlsrpt-digest/main.go` / `main_test.go` の `primeNotifyHandlers` 経由の `LogSystemError` 呼び出しを新 `SystemError{Kind: ...}` 形式へ更新する。ステップ 1-1 完了時点で `make test && make lint` がコンパイルエラーなく通る状態にする
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -78,39 +78,39 @@
 
 破壊的復旧の不変条件・エラー境界・更新範囲の詳細は `02_architecture.md` §6.4 を参照。
 
-- [ ] `internal/store/types.go` に `OpenRecoverReset` モードを追加する
-- [ ] `internal/store/types.go` に `SummaryConsistencyGuard` インターフェース（`CheckRecoveryRequired(ctx context.Context) (found bool, err error)` / `Close() error`）を定義する
-- [ ] `internal/store/store.go` の `Store` インターフェースに以下のメソッドを追加する:
+- [x] `internal/store/types.go` に `OpenRecoverReset` モードを追加する
+- [x] `internal/store/types.go` に `SummaryConsistencyGuard` インターフェース（`CheckRecoveryRequired(ctx context.Context) (found bool, err error)` / `Close() error`）を定義する
+- [x] `internal/store/store.go` の `Store` インターフェースに以下のメソッドを追加する:
   - `ResetForRecovery(currUIDValidity uint32) error`
   - `AbortReset() error`
   - `AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)`
-- [ ] `internal/store/store.go` の `Open` に `OpenRecoverReset` 分岐を追加する: pending reset が存在する場合に通常 `OpenReadWrite` を fail closed（エラー返却）させ、`OpenRecoverReset` だけを通過させる
-- [ ] `internal/store/recovery.go` に `ResetForRecovery(currUIDValidity uint32) error` を実装する:
+- [x] `internal/store/store.go` の `Open` に `OpenRecoverReset` 分岐を追加する: pending reset が存在する場合に通常 `OpenReadWrite` を fail closed（エラー返却）させ、`OpenRecoverReset` だけを通過させる
+- [x] `internal/store/recovery.go` に `ResetForRecovery(currUIDValidity uint32) error` を実装する:
   - recovery-required 不在、または引数 `currUIDValidity` が sentinel の `curr_uid_validity` と異なる場合はエラーを返す
   - pending reset manifest を作成し旧データを staging へ移動する（commit 前）
   - commit を実行する（sentinel の `uid_validity` を current へ更新・`recovery_required` フィールドを除去・アトミック書き込み）
   - commit 後に staging ディレクトリを削除する（cleanup）
   - 中間クラッシュ後の再実行で「空ストア + current UIDVALIDITY + recovery-required 解消」へ収束することを保証する（AC-41）
-- [ ] `internal/store/recovery.go` に `AbortReset() error` を実装する:
+- [x] `internal/store/recovery.go` に `AbortReset() error` を実装する:
   - pending reset がない場合、または commit 後の状態では変更せずエラーを返す（AC-43）
   - pending reset（manifest あり・sentinel 未更新）の場合: staging から旧データを元の位置へ戻し manifest を削除する。完了後も recovery-required は残す
   - 再実行で「旧データ保持 + recovery-required 残存」へ収束すること（AC-44）
-- [ ] `internal/store/recovery.go` に `AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)` を実装する: guard はプロセス間の同期境界として専用ガードファイル（例: `{root_dir}/.tlsrpt-digest-summary.lock`）に対して `unix.Flock(fd, unix.LOCK_SH|unix.LOCK_NB)` で共有ロックを取得する。`CheckRecoveryRequired` は呼び出しごとにセンチネルファイルを再読み込みして recovery-required の有無を確認する（取得時点の状態をキャッシュしない）。writer 側（`SaveRecoveryRequired` / `ResetForRecovery` / `AbortReset` / `ApplyRecovery`）は同じガードファイルに対して `unix.Flock(fd, unix.LOCK_EX)` で排他ロックを取得してからセンチネルを更新することで、第 2 回 `CheckRecoveryRequired(found=false)` から `LogSummary` / `Flush()` 開始までの間に recovery-required が作成される false negative を防ぐ。`summary` がプロセス排他ロック（`lock.go` の `AcquireExclusive`）を取得しない設計でも fail closed 境界を持つ（`02_architecture.md` §3.3 / §6.7 参照）
-- [ ] `internal/store/errors.go` に `ErrPendingReset`, `ErrRecoveryRequiredMissing`, `ErrRecoveryUIDValidityMismatch`, `ErrResetNotPending` を追加し、pending reset の fail closed・recovery-required 不在・curr UIDVALIDITY 不一致・abort 不可状態を分類できるようにする
-- [ ] `internal/store/store_test.go` に以下のテストを追加する:
-  - [ ] pending reset がある状態で `OpenReadWrite` がエラーを返すこと
-  - [ ] `OpenRecoverReset` が pending reset を扱える store を返すこと
-- [ ] `internal/store/recovery_test.go` に以下のテストを追加する:
-  - [ ] `ResetForRecovery` が recovery-required 不在・curr 不一致時にエラーを返すこと
-  - [ ] `ResetForRecovery` の中間クラッシュ後の再実行で最終状態へ収束すること（AC-41）
-  - [ ] `AbortReset` が commit 前の pending reset を取り消し旧データを保持すること（AC-43）
-  - [ ] `AbortReset` が commit 後・pending reset なしでエラーを返すこと（AC-43）
-  - [ ] `AbortReset` の再実行が同じ最終状態へ収束すること（AC-44）
-  - [ ] commit 後の cleanup 未完了が通常データパス（空ストア一貫性）に影響しないこと
-  - [ ] `OpenRecoverReset` が通常 `OpenReadWrite` で fail closed する pending reset を再開できること
-  - [ ] summary guard の第 2 回 `CheckRecoveryRequired(found=false)` 直後に writer が recovery-required を作ろうとする並行テストで、summary の `LogSummary` / `Flush()` と recovery-required 書き込みが同時に通過せず、summary が送信しないか writer が送信開始後まで待つこと
-- [ ] `internal/store/testutil/mocks.go` の `FakeStore` に `ResetForRecovery`・`AbortReset`・`AcquireSummaryConsistencyGuard` を実装する
-- [ ] `internal/store/testutil/mocks.go` に `FakeSummaryConsistencyGuard` 構造体（`CheckRecoveryRequired` の戻り値を外部から注入可能）を追加する
+- [x] `internal/store/recovery.go` に `AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)` を実装する: guard はプロセス間の同期境界として専用ガードファイル（例: `{root_dir}/.tlsrpt-digest-summary.lock`）に対して `unix.Flock(fd, unix.LOCK_SH|unix.LOCK_NB)` で共有ロックを取得する。`CheckRecoveryRequired` は呼び出しごとにセンチネルファイルを再読み込みして recovery-required の有無を確認する（取得時点の状態をキャッシュしない）。writer 側（`SaveRecoveryRequired` / `ApplyRecovery` / `ResetForRecovery` 内の `commitReset`）は同じガードファイルに対して `unix.Flock(fd, unix.LOCK_EX)` で排他ロックを取得してから recovery-required を作成または解除することで、第 2 回 `CheckRecoveryRequired(found=false)` から `LogSummary` / `Flush()` 開始までの間に recovery-required が作成される false negative を防ぐ。`ResetForRecovery` の初期 manifest/staging 作成と `AbortReset` の restore は recovery-required を変更しないため summary guard では囲まず、writer 同士の直列化は cmd 層の store-wide process lock が担当する。`summary` がプロセス排他ロック（`lock.go` の `AcquireExclusive`）を取得しない設計でも fail closed 境界を持つ（`02_architecture.md` §3.3 / §6.7、`docs/dev/developer_guide/process_locking.ja.md` 参照）
+- [x] `internal/store/errors.go` に `ErrPendingReset`, `ErrRecoveryRequiredMissing`, `ErrRecoveryUIDValidityMismatch`, `ErrResetNotPending` を追加し、pending reset の fail closed・recovery-required 不在・curr UIDVALIDITY 不一致・abort 不可状態を分類できるようにする
+- [x] `internal/store/store_test.go` に以下のテストを追加する:
+  - [x] pending reset がある状態で `OpenReadWrite` がエラーを返すこと
+  - [x] `OpenRecoverReset` が pending reset を扱える store を返すこと
+- [x] `internal/store/recovery_test.go` に以下のテストを追加する:
+  - [x] `ResetForRecovery` が recovery-required 不在・curr 不一致時にエラーを返すこと
+  - [x] `ResetForRecovery` の中間クラッシュ後の再実行で最終状態へ収束すること（AC-41）
+  - [x] `AbortReset` が commit 前の pending reset を取り消し旧データを保持すること（AC-43）
+  - [x] `AbortReset` が commit 後・pending reset なしでエラーを返すこと（AC-43）
+  - [x] `AbortReset` の再実行が同じ最終状態へ収束すること（AC-44）
+  - [x] commit 後の cleanup 未完了が通常データパス（空ストア一貫性）に影響しないこと
+  - [x] `OpenRecoverReset` が通常 `OpenReadWrite` で fail closed する pending reset を再開できること
+  - [x] summary guard の第 2 回 `CheckRecoveryRequired(found=false)` 直後に writer が recovery-required を作ろうとする並行テストで、summary の `LogSummary` / `Flush()` と recovery-required 書き込みが同時に通過せず、summary が送信しないか writer が送信開始後まで待つこと
+- [x] `internal/store/testutil/mocks.go` の `FakeStore` に `ResetForRecovery`・`AbortReset`・`AcquireSummaryConsistencyGuard` を実装する
+- [x] `internal/store/testutil/mocks.go` に `FakeSummaryConsistencyGuard` 構造体（`CheckRecoveryRequired` の戻り値を外部から注入可能）を追加する
 
 **完了確認**: `make test && make lint` がパスする。`var _ store.Store = (*storetestutil.FakeStore)(nil)` コンパイルチェックが通ること
 
@@ -125,8 +125,8 @@
 
 変更理由は `02_architecture.md` §3.1 の Duration 型設計判断「半開区間 `[start, end)`」を参照。
 
-- [ ] `internal/notify/aggregate.go` の `inSummaryPeriod` を `(start, end]`（start 除外・end 含む）から `[start, end)`（start 含む・end 除外）へ変更する: `reportEnd.After(start) && (reportEnd.Equal(end) || reportEnd.Before(end))` を `!reportEnd.Before(start) && reportEnd.Before(end)` に変更する
-- [ ] `internal/notify/aggregate_test.go` の境界値テストを `[start, end)` セマンティクスに合わせて更新する（start と等しい `reportEnd` が含まれ、`end` と等しい `reportEnd` が除外されることを確認する）
+- [x] `internal/notify/aggregate.go` の `inSummaryPeriod` を `(start, end]`（start 除外・end 含む）から `[start, end)`（start 含む・end 除外）へ変更する: `reportEnd.After(start) && (reportEnd.Equal(end) || reportEnd.Before(end))` を `!reportEnd.Before(start) && reportEnd.Before(end)` に変更する
+- [x] `internal/notify/aggregate_test.go` の境界値テストを `[start, end)` セマンティクスに合わせて更新する（start と等しい `reportEnd` が含まれ、`end` と等しい `reportEnd` が除外されることを確認する）
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -140,8 +140,8 @@
 
 **レビュー観点**: `internal/store` recovery API の不変条件 / `internal/notify` payload 安全性 / `[start, end)` 区間変更
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/85）
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（ステップ 1-4 以降は新しいブランチで作業する）
 
@@ -179,11 +179,16 @@
 
 OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
 
-- [ ] `lock.go` に `LockHandle` インターフェース（`Close() error`）を定義する
-- [ ] `AcquireExclusive(lockPath string) (LockHandle, error)` を実装する: `golang.org/x/sys/unix` の `unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)` を使い non-blocking 排他ロックを取得する。取得失敗時は即時エラーを返す（待機しない）
-- [ ] `lock_test.go` に以下のテストを追加する:
-  - [ ] 同一パスに対して 2 回目の `AcquireExclusive` が即時失敗すること（AC-10a）
-  - [ ] `Close()` 後に同パスへのロック再取得が成功すること（解放確認）
+- [x] `lock.go` に `LockHandle` インターフェース（`Close() error`）を定義する
+- [x] `AcquireExclusive(lockPath string) (LockHandle, error)` を実装する: `golang.org/x/sys/unix` の `unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)` を使い non-blocking 排他ロックを取得する。取得失敗時は即時エラーを返す（待機しない）
+- [x] サブコマンド化前の暫定 production path では `main.go` から `acquireStoreWriterLock` を呼び、`cfg.Store.RootDir` を作成してから store-wide process lock を取得・保持する。サブコマンド化後はこの処理を `Bootstrap` の W-2 / W-5 へ移管する
+- [x] `lock_test.go` に以下のテストを追加する:
+  - [x] 同一パスに対して 2 回目の `AcquireExclusive` が即時失敗すること（AC-10a）
+  - [x] `Close()` 後に同パスへのロック再取得が成功すること（解放確認）
+  - [x] 存在しない親ディレクトリでは lock file を作成せずエラーを返すこと（W-2 で親ディレクトリを保証する前提の明確化）
+- [x] `main_test.go` に `acquireStoreWriterLock` が root dir を作成して lock を保持し、`Close()` 後に再取得できることを検証するテストを追加する
+
+このステップでは lock primitive と現行 `main.go` の暫定 production path への接続だけを実装する。サブコマンド別の writer/read-only 分岐と runner 完了までの lock 保持は、次の `boot.go` / `main.go` 再構成ステップで `Bootstrap` に移す。未使用の store open wrapper には接続しない。
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -208,7 +213,7 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
   - `os.Args` からサブコマンド名を確定し、各サブコマンド専用の `flag.FlagSet` で残り引数を解釈する（グローバル `flag.Parse()` を廃止する）
   - サブコマンド未指定・未知サブコマンド・`FlagSet` 解析エラー時は usage を stderr へ出力し exit 2 とする（AC-02）
   - `flag.FlagSet` 解析成功直後に `ulid.Make().String()` で RunID を採番する（`02_architecture.md` §3.6 参照）
-  - 既存の `loadConfig`・`setupNotifyHandlers`・`buildIMAPConfig`・`storeOpenMode`・`openStoreForSubcommand` を `boot.go` へ移管する（`primeNotifyHandlers` はステップ 1-1 で新 `SystemError` 形式へ更新済みのため、この段階で削除する）
+  - 既存の `loadConfig`・`setupNotifyHandlers`・`buildIMAPConfig`・`storeOpenMode` を `boot.go` へ移管し、store open は `Bootstrap` 内で lock 取得後に直接行う（`primeNotifyHandlers` はステップ 1-1 で新 `SystemError` 形式へ更新済みのため、この段階で削除する）
   - 各サブコマンド用の `SubcommandRunner` スタブを追加する（`Run` は後続フェーズで実装する）
   - `main` は `Bootstrap` 成功後に `defer boot.Close()` を設定し、`SubcommandRunner.Run` 完了までロックを保持する。`Bootstrap` は初期化途中のエラー時だけ取得済みリソースを閉じ、成功パスでは `LockHandle` を閉じない
 - [ ] `cmd/tlsrpt-digest/test_helpers.go` を新規作成する（`//go:build test` タグ）: `SpyNotificationSink` 構造体（`NotificationSink` を実装し呼び出し記録・エラー注入を提供する）を定義する。`package main` 内部型（`NotificationSink`）を使用するため `testutil/` サブディレクトリではなく同パッケージのこのファイルに配置する（`test_organization.md` Classification B）
@@ -222,7 +227,7 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
   - [ ] fake runner の `Run` 中に同じ lock path へ 2 回目の `AcquireExclusive` を試みると失敗し、`Run` から戻って `BootContext.Close()` が完了した後は再取得できること（AC-10a）
   - [ ] ストアオープン失敗（identity mismatch / permission / corruption）が分類別の `SystemErrorKind` でレポートされること（AC-09）
   - [ ] pending reset による store open 失敗時に `fetch` / `gc` / `reprocess` が `LogSystemError(reset_incomplete)` + `Flush()` + 英語の継続/ロールバック案内 + exit 1 となること
-  - [ ] W-2 境界: `{root_dir}` が symlink の場合に exit 1 となること（TOCTOU 対策。`02_architecture.md` §3.4 W-2 参照）
+  - [ ] W-2 境界: `{root_dir}` が symlink の場合に exit 1 となること（symlink 境界チェック。`02_architecture.md` §3.4 W-2 参照）
   - [ ] W-2 境界: `{root_dir}` のパーミッションが不足している場合に exit 1 となること
 - [ ] `main_test.go` を更新する:
   - [ ] 移管した `buildIMAPConfig`・`loadConfig`・`setupNotifyHandlers` のテストを `boot_test.go` へ移動する

@@ -6,6 +6,7 @@ package storetestutil
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"net/mail"
@@ -49,6 +50,8 @@ type FakeStore struct {
 	Recovery *FakeRecovery
 	// Emails maps (UID, UIDValidity) to the stored email entry.
 	Emails map[EmailKey]*FakeEmailEntry
+	// PendingReset simulates a pending reset state for AbortReset testing.
+	PendingReset bool
 }
 
 // NewFakeStore returns an empty FakeStore ready for use.
@@ -220,3 +223,63 @@ func (f *FakeStore) DeleteEmailsBefore(cutoff time.Time) (int, error) {
 	}
 	return deleted, nil
 }
+
+// ResetForRecovery implements store.Store.
+// Clears all reports and emails, sets UIDValidity to currUIDValidity, and
+// clears Recovery. Returns ErrRecoveryRequiredMissing if Recovery is nil,
+// or ErrRecoveryUIDValidityMismatch if currUIDValidity does not match.
+func (f *FakeStore) ResetForRecovery(currUIDValidity uint32) error {
+	if f.Recovery == nil {
+		return store.ErrRecoveryRequiredMissing
+	}
+	if f.Recovery.Curr != currUIDValidity {
+		return &store.ErrRecoveryUIDValidityMismatch{Got: currUIDValidity, Expected: f.Recovery.Curr}
+	}
+	f.Reports = make(map[string]tlsrpt.Report)
+	f.Emails = make(map[EmailKey]*FakeEmailEntry)
+	vCopy := currUIDValidity
+	f.UIDValidity = &vCopy
+	f.Recovery = nil
+	return nil
+}
+
+// AbortReset implements store.Store.
+// Returns ErrResetNotPending if there is no pending reset.
+func (f *FakeStore) AbortReset() error {
+	if !f.PendingReset {
+		return store.ErrResetNotPending
+	}
+	f.PendingReset = false
+	return nil
+}
+
+// AcquireSummaryConsistencyGuard implements store.Store.
+func (f *FakeStore) AcquireSummaryConsistencyGuard() (store.SummaryConsistencyGuard, error) {
+	return &FakeSummaryConsistencyGuard{RecoveryRequiredFound: f.Recovery != nil}, nil
+}
+
+// FakeSummaryConsistencyGuard is a test double for store.SummaryConsistencyGuard.
+// Set RecoveryRequiredFound to control the found return value of CheckRecoveryRequired.
+// Set CheckError to inject an error return from CheckRecoveryRequired.
+type FakeSummaryConsistencyGuard struct {
+	RecoveryRequiredFound bool
+	CheckError            error
+	Closed                bool
+}
+
+// CheckRecoveryRequired implements store.SummaryConsistencyGuard.
+func (g *FakeSummaryConsistencyGuard) CheckRecoveryRequired(_ context.Context) (bool, error) {
+	if g.CheckError != nil {
+		return false, g.CheckError
+	}
+	return g.RecoveryRequiredFound, nil
+}
+
+// Close implements store.SummaryConsistencyGuard.
+func (g *FakeSummaryConsistencyGuard) Close() error {
+	g.Closed = true
+	return nil
+}
+
+// compile-time interface check
+var _ store.Store = (*FakeStore)(nil)

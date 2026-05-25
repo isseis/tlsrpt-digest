@@ -12,7 +12,8 @@ import (
 )
 
 // Store represents the persistence layer for TLSRPT reports and emails.
-// All operations are assumed to be called from a single writer (ensured by external scheduler).
+// Write operations require a single writer. Command-layer callers must hold
+// the process-level store writer lock while using a read-write store.
 // Read-only mode (OpenReadOnly) prevents write operations and creation of files/directories.
 type Store interface {
 	// SaveReports persists a batch of TLSRPT reports in a single atomic write.
@@ -79,6 +80,28 @@ type Store interface {
 	// method when both fields must change together.
 	ApplyRecovery(newUIDValidity uint32) error
 
+	// ResetForRecovery discards old data and advances uid_validity to currUIDValidity.
+	// It requires recovery-required to be present in the sentinel with a matching current
+	// UIDVALIDITY. The operation is crash-safe: re-running after a partial failure
+	// converges to "empty store + current UIDVALIDITY + recovery-required cleared".
+	// Only valid on stores opened with OpenRecoverReset.
+	// The caller must hold the process-level store writer lock until this method returns.
+	ResetForRecovery(currUIDValidity uint32) error
+
+	// AbortReset cancels a pending (pre-commit) reset and restores old data.
+	// Returns ErrResetNotPending if there is no pending reset or if the commit
+	// has already been applied. After abort, recovery-required remains in the sentinel.
+	// Only valid on stores opened with OpenRecoverReset.
+	// The caller must hold the process-level store writer lock until this method returns.
+	AbortReset() error
+
+	// AcquireSummaryConsistencyGuard acquires a shared flock on the guard file and
+	// returns a SummaryConsistencyGuard. While held, writer processes updating
+	// recovery-required in the sentinel must wait for the exclusive lock, ensuring
+	// that CheckRecoveryRequired results are consistent through LogSummary/Flush.
+	// The caller must call Close() on the returned guard after use.
+	AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)
+
 	// DeleteReportsBefore deletes all report records whose date-range.end-datetime < cutoff
 	// and returns the number of deleted records. Returns deleted=0 without error if no
 	// records match. The updated JSON is written atomically (temp file + rename).
@@ -129,21 +152,49 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 	// Determine if read-only based on mode
 	readOnly := mode == OpenReadOnly
 
+	// OpenReadWrite must fail closed while a forward-progressing reset is still
+	// in flight, but a manifest left behind AFTER commit must not permanently
+	// block the normal data path (see 02_architecture.md, "commit 後の cleanup
+	// 失敗は通常データパスへ影響させず").  cleanupCompletedReset distinguishes
+	// the two cases by inspecting sentinel.recovery_required (the true commit
+	// barrier): if it is cleared, the leftover manifest/staging are removed
+	// here; otherwise ErrPendingReset is returned for the operator to resolve
+	// via OpenRecoverReset.
+	if mode == OpenReadWrite {
+		if err := cleanupCompletedReset(rootDir); err != nil {
+			return nil, err
+		}
+	}
+
 	// In read-write mode, ensure directories exist
 	if !readOnly {
 		if err := ensureDirExists(rootDir); err != nil {
 			return nil, fmt.Errorf("Open: ensure root dir: %w", err)
 		}
 
-		emailsDir := emailsPath(rootDir)
-		if err := ensureDirExists(emailsDir); err != nil {
-			return nil, fmt.Errorf("Open: ensure emails dir: %w", err)
+		// OpenRecoverReset skips emails dir creation and data file initialisation:
+		// these files may have been moved to staging by an interrupted ResetForRecovery,
+		// and re-creating them here would clobber the staged old data on the next rename.
+		if mode != OpenRecoverReset {
+			emailsDir := emailsPath(rootDir)
+			if err := ensureDirExists(emailsDir); err != nil {
+				return nil, fmt.Errorf("Open: ensure emails dir: %w", err)
+			}
+
+			// Initialize the data file with empty content if it does not exist.
+			if err := initDataFile(rootDir); err != nil {
+				return nil, fmt.Errorf("Open: init data file: %w", err)
+			}
 		}
 
-		// Initialize the data file with empty content if it does not exist.
-		if err := initDataFile(rootDir); err != nil {
-			return nil, fmt.Errorf("Open: init data file: %w", err)
+		// Create the guard file so that read-only opens can acquire a shared lock
+		// without needing O_CREATE (which would be a write on a read-only mount).
+		guardPath := guardFilePath(rootDir)
+		f, err := os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, filePerm) //nolint:gosec
+		if err != nil {
+			return nil, fmt.Errorf("Open: create guard file: %w", err)
 		}
+		_ = f.Close()
 	}
 
 	// Load or initialize sentinel

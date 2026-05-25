@@ -470,8 +470,7 @@ func TestFlush_SequentialMessages(t *testing.T) {
 		FailureCount:     2,
 	}))
 	require.NoError(t, notify.LogSystemError(context.Background(), h, notify.SystemError{
-		ErrorType: "StorageError",
-		Message:   "disk full",
+		Kind:      notify.SystemErrorKindStoreCorruption,
 		Component: "storage",
 	}))
 	require.NoError(t, h.Flush(context.Background()))

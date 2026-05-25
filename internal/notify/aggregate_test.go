@@ -32,7 +32,7 @@ func TestGenerateSummary_FiltersByPeriod(t *testing.T) {
 	assert.Equal(t, map[string]int64{"org-inside": 20}, summary.OrganizationStats)
 }
 
-func TestGenerateSummary_StartBoundaryExclusion(t *testing.T) {
+func TestGenerateSummary_StartBoundaryInclusion(t *testing.T) {
 	start := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
 	st := fakeStoreWithReports(summaryReport("at-start", "org-a", start, 10, 0))
@@ -40,11 +40,11 @@ func TestGenerateSummary_StartBoundaryExclusion(t *testing.T) {
 	summary, err := notify.GenerateSummary(context.Background(), st, start, end, nil)
 
 	require.NoError(t, err)
-	assert.Zero(t, summary.ReportCount)
-	assert.Empty(t, summary.OrganizationStats)
+	assert.Equal(t, int64(1), summary.ReportCount)
+	assert.Equal(t, map[string]int64{"org-a": 10}, summary.OrganizationStats)
 }
 
-func TestGenerateSummary_EndBoundaryInclusion(t *testing.T) {
+func TestGenerateSummary_EndBoundaryExclusion(t *testing.T) {
 	start := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 5, 8, 0, 0, 0, 0, time.UTC)
 	st := fakeStoreWithReports(summaryReport("at-end", "org-a", end, 10, 0))
@@ -52,8 +52,8 @@ func TestGenerateSummary_EndBoundaryInclusion(t *testing.T) {
 	summary, err := notify.GenerateSummary(context.Background(), st, start, end, nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), summary.ReportCount)
-	assert.Equal(t, map[string]int64{"org-a": 10}, summary.OrganizationStats)
+	assert.Zero(t, summary.ReportCount)
+	assert.Empty(t, summary.OrganizationStats)
 }
 
 func TestGenerateSummary_ExcludesFailureReports(t *testing.T) {

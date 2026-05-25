@@ -63,12 +63,14 @@ func truncateMessage(m *slackMessage) {
 }
 
 // formatRecords converts buffered slog.Records into one or more slackMessages.
-// TLS failures are aggregated into a single message; system errors become
-// individual messages; summaries produce one message. The messages are ordered:
-// TLS-failure aggregate (if any), system errors (one each), summary (if any).
+// TLS failures are aggregated into a single message; fetch warnings each become
+// individual messages; system errors become individual messages; summaries produce
+// one message. The messages are ordered: TLS-failure aggregate (if any), fetch
+// warnings (one each), system errors (one each), summary (if any).
 // debugLogger receives warnings for unexpected attr keys; nil silences them.
 func formatRecords(records []slog.Record, runID string, debugLogger *slog.Logger) []slackMessage {
 	var alerts []Alert
+	var warnings []Warning
 	var sysErrors []SystemError
 	var summaries []Summary
 
@@ -78,7 +80,11 @@ func formatRecords(records []slog.Record, runID string, debugLogger *slog.Logger
 		case r.Level >= slog.LevelError:
 			sysErrors = append(sysErrors, extractSystemError(r, debugLogger))
 		case r.Level >= slog.LevelWarn:
-			alerts = append(alerts, extractAlert(r, debugLogger))
+			if r.Message == "fetch_warning" {
+				warnings = append(warnings, extractWarning(r, debugLogger))
+			} else {
+				alerts = append(alerts, extractAlert(r, debugLogger))
+			}
 		default:
 			summaries = append(summaries, extractSummary(r, debugLogger))
 		}
@@ -87,6 +93,9 @@ func formatRecords(records []slog.Record, runID string, debugLogger *slog.Logger
 	var msgs []slackMessage
 	if len(alerts) > 0 {
 		msgs = append(msgs, formatAlerts(alerts, runID))
+	}
+	for _, w := range warnings {
+		msgs = append(msgs, formatWarning(w, runID))
 	}
 	for _, e := range sysErrors {
 		msgs = append(msgs, formatSystemError(e, runID))
@@ -136,19 +145,41 @@ func extractAlert(r slog.Record, debugLogger *slog.Logger) Alert {
 // extractSystemError reads SystemError fields from slog.Attrs stored by LogSystemError.
 func extractSystemError(r slog.Record, debugLogger *slog.Logger) SystemError {
 	var e SystemError
-	e.ErrorType = r.Message
 	r.Attrs(func(attr slog.Attr) bool {
 		switch attr.Key {
-		case "message":
-			e.Message = attr.Value.String()
+		case "kind":
+			e.Kind = SystemErrorKind(attr.Value.String())
 		case "component":
 			e.Component = attr.Value.String()
+		case "mailbox":
+			e.Mailbox = attr.Value.String()
 		default:
 			warnUnknownKey(debugLogger, attr.Key, r.Message)
 		}
 		return true
 	})
 	return e
+}
+
+// extractWarning reads Warning fields from slog.Attrs stored by LogWarning.
+func extractWarning(r slog.Record, debugLogger *slog.Logger) Warning {
+	var w Warning
+	r.Attrs(func(attr slog.Attr) bool {
+		switch attr.Key {
+		case "kind":
+			w.Kind = WarningKind(attr.Value.String())
+		case "uid":
+			w.UID = uint32(attr.Value.Uint64()) //nolint:gosec // IMAP UIDs are defined as uint32 by RFC 3501
+		case "uidvalidity":
+			w.UIDValidity = uint32(attr.Value.Uint64()) //nolint:gosec // IMAP UIDVALIDITYs are uint32 by RFC 3501
+		case "message_id":
+			w.MessageID = attr.Value.String()
+		default:
+			warnUnknownKey(debugLogger, attr.Key, r.Message)
+		}
+		return true
+	})
+	return w
 }
 
 // extractSummary reads Summary fields from slog.Attrs stored by LogSummary.
@@ -231,17 +262,18 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 
 // formatSystemError builds a slackMessage for a single system error.
 func formatSystemError(e SystemError, runID string) slackMessage {
+	fields := []slackField{
+		{Title: "Kind", Value: string(e.Kind), Short: true},
+		{Title: "Component", Value: e.Component, Short: true},
+	}
+	if e.Mailbox != "" {
+		fields = append(fields, slackField{Title: "Mailbox", Value: e.Mailbox, Short: true})
+	}
+	fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: true})
 	return slackMessage{
-		Text: fmt.Sprintf("%s System Error: %s", emojiError, e.ErrorType),
+		Text: fmt.Sprintf("%s System Error: %s", emojiError, string(e.Kind)),
 		Attachments: []slackAttachment{
-			{
-				Color: colorDanger,
-				Fields: []slackField{
-					{Title: "Error", Value: e.Message, Short: false},
-					{Title: "Component", Value: e.Component, Short: true},
-					{Title: "Run ID", Value: runID, Short: true},
-				},
-			},
+			{Color: colorDanger, Fields: fields},
 		},
 	}
 }

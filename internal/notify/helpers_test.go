@@ -43,10 +43,58 @@ func TestLogAlert_Level(t *testing.T) {
 func TestLogSystemError_Level(t *testing.T) {
 	var spy spyHandler
 	require.NoError(t, notify.LogSystemError(context.Background(), &spy, notify.SystemError{
-		ErrorType: "IMAPError", Message: "conn dropped", Component: "imap",
+		Kind: notify.SystemErrorKindIMAPOperationFailed, Component: "imap",
 	}))
 	require.Len(t, spy.records, 1)
 	assert.Equal(t, slog.LevelError, spy.records[0].Level)
+}
+
+func TestLogWarning_Level(t *testing.T) {
+	var spy spyHandler
+	require.NoError(t, notify.LogWarning(context.Background(), &spy, notify.Warning{
+		Kind:        notify.WarningKindSizeMismatch,
+		UID:         42,
+		UIDValidity: 100,
+		MessageID:   "<test@example.com>",
+	}))
+	require.Len(t, spy.records, 1)
+	assert.Equal(t, slog.LevelWarn, spy.records[0].Level)
+}
+
+func TestLogWarning_TypedFieldsOnly(t *testing.T) {
+	var spy spyHandler
+	require.NoError(t, notify.LogWarning(context.Background(), &spy, notify.Warning{
+		Kind:        notify.WarningKindParseFailure,
+		UID:         7,
+		UIDValidity: 99,
+		MessageID:   "<msg@example.com>",
+	}))
+	require.Len(t, spy.records, 1)
+	r := spy.records[0]
+	assert.Equal(t, "fetch_warning", r.Message)
+
+	var foundKind, foundUID, foundUIDValidity, foundMessageID bool
+	r.Attrs(func(attr slog.Attr) bool {
+		switch attr.Key {
+		case "kind":
+			foundKind = true
+			assert.Equal(t, "parse_failure", attr.Value.String())
+		case "uid":
+			foundUID = true
+			assert.Equal(t, uint64(7), attr.Value.Uint64())
+		case "uidvalidity":
+			foundUIDValidity = true
+			assert.Equal(t, uint64(99), attr.Value.Uint64())
+		case "message_id":
+			foundMessageID = true
+			assert.Equal(t, "<msg@example.com>", attr.Value.String())
+		}
+		return true
+	})
+	assert.True(t, foundKind)
+	assert.True(t, foundUID)
+	assert.True(t, foundUIDValidity)
+	assert.True(t, foundMessageID)
 }
 
 func TestLogSummary_Level(t *testing.T) {
