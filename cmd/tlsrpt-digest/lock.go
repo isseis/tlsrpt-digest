@@ -43,28 +43,28 @@ func validateAndEnsureRootDir(rootDir string) error {
 	fi, err := os.Lstat(rootDir)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("acquireStoreWriterLock: stat %s: %w", rootDir, err)
+			return fmt.Errorf("validateAndEnsureRootDir: stat %s: %w", rootDir, err)
 		}
 		if err := os.MkdirAll(rootDir, rootDirPerm); err != nil {
-			return fmt.Errorf("acquireStoreWriterLock: mkdir %s: %w", rootDir, err)
+			return fmt.Errorf("validateAndEnsureRootDir: mkdir %s: %w", rootDir, err)
 		}
 		fi, err = os.Lstat(rootDir)
 		if err != nil {
-			return fmt.Errorf("acquireStoreWriterLock: stat %s after mkdir: %w", rootDir, err)
+			return fmt.Errorf("validateAndEnsureRootDir: stat %s after mkdir: %w", rootDir, err)
 		}
 		if fi.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirSymlink)
+			return fmt.Errorf("validateAndEnsureRootDir: %s: %w", rootDir, errRootDirSymlink)
 		}
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirSymlink)
+		return fmt.Errorf("validateAndEnsureRootDir: %s: %w", rootDir, errRootDirSymlink)
 	}
 	if !fi.IsDir() {
-		return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirNotDirectory)
+		return fmt.Errorf("validateAndEnsureRootDir: %s: %w", rootDir, errRootDirNotDirectory)
 	}
 	perm := fi.Mode().Perm()
 	if perm != rootDirPerm && perm != rootDirGroupPerm {
-		return fmt.Errorf("acquireStoreWriterLock: %s has permissions %04o, want 0700 or 0750: %w", rootDir, perm, errRootDirPermission)
+		return fmt.Errorf("validateAndEnsureRootDir: %s has permissions %04o, want 0700 or 0750: %w", rootDir, perm, errRootDirPermission)
 	}
 	return nil
 }
