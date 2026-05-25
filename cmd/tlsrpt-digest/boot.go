@@ -11,6 +11,7 @@ import (
 	"github.com/isseis/tlsrpt-digest/internal/imap"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
 	"github.com/isseis/tlsrpt-digest/internal/store"
+	"github.com/isseis/tlsrpt-digest/internal/storelock"
 )
 
 type SubcommandName string
@@ -229,7 +230,10 @@ func (o BootstrapOptions) withDefaults() BootstrapOptions {
 		o.BuildNotifier = setupNotifyHandlers
 	}
 	if o.AcquireWriterLock == nil {
-		o.AcquireWriterLock = acquireStoreWriterLock
+		// W-2 (validateAndEnsureRootDir) already ran before W-5; only acquire the lock here.
+		o.AcquireWriterLock = func(rootDir string) (LockHandle, error) {
+			return storelock.Acquire(storelock.LockPath(rootDir))
+		}
 	}
 	if o.OpenStore == nil {
 		o.OpenStore = store.Open
