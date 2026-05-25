@@ -161,7 +161,12 @@ func cleanupCompletedReset(rootDir string) error {
 		slog.String("root_dir", rootDir),
 		slog.Int("manifest_phase", int(mfst.Phase)),
 	)
-	_ = os.RemoveAll(resetStagingPath(rootDir))
+	if err := os.RemoveAll(resetStagingPath(rootDir)); err != nil {
+		slog.Warn("store: failed to remove stale staging directory; manual cleanup may be required",
+			slog.String("path", resetStagingPath(rootDir)),
+			slog.Any("error", err),
+		)
+	}
 	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("cleanupCompletedReset: remove manifest: %w", err)
 	}
@@ -489,7 +494,12 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 
 	// Staging dir cleanup is best-effort: a stale staging dir is harmless to normal
 	// data paths and is cleaned up on the next run.
-	_ = os.RemoveAll(stagingPath)
+	if err := os.RemoveAll(stagingPath); err != nil {
+		slog.Warn("store: failed to remove staging directory after reset; manual cleanup may be required",
+			slog.String("path", stagingPath),
+			slog.Any("error", err),
+		)
+	}
 	// Manifest removal is required: if the manifest survives, Open(OpenReadWrite)
 	// will permanently return ErrPendingReset.
 	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -642,7 +652,12 @@ func (s *storeImpl) AbortReset() error {
 		return fmt.Errorf("AbortReset: restore from staging: %w", err)
 	}
 	// Recovery-required remains in the sentinel so the caller can retry.
-	_ = os.RemoveAll(stagingPath)
+	if err := os.RemoveAll(stagingPath); err != nil {
+		slog.Warn("store: failed to remove staging directory after abort; manual cleanup may be required",
+			slog.String("path", stagingPath),
+			slog.Any("error", err),
+		)
+	}
 	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("AbortReset: remove manifest: %w", err)
 	}
