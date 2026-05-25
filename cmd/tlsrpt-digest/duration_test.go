@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ func TestParseDuration(t *testing.T) {
 		{name: "one week", in: "1w", want: Duration{Days: 7}},
 		{name: "four weeks", in: "4w", want: Duration{Days: 28}},
 		{name: "thirty days", in: "30d", want: Duration{Days: 30}},
+		{name: "largest non-overflowing week", in: fmt.Sprintf("%dw", math.MaxInt/7), want: Duration{Days: (math.MaxInt / 7) * 7}},
 	}
 
 	for _, tt := range tests {
@@ -38,6 +41,13 @@ func TestParseDurationErrors(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+func TestParseDurationRejectsWeekOverflow(t *testing.T) {
+	got, err := ParseDuration(fmt.Sprintf("%dw", math.MaxInt/7+1))
+
+	assert.Equal(t, Duration{}, got)
+	require.ErrorIs(t, err, errDurationOverflow)
 }
 
 func TestDurationCutoffUsesUTCDayStart(t *testing.T) {

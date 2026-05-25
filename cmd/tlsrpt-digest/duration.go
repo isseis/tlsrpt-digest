@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ var (
 	errDurationEmpty           = errors.New("duration is empty")
 	errDurationUnsupportedUnit = errors.New("duration unit is unsupported")
 	errDurationNonPositive     = errors.New("duration must be >= 1 day")
+	errDurationOverflow        = errors.New("duration exceeds supported range")
 )
 
 // Duration represents a relative period normalized to whole days.
@@ -40,6 +42,9 @@ func ParseDuration(s string) (Duration, error) {
 
 	days := value
 	if unit == 'w' {
+		if value > math.MaxInt/7 {
+			return Duration{}, fmt.Errorf("%w: %q", errDurationOverflow, s)
+		}
 		days *= 7
 	}
 	return Duration{Days: days}, nil
