@@ -162,7 +162,7 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 		}
 	}()
 
-	identity := storeIdentityFromConfig(cfg)
+	identity := storeIdentity(cfg)
 	if subcmd == subcommandSummary {
 		boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, store.OpenReadOnly)
 		if err != nil {
@@ -191,15 +191,15 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 
 	boot.LockHandle, err = opts.AcquireWriterLock(cfg.Store.RootDir)
 	if err != nil {
-		_ = notifyBootSystemError(context.Background(), boot.Notifier, notify.SystemErrorKindLockHeld, cfg)
+		_ = notifySystemError(context.Background(), boot.Notifier, notify.SystemErrorKindLockHeld, cfg)
 		return nil, fmt.Errorf("acquire store writer lock: %w", err)
 	}
 
-	mode := storeOpenModeForBootstrap(subcmd, opts)
+	mode := storeOpenMode(subcmd, opts)
 	boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
 	if err != nil {
-		kind := classifyStoreOpenError(err)
-		_ = notifyBootSystemError(context.Background(), boot.Notifier, kind, cfg)
+		kind := classifyOpenError(err)
+		_ = notifySystemError(context.Background(), boot.Notifier, kind, cfg)
 		if errors.Is(err, store.ErrPendingReset) {
 			return nil, fmt.Errorf("store reset is incomplete; run recover --mode discard-old --yes to continue or recover --abort-reset --yes to roll back: %w", err)
 		}
@@ -231,7 +231,7 @@ func (o BootstrapOptions) withDefaults() BootstrapOptions {
 	return o
 }
 
-func notifyBootSystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, cfg *config.Config) error {
+func notifySystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, cfg *config.Config) error {
 	if notifier == nil {
 		return nil
 	}
@@ -243,7 +243,7 @@ func notifyBootSystemError(ctx context.Context, notifier NotificationSink, kind 
 	return errors.Join(err, notifier.Flush(ctx))
 }
 
-func storeOpenModeForBootstrap(subcmd SubcommandName, opts BootstrapOptions) store.OpenMode {
+func storeOpenMode(subcmd SubcommandName, opts BootstrapOptions) store.OpenMode {
 	if subcmd == subcommandSummary {
 		return store.OpenReadOnly
 	}
@@ -253,7 +253,7 @@ func storeOpenModeForBootstrap(subcmd SubcommandName, opts BootstrapOptions) sto
 	return store.OpenReadWrite
 }
 
-func classifyStoreOpenError(err error) notify.SystemErrorKind {
+func classifyOpenError(err error) notify.SystemErrorKind {
 	if errors.Is(err, store.ErrPendingReset) {
 		return notify.SystemErrorKindResetIncomplete
 	}
@@ -266,7 +266,7 @@ func classifyStoreOpenError(err error) notify.SystemErrorKind {
 	return notify.SystemErrorKindStoreCorruption
 }
 
-func storeIdentityFromConfig(cfg *config.Config) store.IMAPIdentity {
+func storeIdentity(cfg *config.Config) store.IMAPIdentity {
 	return store.IMAPIdentity{
 		Host:    cfg.IMAP.Host,
 		Port:    cfg.IMAP.Port,

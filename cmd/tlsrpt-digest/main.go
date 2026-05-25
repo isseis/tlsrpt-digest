@@ -106,13 +106,13 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 	opts := cliOptions{ConfigPath: defaultConfigPath}
 	fs.StringVar(&opts.ConfigPath, "config", defaultConfigPath, "path to TOML configuration file")
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "log notification payloads to stderr without sending HTTP requests")
-	registerSubcommandFlags(fs, subcmd, &opts)
+	registerFlags(fs, subcmd, &opts)
 
 	if err := fs.Parse(args[1:]); err != nil {
 		printUsage(stderr)
 		return cliInvocation{}, err
 	}
-	if err := validateParsedFlags(subcmd, opts); err != nil {
+	if err := validateFlags(subcmd, opts); err != nil {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		printUsage(stderr)
 		return cliInvocation{}, err
@@ -120,7 +120,7 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 	return cliInvocation{Subcommand: subcmd, Options: opts, Runner: runner}, nil
 }
 
-func registerSubcommandFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
+func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 	switch subcmd {
 	case subcommandFetch:
 		fs.StringVar(&opts.Since, "since", "", "fetch window duration")
@@ -138,7 +138,7 @@ func registerSubcommandFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliO
 	}
 }
 
-func validateParsedFlags(subcmd SubcommandName, opts cliOptions) error {
+func validateFlags(subcmd SubcommandName, opts cliOptions) error {
 	for name, value := range map[string]string{
 		"since":         opts.Since,
 		"window":        opts.Window,
