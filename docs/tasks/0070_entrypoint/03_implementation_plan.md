@@ -248,8 +248,8 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
 
 **レビュー観点**: 初期化順序 W-1〜W-6 / ロック解放タイミング / `NotificationSink` facade の境界
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/86）
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（フェーズ 2 は新しいブランチで作業する）
 
