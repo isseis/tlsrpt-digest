@@ -359,19 +359,21 @@ func (s *storeImpl) ClearRecoveryRequired() error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
-	sentinel, _, err := loadSentinel(s.rootDir)
-	if err != nil {
-		return fmt.Errorf("ClearRecoveryRequired: load sentinel: %w", err)
-	}
-	if sentinel == nil {
+	return s.withGuardExclusive(func() error {
+		sentinel, _, err := loadSentinel(s.rootDir)
+		if err != nil {
+			return fmt.Errorf("ClearRecoveryRequired: load sentinel: %w", err)
+		}
+		if sentinel == nil {
+			return nil
+		}
+		sentinel.RecoveryRequired = nil
+		if err := saveSentinel(s.rootDir, sentinel); err != nil {
+			return fmt.Errorf("ClearRecoveryRequired: save sentinel: %w", err)
+		}
+		s.sentinel = sentinel
 		return nil
-	}
-	sentinel.RecoveryRequired = nil
-	if err := saveSentinel(s.rootDir, sentinel); err != nil {
-		return fmt.Errorf("ClearRecoveryRequired: save sentinel: %w", err)
-	}
-	s.sentinel = sentinel
-	return nil
+	})
 }
 
 // ApplyRecovery implements Store.ApplyRecovery.
@@ -450,27 +452,28 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 			return &ErrRecoveryUIDValidityMismatch{Got: currUIDValidity, Expected: sentinelCurr}
 		}
 
-		// Write manifest FIRST (before any file moves) under the exclusive guard lock.
+		// Write manifest FIRST before any file moves.
 		// This makes the pending reset immediately visible to OpenReadWrite (→ ErrPendingReset)
 		// and to AbortReset, so the operation is rollback-able from this point onward.
+		// Caller-held process writer lock serializes this whole reset against other writers;
+		// the summary consistency guard is not needed here because recovery_required is not
+		// modified until commitReset.
 		//
 		// Wipe any stale staging dir first: a previous reset that committed but
 		// failed to clean up RemoveAll(staging) could leave files there, which
 		// would later make stageEmailsDir fail (rename onto a non-empty dir).
 		// At this point there is no manifest, so the staging contents (if any)
 		// are guaranteed stale and safe to remove.
-		if err := s.withGuardExclusive(func() error {
-			if err := os.RemoveAll(stagingPath); err != nil {
-				return fmt.Errorf("ResetForRecovery: clean stale staging dir: %w", err)
-			}
-			if err := os.MkdirAll(stagingPath, dirPerm); err != nil {
-				return fmt.Errorf("ResetForRecovery: create staging dir: %w", err)
-			}
-			return writeResetManifest(manifestPath, resetManifest{
-				Version:         resetManifestVersion,
-				CurrUIDValidity: currUIDValidity,
-				Phase:           resetPhaseManifestWritten,
-			})
+		if err := os.RemoveAll(stagingPath); err != nil {
+			return fmt.Errorf("ResetForRecovery: clean stale staging dir: %w", err)
+		}
+		if err := os.MkdirAll(stagingPath, dirPerm); err != nil {
+			return fmt.Errorf("ResetForRecovery: create staging dir: %w", err)
+		}
+		if err := writeResetManifest(manifestPath, resetManifest{
+			Version:         resetManifestVersion,
+			CurrUIDValidity: currUIDValidity,
+			Phase:           resetPhaseManifestWritten,
 		}); err != nil {
 			return fmt.Errorf("ResetForRecovery: write manifest: %w", err)
 		}
@@ -601,7 +604,7 @@ func (s *storeImpl) AbortReset() error {
 	}
 
 	if mfst.Phase != resetPhaseAborting {
-		// Forward-progressing manifest (phases 0–3): check the commit barrier and
+		// Forward-progressing manifest (phases 1–3): check the commit barrier and
 		// transition the manifest to the aborting phase.
 		//
 		// The commit barrier is sentinel.recovery_required: commit writes the sentinel
@@ -640,7 +643,7 @@ func (s *storeImpl) AbortReset() error {
 	}
 	// Recovery-required remains in the sentinel so the caller can retry.
 	_ = os.RemoveAll(stagingPath)
-	if err := os.Remove(manifestPath); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("AbortReset: remove manifest: %w", err)
 	}
 	return nil
@@ -651,7 +654,7 @@ func (s *storeImpl) AbortReset() error {
 // returned: recovery-required cannot be set without a store directory, so
 // CheckRecoveryRequired always returns false and Close is a no-op.
 func (s *storeImpl) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error) {
-	if _, err := os.Stat(s.rootDir); os.IsNotExist(err) {
+	if _, err := os.Stat(s.rootDir); errors.Is(err, os.ErrNotExist) {
 		return noopSummaryConsistencyGuard{}, nil
 	}
 	guardPath := guardFilePath(s.rootDir)

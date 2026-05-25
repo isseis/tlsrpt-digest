@@ -506,6 +506,8 @@ type SubcommandRunner interface {
 
 ### 3.3 プロセスロックの設計
 
+詳細な成立条件と今後の拡張時のレビュー観点は `docs/dev/developer_guide/process_locking.ja.md` に従う。
+
 **プロセスロックの契約**
 - **ロック識別子**: store ごとに一意なロック対象を使い、ストアディレクトリ外の共有資源には依存しない。ロックファイルは `{root_dir}/.tlsrpt-digest-store.lock` とする。
 - **OS API**: `golang.org/x/sys/unix` パッケージの `unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)` を使用する。サードパーティロックライブラリは導入しない。
@@ -519,8 +521,9 @@ type SubcommandRunner interface {
 
 **適用範囲と責務分離**
 - **適用範囲**: 書き込み系サブコマンド（`fetch` / `gc` / `recover` / `reprocess`）が対象。`summary` は read-only モードでストアを開くためロック不要であり、`fetch` 実行中でも並走できる。
+- **破壊的 recover 操作の前提**: `recover --mode discard-old --yes` と `recover --abort-reset --yes` は、store-wide process lock を保持した状態で `OpenRecoverReset` を使う。`ResetForRecovery` / `AbortReset` は manifest read から cleanup までを 1 writer 前提で実行するため、呼び出し側がこの lock を保持することを API contract とする。
 - **`internal/store` 側との責務分離**: ロックファイルは本タスクのオーケストレーションが管理し、`internal/store` 側は `.tlsrpt-digest-store.lock`（`.tlsrpt-digest-` プレフィックスのうち sentinel・data file 以外のファイル）をストア管理対象外として扱う（既存実装は `tlsrpt.json` と sentinel のみを参照しており、副作用はない）。
-- **`summary` 並走時の fail closed**: `summary` はプロセス排他ロックを取得しない代わりに、`internal/store` の read-only consistency guard を取得する。guard は `GenerateSummary` と送信可否判定の間で recovery-required の出現を検出できる境界であり、送信直前の `CheckRecoveryRequired` が `found = false` を返した場合に限り `LogSummary` / `Flush` へ進む。guard 取得中に writer が recovery-required を作成した場合、`summary` は送信せず exit 1 とする（AC-27a）。
+- **`summary` 並走時の fail closed**: `summary` はプロセス排他ロックを取得しない代わりに、`internal/store` の read-only consistency guard を取得する。guard は `GenerateSummary` と送信可否判定の間で recovery-required の出現を検出できる境界であり、送信直前の `CheckRecoveryRequired` が `found = false` を返した場合に限り `LogSummary` / `Flush` へ進む。guard 取得中に writer が recovery-required を作成または解除する場合、writer は guard の排他 lock を取得してから sentinel を更新する。対象は `SaveRecoveryRequired`、`ApplyRecovery`、`ResetForRecovery` 内の `commitReset` に限定し、`ResetForRecovery` の初期 manifest/staging 作成と `AbortReset` の restore は summary guard では囲まない（AC-27a）。
 
 ### 3.4 共通初期化シーケンス（書き込み系の手順）
 
@@ -819,8 +822,9 @@ store 側の設計不変条件は以下:
 - 呼び出し側から見ると、`ResetForRecovery` は「旧データ保持 + recovery-required 残存」または「空ストア + current UIDVALIDITY + recovery-required 解消」のどちらかに収束する。
 - `AbortReset` は pending reset の commit 前状態でのみ有効であり、「旧データ保持 + recovery-required 残存」へ収束する。pending reset がない場合、または commit 後は変更せずエラーを返す。
 - commit 前の pending reset がある場合、通常の `store.Open(OpenReadWrite)` は fail closed する。
-- `recover --mode discard-old --yes` と `recover --abort-reset --yes` だけは `store.Open(rootDir, identity, OpenRecoverReset)` を使い、pending reset を扱える store を取得する。`fetch` / `gc` / `reprocess` / `summary` はこの mode を使わない。
+- `recover --mode discard-old --yes` と `recover --abort-reset --yes` だけは、store-wide process lock を保持した状態で `store.Open(rootDir, identity, OpenRecoverReset)` を使い、pending reset を扱える store を取得する。`fetch` / `gc` / `reprocess` / `summary` はこの mode を使わない。
 - `OpenRecoverReset` で得た store が許可する破壊的操作は `ResetForRecovery(currUIDValidity)` と `AbortReset()` のみとする。
+- `OpenRecoverReset`、`ResetForRecovery`、`AbortReset` の caller は、処理が完了するまで store-wide process lock を保持していなければならない。
 - commit 後の cleanup 失敗は通常データパスへ影響させず、後続の `Open` または `ResetForRecovery` で再 cleanup 可能にする。
 - reset の内部手順と再開手順は実装計画で定義する。
 

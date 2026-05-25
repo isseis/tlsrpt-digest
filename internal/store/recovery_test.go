@@ -538,17 +538,33 @@ func TestAbortReset_NoPendingReset(t *testing.T) {
 	assert.ErrorIs(t, s.AbortReset(), ErrResetNotPending)
 }
 
-// TestAbortReset_AfterCommit returns ErrResetNotPending when the reset is already committed
-// (manifest present but recovery-required is gone).
+// TestAbortReset_AfterCommit returns ErrResetNotPending when the reset is already committed.
+// The fixture reflects the realistic post-commit state: recovery_required is cleared in the
+// sentinel (the true commit barrier) AND the manifest is at phase=committed.
 func TestAbortReset_AfterCommit(t *testing.T) {
 	rootDir := t.TempDir()
-	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
-	require.NoError(t, err)
 
-	// Plant a manifest at phase=committed but no recovery-required (simulating committed state).
+	// Use OpenReadWrite first so the sentinel and data file exist.
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// Simulate a committed reset: clear recovery_required and update UID in the sentinel,
+	// then plant a phase=committed manifest (the state after commitReset but before cleanup).
+	sentinel, _, err := loadSentinel(rootDir)
+	require.NoError(t, err)
+	newUID := uint32(200)
+	sentinel.UIDValidity = &newUID
+	sentinel.RecoveryRequired = nil
+	require.NoError(t, saveSentinel(rootDir, sentinel))
+
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
 		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhaseCommitted,
 	}))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
 
 	assert.ErrorIs(t, s.AbortReset(), ErrResetNotPending)
 }

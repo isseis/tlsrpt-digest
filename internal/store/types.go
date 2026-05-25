@@ -23,6 +23,7 @@ const (
 	// OpenRecoverReset opens the store in read-write mode and allows
 	// ResetForRecovery and AbortReset even when a pending reset manifest exists.
 	// Only recover subcommand (discard-old --yes / --abort-reset --yes) may use this mode.
+	// The caller must hold the process-level store writer lock for the whole operation.
 	OpenRecoverReset
 )
 

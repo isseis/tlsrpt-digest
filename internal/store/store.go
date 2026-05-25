@@ -12,7 +12,8 @@ import (
 )
 
 // Store represents the persistence layer for TLSRPT reports and emails.
-// All operations are assumed to be called from a single writer (ensured by external scheduler).
+// Write operations require a single writer. Command-layer callers must hold
+// the process-level store writer lock while using a read-write store.
 // Read-only mode (OpenReadOnly) prevents write operations and creation of files/directories.
 type Store interface {
 	// SaveReports persists a batch of TLSRPT reports in a single atomic write.
@@ -84,12 +85,14 @@ type Store interface {
 	// UIDVALIDITY. The operation is crash-safe: re-running after a partial failure
 	// converges to "empty store + current UIDVALIDITY + recovery-required cleared".
 	// Only valid on stores opened with OpenRecoverReset.
+	// The caller must hold the process-level store writer lock until this method returns.
 	ResetForRecovery(currUIDValidity uint32) error
 
 	// AbortReset cancels a pending (pre-commit) reset and restores old data.
 	// Returns ErrResetNotPending if there is no pending reset or if the commit
 	// has already been applied. After abort, recovery-required remains in the sentinel.
 	// Only valid on stores opened with OpenRecoverReset.
+	// The caller must hold the process-level store writer lock until this method returns.
 	AbortReset() error
 
 	// AcquireSummaryConsistencyGuard acquires a shared flock on the guard file and

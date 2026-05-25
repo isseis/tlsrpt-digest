@@ -95,7 +95,7 @@
   - pending reset がない場合、または commit 後の状態では変更せずエラーを返す（AC-43）
   - pending reset（manifest あり・sentinel 未更新）の場合: staging から旧データを元の位置へ戻し manifest を削除する。完了後も recovery-required は残す
   - 再実行で「旧データ保持 + recovery-required 残存」へ収束すること（AC-44）
-- [x] `internal/store/recovery.go` に `AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)` を実装する: guard はプロセス間の同期境界として専用ガードファイル（例: `{root_dir}/.tlsrpt-digest-summary.lock`）に対して `unix.Flock(fd, unix.LOCK_SH|unix.LOCK_NB)` で共有ロックを取得する。`CheckRecoveryRequired` は呼び出しごとにセンチネルファイルを再読み込みして recovery-required の有無を確認する（取得時点の状態をキャッシュしない）。writer 側（`SaveRecoveryRequired` / `ResetForRecovery` / `AbortReset` / `ApplyRecovery`）は同じガードファイルに対して `unix.Flock(fd, unix.LOCK_EX)` で排他ロックを取得してからセンチネルを更新することで、第 2 回 `CheckRecoveryRequired(found=false)` から `LogSummary` / `Flush()` 開始までの間に recovery-required が作成される false negative を防ぐ。`summary` がプロセス排他ロック（`lock.go` の `AcquireExclusive`）を取得しない設計でも fail closed 境界を持つ（`02_architecture.md` §3.3 / §6.7 参照）
+- [x] `internal/store/recovery.go` に `AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)` を実装する: guard はプロセス間の同期境界として専用ガードファイル（例: `{root_dir}/.tlsrpt-digest-summary.lock`）に対して `unix.Flock(fd, unix.LOCK_SH|unix.LOCK_NB)` で共有ロックを取得する。`CheckRecoveryRequired` は呼び出しごとにセンチネルファイルを再読み込みして recovery-required の有無を確認する（取得時点の状態をキャッシュしない）。writer 側（`SaveRecoveryRequired` / `ApplyRecovery` / `ResetForRecovery` 内の `commitReset`）は同じガードファイルに対して `unix.Flock(fd, unix.LOCK_EX)` で排他ロックを取得してから recovery-required を作成または解除することで、第 2 回 `CheckRecoveryRequired(found=false)` から `LogSummary` / `Flush()` 開始までの間に recovery-required が作成される false negative を防ぐ。`ResetForRecovery` の初期 manifest/staging 作成と `AbortReset` の restore は recovery-required を変更しないため summary guard では囲まず、writer 同士の直列化は cmd 層の store-wide process lock が担当する。`summary` がプロセス排他ロック（`lock.go` の `AcquireExclusive`）を取得しない設計でも fail closed 境界を持つ（`02_architecture.md` §3.3 / §6.7、`docs/dev/developer_guide/process_locking.ja.md` 参照）
 - [x] `internal/store/errors.go` に `ErrPendingReset`, `ErrRecoveryRequiredMissing`, `ErrRecoveryUIDValidityMismatch`, `ErrResetNotPending` を追加し、pending reset の fail closed・recovery-required 不在・curr UIDVALIDITY 不一致・abort 不可状態を分類できるようにする
 - [x] `internal/store/store_test.go` に以下のテストを追加する:
   - [x] pending reset がある状態で `OpenReadWrite` がエラーを返すこと
@@ -179,11 +179,16 @@
 
 OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
 
-- [ ] `lock.go` に `LockHandle` インターフェース（`Close() error`）を定義する
-- [ ] `AcquireExclusive(lockPath string) (LockHandle, error)` を実装する: `golang.org/x/sys/unix` の `unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)` を使い non-blocking 排他ロックを取得する。取得失敗時は即時エラーを返す（待機しない）
-- [ ] `lock_test.go` に以下のテストを追加する:
-  - [ ] 同一パスに対して 2 回目の `AcquireExclusive` が即時失敗すること（AC-10a）
-  - [ ] `Close()` 後に同パスへのロック再取得が成功すること（解放確認）
+- [x] `lock.go` に `LockHandle` インターフェース（`Close() error`）を定義する
+- [x] `AcquireExclusive(lockPath string) (LockHandle, error)` を実装する: `golang.org/x/sys/unix` の `unix.Flock(fd, unix.LOCK_EX|unix.LOCK_NB)` を使い non-blocking 排他ロックを取得する。取得失敗時は即時エラーを返す（待機しない）
+- [x] サブコマンド化前の暫定 production path では `main.go` から `acquireStoreWriterLock` を呼び、`cfg.Store.RootDir` を作成してから store-wide process lock を取得・保持する。サブコマンド化後はこの処理を `Bootstrap` の W-2 / W-5 へ移管する
+- [x] `lock_test.go` に以下のテストを追加する:
+  - [x] 同一パスに対して 2 回目の `AcquireExclusive` が即時失敗すること（AC-10a）
+  - [x] `Close()` 後に同パスへのロック再取得が成功すること（解放確認）
+  - [x] 存在しない親ディレクトリでは lock file を作成せずエラーを返すこと（W-2 で親ディレクトリを保証する前提の明確化）
+- [x] `main_test.go` に `acquireStoreWriterLock` が root dir を作成して lock を保持し、`Close()` 後に再取得できることを検証するテストを追加する
+
+このステップでは lock primitive と現行 `main.go` の暫定 production path への接続だけを実装する。サブコマンド別の writer/read-only 分岐と runner 完了までの lock 保持は、次の `boot.go` / `main.go` 再構成ステップで `Bootstrap` に移す。未使用の store open wrapper には接続しない。
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -208,7 +213,7 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
   - `os.Args` からサブコマンド名を確定し、各サブコマンド専用の `flag.FlagSet` で残り引数を解釈する（グローバル `flag.Parse()` を廃止する）
   - サブコマンド未指定・未知サブコマンド・`FlagSet` 解析エラー時は usage を stderr へ出力し exit 2 とする（AC-02）
   - `flag.FlagSet` 解析成功直後に `ulid.Make().String()` で RunID を採番する（`02_architecture.md` §3.6 参照）
-  - 既存の `loadConfig`・`setupNotifyHandlers`・`buildIMAPConfig`・`storeOpenMode`・`openStoreForSubcommand` を `boot.go` へ移管する（`primeNotifyHandlers` はステップ 1-1 で新 `SystemError` 形式へ更新済みのため、この段階で削除する）
+  - 既存の `loadConfig`・`setupNotifyHandlers`・`buildIMAPConfig`・`storeOpenMode` を `boot.go` へ移管し、store open は `Bootstrap` 内で lock 取得後に直接行う（`primeNotifyHandlers` はステップ 1-1 で新 `SystemError` 形式へ更新済みのため、この段階で削除する）
   - 各サブコマンド用の `SubcommandRunner` スタブを追加する（`Run` は後続フェーズで実装する）
   - `main` は `Bootstrap` 成功後に `defer boot.Close()` を設定し、`SubcommandRunner.Run` 完了までロックを保持する。`Bootstrap` は初期化途中のエラー時だけ取得済みリソースを閉じ、成功パスでは `LockHandle` を閉じない
 - [ ] `cmd/tlsrpt-digest/test_helpers.go` を新規作成する（`//go:build test` タグ）: `SpyNotificationSink` 構造体（`NotificationSink` を実装し呼び出し記録・エラー注入を提供する）を定義する。`package main` 内部型（`NotificationSink`）を使用するため `testutil/` サブディレクトリではなく同パッケージのこのファイルに配置する（`test_organization.md` Classification B）
