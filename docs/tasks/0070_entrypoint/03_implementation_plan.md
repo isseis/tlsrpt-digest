@@ -227,7 +227,7 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
   - [ ] fake runner の `Run` 中に同じ lock path へ 2 回目の `AcquireExclusive` を試みると失敗し、`Run` から戻って `BootContext.Close()` が完了した後は再取得できること（AC-10a）
   - [ ] ストアオープン失敗（identity mismatch / permission / corruption）が分類別の `SystemErrorKind` でレポートされること（AC-09）
   - [ ] pending reset による store open 失敗時に `fetch` / `gc` / `reprocess` が `LogSystemError(reset_incomplete)` + `Flush()` + 英語の継続/ロールバック案内 + exit 1 となること
-  - [ ] W-2 境界: `{root_dir}` が symlink の場合に exit 1 となること（TOCTOU 対策。`02_architecture.md` §3.4 W-2 参照）
+  - [ ] W-2 境界: `{root_dir}` が symlink の場合に exit 1 となること（symlink 境界チェック。`02_architecture.md` §3.4 W-2 参照）
   - [ ] W-2 境界: `{root_dir}` のパーミッションが不足している場合に exit 1 となること
 - [ ] `main_test.go` を更新する:
   - [ ] 移管した `buildIMAPConfig`・`loadConfig`・`setupNotifyHandlers` のテストを `boot_test.go` へ移動する
