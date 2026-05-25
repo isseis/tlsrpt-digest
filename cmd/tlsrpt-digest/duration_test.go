@@ -79,8 +79,10 @@ func TestDurationCutoffUsesUTCDayStart(t *testing.T) {
 
 func TestDurationCutoffNormalizesWeeksToUTCDays(t *testing.T) {
 	now := time.Date(2026, 5, 25, 23, 59, 59, 123, time.FixedZone("JST", 9*60*60))
+	d, err := ParseDuration("1w")
+	require.NoError(t, err)
 
-	got := Duration{Days: 7}.Cutoff(now)
+	got := d.Cutoff(now)
 
 	assert.Equal(t, time.Date(2026, 5, 18, 0, 0, 0, 0, time.UTC), got)
 }
