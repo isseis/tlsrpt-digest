@@ -3,164 +3,182 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"fmt"
+	"io"
 	"log/slog"
 	"os"
-	"time"
 
 	"github.com/oklog/ulid/v2"
-
-	"github.com/isseis/tlsrpt-digest/internal/config"
-	"github.com/isseis/tlsrpt-digest/internal/imap"
-	"github.com/isseis/tlsrpt-digest/internal/notify"
-	"github.com/isseis/tlsrpt-digest/internal/store"
 )
 
-func main() {
-	dryRun := flag.Bool("dry-run", false, "log notification payloads to stderr without sending HTTP requests")
-	configPath := flag.String("config", "", "path to TOML configuration file")
-	flag.Parse()
+const defaultConfigPath = "./config.toml"
 
-	setupPhase1Logging()
-	slog.Info("tlsrpt-digest starting", "dry_run", *dryRun)
+var commandRunners = defaultRunners()
 
-	runID := ulid.Make().String()
+const (
+	exitOK    = 0
+	exitError = 1
+	exitUsage = 2
+)
 
-	successURL := os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS")
-	errorURL := os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR")
+var errInvalidRecoverMode = errors.New("invalid recovery mode")
 
-	if err := notify.ValidateEnvCombination(successURL, errorURL); err != nil {
-		slog.Error("invalid Slack webhook configuration", "error", err)
-		os.Exit(1)
-	}
-
-	cfg, err := loadConfig(*configPath)
-	if err != nil {
-		slog.Error("failed to load configuration", "error", err)
-		os.Exit(1)
-	}
-
-	// Build notification handlers (Phase 2: after TOML).
-	// SlackHandlers are intentionally NOT wired into slog.Default() — ordinary
-	// application log calls must not enter the notification buffer. Callers use
-	// the typed helpers LogAlert/LogSystemError/LogSummary and then call
-	// Flush() explicitly at the end of each processing run (task 0050).
-	handlers, err := setupNotifyHandlers(successURL, errorURL, cfg, runID, *dryRun)
-	if err != nil {
-		slog.Error("failed to initialise Slack handlers", "error", err)
-		os.Exit(1)
-	}
-
-	ctx := context.Background()
-	if err := primeNotifyHandlers(ctx, handlers, *dryRun); err != nil {
-		slog.Error("failed to prime Slack handlers", "error", err)
-		os.Exit(1)
-	}
-
-	slog.Info("tlsrpt-digest ready", "run_id", runID)
+type cliOptions struct {
+	ConfigPath      string
+	DryRun          bool
+	Since           string
+	Window          string
+	Before          string
+	MaxEmailAge     string
+	RecoverMode     string
+	RecoverYes      bool
+	RecoverAbort    bool
+	ReprocessNotify bool
 }
 
-// setupPhase1Logging initialises console-only logging (Phase 1: before TOML).
-// It returns the handler so tests can verify Phase 1 contains no Slack handler.
+type cliInvocation struct {
+	Subcommand SubcommandName
+	Options    cliOptions
+	Runner     SubcommandRunner
+}
+
+func main() {
+	os.Exit(runCLI(context.Background(), os.Args[1:], os.Stderr, BootstrapOptions{}))
+}
+
+func runCLI(ctx context.Context, args []string, stderr io.Writer, bootOpts BootstrapOptions) int {
+	setupPhase1Logging()
+
+	inv, err := parseCLI(args, stderr)
+	if err != nil {
+		return exitUsage
+	}
+
+	runID := ulid.Make().String()
+	slog.Info("tlsrpt-digest starting", "run_id", runID, "subcommand", inv.Subcommand, "dry_run", inv.Options.DryRun)
+
+	bootOpts.DryRun = inv.Options.DryRun
+	bootOpts.RecoverResetMode = inv.Options.RecoverYes && (inv.Options.RecoverMode == "discard-old" || inv.Options.RecoverAbort)
+	boot, err := Bootstrap(inv.Subcommand, inv.Options.ConfigPath, runID, bootOpts)
+	if err != nil {
+		slog.Error("bootstrap failed", "error", err)
+		return exitError
+	}
+	defer func() {
+		if err := boot.Close(); err != nil {
+			slog.Error("failed to close bootstrap resources", "error", err)
+		}
+	}()
+
+	exitCode, err := inv.Runner.Run(ctx, boot)
+	if err != nil {
+		slog.Error("subcommand failed", "error", err)
+		if exitCode == exitOK {
+			return exitError
+		}
+	}
+	return exitCode
+}
+
+func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
+	if len(args) == 0 {
+		printUsage(stderr)
+		return cliInvocation{}, flag.ErrHelp
+	}
+	subcmd := SubcommandName(args[0])
+	runner, ok := commandRunners[subcmd]
+	if !ok {
+		_, _ = fmt.Fprintf(stderr, "unknown subcommand %q\n", args[0])
+		printUsage(stderr)
+		return cliInvocation{}, flag.ErrHelp
+	}
+
+	fs := flag.NewFlagSet(string(subcmd), flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	opts := cliOptions{ConfigPath: defaultConfigPath}
+	fs.StringVar(&opts.ConfigPath, "config", defaultConfigPath, "path to TOML configuration file")
+	fs.BoolVar(&opts.DryRun, "dry-run", false, "log notification payloads to stderr without sending HTTP requests")
+	registerSubcommandFlags(fs, subcmd, &opts)
+
+	if err := fs.Parse(args[1:]); err != nil {
+		printUsage(stderr)
+		return cliInvocation{}, err
+	}
+	if err := validateParsedFlags(subcmd, opts); err != nil {
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
+		printUsage(stderr)
+		return cliInvocation{}, err
+	}
+	return cliInvocation{Subcommand: subcmd, Options: opts, Runner: runner}, nil
+}
+
+func registerSubcommandFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
+	switch subcmd {
+	case subcommandFetch:
+		fs.StringVar(&opts.Since, "since", "", "fetch window duration")
+	case subcommandSummary:
+		fs.StringVar(&opts.Window, "window", "", "summary window duration")
+	case subcommandGC:
+		fs.StringVar(&opts.Before, "before", "", "report retention duration")
+		fs.StringVar(&opts.MaxEmailAge, "max-email-age", "", "email retention duration")
+	case subcommandRecover:
+		fs.StringVar(&opts.RecoverMode, "mode", "", "recovery mode")
+		fs.BoolVar(&opts.RecoverYes, "yes", false, "confirm recovery action")
+		fs.BoolVar(&opts.RecoverAbort, "abort-reset", false, "abort pending reset")
+	case subcommandReprocess:
+		fs.BoolVar(&opts.ReprocessNotify, "notify", false, "send notifications during reprocess")
+	}
+}
+
+func validateParsedFlags(subcmd SubcommandName, opts cliOptions) error {
+	for name, value := range map[string]string{
+		"since":         opts.Since,
+		"window":        opts.Window,
+		"before":        opts.Before,
+		"max-email-age": opts.MaxEmailAge,
+	} {
+		if value == "" {
+			continue
+		}
+		if _, err := ParseDuration(value); err != nil {
+			return fmt.Errorf("invalid --%s: %w", name, err)
+		}
+	}
+	if subcmd == subcommandRecover && opts.RecoverMode != "" {
+		if opts.RecoverMode != "keep-old" && opts.RecoverMode != "discard-old" {
+			return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
+		}
+	}
+	return nil
+}
+
+func printUsage(w io.Writer) {
+	_, _ = fmt.Fprintln(w, "usage: tlsrpt-digest <fetch|summary|reprocess|gc|recover> [options]")
+}
+
 func setupPhase1Logging() slog.Handler {
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	slog.SetDefault(slog.New(h))
 	return h
 }
 
-// setupNotifyHandlers validates URLs and creates SlackHandler instances for
-// use by the processing loop. The handlers are separate from slog.Default()
-// and must be used via the typed helpers (LogAlert, LogSystemError, LogSummary)
-// followed by an explicit Flush() call after each processing run.
-// Returns the handlers and any configuration error.
-func setupNotifyHandlers(successURL, errorURL string, cfg *config.Config, runID string, dryRun bool) ([]*notify.SlackHandler, error) {
-	// In dry-run mode use LevelDebug so payload dumps appear on stderr.
-	// In normal mode use LevelWarn so Debug-level payload logs are suppressed
-	// (they would otherwise duplicate notification content into service logs)
-	// while send-failure errors and unexpected-key warnings remain visible.
-	debugLevel := slog.LevelWarn
-	if dryRun {
-		debugLevel = slog.LevelDebug
+func defaultRunners() map[SubcommandName]SubcommandRunner {
+	return map[SubcommandName]SubcommandRunner{
+		subcommandFetch:     stubRunner{name: subcommandFetch},
+		subcommandSummary:   stubRunner{name: subcommandSummary},
+		subcommandReprocess: stubRunner{name: subcommandReprocess},
+		subcommandGC:        stubRunner{name: subcommandGC},
+		subcommandRecover:   stubRunner{name: subcommandRecover},
 	}
-	debugLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: debugLevel}))
-
-	opts := notify.SlackHandlerOptions{
-		AllowedHost:   cfg.Notify.Slack.AllowedHost,
-		RunID:         runID,
-		IsDryRun:      dryRun,
-		DebugLogger:   debugLogger,
-		BackoffConfig: notify.DefaultBackoffConfig,
-	}
-	return notify.BuildHandlers(successURL, errorURL, cfg.Notify.Slack.AllowedHost, opts)
 }
 
-// primeNotifyHandlers performs a minimal end-to-end wiring pass for typed helper
-// calls and Flush(). This keeps the notification path reachable from main while
-// task 0050 integration is in progress.
-//
-// For normal (non dry-run) execution, this function is intentionally a no-op.
-func primeNotifyHandlers(ctx context.Context, handlers []*notify.SlackHandler, dryRun bool) error {
-	if !dryRun || len(handlers) == 0 {
-		return nil
-	}
-
-	now := time.Now().UTC()
-	for _, h := range handlers {
-		if err := notify.LogSummary(ctx, h, notify.Summary{
-			Period:            notify.DateRange{Start: now, End: now},
-			OrganizationStats: map[string]int64{},
-			ReportCount:       0,
-		}); err != nil {
-			return err
-		}
-		if err := notify.LogAlert(ctx, h, notify.Alert{
-			OrganizationName: "bootstrap.example",
-			PolicyType:       notify.PolicyTypeUnknown,
-			FailureCount:     0,
-			DateRange:        notify.DateRange{Start: now, End: now},
-		}); err != nil {
-			return err
-		}
-	}
-
-	for _, h := range handlers {
-		if err := h.Flush(ctx); err != nil {
-			return err
-		}
-	}
-
-	return nil
+type stubRunner struct {
+	name SubcommandName
 }
 
-// storeOpenMode returns the store.OpenMode appropriate for a given subcommand.
-// Subcommands that write data (fetch, gc, reprocess, recover) use OpenReadWrite.
-// The summary subcommand uses OpenReadOnly so it can run without a process lock.
-// This stub will be wired into subcommand dispatch in task 0070.
-func storeOpenMode(subcommand string) store.OpenMode {
-	if subcommand == "summary" {
-		return store.OpenReadOnly
-	}
-	return store.OpenReadWrite
-}
-
-// loadConfig reads the TOML configuration from path via config.LoadFile.
-func loadConfig(path string) (*config.Config, error) {
-	return config.LoadFile(path, slog.Default())
-}
-
-// buildIMAPConfig constructs an imap.Config from the TOML-derived Config and
-// environment variables. Credentials are not stored in the config file; they
-// are sourced from TLSRPT_IMAP_USERNAME and TLSRPT_IMAP_PASSWORD.
-func buildIMAPConfig(cfg *config.Config) imap.Config {
-	username := os.Getenv("TLSRPT_IMAP_USERNAME")
-	password := os.Getenv("TLSRPT_IMAP_PASSWORD")
-	return imap.Config{
-		Host:            cfg.IMAP.Host,
-		Port:            cfg.IMAP.Port,
-		Mailbox:         cfg.IMAP.Mailbox,
-		TLSCACert:       cfg.IMAP.TLSCACert,
-		MaxMessageBytes: cfg.IMAP.MaxMessageBytes,
-		Username:        username,
-		Password:        config.Secret(password),
-	}
+func (r stubRunner) Run(_ context.Context, _ *BootContext) (int, error) {
+	slog.Info("subcommand runner is not implemented yet", "subcommand", r.name)
+	return exitOK, nil
 }

@@ -14,7 +14,14 @@ const rootDirPerm = 0o700
 var (
 	errRootDirSymlink      = errors.New("store root directory is a symlink")
 	errRootDirNotDirectory = errors.New("store root directory path is not a directory")
+	errRootDirPermission   = errors.New("store root directory lacks required permissions")
 )
+
+type LockHandle = storelock.LockHandle
+
+func AcquireExclusive(lockPath string) (LockHandle, error) {
+	return storelock.Acquire(lockPath)
+}
 
 // acquireStoreWriterLock validates rootDir, creates it if absent, and acquires
 // the exclusive store writer lock. Must be called before store.Open with
@@ -53,6 +60,9 @@ func validateAndEnsureRootDir(rootDir string) error {
 	}
 	if !fi.IsDir() {
 		return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirNotDirectory)
+	}
+	if fi.Mode().Perm()&rootDirPerm != rootDirPerm {
+		return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirPermission)
 	}
 	if fi.Mode().Perm()&^rootDirPerm != 0 {
 		slog.Warn("acquireStoreWriterLock: directory has loose permissions, consider running chmod 0700",
