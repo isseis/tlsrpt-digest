@@ -127,7 +127,7 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 	}
 
 	seqSet := uidsToSeqSet(uids)
-	fetchItems := []goimap.FetchItem{goimap.FetchUid, goimap.FetchRFC822Size, goimap.FetchFlags, goimap.FetchEnvelope}
+	fetchItems := []goimap.FetchItem{goimap.FetchUid, goimap.FetchRFC822Size, goimap.FetchFlags, goimap.FetchEnvelope, goimap.FetchInternalDate}
 	ch := make(chan *goimap.Message, len(uids))
 
 	fetchErrCh := make(chan error, 1)
@@ -140,6 +140,10 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 		if msg == nil {
 			continue
 		}
+		if msg.InternalDate.IsZero() {
+			slog.Warn("imap: skip message with missing internaldate", "uid", msg.Uid)
+			continue
+		}
 		if msg.Envelope == nil {
 			slog.Warn("imap: skip message with missing envelope", "uid", msg.Uid)
 			continue
@@ -148,7 +152,7 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 		meta := MessageMeta{
 			UID:       msg.Uid,
 			Size:      msg.Size,
-			Date:      msg.Envelope.Date,
+			Date:      msg.InternalDate,
 			Seen:      slices.Contains(msg.Flags, goimap.SeenFlag),
 			MessageID: msg.Envelope.MessageId,
 		}

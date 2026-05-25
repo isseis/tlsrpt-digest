@@ -23,7 +23,7 @@ type Config struct {
 type MessageMeta struct {
 	UID       uint32
 	Size      uint32
-	Date      time.Time
+	Date      time.Time // IMAP INTERNALDATE — server-assigned receive timestamp
 	Seen      bool
 	MessageID string
 }
