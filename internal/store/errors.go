@@ -155,3 +155,10 @@ type ErrResetManifestPhaseUnknown struct {
 func (e *ErrResetManifestPhaseUnknown) Error() string {
 	return fmt.Sprintf("store: unknown reset manifest phase: got=%d", e.Got)
 }
+
+// ErrResetAbortInProgress is returned by ResetForRecovery when the on-disk
+// manifest indicates that an AbortReset is partially applied (phase=aborting).
+// In this state, AbortReset must be re-run to complete the restore and clean
+// up the manifest; continuing the original reset would commit on top of data
+// that AbortReset has already moved back to the root.
+var ErrResetAbortInProgress = errors.New("store: abort reset in progress; re-run AbortReset to finish")

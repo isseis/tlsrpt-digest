@@ -608,6 +608,197 @@ func TestAbortReset_Idempotent(t *testing.T) {
 	assert.ErrorIs(t, s.AbortReset(), ErrResetNotPending)
 }
 
+// TestAbortReset_ResumesFromAbortingPhase simulates a crash that occurred AFTER
+// AbortReset durably wrote phase=aborting but BEFORE restoreFromStaging completed.
+// Re-running AbortReset must finish the restore and remove the manifest.
+func TestAbortReset_ResumesFromAbortingPhase(t *testing.T) {
+	rootDir := t.TempDir()
+
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// State: data is in staging (mid-restore not yet completed), manifest at phase=aborting,
+	// recovery_required still set.
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	dataPath := dataFilePath(rootDir)
+	require.NoError(t, os.Rename(dataPath, filepath.Join(stagingPath, "tlsrpt.json")))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseAborting,
+	}))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s.AbortReset())
+
+	// Data restored to rootDir.
+	_, err = os.Stat(dataPath)
+	assert.NoError(t, err, "data file must be restored on AbortReset resume from phase=aborting")
+
+	// Manifest removed.
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.True(t, os.IsNotExist(err))
+
+	// Recovery-required still present (caller must retry).
+	_, _, _, recFound, err := s.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.True(t, recFound)
+}
+
+// TestAbortReset_CrashAfterRestoreBeforeManifestRemoval simulates the exact crash
+// window that motivated the aborting-phase fix: AbortReset has already restored
+// staged files back to rootDir and removed the staging dir, but crashed before
+// removing the manifest.  With the fix, the manifest is at phase=aborting (set
+// before any file move), so:
+//
+//   - ResetForRecovery refuses with ErrResetAbortInProgress — committing on top
+//     of the restored data would leave stale records in the new store.
+//   - AbortReset succeeds idempotently and removes the manifest.
+func TestAbortReset_CrashAfterRestoreBeforeManifestRemoval(t *testing.T) {
+	rootDir := t.TempDir()
+
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(sRW, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// Crash state: files are already restored to rootDir (they are still there because
+	// the staging+restore round-trip is idempotent and never deleted them); staging
+	// dir does not exist; manifest is at phase=aborting; recovery-required still set.
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseAborting,
+	}))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+
+	// ResetForRecovery must refuse: committing here would discard the just-restored
+	// data and leave a "new UIDValidity + cleared recovery + empty store" state while
+	// the operator's intent was to abort.
+	assert.ErrorIs(t, s.ResetForRecovery(200), ErrResetAbortInProgress)
+
+	// Manifest must remain so the operator can re-run AbortReset to finish.
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.NoError(t, err)
+
+	// Sentinel must remain untouched (recovery_required still set).
+	_, _, _, recFound, err := s.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.True(t, recFound)
+
+	// AbortReset finishes idempotently (restoreFromStaging is a no-op since staging
+	// is absent) and removes the manifest.
+	require.NoError(t, s.AbortReset())
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.True(t, os.IsNotExist(err))
+
+	// Original data still present in rootDir.
+	s2, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	reports, err := s2.GetAllReports()
+	require.NoError(t, err)
+	assert.Len(t, reports, 1, "old data must remain after the abort completes")
+}
+
+// TestResetForRecovery_RefusesAbortingPhase verifies that ResetForRecovery rejects
+// a manifest in the aborting phase rather than continuing to commit.  This is the
+// safety check that prevents a partially-applied AbortReset from being silently
+// converted into a forward commit.
+func TestResetForRecovery_RefusesAbortingPhase(t *testing.T) {
+	rootDir := t.TempDir()
+
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseAborting,
+	}))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+
+	assert.ErrorIs(t, s.ResetForRecovery(200), ErrResetAbortInProgress)
+
+	// Manifest must remain so AbortReset can finish.
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.NoError(t, err)
+
+	// Sentinel must remain untouched (recovery_required still set, UIDValidity unchanged).
+	v, found, err := s.LoadUIDValidity()
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, uint32(100), v)
+	_, _, _, recFound, err := s.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.True(t, recFound)
+}
+
+// TestResetForRecovery_WipesStaleStaging verifies that a stale staging directory
+// left over from a previously-completed reset (whose RemoveAll silently failed)
+// does not break a new ResetForRecovery.  Without the fresh-start cleanup, the
+// second reset's stageEmailsDir would fail with ENOTEMPTY when renaming onto a
+// non-empty stale staging/emails directory.
+func TestResetForRecovery_WipesStaleStaging(t *testing.T) {
+	rootDir := t.TempDir()
+
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(sRW, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// Plant stale staging contents that would conflict with a fresh stage attempt
+	// (staging/emails non-empty would break rename(rootDir/emails -> staging/emails)).
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(stagingPath, "emails", "100", "202401"), dirPerm))
+	require.NoError(t, os.WriteFile(filepath.Join(stagingPath, "emails", "100", "202401", "stale.eml"), []byte("stale"), filePerm))
+	require.NoError(t, os.WriteFile(filepath.Join(stagingPath, "tlsrpt.json"), []byte("stale"), filePerm))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s.ResetForRecovery(200))
+
+	// Reset succeeded end-to-end.
+	_, err = os.Stat(stagingPath)
+	assert.True(t, os.IsNotExist(err), "staging dir must be removed after successful reset")
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.True(t, os.IsNotExist(err), "manifest must be removed after successful reset")
+
+	v, found, err := s.LoadUIDValidity()
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, uint32(200), v)
+
+	_, _, _, recFound, err := s.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.False(t, recFound)
+
+	s2, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	reports, err := s2.GetAllReports()
+	require.NoError(t, err)
+	assert.Empty(t, reports)
+}
+
 // TestSummaryConsistencyGuard_NoopOnMissingRootDir verifies that AcquireSummaryConsistencyGuard
 // returns a no-op guard (not an error) when rootDir does not exist, as required for the
 // empty-store OpenReadOnly path used by the summary subcommand on first run.
