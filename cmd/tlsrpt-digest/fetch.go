@@ -37,7 +37,7 @@ type fetchRunner struct {
 	newMailFetcher func(cfg imap.Config) (imap.MailFetcher, error)
 	getenv         func(key string) string
 	now            func() time.Time
-	localEmailSize func(rootDir string, uid, uidValidity uint32, internalDate time.Time) (int64, bool)
+	localEmailSize func(rootDir string, uid, uidValidity uint32, internalDate time.Time) (int64, bool, error)
 	loadLocalEML   func(rootDir string, uid, uidValidity uint32, internalDate time.Time) ([]byte, error)
 }
 
@@ -46,12 +46,15 @@ func newFetchRunner() *fetchRunner {
 		newMailFetcher: imap.NewIMAPClient,
 		getenv:         os.Getenv,
 		now:            time.Now,
-		localEmailSize: func(rootDir string, uid, uidValidity uint32, internalDate time.Time) (int64, bool) {
+		localEmailSize: func(rootDir string, uid, uidValidity uint32, internalDate time.Time) (int64, bool, error) {
 			info, err := os.Stat(fetchEmailPath(rootDir, uid, uidValidity, internalDate))
 			if err != nil {
-				return 0, false
+				if errors.Is(err, os.ErrNotExist) {
+					return 0, false, nil
+				}
+				return 0, false, err
 			}
-			return info.Size(), true
+			return info.Size(), true, nil
 		},
 		loadLocalEML: func(rootDir string, uid, uidValidity uint32, internalDate time.Time) ([]byte, error) {
 			return os.ReadFile(fetchEmailPath(rootDir, uid, uidValidity, internalDate))
@@ -112,7 +115,10 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	}
 
 	// Step 6: Build candidate list with RFC822.SIZE mismatch warnings.
-	states := r.buildFetchStates(ctx, boot.Notifier, fetchResult.Messages, currentUID, rootDir)
+	states, err := r.buildFetchStates(ctx, boot.Notifier, fetchResult.Messages, currentUID, rootDir)
+	if err != nil {
+		return exitError, err
+	}
 
 	// Step 7: Download and save messages that lack a local .eml.
 	if err := r.fetchDownloadAndSave(ctx, boot, states, currentUID, mailbox, fetcher); err != nil {
@@ -188,16 +194,19 @@ func fetchValidateUID(ctx context.Context, boot *BootContext, now time.Time, cur
 }
 
 // buildFetchStates builds per-message state, logging RFC822.SIZE mismatches as warnings.
-func (r *fetchRunner) buildFetchStates(ctx context.Context, notifier NotificationSink, msgs []imap.MessageMeta, currentUID uint32, rootDir string) []fetchMsgState {
+func (r *fetchRunner) buildFetchStates(ctx context.Context, notifier NotificationSink, msgs []imap.MessageMeta, currentUID uint32, rootDir string) ([]fetchMsgState, error) {
 	states := make([]fetchMsgState, len(msgs))
 	for i, meta := range msgs {
-		localSize, emlExists := r.localEmailSize(rootDir, meta.UID, currentUID, meta.Date)
+		localSize, emlExists, err := r.localEmailSize(rootDir, meta.UID, currentUID, meta.Date)
+		if err != nil {
+			return nil, fmt.Errorf("fetch: check local email size for UID %d: %w", meta.UID, err)
+		}
 		if emlExists && localSize != int64(meta.Size) {
 			logWarnFetch(ctx, notifier, notify.WarningKindSizeMismatch, meta.UID, currentUID, meta.MessageID)
 		}
 		states[i] = fetchMsgState{meta: meta, emlExistedBefore: emlExists}
 	}
-	return states
+	return states, nil
 }
 
 // fetchDownloadAndSave downloads messages lacking a local .eml and saves them to the store.

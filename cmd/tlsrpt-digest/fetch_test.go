@@ -88,12 +88,12 @@ func newFetchTestBedBlank(t *testing.T) *fetchTestBed {
 			return ""
 		},
 		now: func() time.Time { return now },
-		localEmailSize: func(_ string, uid, uidValidity uint32, _ time.Time) (int64, bool) {
+		localEmailSize: func(_ string, uid, uidValidity uint32, _ time.Time) (int64, bool, error) {
 			e, ok := fakeStore.Emails[storetestutil.EmailKey{UID: uid, UIDValidity: uidValidity}]
 			if !ok || e.RawEML == nil {
-				return 0, false
+				return 0, false, nil
 			}
-			return int64(len(e.RawEML)), true
+			return int64(len(e.RawEML)), true, nil
 		},
 		loadLocalEML: func(_ string, uid, uidValidity uint32, _ time.Time) ([]byte, error) {
 			e, ok := fakeStore.Emails[storetestutil.EmailKey{UID: uid, UIDValidity: uidValidity}]
