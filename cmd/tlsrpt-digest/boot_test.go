@@ -457,9 +457,9 @@ allowed_host = "hooks.slack.com"
 	assert.True(t, errors.Is(err, config.ErrConfigFileRead))
 }
 
-func requireNotificationSinkImpl(t *testing.T, sink NotificationSink) *notificationSinkImpl {
+func requireNotificationSinkImpl(t *testing.T, sink NotificationSink) *notificationSink {
 	t.Helper()
-	impl, ok := sink.(*notificationSinkImpl)
+	impl, ok := sink.(*notificationSink)
 	require.True(t, ok)
 	return impl
 }

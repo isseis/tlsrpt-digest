@@ -87,46 +87,46 @@ type BootstrapOptions struct {
 
 var errSlackWebhookURLRequired = errors.New("at least one Slack webhook URL is required")
 
-type notificationSinkImpl struct {
+type notificationSink struct {
 	handlers []*notify.SlackHandler
 	dryRun   bool
 }
 
-func (n *notificationSinkImpl) LogAlert(ctx context.Context, alert notify.Alert) error {
+func (n *notificationSink) LogAlert(ctx context.Context, alert notify.Alert) error {
 	return n.each(func(h *notify.SlackHandler) error {
 		return notify.LogAlert(ctx, h, alert)
 	})
 }
 
-func (n *notificationSinkImpl) LogWarning(ctx context.Context, warning notify.Warning) error {
+func (n *notificationSink) LogWarning(ctx context.Context, warning notify.Warning) error {
 	return n.each(func(h *notify.SlackHandler) error {
 		return notify.LogWarning(ctx, h, warning)
 	})
 }
 
-func (n *notificationSinkImpl) LogSystemError(ctx context.Context, err notify.SystemError) error {
+func (n *notificationSink) LogSystemError(ctx context.Context, err notify.SystemError) error {
 	return n.each(func(h *notify.SlackHandler) error {
 		return notify.LogSystemError(ctx, h, err)
 	})
 }
 
-func (n *notificationSinkImpl) LogSummary(ctx context.Context, summary notify.Summary) error {
+func (n *notificationSink) LogSummary(ctx context.Context, summary notify.Summary) error {
 	return n.each(func(h *notify.SlackHandler) error {
 		return notify.LogSummary(ctx, h, summary)
 	})
 }
 
-func (n *notificationSinkImpl) Flush(ctx context.Context) error {
+func (n *notificationSink) Flush(ctx context.Context) error {
 	return n.each(func(h *notify.SlackHandler) error {
 		return h.Flush(ctx)
 	})
 }
 
-func (n *notificationSinkImpl) IsDryRun() bool {
+func (n *notificationSink) IsDryRun() bool {
 	return n != nil && n.dryRun
 }
 
-func (n *notificationSinkImpl) each(fn func(*notify.SlackHandler) error) error {
+func (n *notificationSink) each(fn func(*notify.SlackHandler) error) error {
 	if n == nil {
 		return nil
 	}
@@ -331,7 +331,7 @@ func setupNotifyHandlers(successURL, errorURL config.Secret, cfg *config.Config,
 	if err != nil {
 		return nil, err
 	}
-	return &notificationSinkImpl{handlers: handlers, dryRun: dryRun}, nil
+	return &notificationSink{handlers: handlers, dryRun: dryRun}, nil
 }
 
 func loadConfig(path string, logger *slog.Logger) (*config.Config, error) {
