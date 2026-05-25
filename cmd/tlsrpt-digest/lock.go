@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 
 	"github.com/isseis/tlsrpt-digest/internal/storelock"
@@ -56,7 +55,6 @@ func validateAndEnsureRootDir(rootDir string) error {
 		if fi.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirSymlink)
 		}
-		return nil
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
 		return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirSymlink)
@@ -66,11 +64,7 @@ func validateAndEnsureRootDir(rootDir string) error {
 	}
 	perm := fi.Mode().Perm()
 	if perm != rootDirPerm && perm != rootDirGroupPerm {
-		slog.Warn("acquireStoreWriterLock: directory has unsupported permissions",
-			slog.String("path", rootDir),
-			slog.String("current_mode", fmt.Sprintf("%04o", perm)),
-			slog.String("allowed_modes", "0700,0750"))
-		return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirPermission)
+		return fmt.Errorf("acquireStoreWriterLock: %s has permissions %04o, want 0700 or 0750: %w", rootDir, perm, errRootDirPermission)
 	}
 	return nil
 }
