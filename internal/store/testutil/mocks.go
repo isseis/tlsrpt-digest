@@ -52,6 +52,8 @@ type FakeStore struct {
 	Emails map[EmailKey]*FakeEmailEntry
 	// PendingReset simulates a pending reset state for AbortReset testing.
 	PendingReset bool
+	// AcquireSummaryConsistencyGuardErr, if non-nil, is returned by AcquireSummaryConsistencyGuard.
+	AcquireSummaryConsistencyGuardErr error
 }
 
 // NewFakeStore returns an empty FakeStore ready for use.
@@ -255,6 +257,9 @@ func (f *FakeStore) AbortReset() error {
 
 // AcquireSummaryConsistencyGuard implements store.Store.
 func (f *FakeStore) AcquireSummaryConsistencyGuard() (store.SummaryConsistencyGuard, error) {
+	if f.AcquireSummaryConsistencyGuardErr != nil {
+		return nil, f.AcquireSummaryConsistencyGuardErr
+	}
 	return &FakeSummaryConsistencyGuard{RecoveryRequiredFound: f.Recovery != nil}, nil
 }
 

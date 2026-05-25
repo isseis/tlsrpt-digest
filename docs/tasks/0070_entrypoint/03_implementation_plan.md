@@ -142,8 +142,8 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/85）
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（ステップ 1-4 以降は新しいブランチで作業する）
+- [x] PR がマージされた
+- [x] 次のブランチへ切り替えた（ステップ 1-4 以降は新しいブランチで作業する）
 
 ---
 
@@ -154,17 +154,17 @@
 **見積工数**: 0.5 日
 **実績工数**: -
 
-- [ ] `duration.go` に `Duration` 型（`Days int`）を定義する（`02_architecture.md` §3.1 参照）
-- [ ] `ParseDuration(s string) (Duration, error)` を実装する: `d` / `w` 単位のみ受け付け、週は日数（`×7`）に正規化する。パース後の値が 0 以下の場合はエラーを返す（AC-07b）
-- [ ] `(d Duration) Cutoff(now time.Time) time.Time` を実装する: `now` を UTC 日付の開始時刻（`00:00:00 UTC`）に切り捨ててから `d.Days` 日遡る（AC-07c）
-- [ ] `UTCDayStart(now time.Time) time.Time` を実装する: 「今日の `00:00:00 UTC`」を返す（AC-07d）
-- [ ] `duration_test.go` に以下のテストを追加する:
-  - [ ] 正常パース: `1d`（Days=1）・`7d`（Days=7）・`1w`（Days=7）・`4w`（Days=28）・`30d`（Days=30）（AC-07 / AC-07b）
-  - [ ] エラー: `0d`・`-1d`・`-2w`・`30h`・`abc`・空文字（AC-07b）
-  - [ ] `Cutoff(now)` の UTC 切り捨て: UTC 02:01:00 に `Days=7` のカットオフが「7 日前の 00:00:00 UTC」になること（「7 日前の 02:01:00」ではないこと）（AC-07c）
-  - [ ] 週指定（`1w`）でも UTC 日付単位の切り捨てが行われること（AC-07c）
-  - [ ] `UTCDayStart(now)` が任意の時刻に対して「今日の 00:00:00 UTC」を返すこと（AC-07d）
-  - [ ] `--window 1w` を 2000-12-10 10:00 UTC に実行したとき `start=2000-12-03 00:00 UTC`・`end=2000-12-10 00:00 UTC` となり重複・欠落がないこと（AC-07d 統合確認）
+- [x] `duration.go` に `Duration` 型（`Days int`）を定義する（`02_architecture.md` §3.1 参照）
+- [x] `ParseDuration(s string) (Duration, error)` を実装する: `d` / `w` 単位のみ受け付け、週は日数（`×7`）に正規化する。パース後の値が 0 以下の場合はエラーを返す（AC-07b）
+- [x] `(d Duration) Cutoff(now time.Time) time.Time` を実装する: `now` を UTC 日付の開始時刻（`00:00:00 UTC`）に切り捨ててから `d.Days` 日遡る（AC-07c）
+- [x] `UTCDayStart(now time.Time) time.Time` を実装する: 「今日の `00:00:00 UTC`」を返す（AC-07d）
+- [x] `duration_test.go` に以下のテストを追加する:
+  - [x] 正常パース: `1d`（Days=1）・`7d`（Days=7）・`1w`（Days=7）・`4w`（Days=28）・`30d`（Days=30）（AC-07 / AC-07b）
+  - [x] エラー: `0d`・`-1d`・`-2w`・`30h`・`abc`・空文字（AC-07b）
+  - [x] `Cutoff(now)` の UTC 切り捨て: UTC 02:01:00 に `Days=7` のカットオフが「7 日前の 00:00:00 UTC」になること（「7 日前の 02:01:00」ではないこと）（AC-07c）
+  - [x] 週指定（`1w`）でも UTC 日付単位の切り捨てが行われること（AC-07c）
+  - [x] `UTCDayStart(now)` が任意の時刻に対して「今日の 00:00:00 UTC」を返すこと（AC-07d）
+  - [x] `--window 1w` を 2000-12-10 10:00 UTC に実行したとき `start=2000-12-03 00:00 UTC`・`end=2000-12-10 00:00 UTC` となり重複・欠落がないこと（AC-07d 統合確認）
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -204,37 +204,37 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
 
 初期化順序（W-1〜W-6）と `summary` 専用フローの詳細は `02_architecture.md` §2.2・§3.4 を参照。
 
-- [ ] `boot.go` に以下の型を定義する: `SubcommandName`・`BootContext`・`IMAPCredentials`・`SubcommandRunner`・`NotificationSink`・`BootstrapOptions`（`02_architecture.md` §3.1 参照）。`BootContext` は `LockHandle` と `SummaryConsistencyGuard` を保持し、`Close() error` で runner 完了後のリソース解放を一元化する
-- [ ] `boot.go` に `notificationSinkImpl` 構造体を実装する: `NotificationSink` インターフェースの具体実装として、内部に `[]*notify.SlackHandler` を保持し、`LogAlert` / `LogWarning` / `LogSystemError` / `LogSummary` / `Flush` / `IsDryRun` を型付きヘルパー経由で委譲する。`SlackHandler` を `cmd` 外部へ直接公開しない
-- [ ] `boot.go` に `Bootstrap(subcmd SubcommandName, configPath string, runID string, opts BootstrapOptions) (*BootContext, error)` を実装する: 書き込み系サブコマンドは W-1（設定読込）→ W-2（`{root_dir}` 確保・検証）→ W-3（Slack URL 取得・即時 Secret 化）→ W-4（`BuildHandlers` all-or-nothing）→ W-5（プロセスロック取得）→ W-6（`store.Open(mode)`）の順で実行する。`fetch` / `gc` / `reprocess` / `recover` の通常表示・`keep-old`・`discard-old` dry-run は `OpenReadWrite`、`recover --mode discard-old --yes` と `recover --abort-reset --yes` は `OpenRecoverReset` を使う
-- [ ] W-6 の store open 失敗を分類する: `store.ErrPendingReset` は `LogSystemError(reset_incomplete)` + `Flush()` + 英語の `recover --mode discard-old --yes` 継続または `recover --abort-reset --yes` ロールバック案内 + exit 1、identity mismatch は `store_identity_mismatch`、permission は `store_permission`、corruption は `store_corruption` とする
-- [ ] `summary` 向け `Bootstrap` は設定読込と `store.Open(OpenReadOnly)`、`AcquireSummaryConsistencyGuard` までに限定し、それらを `BootContext.Store` / `BootContext.SummaryGuard` として渡す。`GenerateSummary`、第 2 回 `CheckRecoveryRequired`、notifier 遅延構築、`LogSummary` は `summary.go` で実行する
-- [ ] `main.go` を再構成する:
-  - `os.Args` からサブコマンド名を確定し、各サブコマンド専用の `flag.FlagSet` で残り引数を解釈する（グローバル `flag.Parse()` を廃止する）
-  - サブコマンド未指定・未知サブコマンド・`FlagSet` 解析エラー時は usage を stderr へ出力し exit 2 とする（AC-02）
-  - `flag.FlagSet` 解析成功直後に `ulid.Make().String()` で RunID を採番する（`02_architecture.md` §3.6 参照）
-  - 既存の `loadConfig`・`setupNotifyHandlers`・`buildIMAPConfig`・`storeOpenMode` を `boot.go` へ移管し、store open は `Bootstrap` 内で lock 取得後に直接行う（`primeNotifyHandlers` はステップ 1-1 で新 `SystemError` 形式へ更新済みのため、この段階で削除する）
-  - 各サブコマンド用の `SubcommandRunner` スタブを追加する（`Run` は後続フェーズで実装する）
-  - `main` は `Bootstrap` 成功後に `defer boot.Close()` を設定し、`SubcommandRunner.Run` 完了までロックを保持する。`Bootstrap` は初期化途中のエラー時だけ取得済みリソースを閉じ、成功パスでは `LockHandle` を閉じない
-- [ ] `cmd/tlsrpt-digest/test_helpers.go` を新規作成する（`//go:build test` タグ）: `SpyNotificationSink` 構造体（`NotificationSink` を実装し呼び出し記録・エラー注入を提供する）を定義する。`package main` 内部型（`NotificationSink`）を使用するため `testutil/` サブディレクトリではなく同パッケージのこのファイルに配置する（`test_organization.md` Classification B）
-- [ ] `boot_test.go` を新規作成する（`package main`、`//go:build test` タグ必須）: `test_helpers.go` の `SpyNotificationSink`（`//go:build test`）を参照するため、このファイルも同じビルドタグを付ける。タグなしの plain `go test ./...` でコンパイル対象外となり、`go test -tags test ./...` でのみ実行される。以下のテストを追加する:
-  - [ ] 設定読込失敗 → stderr 出力のみで exit 1 となること（AC-08）
-  - [ ] Slack URL が取得直後に `config.Secret` でラップされること（生文字列がログに出ないこと）
-  - [ ] `gc` / `recover` / `reprocess` サブコマンドで IMAP 認証情報を要求しないこと
-  - [ ] `BuildHandlers` の all-or-nothing 動作: 一方の URL が不正な場合に全体がエラーになること
-  - [ ] `summary` が空ストア時に `BuildHandlers` を呼ばず Slack URL 未設定でも exit 0 になること（AC-10c）
-  - [ ] ロック取得失敗時に `LogSystemError(lock_held)` + `Flush()` が呼ばれ exit 1 となること（AC-10a）
-  - [ ] fake runner の `Run` 中に同じ lock path へ 2 回目の `AcquireExclusive` を試みると失敗し、`Run` から戻って `BootContext.Close()` が完了した後は再取得できること（AC-10a）
-  - [ ] ストアオープン失敗（identity mismatch / permission / corruption）が分類別の `SystemErrorKind` でレポートされること（AC-09）
-  - [ ] pending reset による store open 失敗時に `fetch` / `gc` / `reprocess` が `LogSystemError(reset_incomplete)` + `Flush()` + 英語の継続/ロールバック案内 + exit 1 となること
-  - [ ] W-2 境界: `{root_dir}` が symlink の場合に exit 1 となること（symlink 境界チェック。`02_architecture.md` §3.4 W-2 参照）
-  - [ ] W-2 境界: `{root_dir}` のパーミッションが不足している場合に exit 1 となること
-- [ ] `main_test.go` を更新する:
-  - [ ] 移管した `buildIMAPConfig`・`loadConfig`・`setupNotifyHandlers` のテストを `boot_test.go` へ移動する
-  - [ ] `fetch` / `summary` / `reprocess` / `gc` / `recover` の 5 サブコマンドそれぞれが対応する `SubcommandRunner` へ振り分けられることを確認するテストを追加する（AC-01）
-  - [ ] サブコマンド未指定・未知サブコマンド・不正フラグで usage が stderr に出力され exit 2 となることを確認するテストを追加する（AC-02）
-  - [ ] `-config` フラグが全サブコマンド（`fetch` / `summary` / `reprocess` / `gc` / `recover`）で受け付けられることを確認するテストを追加する（AC-03）
-  - [ ] `-config` フラグのデフォルトパスが `./config.toml` であることを確認するテストを追加する（AC-04）
+- [x] `boot.go` に以下の型を定義する: `SubcommandName`・`BootContext`・`IMAPCredentials`・`SubcommandRunner`・`NotificationSink`・`BootstrapOptions`（`02_architecture.md` §3.1 参照）。`BootContext` は `LockHandle` と `SummaryConsistencyGuard` を保持し、`Close() error` で runner 完了後のリソース解放を一元化する
+- [x] `boot.go` に `notificationSinkImpl` 構造体を実装する: `NotificationSink` インターフェースの具体実装として、内部に `[]*notify.SlackHandler` を保持し、`LogAlert` / `LogWarning` / `LogSystemError` / `LogSummary` / `Flush` / `IsDryRun` を型付きヘルパー経由で委譲する。`SlackHandler` を `cmd` 外部へ直接公開しない
+- [x] `boot.go` に `Bootstrap(subcmd SubcommandName, configPath string, runID string, opts BootstrapOptions) (*BootContext, error)` を実装する: 書き込み系サブコマンドは W-1（設定読込）→ W-2（`{root_dir}` 確保・検証）→ W-3（Slack URL 取得・即時 Secret 化）→ W-4（`BuildHandlers` all-or-nothing）→ W-5（プロセスロック取得）→ W-6（`store.Open(mode)`）の順で実行する。`fetch` / `gc` / `reprocess` / `recover` の通常表示・`keep-old`・`discard-old` dry-run は `OpenReadWrite`、`recover --mode discard-old --yes` と `recover --abort-reset --yes` は `OpenRecoverReset` を使う
+- [x] W-6 の store open 失敗を分類する: `store.ErrPendingReset` は `LogSystemError(reset_incomplete)` + `Flush()` + 英語の `recover --mode discard-old --yes` 継続または `recover --abort-reset --yes` ロールバック案内 + exit 1、identity mismatch は `store_identity_mismatch`、permission は `store_permission`、corruption は `store_corruption` とする
+- [x] `summary` 向け `Bootstrap` は設定読込と `store.Open(OpenReadOnly)`、`AcquireSummaryConsistencyGuard` までに限定し、それらを `BootContext.Store` / `BootContext.SummaryGuard` として渡す。`GenerateSummary`、第 2 回 `CheckRecoveryRequired`、notifier 遅延構築、`LogSummary` は `summary.go` で実行する
+- [x] `main.go` を再構成する:
+  - [x] `os.Args` からサブコマンド名を確定し、各サブコマンド専用の `flag.FlagSet` で残り引数を解釈する（グローバル `flag.Parse()` を廃止する）
+  - [x] サブコマンド未指定・未知サブコマンド・`FlagSet` 解析エラー時は usage を stderr へ出力し exit 2 とする（AC-02）
+  - [x] `flag.FlagSet` 解析成功直後に `ulid.Make().String()` で RunID を採番する（`02_architecture.md` §3.6 参照）
+  - [x] 既存の `loadConfig`・`setupNotifyHandlers`・`buildIMAPConfig`・`storeOpenMode` を `boot.go` へ移管し、store open は `Bootstrap` 内で lock 取得後に直接行う（`primeNotifyHandlers` はステップ 1-1 で新 `SystemError` 形式へ更新済みのため、この段階で削除する）
+  - [x] 各サブコマンド用の `SubcommandRunner` スタブを追加する（`Run` は後続フェーズで実装する）
+  - [x] `main` は `Bootstrap` 成功後に `defer boot.Close()` を設定し、`SubcommandRunner.Run` 完了までロックを保持する。`Bootstrap` は初期化途中のエラー時だけ取得済みリソースを閉じ、成功パスでは `LockHandle` を閉じない
+- [x] `cmd/tlsrpt-digest/test_helpers.go` を新規作成する（`//go:build test` タグ）: `SpyNotificationSink` 構造体（`NotificationSink` を実装し呼び出し記録・エラー注入を提供する）を定義する。`package main` 内部型（`NotificationSink`）を使用するため `testutil/` サブディレクトリではなく同パッケージのこのファイルに配置する（`test_organization.md` Classification B）
+- [x] `boot_test.go` を新規作成する（`package main`、`//go:build test` タグ必須）: `test_helpers.go` の `SpyNotificationSink`（`//go:build test`）を参照するため、このファイルも同じビルドタグを付ける。タグなしの plain `go test ./...` でコンパイル対象外となり、`go test -tags test ./...` でのみ実行される。以下のテストを追加する:
+  - [x] 設定読込失敗 → stderr 出力のみで exit 1 となること（AC-08）
+  - [x] Slack URL が取得直後に `config.Secret` でラップされること（生文字列がログに出ないこと）
+  - [x] `gc` / `recover` / `reprocess` サブコマンドで IMAP 認証情報を要求しないこと
+  - [x] `BuildHandlers` の all-or-nothing 動作: 一方の URL が不正な場合に全体がエラーになること
+  - [x] `summary` が空ストア時に `BuildHandlers` を呼ばず Slack URL 未設定でも exit 0 になること（AC-10c）
+  - [x] ロック取得失敗時に `LogSystemError(lock_held)` + `Flush()` が呼ばれ exit 1 となること（AC-10a）
+  - [x] fake runner の `Run` 中に同じ lock path へ 2 回目の `AcquireExclusive` を試みると失敗し、`Run` から戻って `BootContext.Close()` が完了した後は再取得できること（AC-10a）
+  - [x] ストアオープン失敗（identity mismatch / permission / corruption）が分類別の `SystemErrorKind` でレポートされること（AC-09）
+  - [x] pending reset による store open 失敗時に `fetch` / `gc` / `reprocess` が `LogSystemError(reset_incomplete)` + `Flush()` + 英語の継続/ロールバック案内 + exit 1 となること
+  - [x] W-2 境界: `{root_dir}` が symlink の場合に exit 1 となること（symlink 境界チェック。`02_architecture.md` §3.4 W-2 参照）
+  - [x] W-2 境界: `{root_dir}` のパーミッションが不足している場合に exit 1 となること
+- [x] `main_test.go` を更新する:
+  - [x] 移管した `buildIMAPConfig`・`loadConfig`・`setupNotifyHandlers` のテストを `boot_test.go` へ移動する
+  - [x] `fetch` / `summary` / `reprocess` / `gc` / `recover` の 5 サブコマンドそれぞれが対応する `SubcommandRunner` へ振り分けられることを確認するテストを追加する（AC-01）
+  - [x] サブコマンド未指定・未知サブコマンド・不正フラグで usage が stderr に出力され exit 2 となることを確認するテストを追加する（AC-02）
+  - [x] `-config` フラグが全サブコマンド（`fetch` / `summary` / `reprocess` / `gc` / `recover`）で受け付けられることを確認するテストを追加する（AC-03）
+  - [x] `-config` フラグのデフォルトパスが `./config.toml` であることを確認するテストを追加する（AC-04）
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -248,8 +248,8 @@ OS API 選定の詳細は `02_architecture.md` §3.3 を参照。
 
 **レビュー観点**: 初期化順序 W-1〜W-6 / ロック解放タイミング / `NotificationSink` facade の境界
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/86）
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（フェーズ 2 は新しいブランチで作業する）
 
