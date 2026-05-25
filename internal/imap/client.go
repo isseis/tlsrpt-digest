@@ -7,9 +7,9 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
-	"net/mail"
 	"os"
 	"slices"
 	"strconv"
@@ -168,12 +168,12 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 	return FetchMetaResult{Messages: metas, UIDValidity: mailboxStatus.UidValidity}, nil
 }
 
-func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32]*mail.Message, error) {
+func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32][]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("imap: download: %w", err)
 	}
 	if len(uids) == 0 {
-		return map[uint32]*mail.Message{}, nil
+		return map[uint32][]byte{}, nil
 	}
 
 	if _, err := c.session.Select(c.cfg.Mailbox, false); err != nil {
@@ -190,7 +190,7 @@ func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32]*m
 		fetchErrCh <- c.session.UidFetch(seqSet, items, ch)
 	}()
 
-	out := make(map[uint32]*mail.Message, len(uids))
+	out := make(map[uint32][]byte, len(uids))
 	for msg := range ch {
 		if msg == nil {
 			continue
@@ -207,11 +207,11 @@ func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32]*m
 			continue
 		}
 
-		parsed, err := mail.ReadMessage(body)
+		raw, err := io.ReadAll(body)
 		if err != nil {
-			return nil, fmt.Errorf("imap: download: parse uid %d: %w", msg.Uid, err)
+			return nil, fmt.Errorf("imap: download: read uid %d: %w", msg.Uid, err)
 		}
-		out[msg.Uid] = parsed
+		out[msg.Uid] = raw
 	}
 
 	if err := <-fetchErrCh; err != nil {
@@ -264,7 +264,7 @@ func isTooLarge(size uint32, maxBytes int64) bool {
 	return int64(size) > maxBytes
 }
 
-func firstMissingUID(requested []uint32, got map[uint32]*mail.Message) (uint32, bool) {
+func firstMissingUID(requested []uint32, got map[uint32][]byte) (uint32, bool) {
 	for _, uid := range requested {
 		if _, ok := got[uid]; !ok {
 			return uid, true

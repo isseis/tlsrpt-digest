@@ -7,8 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"net/mail"
-	"strings"
 	"testing"
 	"time"
 
@@ -75,7 +73,7 @@ func newFetchTestBedBlank(t *testing.T) *fetchTestBed {
 	notif := &SpyNotificationSink{}
 	fakeFetcher := &imaptestutil.FakeMailFetcher{
 		FetchMetaResult: imap.FetchMetaResult{UIDValidity: testUIDValidity},
-		DownloadResult:  make(map[uint32]*mail.Message),
+		DownloadResult:  make(map[uint32][]byte),
 	}
 
 	runner := &fetchRunner{
@@ -118,19 +116,9 @@ func newFetchTestBedBlank(t *testing.T) *fetchTestBed {
 	}
 }
 
-func mustParseMsg(raw string) *mail.Message {
-	msg, err := mail.ReadMessage(strings.NewReader(raw))
-	if err != nil {
-		panic("mustParseMsg: " + err.Error())
-	}
-	return msg
-}
-
 func simpleRawEML() []byte {
 	return []byte("From: a@b.com\r\nSubject: test\r\n\r\nbody")
 }
-
-func simpleMsg() *mail.Message { return mustParseMsg(string(simpleRawEML())) }
 
 func makeTLSRPTJSON(org, id string, failures int64) []byte {
 	b, err := json.Marshal(map[string]any{
@@ -379,16 +367,42 @@ func TestFetch_FetchMetaFails_ReportsOperationFailed(t *testing.T) {
 }
 
 func TestFetch_CredentialsMissing(t *testing.T) {
-	bed := newFetchTestBed(t)
-	bed.runner.getenv = func(_ string) string { return "" }
+	tests := map[string]func(string) string{
+		"both missing": func(_ string) string { return "" },
+		"username missing": func(key string) string {
+			if key == "TLSRPT_IMAP_PASSWORD" {
+				return "secret"
+			}
+			return ""
+		},
+		"password missing": func(key string) string {
+			if key == "TLSRPT_IMAP_USERNAME" {
+				return "user@example.com"
+			}
+			return ""
+		},
+	}
 
-	code, err := bed.runner.Run(context.Background(), bed.boot)
-	require.NoError(t, err)
-	assert.Equal(t, exitError, code)
-	require.Len(t, bed.notif.SystemErrors, 1)
-	assert.Equal(t, notify.SystemErrorKindIMAPCredentialsMissing, bed.notif.SystemErrors[0].Kind)
-	assert.Equal(t, 1, bed.notif.FlushCount)
-	assert.Empty(t, bed.fetcher.FetchMetaCalls)
+	for name, getenv := range tests {
+		t.Run(name, func(t *testing.T) {
+			bed := newFetchTestBed(t)
+			bed.runner.getenv = getenv
+			connectCalled := false
+			bed.runner.newMailFetcher = func(_ imap.Config) (imap.MailFetcher, error) {
+				connectCalled = true
+				return bed.fetcher, nil
+			}
+
+			code, err := bed.runner.Run(context.Background(), bed.boot)
+			require.NoError(t, err)
+			assert.Equal(t, exitError, code)
+			require.Len(t, bed.notif.SystemErrors, 1)
+			assert.Equal(t, notify.SystemErrorKindIMAPCredentialsMissing, bed.notif.SystemErrors[0].Kind)
+			assert.Equal(t, 1, bed.notif.FlushCount)
+			assert.False(t, connectCalled)
+			assert.Empty(t, bed.fetcher.FetchMetaCalls)
+		})
+	}
 }
 
 // ── 4-way selection table ─────────────────────────────────────────────────────
@@ -412,10 +426,11 @@ func TestFetch_SEENEMLExists_Skipped(t *testing.T) {
 
 func TestFetch_UNSEENNoEML_DownloadedAndMarkedSeen(t *testing.T) {
 	bed := newFetchTestBed(t)
+	raw := []byte("X-Custom: folded\r\n\tvalue\r\nX-Custom: second\r\n\r\nbody")
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
-		{UID: testUID1, Size: 100, Date: testDate, Seen: false, MessageID: "m1"},
+		{UID: testUID1, Size: uint32(len(raw)), Date: testDate, Seen: false, MessageID: "m1"},
 	}
-	bed.fetcher.DownloadResult[testUID1] = simpleMsg()
+	bed.fetcher.DownloadResult[testUID1] = raw
 
 	code, err := bed.runner.Run(context.Background(), bed.boot)
 	require.NoError(t, err)
@@ -424,6 +439,9 @@ func TestFetch_UNSEENNoEML_DownloadedAndMarkedSeen(t *testing.T) {
 	assert.Equal(t, []uint32{testUID1}, bed.fetcher.DownloadCalls[0])
 	require.Len(t, bed.fetcher.MarkSeenCalls, 1)
 	assert.Equal(t, []uint32{testUID1}, bed.fetcher.MarkSeenCalls[0])
+	saved := bed.store.Emails[storetestutil.EmailKey{UID: testUID1, UIDValidity: testUIDValidity}]
+	require.NotNil(t, saved)
+	assert.Equal(t, raw, saved.RawEML)
 }
 
 func TestFetch_UNSEENEMLExists_NoDownloadProcessedAndMarkedSeen(t *testing.T) {
@@ -456,7 +474,7 @@ func TestFetch_UNSEENEMLExists_DiskReadFails_LogsWarningAndContinues(t *testing.
 		{UID: testUID1, Size: uint32(len(simpleRawEML())), Date: testDate, Seen: false, MessageID: "m1"},
 		{UID: testUID2, Size: uint32(len(raw)), Date: testDate, Seen: false, MessageID: "m2"},
 	}
-	bed.fetcher.DownloadResult[testUID2] = mustParseMsg(string(raw))
+	bed.fetcher.DownloadResult[testUID2] = raw
 	// Inject a broken loadLocalEML for UID1
 	bed.runner.loadLocalEML = func(_ string, uid, _ uint32, _ time.Time) ([]byte, error) {
 		if uid == testUID1 {
@@ -485,7 +503,7 @@ func TestFetch_SEENNoEML_DownloadedNoMarkSeen(t *testing.T) {
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
 		{UID: testUID1, Size: 100, Date: testDate, Seen: true, MessageID: "m1"},
 	}
-	bed.fetcher.DownloadResult[testUID1] = simpleMsg()
+	bed.fetcher.DownloadResult[testUID1] = simpleRawEML()
 
 	code, err := bed.runner.Run(context.Background(), bed.boot)
 	require.NoError(t, err)
@@ -500,7 +518,7 @@ func TestFetch_SEENNoEMLWithFailure_NoLogAlert(t *testing.T) {
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
 		{UID: testUID1, Size: uint32(len(raw)), Date: testDate, Seen: true, MessageID: "m1"},
 	}
-	bed.fetcher.DownloadResult[testUID1] = mustParseMsg(string(raw))
+	bed.fetcher.DownloadResult[testUID1] = raw
 
 	code, err := bed.runner.Run(context.Background(), bed.boot)
 	require.NoError(t, err)
@@ -516,7 +534,7 @@ func TestFetch_SizeMismatch_UNSEENNoEML_LogsWarning(t *testing.T) {
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
 		{UID: testUID1, Size: uint32(len(raw) + 100), Date: testDate, Seen: false, MessageID: "m1"},
 	}
-	bed.fetcher.DownloadResult[testUID1] = mustParseMsg(string(raw))
+	bed.fetcher.DownloadResult[testUID1] = raw
 
 	code, err := bed.runner.Run(context.Background(), bed.boot)
 	require.NoError(t, err)
@@ -552,7 +570,7 @@ func TestFetch_UNSEENWithFailure_LogsAlert(t *testing.T) {
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
 		{UID: testUID1, Size: uint32(len(raw)), Date: testDate, Seen: false, MessageID: "m1"},
 	}
-	bed.fetcher.DownloadResult[testUID1] = mustParseMsg(string(raw))
+	bed.fetcher.DownloadResult[testUID1] = raw
 
 	code, err := bed.runner.Run(context.Background(), bed.boot)
 	require.NoError(t, err)
@@ -568,7 +586,7 @@ func TestFetch_UNSEENZeroFailures_NoAlert(t *testing.T) {
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
 		{UID: testUID1, Size: uint32(len(raw)), Date: testDate, Seen: false, MessageID: "m1"},
 	}
-	bed.fetcher.DownloadResult[testUID1] = mustParseMsg(string(raw))
+	bed.fetcher.DownloadResult[testUID1] = raw
 
 	code, err := bed.runner.Run(context.Background(), bed.boot)
 	require.NoError(t, err)
@@ -596,8 +614,8 @@ func TestFetch_ParseFailure_LogsWarningAndContinues(t *testing.T) {
 		{UID: testUID1, Size: uint32(len(badRaw)), Date: testDate, Seen: false, MessageID: "bad"},
 		{UID: testUID2, Size: uint32(len(goodRaw)), Date: testDate, Seen: false, MessageID: "good"},
 	}
-	bed.fetcher.DownloadResult[testUID1] = mustParseMsg(badRaw)
-	bed.fetcher.DownloadResult[testUID2] = mustParseMsg(string(goodRaw))
+	bed.fetcher.DownloadResult[testUID1] = []byte(badRaw)
+	bed.fetcher.DownloadResult[testUID2] = goodRaw
 
 	code, err := bed.runner.Run(context.Background(), bed.boot)
 	require.NoError(t, err)
@@ -633,12 +651,28 @@ func TestFetch_DownloadFails_ExitsWithoutSave(t *testing.T) {
 	assert.Equal(t, 1, bed.notif.FlushCount)
 }
 
+func TestFetch_DownloadMissingUID_ExitsWithoutMarkSeen(t *testing.T) {
+	bed := newFetchTestBed(t)
+	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
+		{UID: testUID1, Size: 100, Date: testDate, Seen: false},
+	}
+
+	code, err := bed.runner.Run(context.Background(), bed.boot)
+	require.Error(t, err)
+	assert.Equal(t, exitError, code)
+	assert.Empty(t, bed.store.Emails)
+	assert.Empty(t, bed.fetcher.MarkSeenCalls)
+	require.Len(t, bed.notif.SystemErrors, 1)
+	assert.Equal(t, notify.SystemErrorKindIMAPOperationFailed, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
+}
+
 func TestFetch_SaveEmailFails_ExitsBeforeMetas(t *testing.T) {
 	bed := newFetchTestBed(t)
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
 		{UID: testUID1, Size: 100, Date: testDate, Seen: false},
 	}
-	bed.fetcher.DownloadResult[testUID1] = simpleMsg()
+	bed.fetcher.DownloadResult[testUID1] = simpleRawEML()
 
 	cs := &countingStore{FakeStore: storetestutil.NewFakeStore()}
 	uid := testUIDValidity
@@ -660,7 +694,7 @@ func TestFetch_SaveEmailMetasFails_NoSaveReportsOrMarkSeen(t *testing.T) {
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
 		{UID: testUID1, Size: uint32(len(raw)), Date: testDate, Seen: false},
 	}
-	bed.fetcher.DownloadResult[testUID1] = mustParseMsg(string(raw))
+	bed.fetcher.DownloadResult[testUID1] = raw
 
 	cs := &countingStore{FakeStore: storetestutil.NewFakeStore()}
 	uid := testUIDValidity
@@ -681,7 +715,7 @@ func TestFetch_SaveReportsFails_NoFlushOrMarkSeen(t *testing.T) {
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
 		{UID: testUID1, Size: uint32(len(raw)), Date: testDate, Seen: false},
 	}
-	bed.fetcher.DownloadResult[testUID1] = mustParseMsg(string(raw))
+	bed.fetcher.DownloadResult[testUID1] = raw
 
 	cs := &countingStore{FakeStore: storetestutil.NewFakeStore()}
 	uid := testUIDValidity
@@ -703,7 +737,7 @@ func TestFetch_FlushFails_MarkSeenNotCalled(t *testing.T) {
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
 		{UID: testUID1, Size: 100, Date: testDate, Seen: false},
 	}
-	bed.fetcher.DownloadResult[testUID1] = simpleMsg()
+	bed.fetcher.DownloadResult[testUID1] = simpleRawEML()
 	bed.notif.FlushError = errors.New("network error")
 
 	code, err := bed.runner.Run(context.Background(), bed.boot)
@@ -717,7 +751,7 @@ func TestFetch_MarkSeenFails_SaveUIDValidityNotCalled(t *testing.T) {
 	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
 		{UID: testUID1, Size: 100, Date: testDate, Seen: false},
 	}
-	bed.fetcher.DownloadResult[testUID1] = simpleMsg()
+	bed.fetcher.DownloadResult[testUID1] = simpleRawEML()
 	bed.fetcher.MarkSeenErr = errors.New("IMAP error")
 
 	cs := &countingStore{FakeStore: storetestutil.NewFakeStore()}
@@ -754,8 +788,8 @@ func TestFetch_SaveEmailMetas_CalledOnce(t *testing.T) {
 		{UID: testUID1, Size: 100, Date: testDate, Seen: false},
 		{UID: testUID2, Size: 100, Date: testDate, Seen: false},
 	}
-	bed.fetcher.DownloadResult[testUID1] = simpleMsg()
-	bed.fetcher.DownloadResult[testUID2] = simpleMsg()
+	bed.fetcher.DownloadResult[testUID1] = simpleRawEML()
+	bed.fetcher.DownloadResult[testUID2] = simpleRawEML()
 
 	cs := &countingStore{FakeStore: storetestutil.NewFakeStore()}
 	uid := testUIDValidity
@@ -776,8 +810,8 @@ func TestFetch_SaveReports_CalledWithAllParsedReports(t *testing.T) {
 		{UID: testUID1, Size: uint32(len(raw1)), Date: testDate, Seen: false},
 		{UID: testUID2, Size: uint32(len(raw2)), Date: testDate, Seen: false},
 	}
-	bed.fetcher.DownloadResult[testUID1] = mustParseMsg(string(raw1))
-	bed.fetcher.DownloadResult[testUID2] = mustParseMsg(string(raw2))
+	bed.fetcher.DownloadResult[testUID1] = raw1
+	bed.fetcher.DownloadResult[testUID2] = raw2
 
 	code, err := bed.runner.Run(context.Background(), bed.boot)
 	require.NoError(t, err)

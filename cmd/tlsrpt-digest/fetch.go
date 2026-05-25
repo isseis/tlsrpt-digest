@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/mail"
 	"os"
@@ -23,6 +22,8 @@ import (
 
 // fetchContinue signals that a helper returned without stopping the run.
 const fetchContinue = -1
+
+var errFetchDownloadMissingUID = errors.New("download missing uid")
 
 // fetchMsgState tracks per-message processing state during a fetch run.
 type fetchMsgState struct {
@@ -78,11 +79,12 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 
 	// Step 2: Retrieve IMAP credentials from environment.
 	username := r.getenv("TLSRPT_IMAP_USERNAME")
-	if username == "" {
+	passwordValue := r.getenv("TLSRPT_IMAP_PASSWORD")
+	if username == "" || passwordValue == "" {
 		_ = notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPCredentialsMissing, mailbox)
 		return exitError, nil
 	}
-	password := config.Secret(r.getenv("TLSRPT_IMAP_PASSWORD"))
+	password := config.Secret(passwordValue)
 
 	// Step 3: Connect to IMAP server.
 	fetcher, err := r.newMailFetcher(buildIMAPConfig(boot.Config, IMAPCredentials{Username: username, Password: password}))
@@ -218,14 +220,10 @@ func (r *fetchRunner) fetchDownloadAndSave(ctx context.Context, boot *BootContex
 		if states[i].emlExistedBefore {
 			continue
 		}
-		msg, ok := downloaded[states[i].meta.UID]
+		rawEML, ok := downloaded[states[i].meta.UID]
 		if !ok {
-			continue
-		}
-		rawEML, err := messageToBytes(msg)
-		if err != nil {
-			slog.Error("fetch: convert message to bytes", "uid", states[i].meta.UID, "error", err)
-			return fmt.Errorf("fetch: convert message %d to bytes: %w", states[i].meta.UID, err)
+			_ = notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPOperationFailed, mailbox)
+			return fmt.Errorf("fetch: %w: %d", errFetchDownloadMissingUID, states[i].meta.UID)
 		}
 		if int64(len(rawEML)) != int64(states[i].meta.Size) {
 			logWarnFetch(ctx, boot.Notifier, notify.WarningKindSizeMismatch, states[i].meta.UID, currentUID, states[i].meta.MessageID)
@@ -374,24 +372,6 @@ func fetchSince(opts cliOptions, cfg *config.Config, now time.Time) time.Time {
 func fetchEmailPath(rootDir string, uid, uidValidity uint32, internalDate time.Time) string {
 	yyyymm := internalDate.UTC().Format("200601")
 	return filepath.Join(rootDir, "emails", fmt.Sprintf("%d", uidValidity), yyyymm, fmt.Sprintf("%010d.eml", uid))
-}
-
-// messageToBytes reconstructs the raw bytes of a parsed mail.Message.
-// Header order is non-deterministic but the content is preserved.
-func messageToBytes(msg *mail.Message) ([]byte, error) {
-	var buf bytes.Buffer
-	for key, vals := range msg.Header {
-		for _, v := range vals {
-			fmt.Fprintf(&buf, "%s: %s\r\n", key, v)
-		}
-	}
-	buf.WriteString("\r\n")
-	body, err := io.ReadAll(msg.Body)
-	if err != nil {
-		return nil, err
-	}
-	buf.Write(body)
-	return buf.Bytes(), nil
 }
 
 // classifyIMAPClientError maps a connection or login error to a SystemErrorKind.

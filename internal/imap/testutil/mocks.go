@@ -5,7 +5,6 @@ package imaptestutil
 
 import (
 	"context"
-	"net/mail"
 	"time"
 
 	"github.com/isseis/tlsrpt-digest/internal/imap"
@@ -17,7 +16,7 @@ type FakeMailFetcher struct {
 	FetchMetaErr    error
 	FetchMetaCalls  []time.Time
 
-	DownloadResult map[uint32]*mail.Message
+	DownloadResult map[uint32][]byte
 	DownloadErr    error
 	DownloadCalls  [][]uint32
 
@@ -39,7 +38,7 @@ func (f *FakeMailFetcher) FetchMeta(_ context.Context, since time.Time) (imap.Fe
 }
 
 // Download implements imap.MailFetcher.
-func (f *FakeMailFetcher) Download(_ context.Context, uids []uint32) (map[uint32]*mail.Message, error) {
+func (f *FakeMailFetcher) Download(_ context.Context, uids []uint32) (map[uint32][]byte, error) {
 	f.DownloadCalls = append(f.DownloadCalls, cloneUIDs(uids))
 	if f.DownloadErr != nil {
 		return nil, f.DownloadErr
