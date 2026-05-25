@@ -246,6 +246,7 @@ func TestFetch_LoadUIDValidityFails_ReportsStoreCorruption(t *testing.T) {
 	assert.Equal(t, exitError, code)
 	require.Len(t, bed.notif.SystemErrors, 1)
 	assert.Equal(t, notify.SystemErrorKindStoreCorruption, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
 }
 
 func TestFetch_UIDValidityFirstSaveFails_Exits(t *testing.T) {
@@ -273,6 +274,7 @@ func TestFetch_SaveRecoveryRequiredFails_ReportsStoreCorruption(t *testing.T) {
 	assert.Equal(t, exitError, code)
 	require.Len(t, bed.notif.SystemErrors, 1)
 	assert.Equal(t, notify.SystemErrorKindStoreCorruption, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
 }
 
 // ── Recovery guard ────────────────────────────────────────────────────────────
@@ -303,6 +305,7 @@ func TestFetch_LoadRecoveryRequiredFails_ReportsStoreCorruption(t *testing.T) {
 	assert.Empty(t, bed.fetcher.FetchMetaCalls)
 	require.Len(t, bed.notif.SystemErrors, 1)
 	assert.Equal(t, notify.SystemErrorKindStoreCorruption, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
 }
 
 // ── IMAP connection ───────────────────────────────────────────────────────────
@@ -318,6 +321,7 @@ func TestFetch_IMAPConnectFails(t *testing.T) {
 	assert.Equal(t, exitError, code)
 	require.Len(t, bed.notif.SystemErrors, 1)
 	assert.Equal(t, notify.SystemErrorKindIMAPConnectFailed, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
 }
 
 func TestFetch_IMAPAuthFails(t *testing.T) {
@@ -331,6 +335,7 @@ func TestFetch_IMAPAuthFails(t *testing.T) {
 	assert.Equal(t, exitError, code)
 	require.Len(t, bed.notif.SystemErrors, 1)
 	assert.Equal(t, notify.SystemErrorKindIMAPAuthFailed, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
 }
 
 func TestFetch_IMAPClientClosedOnSuccess(t *testing.T) {
@@ -369,6 +374,7 @@ func TestFetch_FetchMetaFails_ReportsOperationFailed(t *testing.T) {
 	assert.Equal(t, exitError, code)
 	require.Len(t, bed.notif.SystemErrors, 1)
 	assert.Equal(t, notify.SystemErrorKindIMAPOperationFailed, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
 	assert.Empty(t, bed.fetcher.MarkSeenCalls)
 }
 
@@ -381,6 +387,7 @@ func TestFetch_CredentialsMissing(t *testing.T) {
 	assert.Equal(t, exitError, code)
 	require.Len(t, bed.notif.SystemErrors, 1)
 	assert.Equal(t, notify.SystemErrorKindIMAPCredentialsMissing, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
 	assert.Empty(t, bed.fetcher.FetchMetaCalls)
 }
 
@@ -435,6 +442,42 @@ func TestFetch_UNSEENEMLExists_NoDownloadProcessedAndMarkedSeen(t *testing.T) {
 	assert.Empty(t, bed.fetcher.DownloadCalls)
 	require.Len(t, bed.fetcher.MarkSeenCalls, 1)
 	assert.Equal(t, []uint32{testUID1}, bed.fetcher.MarkSeenCalls[0])
+}
+
+func TestFetch_UNSEENEMLExists_DiskReadFails_LogsWarningAndContinues(t *testing.T) {
+	bed := newFetchTestBed(t)
+	raw := tlsrptRawEML("Corp2", "r2", 0)
+	// msg1: UNSEEN + EML in store, but loadLocalEML will fail for it
+	bed.store.Emails[storetestutil.EmailKey{UID: testUID1, UIDValidity: testUIDValidity}] = &storetestutil.FakeEmailEntry{
+		UID: testUID1, UIDValidity: testUIDValidity, InternalDate: testDate, RawEML: simpleRawEML(),
+	}
+	// msg2: UNSEEN + no EML, will be downloaded normally
+	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
+		{UID: testUID1, Size: uint32(len(simpleRawEML())), Date: testDate, Seen: false, MessageID: "m1"},
+		{UID: testUID2, Size: uint32(len(raw)), Date: testDate, Seen: false, MessageID: "m2"},
+	}
+	bed.fetcher.DownloadResult[testUID2] = mustParseMsg(string(raw))
+	// Inject a broken loadLocalEML for UID1
+	bed.runner.loadLocalEML = func(_ string, uid, _ uint32, _ time.Time) ([]byte, error) {
+		if uid == testUID1 {
+			return nil, errors.New("disk read error")
+		}
+		return nil, errors.New("eml not found")
+	}
+
+	code, err := bed.runner.Run(context.Background(), bed.boot)
+	require.NoError(t, err)
+	assert.Equal(t, exitOK, code)
+	// parse_failure warning for msg1
+	require.Len(t, bed.notif.Warnings, 1)
+	assert.Equal(t, notify.WarningKindParseFailure, bed.notif.Warnings[0].Kind)
+	assert.Equal(t, testUID1, bed.notif.Warnings[0].UID)
+	// msg2 still processed and report saved
+	assert.Len(t, bed.store.Reports, 1)
+	// both UIDs still marked seen
+	require.Len(t, bed.fetcher.MarkSeenCalls, 1)
+	assert.Contains(t, bed.fetcher.MarkSeenCalls[0], testUID1)
+	assert.Contains(t, bed.fetcher.MarkSeenCalls[0], testUID2)
 }
 
 func TestFetch_SEENNoEML_DownloadedNoMarkSeen(t *testing.T) {
@@ -585,6 +628,9 @@ func TestFetch_DownloadFails_ExitsWithoutSave(t *testing.T) {
 	assert.Equal(t, exitError, code)
 	assert.Empty(t, bed.store.Emails)
 	assert.Empty(t, bed.fetcher.MarkSeenCalls)
+	require.Len(t, bed.notif.SystemErrors, 1)
+	assert.Equal(t, notify.SystemErrorKindIMAPOperationFailed, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
 }
 
 func TestFetch_SaveEmailFails_ExitsBeforeMetas(t *testing.T) {

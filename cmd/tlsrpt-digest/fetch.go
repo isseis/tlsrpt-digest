@@ -224,6 +224,7 @@ func (r *fetchRunner) fetchDownloadAndSave(ctx context.Context, boot *BootContex
 		}
 		rawEML, err := messageToBytes(msg)
 		if err != nil {
+			slog.Error("fetch: convert message to bytes", "uid", states[i].meta.UID, "error", err)
 			return fmt.Errorf("fetch: convert message %d to bytes: %w", states[i].meta.UID, err)
 		}
 		if int64(len(rawEML)) != int64(states[i].meta.Size) {
@@ -318,11 +319,17 @@ func sendAlerts(ctx context.Context, notifier NotificationSink, report *tlsrpt.R
 	}
 }
 
-// parseTLSRPTAttachment dispatches to ParseGzip or ParseJSON based on content-type/filename.
+// parseTLSRPTAttachment dispatches to ParseGzip or ParseJSON.
+// Content-Type takes priority; filename extension is the fallback for senders
+// that use a generic content-type (e.g. application/octet-stream).
 func parseTLSRPTAttachment(att mailparse.Attachment) (*tlsrpt.Report, error) {
-	ct := strings.ToLower(att.ContentType)
-	fn := strings.ToLower(att.Filename)
-	if ct == "application/tlsrpt+gzip" || strings.HasSuffix(fn, ".json.gz") {
+	switch strings.ToLower(att.ContentType) {
+	case "application/tlsrpt+gzip":
+		return tlsrpt.ParseGzip(att.Content)
+	case "application/tlsrpt+json":
+		return tlsrpt.ParseJSON(att.Content)
+	}
+	if strings.HasSuffix(strings.ToLower(att.Filename), ".json.gz") {
 		return tlsrpt.ParseGzip(att.Content)
 	}
 	return tlsrpt.ParseJSON(att.Content)
