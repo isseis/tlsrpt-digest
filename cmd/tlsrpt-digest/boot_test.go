@@ -219,6 +219,44 @@ func TestBootstrap_NonFetchSubcommandsDoNotReadIMAPCredentials(t *testing.T) {
 	}
 }
 
+func TestBootstrap_Summary_ExistingStore(t *testing.T) {
+	fakeStore := storetestutil.NewFakeStore()
+	buildCalled := false
+	rootDir := secureStoreRoot(t)
+
+	boot, err := Bootstrap(subcommandSummary, "config.toml", "run-summary-existing", BootstrapOptions{
+		LoadConfig: func(string) (*config.Config, error) { return configForRoot(rootDir), nil },
+		BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
+			buildCalled = true
+			return &SpyNotificationSink{}, nil
+		},
+		OpenStore: func(string, store.IMAPIdentity, store.OpenMode) (store.Store, error) {
+			return fakeStore, nil
+		},
+	})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, boot.Close()) }()
+
+	assert.False(t, buildCalled, "summary bootstrap must not build notifier")
+	assert.NotNil(t, boot.Store)
+	assert.NotNil(t, boot.SummaryGuard)
+	assert.Nil(t, boot.LockHandle, "summary bootstrap must not acquire writer lock")
+}
+
+func TestBootstrap_Summary_GuardAcquireFailure(t *testing.T) {
+	guardErr := errors.New("flock: permission denied")
+	fakeStore := storetestutil.NewFakeStore()
+	fakeStore.AcquireSummaryConsistencyGuardErr = guardErr
+
+	_, err := Bootstrap(subcommandSummary, "config.toml", "run-summary-guard-fail", BootstrapOptions{
+		LoadConfig: func(string) (*config.Config, error) { return configForRoot(secureStoreRoot(t)), nil },
+		OpenStore: func(string, store.IMAPIdentity, store.OpenMode) (store.Store, error) {
+			return fakeStore, nil
+		},
+	})
+	require.ErrorIs(t, err, guardErr)
+}
+
 func TestBootstrap_SummaryMissingStoreSkipsNotifier(t *testing.T) {
 	buildCalled := false
 	rootDir := filepath.Join(t.TempDir(), "missing")

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -32,7 +31,7 @@ func ParseDuration(s string) (Duration, error) {
 		return Duration{}, fmt.Errorf("%w: %q", errDurationUnsupportedUnit, unit)
 	}
 
-	value, err := strconv.Atoi(strings.TrimSpace(s[:len(s)-1]))
+	value, err := strconv.Atoi(s[:len(s)-1])
 	if err != nil {
 		return Duration{}, fmt.Errorf("duration: parse %q: %w", s, err)
 	}

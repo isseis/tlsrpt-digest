@@ -43,6 +43,24 @@ func TestParseDurationErrors(t *testing.T) {
 	}
 }
 
+func TestParseDurationRejectsInvalidFormats(t *testing.T) {
+	for _, in := range []string{
+		"1W",   // uppercase unit
+		"1D",   // uppercase unit
+		" 1d",  // leading space
+		"1d ",  // trailing space (unit is space, not 'd')
+		"1 d",  // space between digits and unit
+		"1dd",  // repeated unit
+		"1d2w", // mixed units
+	} {
+		t.Run(fmt.Sprintf("%q", in), func(t *testing.T) {
+			got, err := ParseDuration(in)
+			assert.Equal(t, Duration{}, got)
+			require.Error(t, err, "expected error for input %q", in)
+		})
+	}
+}
+
 func TestParseDurationRejectsWeekOverflow(t *testing.T) {
 	got, err := ParseDuration(fmt.Sprintf("%dw", math.MaxInt/7+1))
 

@@ -255,17 +255,16 @@ func storeOpenModeForBootstrap(subcmd SubcommandName, opts BootstrapOptions) sto
 }
 
 func classifyStoreOpenError(err error) notify.SystemErrorKind {
-	var identityErr *store.ErrStoreIdentityMismatch
-	switch {
-	case errors.Is(err, store.ErrPendingReset):
+	if errors.Is(err, store.ErrPendingReset) {
 		return notify.SystemErrorKindResetIncomplete
-	case errors.As(err, &identityErr):
-		return notify.SystemErrorKindStoreIdentityMismatch
-	case errors.Is(err, os.ErrPermission):
-		return notify.SystemErrorKindStorePermission
-	default:
-		return notify.SystemErrorKindStoreCorruption
 	}
+	if _, ok := errors.AsType[*store.ErrStoreIdentityMismatch](err); ok {
+		return notify.SystemErrorKindStoreIdentityMismatch
+	}
+	if errors.Is(err, os.ErrPermission) {
+		return notify.SystemErrorKindStorePermission
+	}
+	return notify.SystemErrorKindStoreCorruption
 }
 
 func storeIdentityFromConfig(cfg *config.Config) store.IMAPIdentity {

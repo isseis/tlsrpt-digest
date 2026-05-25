@@ -47,6 +47,15 @@ func TestAcquireExclusive_RequiresExistingParent(t *testing.T) {
 	assert.False(t, errors.Is(err, storelock.ErrLockHeld))
 }
 
+func TestAcquireExclusive_DoubleCloseIsSafe(t *testing.T) {
+	lockPath := storelock.LockPath(t.TempDir())
+
+	h, err := AcquireExclusive(lockPath)
+	require.NoError(t, err)
+	require.NoError(t, h.Close())
+	require.NoError(t, h.Close())
+}
+
 func TestAcquireStoreWriterLock_CreatesRootAndHoldsLock(t *testing.T) {
 	rootDir := filepath.Join(t.TempDir(), "store")
 

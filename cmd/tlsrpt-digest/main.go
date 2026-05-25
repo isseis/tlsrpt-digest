@@ -23,7 +23,10 @@ const (
 	exitUsage = 2
 )
 
-var errInvalidRecoverMode = errors.New("invalid recovery mode")
+var (
+	errInvalidRecoverMode  = errors.New("invalid recovery mode")
+	errSubcommandNotImpl   = errors.New("subcommand not yet implemented")
+)
 
 type cliOptions struct {
 	ConfigPath      string
@@ -180,7 +183,6 @@ type stubRunner struct {
 	name SubcommandName
 }
 
-func (r stubRunner) Run(_ context.Context, boot *BootContext) (int, error) {
-	slog.Info("subcommand runner is not implemented yet", "run_id", boot.RunID, "subcommand", r.name)
-	return exitOK, nil
+func (r stubRunner) Run(_ context.Context, _ *BootContext) (int, error) {
+	return exitError, fmt.Errorf("%w: %s", errSubcommandNotImpl, r.name)
 }
