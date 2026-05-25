@@ -24,8 +24,9 @@ const (
 )
 
 var (
-	errInvalidRecoverMode = errors.New("invalid recovery mode")
-	errSubcommandNotImpl  = errors.New("subcommand not yet implemented")
+	errInvalidRecoverMode  = errors.New("invalid recovery mode")
+	errSubcommandNotImpl   = errors.New("subcommand not yet implemented")
+	errUnexpectedArguments = errors.New("unexpected arguments")
 )
 
 type cliOptions struct {
@@ -111,6 +112,11 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 	if err := fs.Parse(args[1:]); err != nil {
 		printUsage(stderr)
 		return cliInvocation{}, err
+	}
+	if fs.NArg() > 0 {
+		_, _ = fmt.Fprintf(stderr, "unexpected arguments: %v\n", fs.Args())
+		printUsage(stderr)
+		return cliInvocation{}, errUnexpectedArguments
 	}
 	if err := validateFlags(subcmd, opts); err != nil {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)

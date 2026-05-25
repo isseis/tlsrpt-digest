@@ -191,7 +191,11 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 
 	boot.LockHandle, err = opts.AcquireWriterLock(cfg.Store.RootDir)
 	if err != nil {
-		_ = notifySystemError(context.Background(), boot.Notifier, notify.SystemErrorKindLockHeld, cfg)
+		kind := notify.SystemErrorKindStorePermission
+		if errors.Is(err, storelock.ErrLockHeld) {
+			kind = notify.SystemErrorKindLockHeld
+		}
+		_ = notifySystemError(context.Background(), boot.Notifier, kind, cfg)
 		return nil, fmt.Errorf("acquire store writer lock: %w", err)
 	}
 
