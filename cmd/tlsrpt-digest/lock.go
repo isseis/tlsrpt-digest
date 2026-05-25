@@ -39,6 +39,13 @@ func validateAndEnsureRootDir(rootDir string) error {
 		if err := os.MkdirAll(rootDir, rootDirPerm); err != nil {
 			return fmt.Errorf("acquireStoreWriterLock: mkdir %s: %w", rootDir, err)
 		}
+		fi, err = os.Lstat(rootDir)
+		if err != nil {
+			return fmt.Errorf("acquireStoreWriterLock: stat %s after mkdir: %w", rootDir, err)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("acquireStoreWriterLock: %s: %w", rootDir, errRootDirSymlink)
+		}
 		return nil
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
