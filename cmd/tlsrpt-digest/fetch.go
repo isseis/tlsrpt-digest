@@ -134,7 +134,7 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 		return exitError, fmt.Errorf("fetch: save email metas: %w", err)
 	}
 
-	// Steps 9–11: Parse TLSRPT attachments, buffer alerts, accumulate reports.
+	// Steps 9–10: Parse TLSRPT attachments, buffer alerts, accumulate reports.
 	reports, err := r.fetchCollectReports(ctx, boot, states, currentUID, rootDir)
 	if err != nil {
 		return exitError, err
