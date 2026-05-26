@@ -129,12 +129,12 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 	switch subcmd {
 	case subcommandFetch:
-		fs.Var(durationFlag{&opts.Since}, "since", "fetch window duration")
+		fs.Var(newDurationFlag(&opts.Since), "since", "fetch window duration")
 	case subcommandSummary:
-		fs.Var(durationFlag{&opts.Window}, "window", "summary window duration")
+		fs.Var(newDurationFlag(&opts.Window), "window", "summary window duration")
 	case subcommandGC:
-		fs.Var(durationFlag{&opts.Before}, "before", "report retention duration")
-		fs.Var(durationFlag{&opts.MaxEmailAge}, "max-email-age", "email retention duration")
+		fs.Var(newDurationFlag(&opts.Before), "before", "report retention duration")
+		fs.Var(newDurationFlag(&opts.MaxEmailAge), "max-email-age", "email retention duration")
 	case subcommandRecover:
 		fs.StringVar(&opts.RecoverMode, "mode", "", "recovery mode")
 		fs.BoolVar(&opts.RecoverYes, "yes", false, "confirm recovery action")

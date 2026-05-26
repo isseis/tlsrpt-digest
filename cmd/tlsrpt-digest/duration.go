@@ -60,6 +60,11 @@ type durationFlag struct {
 	ptr **Duration
 }
 
+// newDurationFlag returns a durationFlag that writes the parsed Duration into *ptr.
+func newDurationFlag(ptr **Duration) durationFlag {
+	return durationFlag{ptr: ptr}
+}
+
 func (f durationFlag) String() string {
 	if *f.ptr == nil {
 		return ""
