@@ -295,10 +295,10 @@ func (r *fetchRunner) fetchCollectReports(ctx context.Context, boot *BootContext
 func (r *fetchRunner) processAttachments(ctx context.Context, boot *BootContext, attachments []mailparse.Attachment, s *fetchMsgState, currentUID uint32) []store.ReportInput {
 	var reports []store.ReportInput
 	for _, att := range attachments {
-		if !isTLSRPTAttachment(att) {
-			continue
-		}
 		report, err := parseTLSRPTAttachment(att)
+		if report == nil && err == nil {
+			continue // not a TLSRPT attachment
+		}
 		if err != nil {
 			logWarnFetch(ctx, boot.Notifier, notify.WarningKindParseFailure, s.meta.UID, currentUID, s.meta.MessageID)
 			continue
@@ -335,9 +335,9 @@ func sendAlerts(ctx context.Context, notifier NotificationSink, report *tlsrpt.R
 	}
 }
 
-// parseTLSRPTAttachment dispatches to ParseGzip or ParseJSON.
-// Content-Type takes priority; filename extension is the fallback for senders
-// that use a generic content-type (e.g. application/octet-stream).
+// parseTLSRPTAttachment dispatches to ParseGzip or ParseJSON based on Content-Type,
+// falling back to filename extension for senders that use a generic content-type.
+// Returns (nil, nil) if the attachment is not a TLSRPT report.
 func parseTLSRPTAttachment(att mailparse.Attachment) (*tlsrpt.Report, error) {
 	switch strings.ToLower(att.ContentType) {
 	case "application/tlsrpt+gzip":
@@ -345,10 +345,14 @@ func parseTLSRPTAttachment(att mailparse.Attachment) (*tlsrpt.Report, error) {
 	case "application/tlsrpt+json":
 		return tlsrpt.ParseJSON(att.Content)
 	}
-	if strings.HasSuffix(strings.ToLower(att.Filename), ".json.gz") {
+	fn := strings.ToLower(att.Filename)
+	if strings.HasSuffix(fn, ".json.gz") {
 		return tlsrpt.ParseGzip(att.Content)
 	}
-	return tlsrpt.ParseJSON(att.Content)
+	if strings.HasSuffix(fn, ".json") {
+		return tlsrpt.ParseJSON(att.Content)
+	}
+	return nil, nil
 }
 
 // buildEmailMetas builds a SaveEmailMetas input slice from states with local .eml files.
@@ -397,16 +401,6 @@ func classifyIMAPClientError(err error) notify.SystemErrorKind {
 		return notify.SystemErrorKindIMAPAuthFailed
 	}
 	return notify.SystemErrorKindIMAPConnectFailed
-}
-
-// isTLSRPTAttachment reports whether an attachment should be treated as a TLSRPT report.
-func isTLSRPTAttachment(att mailparse.Attachment) bool {
-	ct := strings.ToLower(att.ContentType)
-	if ct == "application/tlsrpt+gzip" || ct == "application/tlsrpt+json" {
-		return true
-	}
-	fn := strings.ToLower(att.Filename)
-	return strings.HasSuffix(fn, ".json.gz") || strings.HasSuffix(fn, ".json")
 }
 
 // notifyFetchSystemError logs a system error with component "fetch" and flushes.
