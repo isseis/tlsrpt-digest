@@ -9,6 +9,6 @@ Use:
 - direct file rewrites
 
 After edits:
-- run git diff
+- run git diff HEAD -- <files>
 - keep edits minimal
 - avoid sandbox mount operations
