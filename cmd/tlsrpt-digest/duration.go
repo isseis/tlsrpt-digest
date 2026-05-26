@@ -20,17 +20,6 @@ type Duration struct {
 	Days int
 }
 
-// NewDuration returns a Duration of the given number of days.
-func NewDuration(days int) Duration {
-	return Duration{Days: days}
-}
-
-// NewDurationPtr returns a pointer to a Duration of the given number of days.
-func NewDurationPtr(days int) *Duration {
-	d := NewDuration(days)
-	return &d
-}
-
 // ParseDuration parses CLI duration values using day or week units.
 func ParseDuration(s string) (Duration, error) {
 	if s == "" {
@@ -57,7 +46,7 @@ func ParseDuration(s string) (Duration, error) {
 		}
 		days *= 7
 	}
-	return NewDuration(days), nil
+	return Duration{Days: days}, nil
 }
 
 // Cutoff returns the UTC day boundary that is d.Days before now.

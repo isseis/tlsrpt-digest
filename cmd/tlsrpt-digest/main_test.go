@@ -50,7 +50,7 @@ func TestRunCLI_PassesParsedOptionsAndDryRun(t *testing.T) {
 	withCommandRunners(t, map[SubcommandName]SubcommandRunner{
 		subcommandFetch: runnerFunc(func(_ context.Context, boot *BootContext) (int, error) {
 			assert.True(t, boot.Options.DryRun)
-			assert.Equal(t, NewDurationPtr(7), boot.Options.Since)
+			assert.Equal(t, &Duration{Days: 7}, boot.Options.Since)
 			return 0, nil
 		}),
 	})
