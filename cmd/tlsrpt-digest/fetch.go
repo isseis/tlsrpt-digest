@@ -379,9 +379,8 @@ func collectUnseenUIDs(states []fetchMsgState) []uint32 {
 
 // fetchSince returns the since time for FetchMeta, derived from --since flag or config.
 func fetchSince(opts cliOptions, cfg *config.Config, now time.Time) time.Time {
-	if opts.Since != "" {
-		d, _ := ParseDuration(opts.Since) // validated by parseCLI
-		return d.Cutoff(now)
+	if opts.Since != nil {
+		return opts.Since.Cutoff(now)
 	}
 	return Duration{Days: cfg.IMAP.FetchDays}.Cutoff(now)
 }

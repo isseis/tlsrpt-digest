@@ -54,6 +54,28 @@ func (d Duration) Cutoff(now time.Time) time.Time {
 	return UTCDayStart(now).AddDate(0, 0, -d.Days)
 }
 
+// durationFlag is a flag.Value adapter that parses into a *Duration field.
+// A nil pointer target indicates the flag was not provided.
+type durationFlag struct {
+	ptr **Duration
+}
+
+func (f durationFlag) String() string {
+	if *f.ptr == nil {
+		return ""
+	}
+	return fmt.Sprintf("%dd", (*f.ptr).Days)
+}
+
+func (f durationFlag) Set(s string) error {
+	d, err := ParseDuration(s)
+	if err != nil {
+		return err
+	}
+	*f.ptr = &d
+	return nil
+}
+
 // UTCDayStart returns 00:00:00 UTC for the UTC date containing now.
 func UTCDayStart(now time.Time) time.Time {
 	utc := now.UTC()
