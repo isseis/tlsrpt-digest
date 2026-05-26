@@ -16,12 +16,12 @@ func TestParseDuration(t *testing.T) {
 		in   string
 		want Duration
 	}{
-		{name: "one day", in: "1d", want: Duration{Days: 1}},
-		{name: "seven days", in: "7d", want: Duration{Days: 7}},
-		{name: "one week", in: "1w", want: Duration{Days: 7}},
-		{name: "four weeks", in: "4w", want: Duration{Days: 28}},
-		{name: "thirty days", in: "30d", want: Duration{Days: 30}},
-		{name: "largest non-overflowing week", in: fmt.Sprintf("%dw", math.MaxInt/7), want: Duration{Days: (math.MaxInt / 7) * 7}},
+		{name: "one day", in: "1d", want: NewDuration(1)},
+		{name: "seven days", in: "7d", want: NewDuration(7)},
+		{name: "one week", in: "1w", want: NewDuration(7)},
+		{name: "four weeks", in: "4w", want: NewDuration(28)},
+		{name: "thirty days", in: "30d", want: NewDuration(30)},
+		{name: "largest non-overflowing week", in: fmt.Sprintf("%dw", math.MaxInt/7), want: NewDuration((math.MaxInt / 7) * 7)},
 	}
 
 	for _, tt := range tests {
@@ -71,7 +71,7 @@ func TestParseDurationRejectsWeekOverflow(t *testing.T) {
 func TestDurationCutoffUsesUTCDayStart(t *testing.T) {
 	now := time.Date(2026, 5, 25, 2, 1, 0, 0, time.UTC)
 
-	got := Duration{Days: 7}.Cutoff(now)
+	got := NewDuration(7).Cutoff(now)
 
 	assert.Equal(t, time.Date(2026, 5, 18, 0, 0, 0, 0, time.UTC), got)
 	assert.NotEqual(t, now.AddDate(0, 0, -7), got)

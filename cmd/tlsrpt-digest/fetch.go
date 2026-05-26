@@ -382,7 +382,7 @@ func fetchSince(opts cliOptions, cfg *config.Config, now time.Time) time.Time {
 	if opts.Since != nil {
 		return opts.Since.Cutoff(now)
 	}
-	return Duration{Days: cfg.IMAP.FetchDays}.Cutoff(now)
+	return NewDuration(cfg.IMAP.FetchDays).Cutoff(now)
 }
 
 // fetchEmailPath returns the storage path for a .eml file, matching the store package layout.
