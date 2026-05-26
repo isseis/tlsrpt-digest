@@ -67,7 +67,9 @@ func newFetchRunner() *fetchRunner {
 	}
 }
 
-// Run executes the fetch subcommand.
+// Run executes the fetch subcommand. Crash-safe: a crash between steps 11–13 may
+// cause duplicate notifications on the next run, which is expected under the
+// at-least-once delivery guarantee.
 func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	now := r.now()
 	rootDir := boot.Config.Store.RootDir
