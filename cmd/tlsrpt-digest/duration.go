@@ -25,6 +25,12 @@ func NewDuration(days int) Duration {
 	return Duration{Days: days}
 }
 
+// NewDurationPtr returns a pointer to a Duration of the given number of days.
+func NewDurationPtr(days int) *Duration {
+	d := NewDuration(days)
+	return &d
+}
+
 // ParseDuration parses CLI duration values using day or week units.
 func ParseDuration(s string) (Duration, error) {
 	if s == "" {

@@ -164,7 +164,7 @@ func TestFetchSince_UsesConfigFetchDays(t *testing.T) {
 
 func TestFetchSince_FlagOverridesConfig(t *testing.T) {
 	bed := newFetchTestBed(t)
-	bed.boot.Options.Since = &Duration{Days: 7}
+	bed.boot.Options.Since = NewDurationPtr(7)
 	_, err := bed.runner.Run(context.Background(), bed.boot)
 	require.NoError(t, err)
 	require.Len(t, bed.fetcher.FetchMetaCalls, 1)
@@ -175,7 +175,7 @@ func TestFetchSince_FlagOverridesConfig(t *testing.T) {
 func TestFetchSince_FlagIgnoresConfigFetchDays(t *testing.T) {
 	bed := newFetchTestBed(t)
 	bed.boot.Config.IMAP.FetchDays = 30
-	bed.boot.Options.Since = &Duration{Days: 3}
+	bed.boot.Options.Since = NewDurationPtr(3)
 	_, err := bed.runner.Run(context.Background(), bed.boot)
 	require.NoError(t, err)
 	require.Len(t, bed.fetcher.FetchMetaCalls, 1)
