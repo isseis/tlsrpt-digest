@@ -286,13 +286,14 @@ func (r *fetchRunner) fetchCollectReports(ctx context.Context, boot *BootContext
 			logWarnFetch(ctx, boot.Notifier, notify.WarningKindParseFailure, states[i].meta.UID, currentUID, states[i].meta.MessageID)
 			continue
 		}
-		reports = r.processAttachments(ctx, boot, reports, attachments, &states[i], currentUID)
+		reports = append(reports, r.processAttachments(ctx, boot, attachments, &states[i], currentUID)...)
 	}
 	return reports, nil
 }
 
-// processAttachments parses TLSRPT attachments from one message and appends valid reports.
-func (r *fetchRunner) processAttachments(ctx context.Context, boot *BootContext, reports []store.ReportInput, attachments []mailparse.Attachment, s *fetchMsgState, currentUID uint32) []store.ReportInput {
+// processAttachments parses TLSRPT attachments from one message and returns valid reports.
+func (r *fetchRunner) processAttachments(ctx context.Context, boot *BootContext, attachments []mailparse.Attachment, s *fetchMsgState, currentUID uint32) []store.ReportInput {
+	var reports []store.ReportInput
 	for _, att := range attachments {
 		if !isTLSRPTAttachment(att) {
 			continue
