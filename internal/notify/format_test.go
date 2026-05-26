@@ -220,6 +220,56 @@ func TestFormatSystemError_Fields(t *testing.T) {
 	assert.Contains(t, body, "run-001")
 }
 
+func TestFormatSystemError_ActionHint_UIDValidityChanged(t *testing.T) {
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
+	defer cleanup()
+	require.NoError(t, notify.LogSystemError(context.Background(), h, notify.SystemError{
+		Kind: notify.SystemErrorKindUIDValidityChanged, Component: "fetch",
+	}))
+	require.NoError(t, h.Flush(context.Background()))
+	body := string(recv)
+	assert.Contains(t, body, "Action Required")
+	assert.Contains(t, body, "tlsrpt-digest recover")
+}
+
+func TestFormatSystemError_ActionHint_RecoveryRequired(t *testing.T) {
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
+	defer cleanup()
+	require.NoError(t, notify.LogSystemError(context.Background(), h, notify.SystemError{
+		Kind: notify.SystemErrorKindRecoveryRequired, Component: "fetch",
+	}))
+	require.NoError(t, h.Flush(context.Background()))
+	body := string(recv)
+	assert.Contains(t, body, "Action Required")
+	assert.Contains(t, body, "tlsrpt-digest recover")
+}
+
+func TestFormatSystemError_ActionHint_CredentialsMissing(t *testing.T) {
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
+	defer cleanup()
+	require.NoError(t, notify.LogSystemError(context.Background(), h, notify.SystemError{
+		Kind: notify.SystemErrorKindIMAPCredentialsMissing, Component: "fetch",
+	}))
+	require.NoError(t, h.Flush(context.Background()))
+	body := string(recv)
+	assert.Contains(t, body, "Action Required")
+	assert.Contains(t, body, "TLSRPT_IMAP_USERNAME")
+}
+
+func TestFormatSystemError_NoActionHint_StoreCorruption(t *testing.T) {
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
+	defer cleanup()
+	require.NoError(t, notify.LogSystemError(context.Background(), h, notify.SystemError{
+		Kind: notify.SystemErrorKindStoreCorruption, Component: "fetch",
+	}))
+	require.NoError(t, h.Flush(context.Background()))
+	assert.NotContains(t, string(recv), "Action Required")
+}
+
 func TestFormatSystemError_Color(t *testing.T) {
 	var recv []byte
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)

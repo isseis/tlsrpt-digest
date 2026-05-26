@@ -83,7 +83,7 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 		return exitError, fmt.Errorf("fetch: load recovery-required: %w", err)
 	}
 	if recoveryFound {
-		fmt.Fprintln(os.Stderr, "recovery required; run: tlsrpt-digest recover --mode discard-old --yes or --abort-reset --yes")
+		slog.Error("fetch: recovery required; run tlsrpt-digest recover to resolve")
 		_ = notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindRecoveryRequired, mailbox)
 		return exitError, nil
 	}
@@ -192,7 +192,7 @@ func fetchValidateUID(ctx context.Context, boot *BootContext, now time.Time, cur
 			_ = notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
 			return exitError, fmt.Errorf("fetch: save recovery-required: %w", saveErr)
 		}
-		fmt.Fprintln(os.Stderr, "UIDVALIDITY changed; recovery required; run: tlsrpt-digest recover to resolve")
+		slog.Error("fetch: uidvalidity changed; run tlsrpt-digest recover to resolve")
 		_ = notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindUIDValidityChanged, mailbox)
 		return exitError, nil
 	}
