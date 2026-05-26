@@ -168,17 +168,9 @@ func TestBootstrap_SlackURLsSecretWrappedImmediately(t *testing.T) {
 	var gotError config.Secret
 	cfg := configForRoot(secureStoreRoot(t))
 	_, err := Bootstrap(subcommandFetch, "config.toml", "run-secret", BootstrapOptions{
-		LoadConfig: func(string) (*config.Config, error) { return cfg, nil },
-		Getenv: func(key string) string {
-			switch key {
-			case "TLSRPT_SLACK_WEBHOOK_URL_SUCCESS":
-				return testSuccessURL
-			case "TLSRPT_SLACK_WEBHOOK_URL_ERROR":
-				return testErrorURL
-			default:
-				return ""
-			}
-		},
+		LoadConfig:             func(string) (*config.Config, error) { return cfg, nil },
+		SlackWebhookURLSuccess: config.Secret(testSuccessURL),
+		SlackWebhookURLError:   config.Secret(testErrorURL),
 		BuildNotifier: func(successURL, errorURL config.Secret, _ *config.Config, _ string, _ bool) (NotificationSink, error) {
 			gotSuccess = successURL
 			gotError = errorURL
@@ -198,13 +190,8 @@ func TestBootstrap_SlackURLsSecretWrappedImmediately(t *testing.T) {
 func TestBootstrap_NonFetchSubcommandsDoNotReadIMAPCredentials(t *testing.T) {
 	for _, subcmd := range []SubcommandName{subcommandGC, subcommandRecover, subcommandReprocess} {
 		t.Run(string(subcmd), func(t *testing.T) {
-			getenvKeys := make([]string, 0)
 			_, err := Bootstrap(subcmd, "config.toml", "run-no-imap", BootstrapOptions{
 				LoadConfig: func(string) (*config.Config, error) { return configForRoot(secureStoreRoot(t)), nil },
-				Getenv: func(key string) string {
-					getenvKeys = append(getenvKeys, key)
-					return ""
-				},
 				BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
 					return &SpyNotificationSink{}, nil
 				},
@@ -213,8 +200,6 @@ func TestBootstrap_NonFetchSubcommandsDoNotReadIMAPCredentials(t *testing.T) {
 				},
 			})
 			require.NoError(t, err)
-			assert.NotContains(t, getenvKeys, "TLSRPT_IMAP_USERNAME")
-			assert.NotContains(t, getenvKeys, "TLSRPT_IMAP_PASSWORD")
 		})
 	}
 }

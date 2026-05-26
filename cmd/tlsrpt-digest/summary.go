@@ -33,7 +33,7 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 	// Step 2: First CheckRecoveryRequired before aggregation.
 	found, err := guard.CheckRecoveryRequired(ctx)
 	if err != nil {
-		return exitError, fmt.Errorf("summary: check recovery required: %w", err)
+		return exitError, fmt.Errorf("summary: check recovery required (pre-aggregation): %w", err)
 	}
 	if found {
 		fmt.Fprintln(os.Stderr, "recovery required: run tlsrpt-digest recover to resolve")
@@ -53,7 +53,7 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 	start := summarySince(boot.Options.Window, boot.Config.Summary.WindowDays, now)
 	end := UTCDayStart(now)
 
-	summary, err := notify.GenerateSummary(ctx, boot.Store, start, end, nil)
+	summary, err := notify.GenerateSummary(ctx, boot.Store, start, end, slog.Default())
 	if err != nil {
 		return exitError, fmt.Errorf("summary: generate: %w", err)
 	}
@@ -62,7 +62,7 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 	if summary.ReportCount == 0 {
 		found2, err2 := guard.CheckRecoveryRequired(ctx)
 		if err2 != nil {
-			return exitError, fmt.Errorf("summary: check recovery required: %w", err2)
+			return exitError, fmt.Errorf("summary: check recovery required (empty summary): %w", err2)
 		}
 		if found2 {
 			fmt.Fprintln(os.Stderr, "recovery required: run tlsrpt-digest recover to resolve")

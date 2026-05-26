@@ -70,16 +70,17 @@ type NotificationSink interface {
 }
 
 type BootstrapOptions struct {
-	DryRun             bool
-	RecoverResetMode   bool
-	Logger             *slog.Logger
-	LoadConfig         func(path string) (*config.Config, error)
-	BuildNotifier      func(successURL, errorURL config.Secret, cfg *config.Config, runID string, dryRun bool) (NotificationSink, error)
-	AcquireWriterLock  func(rootDir string) (LockHandle, error)
-	OpenStore          func(rootDir string, identity store.IMAPIdentity, mode store.OpenMode) (store.Store, error)
-	Getenv             func(key string) string
-	Stderr             *os.File
-	SummaryGuardOpened func(store.SummaryConsistencyGuard)
+	DryRun                 bool
+	RecoverResetMode       bool
+	Logger                 *slog.Logger
+	LoadConfig             func(path string) (*config.Config, error)
+	BuildNotifier          func(successURL, errorURL config.Secret, cfg *config.Config, runID string, dryRun bool) (NotificationSink, error)
+	AcquireWriterLock      func(rootDir string) (LockHandle, error)
+	OpenStore              func(rootDir string, identity store.IMAPIdentity, mode store.OpenMode) (store.Store, error)
+	SlackWebhookURLSuccess config.Secret
+	SlackWebhookURLError   config.Secret
+	Stderr                 *os.File
+	SummaryGuardOpened     func(store.SummaryConsistencyGuard)
 }
 
 var errSlackWebhookURLRequired = errors.New("at least one Slack webhook URL is required")
@@ -182,9 +183,7 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 		return nil, fmt.Errorf("prepare store root: %w", err)
 	}
 
-	successURL := config.Secret(opts.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"))
-	errorURL := config.Secret(opts.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR"))
-	boot.Notifier, err = opts.BuildNotifier(successURL, errorURL, cfg, runID, opts.DryRun)
+	boot.Notifier, err = opts.BuildNotifier(opts.SlackWebhookURLSuccess, opts.SlackWebhookURLError, cfg, runID, opts.DryRun)
 	if err != nil {
 		return nil, fmt.Errorf("build notifier: %w", err)
 	}
@@ -226,8 +225,9 @@ func (o BootstrapOptions) withDefaults() BootstrapOptions {
 	if o.OpenStore == nil {
 		o.OpenStore = store.Open
 	}
-	if o.Getenv == nil {
-		o.Getenv = os.Getenv
+	if o.SlackWebhookURLSuccess == "" && o.SlackWebhookURLError == "" {
+		o.SlackWebhookURLSuccess = config.Secret(os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"))
+		o.SlackWebhookURLError = config.Secret(os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR"))
 	}
 	if o.Stderr == nil {
 		o.Stderr = os.Stderr
