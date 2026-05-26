@@ -35,7 +35,7 @@ type fetchMsgState struct {
 // fetchRunner implements SubcommandRunner for the fetch subcommand.
 type fetchRunner struct {
 	newMailFetcher func(cfg imap.Config) (imap.MailFetcher, error)
-	getenv         func(key string) string
+	credentials    func() (username string, password config.Secret)
 	now            func() time.Time
 	localEmailSize func(rootDir string, uid, uidValidity uint32, internalDate time.Time) (int64, bool, error)
 	loadLocalEML   func(rootDir string, uid, uidValidity uint32, internalDate time.Time) ([]byte, error)
@@ -44,8 +44,10 @@ type fetchRunner struct {
 func newFetchRunner() *fetchRunner {
 	return &fetchRunner{
 		newMailFetcher: imap.NewIMAPClient,
-		getenv:         os.Getenv,
-		now:            time.Now,
+		credentials: func() (string, config.Secret) {
+			return os.Getenv("TLSRPT_IMAP_USERNAME"), config.Secret(os.Getenv("TLSRPT_IMAP_PASSWORD"))
+		},
+		now: time.Now,
 		localEmailSize: func(rootDir string, uid, uidValidity uint32, internalDate time.Time) (int64, bool, error) {
 			info, err := os.Stat(fetchEmailPath(rootDir, uid, uidValidity, internalDate))
 			if err != nil {
@@ -84,14 +86,12 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 		return exitError, nil
 	}
 
-	// Step 2: Retrieve IMAP credentials from environment.
-	username := r.getenv("TLSRPT_IMAP_USERNAME")
-	passwordValue := r.getenv("TLSRPT_IMAP_PASSWORD")
-	if username == "" || passwordValue == "" {
+	// Step 2: Retrieve IMAP credentials.
+	username, password := r.credentials()
+	if username == "" || string(password) == "" {
 		_ = notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPCredentialsMissing, mailbox)
 		return exitError, nil
 	}
-	password := config.Secret(passwordValue)
 
 	// Step 3: Connect to IMAP server.
 	fetcher, err := r.newMailFetcher(buildIMAPConfig(boot.Config, IMAPCredentials{Username: username, Password: password}))

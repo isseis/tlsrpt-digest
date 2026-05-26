@@ -78,14 +78,8 @@ func newFetchTestBedBlank(t *testing.T) *fetchTestBed {
 
 	runner := &fetchRunner{
 		newMailFetcher: func(_ imap.Config) (imap.MailFetcher, error) { return fakeFetcher, nil },
-		getenv: func(key string) string {
-			switch key {
-			case "TLSRPT_IMAP_USERNAME":
-				return "user@example.com"
-			case "TLSRPT_IMAP_PASSWORD":
-				return "secret"
-			}
-			return ""
+		credentials: func() (string, config.Secret) {
+			return "user@example.com", "secret"
 		},
 		now: func() time.Time { return now },
 		localEmailSize: func(_ string, uid, uidValidity uint32, _ time.Time) (int64, bool, error) {
@@ -367,26 +361,16 @@ func TestFetch_FetchMetaFails_ReportsOperationFailed(t *testing.T) {
 }
 
 func TestFetch_CredentialsMissing(t *testing.T) {
-	tests := map[string]func(string) string{
-		"both missing": func(_ string) string { return "" },
-		"username missing": func(key string) string {
-			if key == "TLSRPT_IMAP_PASSWORD" {
-				return "secret"
-			}
-			return ""
-		},
-		"password missing": func(key string) string {
-			if key == "TLSRPT_IMAP_USERNAME" {
-				return "user@example.com"
-			}
-			return ""
-		},
+	tests := map[string]func() (string, config.Secret){
+		"both missing":     func() (string, config.Secret) { return "", "" },
+		"username missing": func() (string, config.Secret) { return "", "secret" },
+		"password missing": func() (string, config.Secret) { return "user@example.com", "" },
 	}
 
-	for name, getenv := range tests {
+	for name, credentials := range tests {
 		t.Run(name, func(t *testing.T) {
 			bed := newFetchTestBed(t)
-			bed.runner.getenv = getenv
+			bed.runner.credentials = credentials
 			connectCalled := false
 			bed.runner.newMailFetcher = func(_ imap.Config) (imap.MailFetcher, error) {
 				connectCalled = true
