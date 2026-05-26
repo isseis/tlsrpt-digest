@@ -22,6 +22,7 @@ import (
 var (
 	errInvalidTLSCAPEM = errors.New("imap: invalid tls ca pem")
 	errUIDNotFound     = errors.New("uid not found")
+	errBodyTooLarge    = errors.New("body exceeds max_message_bytes")
 )
 
 type imapSession interface {
@@ -211,9 +212,16 @@ func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32][]
 			continue
 		}
 
-		raw, err := io.ReadAll(body)
+		var r io.Reader = body
+		if c.cfg.MaxMessageBytes > 0 {
+			r = io.LimitReader(body, c.cfg.MaxMessageBytes+1)
+		}
+		raw, err := io.ReadAll(r)
 		if err != nil {
 			return nil, fmt.Errorf("imap: download: read uid %d: %w", msg.Uid, err)
+		}
+		if c.cfg.MaxMessageBytes > 0 && int64(len(raw)) > c.cfg.MaxMessageBytes {
+			return nil, fmt.Errorf("imap: download: uid %d: %w", msg.Uid, errBodyTooLarge)
 		}
 		out[msg.Uid] = raw
 	}

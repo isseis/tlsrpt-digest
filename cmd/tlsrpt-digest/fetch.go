@@ -67,6 +67,7 @@ func newFetchRunner() *fetchRunner {
 
 // Run executes the fetch subcommand.
 func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
+	now := r.now()
 	rootDir := boot.Config.Store.RootDir
 	mailbox := mailboxID(boot.Config)
 
@@ -105,7 +106,7 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	}()
 
 	// Step 4: Fetch message metadata from the mailbox.
-	fetchResult, err := fetcher.FetchMeta(ctx, fetchSince(boot.Options, boot.Config, r.now()))
+	fetchResult, err := fetcher.FetchMeta(ctx, fetchSince(boot.Options, boot.Config, now))
 	if err != nil {
 		_ = notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPOperationFailed, mailbox)
 		return exitError, fmt.Errorf("fetch: fetch meta: %w", err)
@@ -113,7 +114,7 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	currentUID := fetchResult.UIDValidity
 
 	// Step 5: Validate UIDVALIDITY.
-	if code, err := fetchValidateUID(ctx, boot, r.now(), currentUID, mailbox); code != fetchContinue {
+	if code, err := fetchValidateUID(ctx, boot, now, currentUID, mailbox); code != fetchContinue {
 		return code, err
 	}
 
