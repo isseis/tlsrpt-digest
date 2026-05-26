@@ -226,9 +226,7 @@ func TestSummary_EmptyStoreExitOK(t *testing.T) {
 
 func TestSummary_EmptySecondCheckRecoveryRequired(t *testing.T) {
 	bed := newSummaryTestBed(t)
-	buildCalled := false
 	bed.runner.buildNotifier = func(_ *BootContext) (NotificationSink, error) {
-		buildCalled = true
 		return bed.notif, nil
 	}
 
@@ -243,7 +241,8 @@ func TestSummary_EmptySecondCheckRecoveryRequired(t *testing.T) {
 	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
 	assert.Equal(t, exitError, exitCode)
 	require.NoError(t, err)
-	assert.False(t, buildCalled, "notifier must not be built when empty summary hits recovery-required")
+	require.Len(t, bed.notif.SystemErrors, 1)
+	assert.Equal(t, notify.SystemErrorKindRecoveryRequired, bed.notif.SystemErrors[0].Kind)
 }
 
 func TestSummary_EmptySecondCheckError(t *testing.T) {

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/isseis/tlsrpt-digest/internal/notify"
@@ -36,7 +35,7 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 		return exitError, fmt.Errorf("summary: check recovery required (pre-aggregation): %w", err)
 	}
 	if found {
-		fmt.Fprintln(os.Stderr, "recovery required: run tlsrpt-digest recover to resolve")
+		slog.Warn("recovery required: run tlsrpt-digest recover to resolve")
 		notifier, buildErr := r.buildNotifier(boot)
 		if buildErr != nil {
 			slog.Error("summary: build notifier for recovery error", "error", buildErr)
@@ -49,23 +48,31 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 	}
 
 	// Step 3: Aggregate reports over the summary window.
-	now := r.now()
-	start := summarySince(boot.Options.Window, boot.Config.Summary.WindowDays, now)
-	end := UTCDayStart(now)
+	baseTime := r.now()
+	start := summarySince(boot.Options.Window, boot.Config.Summary.WindowDays, baseTime)
+	end := UTCDayStart(baseTime)
 
 	summary, err := notify.GenerateSummary(ctx, boot.Store, start, end, slog.Default())
 	if err != nil {
 		return exitError, fmt.Errorf("summary: generate: %w", err)
 	}
 
-	// Step 4a: Empty summary — second check without building a notifier.
+	// Step 4a: Empty summary — second check before deciding to skip.
 	if summary.ReportCount == 0 {
 		found2, err2 := guard.CheckRecoveryRequired(ctx)
 		if err2 != nil {
 			return exitError, fmt.Errorf("summary: check recovery required (empty summary): %w", err2)
 		}
 		if found2 {
-			fmt.Fprintln(os.Stderr, "recovery required: run tlsrpt-digest recover to resolve")
+			slog.Warn("recovery required: run tlsrpt-digest recover to resolve")
+			notifier, buildErr := r.buildNotifier(boot)
+			if buildErr != nil {
+				slog.Error("summary: build notifier for recovery error", "error", buildErr)
+				return exitError, fmt.Errorf("summary: build notifier: %w", buildErr)
+			}
+			if err := logSummarySystemError(ctx, notifier, notify.SystemErrorKindRecoveryRequired, mailbox); err != nil {
+				return exitError, fmt.Errorf("summary: notify recovery required: %w", err)
+			}
 			return exitError, nil
 		}
 		slog.Info("no reports to summarize")
@@ -88,7 +95,7 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 		)
 	}
 	if found3 {
-		fmt.Fprintln(os.Stderr, "recovery required: run tlsrpt-digest recover to resolve")
+		slog.Warn("recovery required: run tlsrpt-digest recover to resolve")
 		if err := logSummarySystemError(ctx, notifier, notify.SystemErrorKindRecoveryRequired, mailbox); err != nil {
 			return exitError, fmt.Errorf("summary: notify recovery required before send: %w", err)
 		}
