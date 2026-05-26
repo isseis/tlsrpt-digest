@@ -181,6 +181,20 @@ func TestSummary_RecoveryRequiredFirstCheck(t *testing.T) {
 	assert.Equal(t, 1, bed.notif.FlushCount)
 }
 
+func TestSummary_RecoveryRequiredFirstCheckFlushFailure(t *testing.T) {
+	bed := newSummaryTestBed(t)
+	bed.guard.RecoveryRequiredFound = true
+	bed.notif.FlushError = errors.New("slack flush failed")
+
+	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
+	assert.Equal(t, exitError, exitCode)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "notify recovery required")
+	require.Len(t, bed.notif.SystemErrors, 1)
+	assert.Equal(t, notify.SystemErrorKindRecoveryRequired, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
+}
+
 func TestSummary_FirstCheckError(t *testing.T) {
 	bed := newSummaryTestBed(t)
 	bed.guard.CheckError = errors.New("guard lock lost")
@@ -288,6 +302,27 @@ func TestSummary_NonEmptyRecoveryRequiredBeforeSend(t *testing.T) {
 	assert.Equal(t, notify.SystemErrorKindRecoveryRequired, bed.notif.SystemErrors[0].Kind)
 	assert.Equal(t, 1, bed.notif.FlushCount)
 	assert.Empty(t, bed.notif.Summaries, "summary must not be sent when recovery-required detected before send")
+}
+
+func TestSummary_NonEmptyRecoveryRequiredBeforeSendFlushFailure(t *testing.T) {
+	bed := newSummaryTestBed(t)
+	bed.addReportInWindow()
+	bed.notif.FlushError = errors.New("slack flush failed")
+	bed.boot.SummaryGuard = &countingGuard{
+		responses: []guardResponse{
+			{found: false},
+			{found: true},
+		},
+	}
+
+	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
+	assert.Equal(t, exitError, exitCode)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "notify recovery required before send")
+	require.Len(t, bed.notif.SystemErrors, 1)
+	assert.Equal(t, notify.SystemErrorKindRecoveryRequired, bed.notif.SystemErrors[0].Kind)
+	assert.Equal(t, 1, bed.notif.FlushCount)
+	assert.Empty(t, bed.notif.Summaries)
 }
 
 func TestSummary_NonEmptySecondCheckError(t *testing.T) {

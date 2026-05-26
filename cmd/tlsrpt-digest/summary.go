@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -41,12 +42,9 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 			slog.Error("summary: build notifier for recovery error", "error", buildErr)
 			return exitError, fmt.Errorf("summary: build notifier: %w", buildErr)
 		}
-		_ = notifier.LogSystemError(ctx, notify.SystemError{
-			Kind:      notify.SystemErrorKindRecoveryRequired,
-			Component: "summary",
-			Mailbox:   mailbox,
-		})
-		_ = notifier.Flush(ctx)
+		if err := logSummarySystemError(ctx, notifier, notify.SystemErrorKindRecoveryRequired, mailbox); err != nil {
+			return exitError, fmt.Errorf("summary: notify recovery required: %w", err)
+		}
 		return exitError, nil
 	}
 
@@ -83,22 +81,17 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 	// Step 5: Second CheckRecoveryRequired immediately before sending.
 	found3, err3 := guard.CheckRecoveryRequired(ctx)
 	if err3 != nil {
-		_ = notifier.LogSystemError(ctx, notify.SystemError{
-			Kind:      notify.SystemErrorKindStoreCorruption,
-			Component: "summary",
-			Mailbox:   mailbox,
-		})
-		_ = notifier.Flush(ctx)
-		return exitError, fmt.Errorf("summary: check recovery required before send: %w", err3)
+		notifyErr := logSummarySystemError(ctx, notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+		return exitError, errors.Join(
+			fmt.Errorf("summary: check recovery required before send: %w", err3),
+			notifyErr,
+		)
 	}
 	if found3 {
 		fmt.Fprintln(os.Stderr, "recovery required: run tlsrpt-digest recover to resolve")
-		_ = notifier.LogSystemError(ctx, notify.SystemError{
-			Kind:      notify.SystemErrorKindRecoveryRequired,
-			Component: "summary",
-			Mailbox:   mailbox,
-		})
-		_ = notifier.Flush(ctx)
+		if err := logSummarySystemError(ctx, notifier, notify.SystemErrorKindRecoveryRequired, mailbox); err != nil {
+			return exitError, fmt.Errorf("summary: notify recovery required before send: %w", err)
+		}
 		return exitError, nil
 	}
 
@@ -112,6 +105,15 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 	}
 
 	return exitOK, nil
+}
+
+func logSummarySystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, mailbox string) error {
+	err := notifier.LogSystemError(ctx, notify.SystemError{
+		Kind:      kind,
+		Component: "summary",
+		Mailbox:   mailbox,
+	})
+	return errors.Join(err, notifier.Flush(ctx))
 }
 
 // summarySince returns the start time for GenerateSummary, derived from --window flag or config.
