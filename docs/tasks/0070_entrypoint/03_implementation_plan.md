@@ -389,7 +389,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 **レビュー観点**: `SummaryConsistencyGuard` の 2 回確認ロジック / 空ストア時の notifier 遅延構築
 
 - [x] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/89）
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（フェーズ 3 は新しいブランチで作業する）
 
