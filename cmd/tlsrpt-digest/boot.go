@@ -25,14 +25,16 @@ const (
 )
 
 type BootContext struct {
-	Config       *config.Config
-	Store        store.Store
-	Notifier     NotificationSink
-	LockHandle   LockHandle
-	SummaryGuard store.SummaryConsistencyGuard
-	Subcommand   SubcommandName
-	Options      cliOptions
-	RunID        string
+	Config                 *config.Config
+	Store                  store.Store
+	Notifier               NotificationSink
+	LockHandle             LockHandle
+	SummaryGuard           store.SummaryConsistencyGuard
+	Subcommand             SubcommandName
+	Options                cliOptions
+	RunID                  string
+	SlackWebhookURLSuccess config.Secret
+	SlackWebhookURLError   config.Secret
 }
 
 func (b *BootContext) Close() error {
@@ -153,9 +155,11 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 	}
 
 	boot := &BootContext{
-		Config:     cfg,
-		Subcommand: subcmd,
-		RunID:      runID,
+		Config:                 cfg,
+		Subcommand:             subcmd,
+		RunID:                  runID,
+		SlackWebhookURLSuccess: opts.SlackWebhookURLSuccess,
+		SlackWebhookURLError:   opts.SlackWebhookURLError,
 	}
 	defer func() {
 		if err != nil {
@@ -322,14 +326,8 @@ func setupNotifyHandlers(successURL, errorURL config.Secret, cfg *config.Config,
 	return &notificationSink{handlers: handlers, dryRun: dryRun}, nil
 }
 
-// defaultBuildSummaryNotifier reads Slack webhook URLs from the environment and
-// constructs the NotificationSink for the summary subcommand. It is used as the
-// default buildNotifier in summaryRunner so that summary.go does not need to
-// import internal/config directly.
 func defaultBuildSummaryNotifier(boot *BootContext) (NotificationSink, error) {
-	successURL := config.Secret(os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"))
-	errorURL := config.Secret(os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR"))
-	return setupNotifyHandlers(successURL, errorURL, boot.Config, boot.RunID, boot.Options.DryRun)
+	return setupNotifyHandlers(boot.SlackWebhookURLSuccess, boot.SlackWebhookURLError, boot.Config, boot.RunID, boot.Options.DryRun)
 }
 
 func loadConfig(path string, logger *slog.Logger) (*config.Config, error) {
