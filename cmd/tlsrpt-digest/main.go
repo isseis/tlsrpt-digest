@@ -166,7 +166,7 @@ func setupPhase1Logging() slog.Handler {
 func defaultRunners() map[SubcommandName]SubcommandRunner {
 	return map[SubcommandName]SubcommandRunner{
 		subcommandFetch:     newFetchRunner(),
-		subcommandSummary:   stubRunner{name: subcommandSummary},
+		subcommandSummary:   newSummaryRunner(),
 		subcommandReprocess: stubRunner{name: subcommandReprocess},
 		subcommandGC:        stubRunner{name: subcommandGC},
 		subcommandRecover:   stubRunner{name: subcommandRecover},
