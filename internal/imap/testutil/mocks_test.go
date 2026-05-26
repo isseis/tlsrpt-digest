@@ -5,8 +5,6 @@ package imaptestutil
 import (
 	"context"
 	"errors"
-	"net/mail"
-	"strings"
 	"testing"
 	"time"
 
@@ -30,10 +28,8 @@ func TestFakeMailFetcherFetchMeta(t *testing.T) {
 func TestFakeMailFetcherDownload(t *testing.T) {
 	t.Parallel()
 
-	msg, err := mail.ReadMessage(strings.NewReader("From: a@example.com\r\nTo: b@example.com\r\nSubject: test\r\n\r\nbody"))
-	require.NoError(t, err)
-
-	f := &FakeMailFetcher{DownloadResult: map[uint32]*mail.Message{3: msg}}
+	raw := []byte("From: a@example.com\r\nTo: b@example.com\r\nSubject: test\r\n\r\nbody")
+	f := &FakeMailFetcher{DownloadResult: map[uint32][]byte{3: raw}}
 	uids := []uint32{3, 9}
 
 	got, derr := f.Download(context.Background(), uids)

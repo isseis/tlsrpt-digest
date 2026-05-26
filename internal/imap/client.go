@@ -7,9 +7,9 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
-	"net/mail"
 	"os"
 	"slices"
 	"strconv"
@@ -22,6 +22,7 @@ import (
 var (
 	errInvalidTLSCAPEM = errors.New("imap: invalid tls ca pem")
 	errUIDNotFound     = errors.New("uid not found")
+	errBodyTooLarge    = errors.New("body exceeds max_message_bytes")
 )
 
 type imapSession interface {
@@ -127,7 +128,7 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 	}
 
 	seqSet := uidsToSeqSet(uids)
-	fetchItems := []goimap.FetchItem{goimap.FetchUid, goimap.FetchRFC822Size, goimap.FetchFlags, goimap.FetchEnvelope}
+	fetchItems := []goimap.FetchItem{goimap.FetchUid, goimap.FetchRFC822Size, goimap.FetchFlags, goimap.FetchEnvelope, goimap.FetchInternalDate}
 	ch := make(chan *goimap.Message, len(uids))
 
 	fetchErrCh := make(chan error, 1)
@@ -140,6 +141,10 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 		if msg == nil {
 			continue
 		}
+		if msg.InternalDate.IsZero() {
+			slog.Warn("imap: skip message with missing internaldate", "uid", msg.Uid)
+			continue
+		}
 		if msg.Envelope == nil {
 			slog.Warn("imap: skip message with missing envelope", "uid", msg.Uid)
 			continue
@@ -148,7 +153,7 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 		meta := MessageMeta{
 			UID:       msg.Uid,
 			Size:      msg.Size,
-			Date:      msg.Envelope.Date,
+			Date:      msg.InternalDate,
 			Seen:      slices.Contains(msg.Flags, goimap.SeenFlag),
 			MessageID: msg.Envelope.MessageId,
 		}
@@ -168,12 +173,12 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 	return FetchMetaResult{Messages: metas, UIDValidity: mailboxStatus.UidValidity}, nil
 }
 
-func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32]*mail.Message, error) {
+func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32][]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("imap: download: %w", err)
 	}
 	if len(uids) == 0 {
-		return map[uint32]*mail.Message{}, nil
+		return map[uint32][]byte{}, nil
 	}
 
 	if _, err := c.session.Select(c.cfg.Mailbox, false); err != nil {
@@ -190,7 +195,7 @@ func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32]*m
 		fetchErrCh <- c.session.UidFetch(seqSet, items, ch)
 	}()
 
-	out := make(map[uint32]*mail.Message, len(uids))
+	out := make(map[uint32][]byte, len(uids))
 	for msg := range ch {
 		if msg == nil {
 			continue
@@ -207,11 +212,18 @@ func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32]*m
 			continue
 		}
 
-		parsed, err := mail.ReadMessage(body)
-		if err != nil {
-			return nil, fmt.Errorf("imap: download: parse uid %d: %w", msg.Uid, err)
+		var r io.Reader = body
+		if c.cfg.MaxMessageBytes > 0 {
+			r = io.LimitReader(body, c.cfg.MaxMessageBytes+1)
 		}
-		out[msg.Uid] = parsed
+		raw, err := io.ReadAll(r)
+		if err != nil {
+			return nil, fmt.Errorf("imap: download: read uid %d: %w", msg.Uid, err)
+		}
+		if c.cfg.MaxMessageBytes > 0 && int64(len(raw)) > c.cfg.MaxMessageBytes {
+			return nil, fmt.Errorf("imap: download: uid %d: %w", msg.Uid, errBodyTooLarge)
+		}
+		out[msg.Uid] = raw
 	}
 
 	if err := <-fetchErrCh; err != nil {
@@ -264,7 +276,7 @@ func isTooLarge(size uint32, maxBytes int64) bool {
 	return int64(size) > maxBytes
 }
 
-func firstMissingUID(requested []uint32, got map[uint32]*mail.Message) (uint32, bool) {
+func firstMissingUID(requested []uint32, got map[uint32][]byte) (uint32, bool) {
 	for _, uid := range requested {
 		if _, ok := got[uid]; !ok {
 			return uid, true

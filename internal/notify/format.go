@@ -269,12 +269,28 @@ func formatSystemError(e SystemError, runID string) slackMessage {
 	if e.Mailbox != "" {
 		fields = append(fields, slackField{Title: "Mailbox", Value: e.Mailbox, Short: true})
 	}
+	if hint := systemErrorHint(e.Kind); hint != "" {
+		fields = append(fields, slackField{Title: "Action Required", Value: hint, Short: false})
+	}
 	fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: true})
 	return slackMessage{
 		Text: fmt.Sprintf("%s System Error: %s", emojiError, string(e.Kind)),
 		Attachments: []slackAttachment{
 			{Color: colorDanger, Fields: fields},
 		},
+	}
+}
+
+// systemErrorHint returns an operator-facing action hint for the given SystemErrorKind.
+// Returns "" for kinds that have no specific recovery action.
+func systemErrorHint(kind SystemErrorKind) string {
+	switch kind {
+	case SystemErrorKindUIDValidityChanged, SystemErrorKindRecoveryRequired:
+		return "Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)"
+	case SystemErrorKindIMAPCredentialsMissing:
+		return "Set TLSRPT_IMAP_USERNAME and TLSRPT_IMAP_PASSWORD environment variables"
+	default:
+		return ""
 	}
 }
 

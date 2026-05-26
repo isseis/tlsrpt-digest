@@ -32,10 +32,10 @@ var (
 type cliOptions struct {
 	ConfigPath      string
 	DryRun          bool
-	Since           string
-	Window          string
-	Before          string
-	MaxEmailAge     string
+	Since           *Duration
+	Window          *Duration
+	Before          *Duration
+	MaxEmailAge     *Duration
 	RecoverMode     string
 	RecoverYes      bool
 	RecoverAbort    bool
@@ -129,12 +129,12 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 	switch subcmd {
 	case subcommandFetch:
-		fs.StringVar(&opts.Since, "since", "", "fetch window duration")
+		fs.Var(newDurationFlag(&opts.Since), "since", "fetch window duration")
 	case subcommandSummary:
-		fs.StringVar(&opts.Window, "window", "", "summary window duration")
+		fs.Var(newDurationFlag(&opts.Window), "window", "summary window duration")
 	case subcommandGC:
-		fs.StringVar(&opts.Before, "before", "", "report retention duration")
-		fs.StringVar(&opts.MaxEmailAge, "max-email-age", "", "email retention duration")
+		fs.Var(newDurationFlag(&opts.Before), "before", "report retention duration")
+		fs.Var(newDurationFlag(&opts.MaxEmailAge), "max-email-age", "email retention duration")
 	case subcommandRecover:
 		fs.StringVar(&opts.RecoverMode, "mode", "", "recovery mode")
 		fs.BoolVar(&opts.RecoverYes, "yes", false, "confirm recovery action")
@@ -145,19 +145,6 @@ func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 }
 
 func validateFlags(subcmd SubcommandName, opts cliOptions) error {
-	for name, value := range map[string]string{
-		"since":         opts.Since,
-		"window":        opts.Window,
-		"before":        opts.Before,
-		"max-email-age": opts.MaxEmailAge,
-	} {
-		if value == "" {
-			continue
-		}
-		if _, err := ParseDuration(value); err != nil {
-			return fmt.Errorf("invalid --%s: %w", name, err)
-		}
-	}
 	if subcmd == subcommandRecover && opts.RecoverMode != "" {
 		if opts.RecoverMode != "keep-old" && opts.RecoverMode != "discard-old" {
 			return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
@@ -178,7 +165,7 @@ func setupPhase1Logging() slog.Handler {
 
 func defaultRunners() map[SubcommandName]SubcommandRunner {
 	return map[SubcommandName]SubcommandRunner{
-		subcommandFetch:     stubRunner{name: subcommandFetch},
+		subcommandFetch:     newFetchRunner(),
 		subcommandSummary:   stubRunner{name: subcommandSummary},
 		subcommandReprocess: stubRunner{name: subcommandReprocess},
 		subcommandGC:        stubRunner{name: subcommandGC},
