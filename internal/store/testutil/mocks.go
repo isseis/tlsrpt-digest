@@ -54,6 +54,25 @@ type FakeStore struct {
 	PendingReset bool
 	// AcquireSummaryConsistencyGuardErr, if non-nil, is returned by AcquireSummaryConsistencyGuard.
 	AcquireSummaryConsistencyGuardErr error
+
+	// Error injection fields for individual operations.
+	LoadRecoveryRequiredErr error
+	SaveReportsErr          error
+	SaveEmailMetasErr       error
+	DeleteReportsBeforeErr  error
+	DeleteEmailsBeforeErr   error
+	LoadEmailsErr           error
+
+	// Call-count fields for ordering/invocation assertions.
+	SaveEmailMetasCallCount      int
+	SaveReportsCallCount         int
+	LoadEmailsCallCount          int
+	DeleteReportsBeforeCallCount int
+	DeleteEmailsBeforeCallCount  int
+
+	// Cutoff capture fields for asserting the argument passed to delete operations.
+	DeleteReportsCutoff time.Time
+	DeleteEmailsCutoff  time.Time
 }
 
 // NewFakeStore returns an empty FakeStore ready for use.
@@ -66,6 +85,10 @@ func NewFakeStore() *FakeStore {
 
 // SaveReports implements store.Store.
 func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
+	f.SaveReportsCallCount++
+	if f.SaveReportsErr != nil {
+		return f.SaveReportsErr
+	}
 	for _, input := range inputs {
 		f.Reports[input.Report.ReportID] = input.Report
 	}
@@ -74,6 +97,10 @@ func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
 
 // SaveEmailMetas implements store.Store.
 func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
+	f.SaveEmailMetasCallCount++
+	if f.SaveEmailMetasErr != nil {
+		return f.SaveEmailMetasErr
+	}
 	// Validate all entries before committing any, matching the real store's
 	// atomic semantics (either all succeed or nothing is persisted).
 	for _, meta := range metas {
@@ -129,6 +156,10 @@ func (f *FakeStore) SaveEmail(uid, uidValidity uint32, internalDate time.Time, r
 
 // LoadEmails implements store.Store.
 func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
+	f.LoadEmailsCallCount++
+	if f.LoadEmailsErr != nil {
+		return nil, f.LoadEmailsErr
+	}
 	result := make([]store.LoadedEmail, 0, len(f.Emails))
 	var errs []error
 
@@ -138,16 +169,22 @@ func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
 		}
 		msg, err := mail.ReadMessage(bytes.NewReader(entry.RawEML))
 		if err != nil {
-			errs = append(errs, fmt.Errorf("FakeStore.LoadEmails: parse %d/%d: %w", entry.UIDValidity, entry.UID, err))
+			errs = append(errs, &store.ErrLoadEmailFailed{
+				Path:        fmt.Sprintf("%d/%d", entry.UIDValidity, entry.UID),
+				UID:         entry.UID,
+				UIDValidity: entry.UIDValidity,
+				Err:         err,
+			})
 			continue
 		}
 		yyyymm := entry.InternalDate.UTC().Format("200601")
 		relPath := filepath.Join(fmt.Sprintf("%d", entry.UIDValidity), yyyymm, fmt.Sprintf("%010d.eml", entry.UID))
 		result = append(result, store.LoadedEmail{
-			Message:     msg,
-			UID:         entry.UID,
-			UIDValidity: entry.UIDValidity,
-			Path:        relPath,
+			Message:      msg,
+			UID:          entry.UID,
+			UIDValidity:  entry.UIDValidity,
+			InternalDate: entry.InternalDate,
+			Path:         relPath,
 		})
 	}
 	slices.SortFunc(result, func(a, b store.LoadedEmail) int {
@@ -182,6 +219,9 @@ func (f *FakeStore) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time
 
 // LoadRecoveryRequired implements store.Store.
 func (f *FakeStore) LoadRecoveryRequired() (uint32, uint32, time.Time, bool, error) {
+	if f.LoadRecoveryRequiredErr != nil {
+		return 0, 0, time.Time{}, false, f.LoadRecoveryRequiredErr
+	}
 	if f.Recovery == nil {
 		return 0, 0, time.Time{}, false, nil
 	}
@@ -204,6 +244,11 @@ func (f *FakeStore) ApplyRecovery(newUIDValidity uint32) error {
 
 // DeleteReportsBefore implements store.Store.
 func (f *FakeStore) DeleteReportsBefore(cutoff time.Time) (int, error) {
+	f.DeleteReportsBeforeCallCount++
+	f.DeleteReportsCutoff = cutoff
+	if f.DeleteReportsBeforeErr != nil {
+		return 0, f.DeleteReportsBeforeErr
+	}
 	deleted := 0
 	for id, r := range f.Reports {
 		if r.DateRange.EndDatetime.Before(cutoff) {
@@ -216,6 +261,11 @@ func (f *FakeStore) DeleteReportsBefore(cutoff time.Time) (int, error) {
 
 // DeleteEmailsBefore implements store.Store.
 func (f *FakeStore) DeleteEmailsBefore(cutoff time.Time) (int, error) {
+	f.DeleteEmailsBeforeCallCount++
+	f.DeleteEmailsCutoff = cutoff
+	if f.DeleteEmailsBeforeErr != nil {
+		return 0, f.DeleteEmailsBeforeErr
+	}
 	deleted := 0
 	for key, entry := range f.Emails {
 		if entry.InternalDate.Before(cutoff) {

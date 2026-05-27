@@ -22,6 +22,9 @@ var errTargetNotRegularFile = errors.New("store: target path is not a regular fi
 // ErrZeroInternalDate is returned when an InternalDate (IMAP INTERNALDATE) value is zero.
 var ErrZeroInternalDate = errors.New("store: internalDate must not be zero")
 
+// ErrEmailsPathNotDirectory is returned when the emails storage path is not a directory.
+var ErrEmailsPathNotDirectory = errors.New("store: emails path is not a directory")
+
 // buildEmailPath returns the storage path for a .eml file.
 // The uid is zero-padded to 10 digits. internalDate determines the YYYYMM directory component.
 func buildEmailPath(rootDir string, uid, uidValidity uint32, internalDate time.Time) string {
@@ -50,7 +53,7 @@ func (s *storeImpl) SaveEmail(uid, uidValidity uint32, internalDate time.Time, r
 			return nil
 		}
 		return fmt.Errorf("%w: %s", errTargetNotRegularFile, targetPath)
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("SaveEmail: stat: %w", err)
 	}
 
@@ -100,17 +103,26 @@ func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
 // LoadEmails implements Store.LoadEmails.
 func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 	emailsDir := s.emailsDirPath
-	if _, err := os.Stat(emailsDir); os.IsNotExist(err) {
+	found, err := validateEmailsDir(emailsDir)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
 		return []LoadedEmail{}, nil
 	}
+
+	indexedDates := s.loadIndexedEmailDates()
 
 	var result []LoadedEmail
 	var errs []error
 
 	walkErr := filepath.WalkDir(emailsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: err})
-			return nil
+			if filepath.Ext(path) == ".eml" {
+				errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: err})
+				return nil
+			}
+			return err
 		}
 		if d.IsDir() {
 			return nil
@@ -147,24 +159,39 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 			return nil
 		}
 		uid := uint32(uidU64)
+		uidKey := emailKey{UID: uid, UIDValidity: uidValidity}
+		internalDate, ok := indexedDates[uidKey]
+		if !ok {
+			internalDate, parseErr = internalDateFromEmailPath(relPath)
+			if parseErr != nil {
+				errs = append(errs, &ErrLoadEmailFailed{
+					Path:        path,
+					UID:         uid,
+					UIDValidity: uidValidity,
+					Err:         parseErr,
+				})
+				return nil
+			}
+		}
 
 		data, readErr := os.ReadFile(path) //nolint:gosec
 		if readErr != nil {
-			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: readErr})
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, UID: uid, UIDValidity: uidValidity, Err: readErr})
 			return nil
 		}
 
 		msg, parseErr := mail.ReadMessage(bytes.NewReader(data))
 		if parseErr != nil {
-			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: parseErr})
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, UID: uid, UIDValidity: uidValidity, Err: parseErr})
 			return nil
 		}
 
 		result = append(result, LoadedEmail{
-			Message:     msg,
-			UID:         uid,
-			UIDValidity: uidValidity,
-			Path:        relPath,
+			Message:      msg,
+			UID:          uid,
+			UIDValidity:  uidValidity,
+			InternalDate: internalDate,
+			Path:         relPath,
 		})
 		return nil
 	})
@@ -176,6 +203,46 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 		result = []LoadedEmail{}
 	}
 	return result, errors.Join(errs...)
+}
+
+func (s *storeImpl) loadIndexedEmailDates() map[emailKey]time.Time {
+	indexedDates := make(map[emailKey]time.Time)
+	df, err := s.loadDataFile()
+	if err != nil {
+		slog.Warn("loadIndexedEmailDates: load data file failed; falling back to path-derived dates", "error", err)
+		return indexedDates
+	}
+	for _, entry := range df.Emails {
+		indexedDates[emailKey{entry.UID, entry.UIDValidity}] = entry.InternalDate
+	}
+	return indexedDates
+}
+
+func validateEmailsDir(emailsDir string) (bool, error) {
+	info, err := os.Stat(emailsDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("LoadEmails: stat emails dir: %w", err)
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("%w: %s", ErrEmailsPathNotDirectory, emailsDir)
+	}
+	return true, nil
+}
+
+func internalDateFromEmailPath(relPath string) (time.Time, error) {
+	const emailPathComponents = 3
+	parts := strings.Split(relPath, string(filepath.Separator))
+	if len(parts) != emailPathComponents {
+		return time.Time{}, &ErrInvalidEmailPath{Path: relPath}
+	}
+	t, err := time.Parse("200601", parts[1])
+	if err != nil {
+		return time.Time{}, &ErrInvalidEmailPath{Path: relPath}
+	}
+	return t.UTC(), nil
 }
 
 // DeleteEmailsBefore implements Store.DeleteEmailsBefore.
@@ -206,7 +273,7 @@ func (s *storeImpl) DeleteEmailsBefore(cutoff time.Time) (deleted int, err error
 
 		// Delete the .eml file first (file deletion before index update).
 		emlPath := buildEmailPath(s.rootDir, entry.UID, entry.UIDValidity, entry.InternalDate)
-		if rmErr := os.Remove(emlPath); rmErr != nil && !os.IsNotExist(rmErr) {
+		if rmErr := os.Remove(emlPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 			// File I/O error: keep index entry, aggregate error, continue.
 			deleteErrs = append(deleteErrs, &ErrDeleteEmailFailed{
 				Path:        emlPath,
@@ -264,14 +331,14 @@ func (s *storeImpl) cleanupEmptyDirs(gcEntries []internalEmailIndexEntry) {
 		dir := filepath.Join(emailsDir, k.uv, k.mm)
 		entries, rdErr := os.ReadDir(dir)
 		if rdErr != nil {
-			if !os.IsNotExist(rdErr) {
+			if !errors.Is(rdErr, os.ErrNotExist) {
 				slog.Warn("DeleteEmailsBefore: read YYYYMM dir failed",
 					slog.String("dir", dir), slog.Any("error", rdErr))
 			}
 			continue
 		}
 		if len(entries) == 0 {
-			if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
+			if rmErr := os.Remove(dir); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 				slog.Warn("DeleteEmailsBefore: remove YYYYMM dir failed",
 					slog.String("dir", dir), slog.Any("error", rmErr))
 			}
@@ -283,14 +350,14 @@ func (s *storeImpl) cleanupEmptyDirs(gcEntries []internalEmailIndexEntry) {
 		dir := filepath.Join(emailsDir, uv)
 		entries, rdErr := os.ReadDir(dir)
 		if rdErr != nil {
-			if !os.IsNotExist(rdErr) {
+			if !errors.Is(rdErr, os.ErrNotExist) {
 				slog.Warn("DeleteEmailsBefore: read uidvalidity dir failed",
 					slog.String("dir", dir), slog.Any("error", rdErr))
 			}
 			continue
 		}
 		if len(entries) == 0 {
-			if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
+			if rmErr := os.Remove(dir); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 				slog.Warn("DeleteEmailsBefore: remove uidvalidity dir failed",
 					slog.String("dir", dir), slog.Any("error", rmErr))
 			}

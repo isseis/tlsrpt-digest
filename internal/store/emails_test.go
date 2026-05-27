@@ -349,13 +349,19 @@ func TestLoadEmails_Enumeration(t *testing.T) {
 	assert.Contains(t, byKey, emailKey{1, 200})
 }
 
-// TestLoadEmails_Fields verifies that Path, UID, UIDValidity, and Message are populated correctly.
+// TestLoadEmails_Fields verifies that Path, UID, UIDValidity, Message, and
+// indexed InternalDate are populated correctly.
 func TestLoadEmails_Fields(t *testing.T) {
 	s, _ := openTestStore(t)
 
-	internalDate := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	internalDate := time.Date(2025, 6, 15, 12, 34, 0, 0, time.UTC)
 	rawEML := makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")
 	require.NoError(t, s.SaveEmail(42, 999, internalDate, rawEML))
+	require.NoError(t, s.SaveEmailMetas([]EmailMeta{{
+		UID:          42,
+		UIDValidity:  999,
+		InternalDate: internalDate,
+	}}))
 
 	emails, err := s.LoadEmails()
 	require.NoError(t, err)
@@ -364,8 +370,22 @@ func TestLoadEmails_Fields(t *testing.T) {
 	e := emails[0]
 	assert.Equal(t, uint32(42), e.UID)
 	assert.Equal(t, uint32(999), e.UIDValidity)
+	assert.Equal(t, internalDate, e.InternalDate)
 	assert.Equal(t, "999/202506/0000000042.eml", filepath.ToSlash(e.Path))
 	assert.NotNil(t, e.Message)
+}
+
+func TestLoadEmails_InternalDateFallbackForOrphanEmail(t *testing.T) {
+	s, _ := openTestStore(t)
+
+	originalDate := time.Date(2025, 6, 15, 12, 34, 0, 0, time.UTC)
+	require.NoError(t, s.SaveEmail(42, 999, originalDate, makeTestEML("Mon, 01 Jun 2025 00:00:00 +0000")))
+
+	emails, err := s.LoadEmails()
+	require.NoError(t, err)
+	require.Len(t, emails, 1)
+
+	assert.Equal(t, time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC), emails[0].InternalDate)
 }
 
 // TestLoadEmails_SkipsFailedFiles verifies that a corrupt .eml is skipped and its error

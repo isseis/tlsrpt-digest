@@ -30,14 +30,14 @@ func (s *storeImpl) loadDataFile() (*internalDataFile, error) {
 
 	var df internalDataFile
 	if err := json.Unmarshal(data, &df); err != nil {
-		return nil, fmt.Errorf("loadDataFile: unmarshal: %w", err)
+		return nil, errors.Join(ErrDataCorrupted, fmt.Errorf("loadDataFile: unmarshal: %w", err))
 	}
 
 	if df.Version != DataFileVersion {
-		return nil, &ErrUnsupportedSchemaVersion{
+		return nil, errors.Join(ErrDataCorrupted, &ErrUnsupportedSchemaVersion{
 			File:    s.dataPath,
 			Version: df.Version,
-		}
+		})
 	}
 
 	return &df, nil

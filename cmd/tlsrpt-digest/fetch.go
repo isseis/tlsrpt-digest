@@ -208,7 +208,7 @@ func (r *fetchRunner) buildFetchStates(ctx context.Context, notifier Notificatio
 			return nil, fmt.Errorf("fetch: check local email size for UID %d: %w", meta.UID, err)
 		}
 		if emlExists && localSize != int64(meta.Size) {
-			logWarnFetch(ctx, notifier, notify.WarningKindSizeMismatch, meta.UID, currentUID, meta.MessageID)
+			logWarn(ctx, notifier, notify.WarningKindSizeMismatch, meta.UID, currentUID, meta.MessageID, "fetch")
 		}
 		states[i] = fetchMsgState{meta: meta, emlExistedBefore: emlExists}
 	}
@@ -244,7 +244,7 @@ func (r *fetchRunner) fetchDownloadAndSave(ctx context.Context, boot *BootContex
 			return fmt.Errorf("fetch: %w: %d", errFetchDownloadMissingUID, states[i].meta.UID)
 		}
 		if int64(len(rawEML)) != int64(states[i].meta.Size) {
-			logWarnFetch(ctx, boot.Notifier, notify.WarningKindSizeMismatch, states[i].meta.UID, currentUID, states[i].meta.MessageID)
+			logWarn(ctx, boot.Notifier, notify.WarningKindSizeMismatch, states[i].meta.UID, currentUID, states[i].meta.MessageID, "fetch")
 		}
 		if err := boot.Store.SaveEmail(states[i].meta.UID, currentUID, states[i].meta.Date, rawEML); err != nil {
 			return fmt.Errorf("fetch: save email %d: %w", states[i].meta.UID, err)
@@ -278,12 +278,12 @@ func (r *fetchRunner) fetchCollectReports(ctx context.Context, boot *BootContext
 		}
 		parsedMsg, err := mail.ReadMessage(bytes.NewReader(states[i].rawEML))
 		if err != nil {
-			logWarnFetch(ctx, boot.Notifier, notify.WarningKindParseFailure, states[i].meta.UID, currentUID, states[i].meta.MessageID)
+			logWarn(ctx, boot.Notifier, notify.WarningKindParseFailure, states[i].meta.UID, currentUID, states[i].meta.MessageID, "fetch")
 			continue
 		}
 		attachments, err := mailparse.ExtractAttachments(parsedMsg, boot.Config.IMAP.MaxMessageBytes)
 		if err != nil {
-			logWarnFetch(ctx, boot.Notifier, notify.WarningKindParseFailure, states[i].meta.UID, currentUID, states[i].meta.MessageID)
+			logWarn(ctx, boot.Notifier, notify.WarningKindParseFailure, states[i].meta.UID, currentUID, states[i].meta.MessageID, "fetch")
 			continue
 		}
 		reports = append(reports, r.processAttachments(ctx, boot, attachments, &states[i], currentUID)...)
@@ -300,11 +300,11 @@ func (r *fetchRunner) processAttachments(ctx context.Context, boot *BootContext,
 			continue // not a TLSRPT attachment
 		}
 		if err != nil {
-			logWarnFetch(ctx, boot.Notifier, notify.WarningKindParseFailure, s.meta.UID, currentUID, s.meta.MessageID)
+			logWarn(ctx, boot.Notifier, notify.WarningKindParseFailure, s.meta.UID, currentUID, s.meta.MessageID, "fetch")
 			continue
 		}
 		if !s.meta.Seen && report.HasFailure() {
-			sendAlerts(ctx, boot.Notifier, report)
+			logAlerts(ctx, boot.Notifier, report, "fetch")
 		}
 		reports = append(reports, store.ReportInput{
 			Report:      *report,
@@ -313,26 +313,6 @@ func (r *fetchRunner) processAttachments(ctx context.Context, boot *BootContext,
 		})
 	}
 	return reports
-}
-
-// sendAlerts logs one alert per failing policy in the report.
-func sendAlerts(ctx context.Context, notifier NotificationSink, report *tlsrpt.Report) {
-	for _, policy := range report.Policies {
-		if policy.Summary.TotalFailureSessionCount <= 0 {
-			continue
-		}
-		if err := notifier.LogAlert(ctx, notify.Alert{
-			OrganizationName: report.OrganizationName,
-			PolicyType:       notify.PolicyType(policy.Policy.PolicyType),
-			FailureCount:     policy.Summary.TotalFailureSessionCount,
-			DateRange: notify.DateRange{
-				Start: report.DateRange.StartDatetime,
-				End:   report.DateRange.EndDatetime,
-			},
-		}); err != nil {
-			slog.Error("fetch: log alert", "error", err)
-		}
-	}
 }
 
 // parseTLSRPTAttachment dispatches to ParseGzip or ParseJSON based on Content-Type,
@@ -414,19 +394,4 @@ func notifyFetchSystemError(ctx context.Context, notifier NotificationSink, kind
 		Mailbox:   mailbox,
 	})
 	return errors.Join(err, notifier.Flush(ctx))
-}
-
-// logWarnFetch buffers a fetch warning; slog errors from LogWarning but does not abort.
-func logWarnFetch(ctx context.Context, notifier NotificationSink, kind notify.WarningKind, uid, uidValidity uint32, messageID string) {
-	if notifier == nil {
-		return
-	}
-	if err := notifier.LogWarning(ctx, notify.Warning{
-		Kind:        kind,
-		UID:         uid,
-		UIDValidity: uidValidity,
-		MessageID:   messageID,
-	}); err != nil {
-		slog.Error("fetch: log warning", "error", err)
-	}
 }

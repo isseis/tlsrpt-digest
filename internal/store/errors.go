@@ -70,7 +70,9 @@ func (e *ErrInvalidEmailPath) Error() string {
 // ErrLoadEmailFailed is returned when a single email file cannot be loaded.
 // Multiple failures are aggregated using errors.Join.
 type ErrLoadEmailFailed struct {
-	Path string
+	Path        string
+	UID         uint32
+	UIDValidity uint32
 	// Underlying error (wrapped via Unwrap())
 	Err error
 }
@@ -103,6 +105,12 @@ func (e *ErrDeleteEmailFailed) Error() string {
 func (e *ErrDeleteEmailFailed) Unwrap() error {
 	return e.Err
 }
+
+// ErrDataCorrupted is joined into errors returned by loadDataFile when the data file
+// contains invalid JSON or an unsupported schema version. Callers can use
+// errors.Is(err, store.ErrDataCorrupted) to distinguish data corruption from I/O
+// permission errors and send the appropriate system-error notification.
+var ErrDataCorrupted = errors.New("store: data file is corrupted or has an unsupported schema")
 
 // ErrPendingReset is returned by Open(OpenReadWrite) when a pending reset manifest
 // exists. Use OpenRecoverReset to open the store and resume or abort the reset.
