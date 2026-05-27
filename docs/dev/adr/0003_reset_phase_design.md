@@ -63,11 +63,14 @@ UIDValidity / recovery_required ─── true basis for whether the operation i
 flowchart TD
     Normal["Normal<br>(no manifest / no recovery_required)"]
     RR["Recovery Required<br>(recovery_required set / no manifest)"]
-    P1["Phase 1<br>(manifest written)"]
-    P2["Phase 2<br>(data staged)"]
-    P3["Phase 3<br>(emails staged)"]
     P4["Phase 4<br>(committed / cleanup pending)"]
     P5["Phase 5<br>(abort in progress)"]
+
+    subgraph PendingReset["Pre-commit pending reset (phases 1–3)"]
+        P1["Phase 1<br>(manifest written)"]
+        P2["Phase 2<br>(data staged)"]
+        P3["Phase 3<br>(emails staged)"]
+    end
 
     Normal -.->|"fetch detects UIDVALIDITY change"| RR
     RR -->|"recover --mode keep-old"| Normal
@@ -76,9 +79,7 @@ flowchart TD
     P2 -->|"recover --mode discard-old --yes<br>(stageEmailsDir)"| P3
     P3 -->|"recover --mode discard-old --yes<br>(commitReset)"| P4
     P4 -->|"Open runs cleanupCompletedReset"| Normal
-    P1 -.->|"recover --abort-reset --yes"| P5
-    P2 -.->|"recover --abort-reset --yes"| P5
-    P3 -.->|"recover --abort-reset --yes"| P5
+    PendingReset -.->|"recover --abort-reset --yes"| P5
     P5 -->|"AbortReset complete"| RR
 ```
 
