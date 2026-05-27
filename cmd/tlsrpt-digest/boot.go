@@ -205,6 +205,12 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 	mode := storeOpenMode(subcmd, opts)
 	boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
 	if err != nil {
+		if subcmd == subcommandRecover && errors.Is(err, store.ErrPendingReset) {
+			boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, store.OpenRecoverReset)
+			if err == nil {
+				return boot, nil
+			}
+		}
 		kind := classifyOpenError(err)
 		_ = notifySystemError(context.Background(), boot.Notifier, kind, cfg)
 		if errors.Is(err, store.ErrPendingReset) {

@@ -145,7 +145,7 @@ func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 
 func validateFlags(subcmd SubcommandName, opts cliOptions) error {
 	if subcmd == subcommandRecover && opts.RecoverMode != "" {
-		if opts.RecoverMode != "keep-old" && opts.RecoverMode != "discard-old" {
+		if opts.RecoverMode != recoverModeKeepOld && opts.RecoverMode != recoverModeDiscardOld {
 			return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
 		}
 	}

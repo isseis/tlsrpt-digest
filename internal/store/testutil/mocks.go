@@ -57,6 +57,7 @@ type FakeStore struct {
 
 	// Error injection fields for individual operations.
 	LoadRecoveryRequiredErr error
+	HasPendingResetErr      error
 	SaveReportsErr          error
 	SaveEmailMetasErr       error
 	DeleteReportsBeforeErr  error
@@ -311,6 +312,9 @@ func (f *FakeStore) ResetForRecovery(currUIDValidity uint32) error {
 
 // HasPendingReset implements store.Store.
 func (f *FakeStore) HasPendingReset() (bool, error) {
+	if f.HasPendingResetErr != nil {
+		return false, f.HasPendingResetErr
+	}
 	return f.PendingReset, nil
 }
 

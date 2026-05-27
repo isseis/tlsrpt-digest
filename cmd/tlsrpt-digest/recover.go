@@ -10,7 +10,10 @@ import (
 	"github.com/isseis/tlsrpt-digest/internal/store"
 )
 
-const recoverModeDiscardOld = "discard-old"
+const (
+	recoverModeKeepOld    = "keep-old"
+	recoverModeDiscardOld = "discard-old"
+)
 
 // recoverRunner implements SubcommandRunner for the recover subcommand.
 type recoverRunner struct {
@@ -95,7 +98,11 @@ func (r *recoverRunner) executeMode(st store.Store, opts cliOptions, curr uint32
 	switch {
 	case opts.RecoverAbort:
 		return r.runAbortReset(st)
-	case opts.RecoverMode == "keep-old":
+	case pendingReset && opts.RecoverMode == recoverModeKeepOld:
+		_, _ = fmt.Fprintln(r.stdout, "")
+		_, _ = fmt.Fprintln(r.stdout, "No changes made. Resolve the pending reset before applying keep-old recovery.")
+		return exitError, nil
+	case opts.RecoverMode == recoverModeKeepOld:
 		return r.runKeepOld(st, curr)
 	case opts.RecoverMode == recoverModeDiscardOld:
 		return r.runDiscardOld(st, curr, opts.RecoverYes, pendingReset)

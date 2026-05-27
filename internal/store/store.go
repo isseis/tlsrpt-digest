@@ -160,8 +160,7 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 
 	// OpenReadWrite must fail closed while a forward-progressing reset is still
 	// in flight, but a manifest left behind AFTER commit must not permanently
-	// block the normal data path (see 02_architecture.md, "commit 後の cleanup
-	// 失敗は通常データパスへ影響させず").  cleanupCompletedReset distinguishes
+	// block the normal data path after cleanup fails. cleanupCompletedReset distinguishes
 	// the two cases by inspecting sentinel.recovery_required (the true commit
 	// barrier): if it is cleared, the leftover manifest/staging are removed
 	// here; otherwise ErrPendingReset is returned for the operator to resolve

@@ -359,6 +359,86 @@ func TestRecover_PendingReset_NonResetModesShowOptions(t *testing.T) {
 	}
 }
 
+// TestRecover_PendingResetBootstrapFallsBackToStatusDisplay verifies that recover can
+// open a store with an incomplete reset, show the operator status, and avoid destructive
+// actions for status-only and unconfirmed modes.
+func TestRecover_PendingResetBootstrapFallsBackToStatusDisplay(t *testing.T) {
+	tests := []struct {
+		name string
+		opts cliOptions
+	}{
+		{name: "plain recover", opts: cliOptions{}},
+		{name: "keep old", opts: cliOptions{RecoverMode: "keep-old"}},
+		{name: "discard old dry run", opts: cliOptions{RecoverMode: "discard-old"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			st := makeRecoveryStore(100, 200)
+			st.PendingReset = true
+			var modes []store.OpenMode
+
+			boot, err := Bootstrap(subcommandRecover, "config.toml", "run-recover-pending", BootstrapOptions{
+				LoadConfig: func(string) (*config.Config, error) {
+					return configForRoot(secureStoreRoot(t)), nil
+				},
+				BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
+					return &SpyNotificationSink{}, nil
+				},
+				OpenStore: func(_ string, _ store.IMAPIdentity, mode store.OpenMode) (store.Store, error) {
+					modes = append(modes, mode)
+					if mode == store.OpenReadWrite {
+						return nil, store.ErrPendingReset
+					}
+					return st, nil
+				},
+			})
+			require.NoError(t, err)
+			defer func() { require.NoError(t, boot.Close()) }()
+			boot.Options = tt.opts
+
+			var out bytes.Buffer
+			runner := &recoverRunner{stdout: &out}
+			code, err := runner.Run(context.Background(), boot)
+
+			require.NoError(t, err)
+			assert.Equal(t, exitError, code)
+			assert.Equal(t, []store.OpenMode{store.OpenReadWrite, store.OpenRecoverReset}, modes)
+			assert.Equal(t, 0, st.ApplyRecoveryCallCount)
+			assert.Equal(t, 0, st.ResetForRecoveryCallCount)
+			assert.Equal(t, 0, st.AbortResetCallCount)
+			assert.NotNil(t, st.Recovery)
+			output := out.String()
+			assert.Contains(t, output, "Recovery required for mailbox: imap.example.com:993/INBOX")
+			assert.Contains(t, output, "Previous UIDVALIDITY: 100")
+			assert.Contains(t, output, "Current UIDVALIDITY:  200")
+			assert.Contains(t, output, "Local data path:")
+			assert.Contains(t, output, "Pending reset: detected")
+			assert.Contains(t, output, "recover --mode discard-old --yes")
+			assert.Contains(t, output, "recover --abort-reset --yes")
+		})
+	}
+}
+
+// TestRecover_HasPendingResetFailure verifies that status inspection errors are surfaced
+// without mutating recovery state.
+func TestRecover_HasPendingResetFailure(t *testing.T) {
+	st := makeRecoveryStore(100, 200)
+	st.HasPendingResetErr = errors.New("manifest unreadable")
+	var out bytes.Buffer
+	runner := &recoverRunner{stdout: &out}
+
+	code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, cliOptions{}))
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "check pending reset")
+	assert.Equal(t, exitError, code)
+	assert.Equal(t, 0, st.ApplyRecoveryCallCount)
+	assert.Equal(t, 0, st.ResetForRecoveryCallCount)
+	assert.Equal(t, 0, st.AbortResetCallCount)
+	assert.NotNil(t, st.Recovery)
+}
+
 // TestRecover_LoadRecoveryRequiredFailure verifies that a LoadRecoveryRequired error
 // returns exit 1 with an error.
 func TestRecover_LoadRecoveryRequiredFailure(t *testing.T) {
