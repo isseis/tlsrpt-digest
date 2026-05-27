@@ -35,15 +35,10 @@ When an IMAP server changes UIDVALIDITY, the correspondence between existing UID
 
 `ResetForRecovery` records the progress of file operations as `resetPhase` (an integer value) in the reset manifest (`.tlsrpt-digest-reset-manifest.json`). The manifest is the progress ledger for the reset operation, and the sentinel file (`.tlsrpt-digest-meta.json`) holds the user-visible committed state (UIDValidity and the current value of recovery_required).
 
-```
-Manifest (progress ledger)
-  ↓  records
-resetPhase (integer) ─── code decides whether to resume or stop according to the phase
-
-Sentinel (committed state)
-  ↓  records
-UIDValidity / recovery_required ─── true basis for whether the operation is "committed"
-```
+| File | Contents | Role |
+|---|---|---|
+| Manifest (`.tlsrpt-digest-reset-manifest.json`) | `resetPhase` (integer 1–5) | Progress ledger for the reset operation. Used to decide where to resume or stop after a crash |
+| Sentinel (`.tlsrpt-digest-meta.json`) | `UIDValidity`, `recovery_required` | Committed-state ledger. `recovery_required == nil` is the authoritative signal that the commit is complete |
 
 ---
 

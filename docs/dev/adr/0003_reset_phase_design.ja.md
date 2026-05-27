@@ -35,15 +35,10 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 
 `ResetForRecovery` はファイル操作の進捗を `resetPhase`（整数値）としてリセットマニフェスト（`.tlsrpt-digest-reset-manifest.json`）に記録する。マニフェストはリセット操作の進捗台帳であり、センチネルファイル（`.tlsrpt-digest-meta.json`）はユーザー可視の確定状態（UIDValidity・recovery_required の現在値）を保持する。
 
-```
-マニフェスト（進捗台帳）
-  ↓  記録
-resetPhase（整数） ─── フェーズに応じてコードが再開・中断を判断
-
-センチネル（確定状態）
-  ↓  記録
-UIDValidity / recovery_required ─── 操作の「コミット済みか否か」の真の根拠
-```
+| ファイル | 記録内容 | 役割 |
+|---|---|---|
+| マニフェスト (`.tlsrpt-digest-reset-manifest.json`) | `resetPhase`（整数 1–5） | リセット操作の進捗台帳。クラッシュ後の再開・中断判断に使う |
+| センチネル (`.tlsrpt-digest-meta.json`) | `UIDValidity`・`recovery_required` | 確定状態の台帳。`recovery_required == nil` がコミット完了の真の根拠 |
 
 ---
 
