@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
+	"github.com/isseis/tlsrpt-digest/internal/store"
 	storetestutil "github.com/isseis/tlsrpt-digest/internal/store/testutil"
 	"github.com/isseis/tlsrpt-digest/internal/tlsrpt"
 	"github.com/stretchr/testify/assert"
@@ -265,6 +267,34 @@ func TestGC_DeleteEmailsFailureNotifies(t *testing.T) {
 	assert.Equal(t, exitError, code)
 	require.Len(t, spy.SystemErrors, 1)
 	assert.Equal(t, notify.SystemErrorKindStorePermission, spy.SystemErrors[0].Kind)
+	assert.Equal(t, 1, spy.FlushCount)
+}
+
+func TestGC_DeleteReportsCorruptionNotifies(t *testing.T) {
+	st := storetestutil.NewFakeStore()
+	st.DeleteReportsBeforeErr = fmt.Errorf("wrapped: %w", store.ErrDataCorrupted)
+	spy := &SpyNotificationSink{}
+
+	runner := &gcRunner{now: time.Now}
+	code, err := runner.Run(context.Background(), makeGCBoot(t, st, spy, cliOptions{}, nil))
+	assert.Error(t, err)
+	assert.Equal(t, exitError, code)
+	require.Len(t, spy.SystemErrors, 1)
+	assert.Equal(t, notify.SystemErrorKindStoreCorruption, spy.SystemErrors[0].Kind)
+	assert.Equal(t, 1, spy.FlushCount)
+}
+
+func TestGC_DeleteEmailsCorruptionNotifies(t *testing.T) {
+	st := storetestutil.NewFakeStore()
+	st.DeleteEmailsBeforeErr = fmt.Errorf("wrapped: %w", store.ErrDataCorrupted)
+	spy := &SpyNotificationSink{}
+
+	runner := &gcRunner{now: time.Now}
+	code, err := runner.Run(context.Background(), makeGCBoot(t, st, spy, cliOptions{}, nil))
+	assert.Error(t, err)
+	assert.Equal(t, exitError, code)
+	require.Len(t, spy.SystemErrors, 1)
+	assert.Equal(t, notify.SystemErrorKindStoreCorruption, spy.SystemErrors[0].Kind)
 	assert.Equal(t, 1, spy.FlushCount)
 }
 

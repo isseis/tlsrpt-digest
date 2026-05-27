@@ -9,6 +9,7 @@ import (
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
+	"github.com/isseis/tlsrpt-digest/internal/store"
 )
 
 // gcRunner implements SubcommandRunner for the gc subcommand.
@@ -41,7 +42,11 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	reportCutoff := gcReportCutoff(boot.Options, boot.Config, now)
 	reportDeleted, err := boot.Store.DeleteReportsBefore(reportCutoff)
 	if err != nil {
-		_ = notifyGCSystemError(ctx, boot.Notifier, notify.SystemErrorKindStorePermission, mailbox)
+		kind := notify.SystemErrorKindStorePermission
+		if errors.Is(err, store.ErrDataCorrupted) {
+			kind = notify.SystemErrorKindStoreCorruption
+		}
+		_ = notifyGCSystemError(ctx, boot.Notifier, kind, mailbox)
 		return exitError, fmt.Errorf("gc: delete reports: %w", err)
 	}
 
@@ -49,7 +54,11 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	emailCutoff := gcEmailCutoff(boot.Options, boot.Config, now)
 	emailDeleted, err := boot.Store.DeleteEmailsBefore(emailCutoff)
 	if err != nil {
-		_ = notifyGCSystemError(ctx, boot.Notifier, notify.SystemErrorKindStorePermission, mailbox)
+		kind := notify.SystemErrorKindStorePermission
+		if errors.Is(err, store.ErrDataCorrupted) {
+			kind = notify.SystemErrorKindStoreCorruption
+		}
+		_ = notifyGCSystemError(ctx, boot.Notifier, kind, mailbox)
 		return exitError, fmt.Errorf("gc: delete emails: %w", err)
 	}
 
