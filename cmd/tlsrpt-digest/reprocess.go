@@ -42,7 +42,13 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 	// Step 2: Enumerate all locally stored .eml files.
 	emails, loadErr := boot.Store.LoadEmails()
 	if loadErr != nil {
-		// Per-file failures: log and continue with successfully loaded emails.
+		if len(emails) == 0 {
+			// Global failure (e.g. email directory inaccessible): fail closed.
+			slog.Error("reprocess: load emails", "error", loadErr)
+			_ = notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+			return exitError, fmt.Errorf("reprocess: load emails: %w", loadErr)
+		}
+		// Per-file failures alongside partial results: log and continue.
 		slog.Warn("reprocess: some emails could not be loaded", "error", loadErr)
 	}
 

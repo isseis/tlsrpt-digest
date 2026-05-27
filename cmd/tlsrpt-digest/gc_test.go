@@ -88,6 +88,9 @@ func TestGC_ReportsCutoff(t *testing.T) {
 	_, hasNew := st.Reports["new"]
 	assert.False(t, hasOld, "old report should be deleted")
 	assert.True(t, hasNew, "new report should be kept")
+	// Assert the actual UTC-truncated cutoff passed to DeleteReportsBefore (AC-07c).
+	wantCutoff := time.Date(2026, 1, 8, 0, 0, 0, 0, time.UTC)
+	assert.Equal(t, wantCutoff, st.DeleteReportsCutoff)
 }
 
 func TestGC_EmailsCutoff(t *testing.T) {
@@ -115,6 +118,9 @@ func TestGC_EmailsCutoff(t *testing.T) {
 	_, hasNew := st.Emails[storetestutil.EmailKey{UID: 2, UIDValidity: 100}]
 	assert.False(t, hasOld, "old email should be deleted")
 	assert.True(t, hasNew, "new email should be kept")
+	// Assert the actual UTC-truncated cutoff passed to DeleteEmailsBefore (AC-07c).
+	wantCutoff := time.Date(2026, 1, 8, 0, 0, 0, 0, time.UTC)
+	assert.Equal(t, wantCutoff, st.DeleteEmailsCutoff)
 }
 
 func TestGC_MaxEmailAgeDefault(t *testing.T) {

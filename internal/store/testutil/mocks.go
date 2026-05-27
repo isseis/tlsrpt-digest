@@ -67,6 +67,10 @@ type FakeStore struct {
 	SaveEmailMetasCallCount     int
 	SaveReportsCallCount        int
 	DeleteEmailsBeforeCallCount int
+
+	// Cutoff capture fields for asserting the argument passed to delete operations.
+	DeleteReportsCutoff time.Time
+	DeleteEmailsCutoff  time.Time
 }
 
 // NewFakeStore returns an empty FakeStore ready for use.
@@ -231,6 +235,7 @@ func (f *FakeStore) ApplyRecovery(newUIDValidity uint32) error {
 
 // DeleteReportsBefore implements store.Store.
 func (f *FakeStore) DeleteReportsBefore(cutoff time.Time) (int, error) {
+	f.DeleteReportsCutoff = cutoff
 	if f.DeleteReportsBeforeErr != nil {
 		return 0, f.DeleteReportsBeforeErr
 	}
@@ -247,6 +252,7 @@ func (f *FakeStore) DeleteReportsBefore(cutoff time.Time) (int, error) {
 // DeleteEmailsBefore implements store.Store.
 func (f *FakeStore) DeleteEmailsBefore(cutoff time.Time) (int, error) {
 	f.DeleteEmailsBeforeCallCount++
+	f.DeleteEmailsCutoff = cutoff
 	if f.DeleteEmailsBeforeErr != nil {
 		return 0, f.DeleteEmailsBeforeErr
 	}

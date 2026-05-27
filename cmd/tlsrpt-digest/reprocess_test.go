@@ -161,27 +161,38 @@ func TestReprocess_Notify_ParseFailure_LogsWarning(t *testing.T) {
 	assert.Equal(t, 1, spy.FlushCount)
 }
 
+// TestReprocess_FileReadFailureContinues verifies that per-file LoadEmails failures
+// (partial results + error) are treated as warnings and processing continues.
 func TestReprocess_FileReadFailureContinues(t *testing.T) {
 	st := storetestutil.NewFakeStore()
-	// Simulate a LoadEmails error (per-file failure) alongside some valid emails.
-	// We can't easily inject per-file failures into FakeStore.LoadEmails, so we use
-	// LoadEmailsErr to simulate the combined error alongside the empty return.
-	// Instead, test with a valid email and a separate FakeStore that returns an error.
-	st2 := storetestutil.NewFakeStore()
 	internalDate := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	// uid=1: valid email (will succeed).
 	addFakeEmail(st, 1, 100, internalDate, tlsrptRawEMLReprocess("Corp", "r1", 0))
-	st.LoadEmailsErr = errors.New("some file failed")
+	// uid=2: malformed raw bytes → mail.ReadMessage fails → per-file error in LoadEmails.
+	addFakeEmail(st, 2, 100, internalDate, []byte("InvalidHeader\r\n\r\nbody"))
 	spy := &SpyNotificationSink{}
 
-	// When LoadEmails returns error (global), we log and continue with empty list.
+	// Per-file failure: LoadEmails returns [uid=1 email] + error → continue with partial list.
 	code, err := newReprocessRunner().Run(context.Background(), makeReprocessBoot(t, st, spy, false))
-	// LoadEmailsErr returns nil emails + error → we log warn and continue with empty.
 	require.NoError(t, err)
 	assert.Equal(t, exitOK, code)
-	// SaveEmailMetas and SaveReports called with empty lists.
 	assert.Equal(t, 1, st.SaveEmailMetasCallCount)
 	assert.Equal(t, 1, st.SaveReportsCallCount)
-	_ = st2
+}
+
+// TestReprocess_GlobalLoadFailureExitsError verifies that a global LoadEmails failure
+// (nil emails + error) causes exit 1 with a system error notification.
+func TestReprocess_GlobalLoadFailureExitsError(t *testing.T) {
+	st := storetestutil.NewFakeStore()
+	st.LoadEmailsErr = errors.New("disk I/O error")
+	spy := &SpyNotificationSink{}
+
+	code, err := newReprocessRunner().Run(context.Background(), makeReprocessBoot(t, st, spy, false))
+	assert.Error(t, err)
+	assert.Equal(t, exitError, code)
+	require.Len(t, spy.SystemErrors, 1)
+	assert.Equal(t, notify.SystemErrorKindStoreCorruption, spy.SystemErrors[0].Kind)
+	assert.Equal(t, 1, spy.FlushCount)
 }
 
 func TestReprocess_SaveEmailMetasFail(t *testing.T) {
