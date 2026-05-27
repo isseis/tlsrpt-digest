@@ -474,7 +474,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 **レビュー観点**: カットオフ計算 / recovery-required ガード / `SaveEmailMetas` → `SaveReports` 呼び出し順序
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（ステップ 3-3 は新しいブランチで作業する）
