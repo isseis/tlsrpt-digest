@@ -50,10 +50,11 @@ type ReportInput struct {
 
 // LoadedEmail represents an email loaded from storage.
 type LoadedEmail struct {
-	Message     *mail.Message // Parsed email message
-	UID         uint32        // IMAP UID
-	UIDValidity uint32        // IMAP UIDVALIDITY
-	Path        string        // Relative path within {root_dir}/emails/ (e.g., "1234567890/202605/0000000123.eml")
+	Message      *mail.Message // Parsed email message
+	UID          uint32        // IMAP UID
+	UIDValidity  uint32        // IMAP UIDVALIDITY
+	InternalDate time.Time     // IMAP INTERNALDATE, or month fallback for orphaned .eml files
+	Path         string        // Relative path within {root_dir}/emails/ (e.g., "1234567890/202605/0000000123.eml")
 }
 
 // internalDataFile represents the structure of tlsrpt.json.

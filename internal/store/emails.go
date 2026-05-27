@@ -104,6 +104,13 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 		return []LoadedEmail{}, nil
 	}
 
+	indexedDates := make(map[emailKey]time.Time)
+	if df, err := s.loadDataFile(); err == nil {
+		for _, entry := range df.Emails {
+			indexedDates[emailKey{entry.UID, entry.UIDValidity}] = entry.InternalDate
+		}
+	}
+
 	var result []LoadedEmail
 	var errs []error
 
@@ -147,24 +154,39 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 			return nil
 		}
 		uid := uint32(uidU64)
+		uidKey := emailKey{UID: uid, UIDValidity: uidValidity}
+		internalDate, ok := indexedDates[uidKey]
+		if !ok {
+			internalDate, parseErr = internalDateFromEmailPath(relPath)
+			if parseErr != nil {
+				errs = append(errs, &ErrLoadEmailFailed{
+					Path:        path,
+					UID:         uid,
+					UIDValidity: uidValidity,
+					Err:         parseErr,
+				})
+				return nil
+			}
+		}
 
 		data, readErr := os.ReadFile(path) //nolint:gosec
 		if readErr != nil {
-			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: readErr})
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, UID: uid, UIDValidity: uidValidity, Err: readErr})
 			return nil
 		}
 
 		msg, parseErr := mail.ReadMessage(bytes.NewReader(data))
 		if parseErr != nil {
-			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: parseErr})
+			errs = append(errs, &ErrLoadEmailFailed{Path: path, UID: uid, UIDValidity: uidValidity, Err: parseErr})
 			return nil
 		}
 
 		result = append(result, LoadedEmail{
-			Message:     msg,
-			UID:         uid,
-			UIDValidity: uidValidity,
-			Path:        relPath,
+			Message:      msg,
+			UID:          uid,
+			UIDValidity:  uidValidity,
+			InternalDate: internalDate,
+			Path:         relPath,
 		})
 		return nil
 	})
@@ -176,6 +198,19 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 		result = []LoadedEmail{}
 	}
 	return result, errors.Join(errs...)
+}
+
+func internalDateFromEmailPath(relPath string) (time.Time, error) {
+	const emailPathComponents = 3
+	parts := strings.Split(relPath, string(filepath.Separator))
+	if len(parts) != emailPathComponents {
+		return time.Time{}, &ErrInvalidEmailPath{Path: relPath}
+	}
+	t, err := time.Parse("200601", parts[1])
+	if err != nil {
+		return time.Time{}, &ErrInvalidEmailPath{Path: relPath}
+	}
+	return t.UTC(), nil
 }
 
 // DeleteEmailsBefore implements Store.DeleteEmailsBefore.

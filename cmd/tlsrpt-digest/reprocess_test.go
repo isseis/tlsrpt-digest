@@ -7,7 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"path/filepath"
+	"io"
 	"testing"
 	"time"
 
@@ -140,25 +140,10 @@ func TestReprocess_Notify_TLSFailure_LogsAlert(t *testing.T) {
 	assert.Equal(t, 1, spy.FlushCount)
 }
 
-func TestReprocess_Notify_ParseFailure_LogsWarning(t *testing.T) {
-	st := storetestutil.NewFakeStore()
-	internalDate := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	// Valid TLSRPT email for uid=1.
-	addFakeEmail(st, 1, 100, internalDate, tlsrptRawEMLReprocess("Corp", "r1", 0))
-	// Invalid email bytes for uid=2 (will fail mailparse).
-	invalidEML := []byte("From: test\r\n\r\nnot-valid-mime-attachment")
-	addFakeEmail(st, 2, 100, internalDate, invalidEML)
-	spy := &SpyNotificationSink{}
-
-	code, err := newReprocessRunner().Run(context.Background(), makeReprocessBoot(t, st, spy, true))
+func TestParseCLI_ReprocessNotifyFlag(t *testing.T) {
+	inv, err := parseCLI([]string{"reprocess", "--notify"}, io.Discard)
 	require.NoError(t, err)
-	assert.Equal(t, exitOK, code)
-	// uid=1 parses OK with no failures; uid=2 parse fails → LogWarning.
-	// (parse failure of attachment extraction or tlsrpt parsing → LogWarning)
-	// uid=2 has no valid TLSRPT attachment → mailparse succeeds but tlsrpt finds no reports,
-	// so no warning is logged for it. Reports from uid=1 are saved.
-	_ = spy.Warnings // verify no panic
-	assert.Equal(t, 1, spy.FlushCount)
+	assert.True(t, inv.Options.ReprocessNotify)
 }
 
 // TestReprocess_FileReadFailureContinues verifies that per-file LoadEmails failures
@@ -178,6 +163,24 @@ func TestReprocess_FileReadFailureContinues(t *testing.T) {
 	assert.Equal(t, exitOK, code)
 	assert.Equal(t, 1, st.SaveEmailMetasCallCount)
 	assert.Equal(t, 1, st.SaveReportsCallCount)
+}
+
+func TestReprocess_AllFileReadFailuresContinueWithWarning(t *testing.T) {
+	st := storetestutil.NewFakeStore()
+	internalDate := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	addFakeEmail(st, 2, 100, internalDate, []byte("InvalidHeader\r\n\r\nbody"))
+	spy := &SpyNotificationSink{}
+
+	code, err := newReprocessRunner().Run(context.Background(), makeReprocessBoot(t, st, spy, true))
+	require.NoError(t, err)
+	assert.Equal(t, exitOK, code)
+	assert.Equal(t, 1, st.SaveEmailMetasCallCount)
+	assert.Equal(t, 1, st.SaveReportsCallCount)
+	require.Len(t, spy.Warnings, 1)
+	assert.Equal(t, notify.WarningKindParseFailure, spy.Warnings[0].Kind)
+	assert.Equal(t, uint32(2), spy.Warnings[0].UID)
+	assert.Equal(t, uint32(100), spy.Warnings[0].UIDValidity)
+	assert.Equal(t, 1, spy.FlushCount)
 }
 
 // TestReprocess_GlobalLoadFailureExitsError verifies that a global LoadEmails failure
@@ -330,56 +333,6 @@ func TestReprocess_ExitCodes(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestInferInternalDateFromPath(t *testing.T) {
-	tests := []struct {
-		path      string
-		wantYear  int
-		wantMonth time.Month
-		wantZero  bool
-	}{
-		{path: "100/202601/0000000001.eml", wantYear: 2026, wantMonth: time.January},
-		{path: "100/202512/0000000999.eml", wantYear: 2025, wantMonth: time.December},
-		{path: "invalid", wantZero: true},
-		{path: "a/b/c/d.eml", wantZero: true},
-		{path: "100/notadate/0000000001.eml", wantZero: true},
-	}
-	for _, tc := range tests {
-		t.Run(tc.path, func(t *testing.T) {
-			got := inferInternalDateFromPath(tc.path)
-			if tc.wantZero {
-				assert.True(t, got.IsZero())
-				return
-			}
-			assert.Equal(t, tc.wantYear, got.Year())
-			assert.Equal(t, tc.wantMonth, got.Month())
-			assert.Equal(t, 1, got.Day())
-			assert.Equal(t, time.UTC, got.Location())
-		})
-	}
-}
-
-// TestReprocess_FakeStoreLoadEmailsPath verifies that FakeStore.LoadEmails returns paths
-// with the YYYYMM format that inferInternalDateFromPath can parse.
-func TestReprocess_FakeStoreLoadEmailsPath(t *testing.T) {
-	st := storetestutil.NewFakeStore()
-	internalDate := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
-	rawEML := tlsrptRawEMLReprocess("Corp", "r1", 0)
-	addFakeEmail(st, 42, 100, internalDate, rawEML)
-
-	emails, err := st.LoadEmails()
-	require.NoError(t, err)
-	require.Len(t, emails, 1)
-
-	// Path should be: {uidvalidity}/{YYYYMM}/{padded_uid}.eml
-	expected := filepath.Join("100", "202603", "0000000042.eml")
-	assert.Equal(t, expected, emails[0].Path)
-
-	// inferInternalDateFromPath should correctly derive year/month from the path.
-	// Note: the FakeStore path uses filepath.Join (OS separator), but on Linux it's "/".
-	// We use the path directly.
-	t.Log("path:", emails[0].Path)
 }
 
 // TestReprocess_Notify_ZeroFailures_NoAlert verifies no alert is sent for zero failures.

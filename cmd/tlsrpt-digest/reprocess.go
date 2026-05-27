@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
-	"time"
 
 	"github.com/isseis/tlsrpt-digest/internal/mailparse"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
@@ -42,14 +40,18 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 	// Step 2: Enumerate all locally stored .eml files.
 	emails, loadErr := boot.Store.LoadEmails()
 	if loadErr != nil {
-		if len(emails) == 0 {
-			// Global failure (e.g. email directory inaccessible): fail closed.
+		loadFailures := collectLoadEmailFailures(loadErr)
+		if len(loadFailures) == 0 {
 			slog.Error("reprocess: load emails", "error", loadErr)
 			_ = notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
 			return exitError, fmt.Errorf("reprocess: load emails: %w", loadErr)
 		}
-		// Per-file failures alongside partial results: log and continue.
 		slog.Warn("reprocess: some emails could not be loaded", "error", loadErr)
+		if notifyEnabled {
+			for _, failure := range loadFailures {
+				logWarnReprocess(ctx, boot.Notifier, notify.WarningKindParseFailure, failure.UID, failure.UIDValidity, "")
+			}
+		}
 	}
 
 	// Step 3: Build and persist email metadata index.
@@ -81,42 +83,21 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 }
 
 // buildReprocessMetas constructs SaveEmailMetas inputs from loaded emails.
-// InternalDate is inferred from the YYYYMM directory component of the path.
 // SaveEmailMetas is idempotent, so already-indexed entries retain their original date.
 func buildReprocessMetas(emails []store.LoadedEmail) []store.EmailMeta {
 	metas := make([]store.EmailMeta, 0, len(emails))
 	for _, e := range emails {
-		t := inferInternalDateFromPath(e.Path)
-		if t.IsZero() {
-			slog.Warn("reprocess: cannot infer internal date from path; skipping meta registration", "path", e.Path)
+		if e.InternalDate.IsZero() {
+			slog.Warn("reprocess: email missing internal date; skipping meta registration", "path", e.Path)
 			continue
 		}
 		metas = append(metas, store.EmailMeta{
 			UID:          e.UID,
 			UIDValidity:  e.UIDValidity,
-			InternalDate: t,
+			InternalDate: e.InternalDate,
 		})
 	}
 	return metas
-}
-
-// emailPathParts is the expected number of components in a stored .eml relative path:
-// {uidvalidity}/{YYYYMM}/{padded_uid}.eml
-const emailPathParts = 3
-
-// inferInternalDateFromPath parses the YYYYMM component from a path of the form
-// {uidvalidity}/{YYYYMM}/{padded_uid}.eml and returns the first day of that month in UTC.
-// Returns the zero value if the path does not match the expected format.
-func inferInternalDateFromPath(relPath string) time.Time {
-	parts := strings.Split(relPath, "/")
-	if len(parts) != emailPathParts {
-		return time.Time{}
-	}
-	t, err := time.Parse("200601", parts[1])
-	if err != nil {
-		return time.Time{}
-	}
-	return t.UTC()
 }
 
 // reprocessCollectReports parses TLSRPT attachments from all loaded emails.
@@ -157,6 +138,31 @@ func reprocessCollectReports(ctx context.Context, notifier NotificationSink, max
 		}
 	}
 	return reports, parseErrs
+}
+
+func collectLoadEmailFailures(err error) []*store.ErrLoadEmailFailed {
+	if err == nil {
+		return nil
+	}
+	var failures []*store.ErrLoadEmailFailed
+	collectLoadEmailFailuresInto(err, &failures)
+	return failures
+}
+
+func collectLoadEmailFailuresInto(err error, failures *[]*store.ErrLoadEmailFailed) {
+	type multiUnwrapper interface {
+		Unwrap() []error
+	}
+	if joined, ok := err.(multiUnwrapper); ok {
+		for _, child := range joined.Unwrap() {
+			collectLoadEmailFailuresInto(child, failures)
+		}
+		return
+	}
+	var loadFailure *store.ErrLoadEmailFailed
+	if errors.As(err, &loadFailure) {
+		*failures = append(*failures, loadFailure)
+	}
 }
 
 // reprocessSendAlerts logs one alert per failing policy in the report.

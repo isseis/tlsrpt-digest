@@ -166,16 +166,22 @@ func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
 		}
 		msg, err := mail.ReadMessage(bytes.NewReader(entry.RawEML))
 		if err != nil {
-			errs = append(errs, fmt.Errorf("FakeStore.LoadEmails: parse %d/%d: %w", entry.UIDValidity, entry.UID, err))
+			errs = append(errs, &store.ErrLoadEmailFailed{
+				Path:        fmt.Sprintf("%d/%d", entry.UIDValidity, entry.UID),
+				UID:         entry.UID,
+				UIDValidity: entry.UIDValidity,
+				Err:         err,
+			})
 			continue
 		}
 		yyyymm := entry.InternalDate.UTC().Format("200601")
 		relPath := filepath.Join(fmt.Sprintf("%d", entry.UIDValidity), yyyymm, fmt.Sprintf("%010d.eml", entry.UID))
 		result = append(result, store.LoadedEmail{
-			Message:     msg,
-			UID:         entry.UID,
-			UIDValidity: entry.UIDValidity,
-			Path:        relPath,
+			Message:      msg,
+			UID:          entry.UID,
+			UIDValidity:  entry.UIDValidity,
+			InternalDate: entry.InternalDate,
+			Path:         relPath,
 		})
 	}
 	slices.SortFunc(result, func(a, b store.LoadedEmail) int {

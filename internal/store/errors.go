@@ -70,7 +70,9 @@ func (e *ErrInvalidEmailPath) Error() string {
 // ErrLoadEmailFailed is returned when a single email file cannot be loaded.
 // Multiple failures are aggregated using errors.Join.
 type ErrLoadEmailFailed struct {
-	Path string
+	Path        string
+	UID         uint32
+	UIDValidity uint32
 	// Underlying error (wrapped via Unwrap())
 	Err error
 }
