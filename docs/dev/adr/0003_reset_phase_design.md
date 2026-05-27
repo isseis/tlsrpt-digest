@@ -111,13 +111,12 @@ If a crash occurs before writing the flag, the manifest does not exist, so the n
 
 ### Reason for Writing Phases 2 and 3 (Checkpoints) After Rename
 
-Because `rename(2)` is an atomic operation guaranteed by POSIX, files are moved only when the operation succeeds. By writing checkpoints after rename, the inference "checkpoint is written = rename is definitely complete" holds. When resuming after a crash:
+Because `rename(2)` is an atomic operation guaranteed by POSIX, files are moved only when the operation succeeds. By writing checkpoints after rename, the following inferences hold when resuming after a crash:
 
-```
-[Checkpoint for phase N is absent]
-  → "The operation for phase N may already be complete, or may not have run yet"
-  → Re-run the idempotent operation (if the file is absent, no-op)
-```
+| Checkpoint for phase N | Inference | Action on resume |
+|---|---|---|
+| Present | Rename is definitely complete | Skip |
+| Absent | May already be complete, or may not have run | Re-run the idempotent operation (if file absent, no-op) |
 
 Conversely, if the checkpoint were written before rename, a crash could create a state where the checkpoint was written but the rename was not complete, creating the risk that resume processing would incorrectly judge the operation as complete. This design chose the post-operation checkpoint pattern.
 
