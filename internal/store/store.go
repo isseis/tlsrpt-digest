@@ -3,6 +3,7 @@ package store
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -267,7 +268,7 @@ func initDataFile(rootDir string) error {
 	path := dataFilePath(rootDir)
 	if _, err := os.Stat(path); err == nil {
 		return nil // Already exists; leave it untouched.
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("initDataFile: stat: %w", err)
 	}
 

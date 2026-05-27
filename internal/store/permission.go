@@ -42,7 +42,7 @@ func ensureDirExists(dirPath string) error {
 		return nil
 	}
 
-	if !os.IsNotExist(err) {
+	if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("ensureDirExists: stat failed: %w", err)
 	}
 

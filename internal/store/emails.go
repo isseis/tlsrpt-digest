@@ -53,7 +53,7 @@ func (s *storeImpl) SaveEmail(uid, uidValidity uint32, internalDate time.Time, r
 			return nil
 		}
 		return fmt.Errorf("%w: %s", errTargetNotRegularFile, targetPath)
-	} else if !os.IsNotExist(err) {
+	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("SaveEmail: stat: %w", err)
 	}
 
@@ -217,7 +217,7 @@ func (s *storeImpl) loadIndexedEmailDates() map[emailKey]time.Time {
 
 func validateEmailsDir(emailsDir string) (bool, error) {
 	info, err := os.Stat(emailsDir)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
 	if err != nil {
@@ -270,7 +270,7 @@ func (s *storeImpl) DeleteEmailsBefore(cutoff time.Time) (deleted int, err error
 
 		// Delete the .eml file first (file deletion before index update).
 		emlPath := buildEmailPath(s.rootDir, entry.UID, entry.UIDValidity, entry.InternalDate)
-		if rmErr := os.Remove(emlPath); rmErr != nil && !os.IsNotExist(rmErr) {
+		if rmErr := os.Remove(emlPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 			// File I/O error: keep index entry, aggregate error, continue.
 			deleteErrs = append(deleteErrs, &ErrDeleteEmailFailed{
 				Path:        emlPath,
@@ -328,14 +328,14 @@ func (s *storeImpl) cleanupEmptyDirs(gcEntries []internalEmailIndexEntry) {
 		dir := filepath.Join(emailsDir, k.uv, k.mm)
 		entries, rdErr := os.ReadDir(dir)
 		if rdErr != nil {
-			if !os.IsNotExist(rdErr) {
+			if !errors.Is(rdErr, os.ErrNotExist) {
 				slog.Warn("DeleteEmailsBefore: read YYYYMM dir failed",
 					slog.String("dir", dir), slog.Any("error", rdErr))
 			}
 			continue
 		}
 		if len(entries) == 0 {
-			if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
+			if rmErr := os.Remove(dir); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 				slog.Warn("DeleteEmailsBefore: remove YYYYMM dir failed",
 					slog.String("dir", dir), slog.Any("error", rmErr))
 			}
@@ -347,14 +347,14 @@ func (s *storeImpl) cleanupEmptyDirs(gcEntries []internalEmailIndexEntry) {
 		dir := filepath.Join(emailsDir, uv)
 		entries, rdErr := os.ReadDir(dir)
 		if rdErr != nil {
-			if !os.IsNotExist(rdErr) {
+			if !errors.Is(rdErr, os.ErrNotExist) {
 				slog.Warn("DeleteEmailsBefore: read uidvalidity dir failed",
 					slog.String("dir", dir), slog.Any("error", rdErr))
 			}
 			continue
 		}
 		if len(entries) == 0 {
-			if rmErr := os.Remove(dir); rmErr != nil && !os.IsNotExist(rmErr) {
+			if rmErr := os.Remove(dir); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 				slog.Warn("DeleteEmailsBefore: remove uidvalidity dir failed",
 					slog.String("dir", dir), slog.Any("error", rmErr))
 			}
