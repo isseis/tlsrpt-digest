@@ -120,7 +120,8 @@ func readResetManifest(path string) (resetManifest, error) {
 //     explicitly asked to discard via ResetForRecovery, so RemoveAll is safe.
 //
 // Returns:
-//   - nil if there is no manifest, or the manifest was cleaned up.
+//   - nil if there is no manifest, or the manifest was cleaned up (or cleanup failed
+//     best-effort — the failure is logged as WARN and does not block the caller).
 //   - ErrPendingReset if the manifest exists and recovery_required is still set
 //     (i.e. a forward reset is genuinely in progress, or an AbortReset is
 //     partially applied — both must be resolved via OpenRecoverReset).
@@ -168,7 +169,10 @@ func cleanupCompletedReset(rootDir string) error {
 		)
 	}
 	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("cleanupCompletedReset: remove manifest: %w", err)
+		slog.Warn("store: failed to remove stale reset manifest; manual cleanup may be required",
+			slog.String("path", manifestPath),
+			slog.Any("error", err),
+		)
 	}
 	return nil
 }

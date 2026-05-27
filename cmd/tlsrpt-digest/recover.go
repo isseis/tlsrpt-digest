@@ -28,10 +28,6 @@ func newRecoverRunner() *recoverRunner {
 func (r *recoverRunner) Run(_ context.Context, boot *BootContext) (int, error) {
 	opts := boot.Options
 
-	if code, done := r.validateFlags(opts); done {
-		return code, nil
-	}
-
 	prev, curr, _, found, err := boot.Store.LoadRecoveryRequired()
 	if err != nil {
 		return exitError, fmt.Errorf("recover: load recovery-required: %w", err)
@@ -49,19 +45,6 @@ func (r *recoverRunner) Run(_ context.Context, boot *BootContext) (int, error) {
 	r.printInfo(boot, prev, curr, opts, pendingReset)
 
 	return r.executeMode(boot.Store, opts, curr, pendingReset)
-}
-
-// validateFlags checks flag combinations. Returns (exitCode, done=true) if validation fails.
-func (r *recoverRunner) validateFlags(opts cliOptions) (int, bool) {
-	if opts.RecoverAbort && !opts.RecoverYes {
-		_, _ = fmt.Fprintln(r.stdout, "error: --abort-reset requires --yes to confirm")
-		return exitError, true
-	}
-	if opts.RecoverYes && !opts.RecoverAbort && opts.RecoverMode == "" {
-		_, _ = fmt.Fprintln(r.stdout, "error: --yes requires --mode or --abort-reset")
-		return exitError, true
-	}
-	return 0, false
 }
 
 // printInfo writes the operator summary to stdout.
@@ -142,12 +125,15 @@ func (r *recoverRunner) runDiscardOld(st store.Store, curr uint32, confirmed boo
 	_, _ = fmt.Fprintln(r.stdout, "  - .eml store will be replaced with an empty state.")
 	_, _ = fmt.Fprintf(r.stdout, "  - Sentinel uid_validity will be updated to current value: %d\n", curr)
 	_, _ = fmt.Fprintln(r.stdout, "  - Sentinel initialized_at and mailbox identity (host/port/mailbox) are preserved.")
-	if pendingReset {
-		_, _ = fmt.Fprintln(r.stdout, "  (Continuing incomplete reset from a previous run.)")
-	}
 	if !confirmed {
+		if pendingReset {
+			_, _ = fmt.Fprintln(r.stdout, "  (A previous incomplete reset will be resumed when re-run with --yes.)")
+		}
 		_, _ = fmt.Fprintln(r.stdout, "No changes made. Re-run with --yes to apply.")
 		return exitError, nil
+	}
+	if pendingReset {
+		_, _ = fmt.Fprintln(r.stdout, "  (Continuing incomplete reset from a previous run.)")
 	}
 	if err := st.ResetForRecovery(curr); err != nil {
 		return exitError, fmt.Errorf("recover: reset for recovery: %w", err)

@@ -230,37 +230,22 @@ func TestRecover_AbortResetFailure(t *testing.T) {
 	assert.NotNil(t, st.Recovery, "recovery-required should be preserved on failure")
 }
 
-// TestRecover_AbortResetAlone verifies that --abort-reset without --yes returns exit 1
-// without calling AbortReset.
+// TestRecover_AbortResetAlone verifies that --abort-reset without --yes is rejected at
+// parse time with a descriptive error message.
 func TestRecover_AbortResetAlone(t *testing.T) {
-	st := makeRecoveryStore(100, 200)
-	var out bytes.Buffer
-	runner := &recoverRunner{stdout: &out}
-
-	opts := cliOptions{RecoverAbort: true}
-	code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
-
-	require.NoError(t, err)
-	assert.Equal(t, exitError, code)
-	assert.Equal(t, 0, st.AbortResetCallCount)
-	assert.Contains(t, out.String(), "--abort-reset requires --yes")
+	var stderr bytes.Buffer
+	_, err := parseCLI([]string{"recover", "--config", "test.toml", "--abort-reset"}, &stderr)
+	assert.Error(t, err)
+	assert.Contains(t, stderr.String(), "--abort-reset requires --yes")
 }
 
-// TestRecover_YesAlone verifies that --yes without --mode or --abort-reset returns exit 1
-// without making any store changes.
+// TestRecover_YesAlone verifies that --yes without --mode or --abort-reset is rejected at
+// parse time with a descriptive error message.
 func TestRecover_YesAlone(t *testing.T) {
-	st := makeRecoveryStore(100, 200)
-	var out bytes.Buffer
-	runner := &recoverRunner{stdout: &out}
-
-	opts := cliOptions{RecoverYes: true}
-	code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
-
-	require.NoError(t, err)
-	assert.Equal(t, exitError, code)
-	assert.Equal(t, 0, st.ApplyRecoveryCallCount)
-	assert.Equal(t, 0, st.ResetForRecoveryCallCount)
-	assert.Contains(t, out.String(), "--yes requires --mode or --abort-reset")
+	var stderr bytes.Buffer
+	_, err := parseCLI([]string{"recover", "--config", "test.toml", "--yes"}, &stderr)
+	assert.Error(t, err)
+	assert.Contains(t, stderr.String(), "--yes requires --mode or --abort-reset")
 }
 
 // TestRecover_NoRecoveryRequired verifies that all modes exit 1 with an explanation when

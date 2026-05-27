@@ -24,8 +24,10 @@ const (
 )
 
 var (
-	errInvalidRecoverMode  = errors.New("invalid recovery mode")
-	errUnexpectedArguments = errors.New("unexpected arguments")
+	errInvalidRecoverMode     = errors.New("invalid recovery mode")
+	errUnexpectedArguments    = errors.New("unexpected arguments")
+	errAbortResetRequiresYes  = errors.New("--abort-reset requires --yes to confirm")
+	errYesRequiresModeOrAbort = errors.New("--yes requires --mode or --abort-reset")
 )
 
 type cliOptions struct {
@@ -144,9 +146,17 @@ func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 }
 
 func validateFlags(subcmd SubcommandName, opts cliOptions) error {
-	if subcmd == subcommandRecover && opts.RecoverMode != "" {
-		if opts.RecoverMode != recoverModeKeepOld && opts.RecoverMode != recoverModeDiscardOld {
-			return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
+	if subcmd == subcommandRecover {
+		if opts.RecoverMode != "" {
+			if opts.RecoverMode != recoverModeKeepOld && opts.RecoverMode != recoverModeDiscardOld {
+				return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
+			}
+		}
+		if opts.RecoverAbort && !opts.RecoverYes {
+			return errAbortResetRequiresYes
+		}
+		if opts.RecoverYes && !opts.RecoverAbort && opts.RecoverMode == "" {
+			return errYesRequiresModeOrAbort
 		}
 	}
 	return nil
