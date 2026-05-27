@@ -75,15 +75,17 @@ flowchart TD
     Normal -.->|"fetch が UIDVALIDITY 変化を検出"| RR
     RR -->|"recover --mode keep-old"| Normal
     RR -->|"recover --mode discard-old --yes"| P1
-    P1 -->|"recover --mode discard-old --yes<br>(stageDataFile)"| P2
-    P2 -->|"recover --mode discard-old --yes<br>(stageEmailsDir)"| P3
-    P3 -->|"recover --mode discard-old --yes<br>(commitReset)"| P4
+    P1 -->|"stageDataFile 完了"| P2
+    P2 -->|"stageEmailsDir 完了"| P3
+    P3 -->|"commitReset 完了"| P4
     P4 -->|"Open で cleanupCompletedReset"| Normal
     PendingReset -.->|"recover --abort-reset --yes"| P5
     P5 -->|"AbortReset 完了"| RR
 ```
 
 凡例：実線 = 正常系の遷移、破線 = 例外イベント（UIDVALIDITY 変化）または手動中断（abort）
+
+**クラッシュ後の再開**：フェーズ 1–3 でプロセスが停止した場合、`recover --mode discard-old --yes` を再実行すると現在のフェーズから再開し、以降のステップが自動的に続行される。
 
 **クラッシュリカバリ**：各フェーズでのクラッシュ後は同じフェーズから再開可能（各ステージング操作は冪等）。
 

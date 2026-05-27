@@ -75,15 +75,17 @@ flowchart TD
     Normal -.->|"fetch detects UIDVALIDITY change"| RR
     RR -->|"recover --mode keep-old"| Normal
     RR -->|"recover --mode discard-old --yes"| P1
-    P1 -->|"recover --mode discard-old --yes<br>(stageDataFile)"| P2
-    P2 -->|"recover --mode discard-old --yes<br>(stageEmailsDir)"| P3
-    P3 -->|"recover --mode discard-old --yes<br>(commitReset)"| P4
+    P1 -->|"stageDataFile complete"| P2
+    P2 -->|"stageEmailsDir complete"| P3
+    P3 -->|"commitReset complete"| P4
     P4 -->|"Open runs cleanupCompletedReset"| Normal
     PendingReset -.->|"recover --abort-reset --yes"| P5
     P5 -->|"AbortReset complete"| RR
 ```
 
 Legend: solid = normal transition; dashed = exceptional event (UIDVALIDITY change) or manual abort.
+
+**Crash recovery**: If the process stops at phases 1–3, re-running `recover --mode discard-old --yes` resumes from the current phase and the remaining steps continue automatically.
 
 **Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent).
 
