@@ -164,8 +164,7 @@ func collectLoadEmailFailuresInto(err error, failures *[]*store.ErrLoadEmailFail
 		}
 		return allPerFile
 	}
-	var loadFailure *store.ErrLoadEmailFailed
-	if errors.As(err, &loadFailure) {
+	if loadFailure, ok := errors.AsType[*store.ErrLoadEmailFailed](err); ok {
 		*failures = append(*failures, loadFailure)
 		return true
 	}

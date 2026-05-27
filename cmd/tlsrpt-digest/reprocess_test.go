@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -93,6 +95,7 @@ func TestReprocess_RecoveryRequiredStops(t *testing.T) {
 	code, err := newReprocessRunner().Run(context.Background(), makeReprocessBoot(t, st, spy, false))
 	require.NoError(t, err)
 	assert.Equal(t, exitError, code)
+	assert.Equal(t, 0, st.LoadEmailsCallCount)
 	assert.Equal(t, 0, st.SaveEmailMetasCallCount)
 	assert.Equal(t, 0, st.SaveReportsCallCount)
 }
@@ -390,4 +393,23 @@ func TestReprocess_TLSRPTParseFailure_WithNotify(t *testing.T) {
 	// uid=2 succeeds → report saved.
 	assert.Len(t, st.Reports, 1)
 	assert.Equal(t, 1, spy.FlushCount)
+}
+
+// TestReprocess_RealEML_RoundTrip verifies that a real TLSRPT .eml from testdata
+// (gzip-compressed JSON attachment in a realistic multipart structure) is fully
+// parsed and its report saved to the store.
+func TestReprocess_RealEML_RoundTrip(t *testing.T) {
+	emlPath := filepath.Join("..", "..", "testdata", "tlsrpt_google.eml")
+	rawEML, err := os.ReadFile(emlPath) //nolint:gosec // G304: path is a hardcoded testdata literal
+	require.NoError(t, err, "testdata/tlsrpt_google.eml must be readable")
+
+	st := storetestutil.NewFakeStore()
+	internalDate := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	addFakeEmail(st, 1, 100, internalDate, rawEML)
+	spy := &SpyNotificationSink{}
+
+	code, err := newReprocessRunner().Run(context.Background(), makeReprocessBoot(t, st, spy, false))
+	require.NoError(t, err)
+	assert.Equal(t, exitOK, code)
+	assert.NotEmpty(t, st.Reports, "at least one report should be parsed from the real EML")
 }

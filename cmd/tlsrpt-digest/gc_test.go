@@ -80,7 +80,10 @@ func TestGC_BeforeDefault(t *testing.T) {
 	code, err := runner.Run(context.Background(), makeGCBoot(t, st, spy, cliOptions{}, cfg))
 	require.NoError(t, err)
 	assert.Equal(t, exitOK, code)
+	// RetentionDays=14: cutoff = 2026-01-01.
 	assert.Equal(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), st.DeleteReportsCutoff)
+	// MaxEmailAgeDays=30: cutoff = 2025-12-16.
+	assert.Equal(t, time.Date(2025, 12, 16, 0, 0, 0, 0, time.UTC), st.DeleteEmailsCutoff)
 }
 
 func TestGC_ReportsCutoff(t *testing.T) {
@@ -161,9 +164,13 @@ func TestGC_MaxEmailAgeDefault(t *testing.T) {
 	code, err := runner.Run(context.Background(), makeGCBoot(t, st, spy, cliOptions{}, cfg))
 	require.NoError(t, err)
 	assert.Equal(t, exitOK, code)
-	// max_email_age_days=7, cutoff = Jan 8. Email (Jan 1) < cutoff → deleted.
+	// MaxEmailAgeDays=7, cutoff = Jan 8. Email (Jan 1) < cutoff → deleted.
 	_, hasOld := st.Emails[storetestutil.EmailKey{UID: 1, UIDValidity: 100}]
 	assert.False(t, hasOld)
+	// Assert both cutoffs independently (AC-32a).
+	assert.Equal(t, time.Date(2026, 1, 8, 0, 0, 0, 0, time.UTC), st.DeleteEmailsCutoff)
+	// RetentionDays=30: cutoff = 2025-12-16.
+	assert.Equal(t, time.Date(2025, 12, 16, 0, 0, 0, 0, time.UTC), st.DeleteReportsCutoff)
 }
 
 func TestGC_DeleteCountLog(t *testing.T) {

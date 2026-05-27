@@ -66,6 +66,7 @@ type FakeStore struct {
 	// Call-count fields for ordering/invocation assertions.
 	SaveEmailMetasCallCount      int
 	SaveReportsCallCount         int
+	LoadEmailsCallCount          int
 	DeleteReportsBeforeCallCount int
 	DeleteEmailsBeforeCallCount  int
 
@@ -155,6 +156,7 @@ func (f *FakeStore) SaveEmail(uid, uidValidity uint32, internalDate time.Time, r
 
 // LoadEmails implements store.Store.
 func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
+	f.LoadEmailsCallCount++
 	if f.LoadEmailsErr != nil {
 		return nil, f.LoadEmailsErr
 	}

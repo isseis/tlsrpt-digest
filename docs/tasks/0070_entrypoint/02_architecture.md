@@ -154,12 +154,12 @@ flowchart LR
 | `fetch.go` | | ✓\* | ✓ | ✓ | ✓ | ✓ |
 | `summary.go` | | | | | ✓ | ✓ |
 | `reprocess.go` | | | ✓ | ✓ | ✓ | ✓ |
-| `gc.go` | | | | | | ✓ |
+| `gc.go` | | | | | ✓ | ✓ |
 | `recover.go` | | | | | | ✓ |
 
 - `imap` は `fetch` のみが使用（IMAP サーバへの直接接続）。
 - `tlsrpt` / `mailparse` は `fetch` と `reprocess` が使用（`.json.gz` 添付のパース）。
-- `notify` / `store` は書き込み系全サブコマンドが使用。
+- `notify` / `store` は書き込み系全サブコマンド（`fetch`, `summary`, `reprocess`, `gc`）が使用。
 - `config` は `boot.go` のみが使用（設定読込責務を `boot.go` に集約）。
 
 ### 2.2 共通初期化シーケンス
