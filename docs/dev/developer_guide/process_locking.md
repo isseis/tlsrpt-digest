@@ -2,114 +2,187 @@
 
 ## Overview
 
-This project has multiple CLI subcommands that read and write the same store. In particular, `recover --mode discard-old --yes` and `recover --abort-reset --yes` are destructive operations that move and delete multiple files; if multiple writers run concurrently, the states of the reset manifest, staging, and sentinel will conflict.
+This project has multiple CLI subcommands that read and write the same store.
+To prevent inconsistencies from concurrent execution, two types of locks with different purposes are used.
 
-This guideline defines the design policy for clearly separating the responsibilities of inter-process locks and maintaining the same assumptions in future implementations and extensions.
+| Lock | Problem solved |
+|---|---|
+| store-wide process lock | Prevents concurrent execution among write subcommands |
+| summary consistency guard | Prevents `recovery_required` from being missed during concurrent execution of `summary` and `fetch` |
 
----
-
-## 1. Lock Types and Responsibilities
-
-| Lock | Target | Purpose | Held During |
-|---|---|---|---|
-| store-wide process lock | writer vs writer | Prevent concurrent writes among `fetch` / `gc` / `reprocess` / `recover` | For write subcommands: from before store open until processing is complete |
-| summary consistency guard | summary vs recovery_required writer | Prevent `summary` from notifying based on a stale "no recovery needed" judgment | While `summary` is aggregating and checking whether to send, and while the writer is updating recovery_required |
-
-These two types are not alternatives to each other. The store-wide process lock serializes writers against each other. The summary consistency guard synchronizes only between `summary` (which does not acquire the store-wide process lock) and writers that modify recovery_required.
+These two are not alternatives to each other; each solves an independent problem.
 
 ---
 
-## 2. Store-Wide Process Lock Contract
+## 1. Subcommand Concurrency Rules
 
-Write subcommands acquire a non-blocking exclusive `flock` on `{root_dir}/.tlsrpt-digest-store.lock` before opening the store. If acquisition fails, another process is considered to be writing to the same store, and the subcommand fails immediately without waiting.
+| | fetch | gc | reprocess | recover | summary |
+|---|---|---|---|---|---|
+| **fetch** | ✗ | ✗ | ✗ | ✗ | ○ |
+| **gc** | ✗ | ✗ | ✗ | ✗ | ○ |
+| **reprocess** | ✗ | ✗ | ✗ | ✗ | ○ |
+| **recover** | ✗ | ✗ | ✗ | ✗ | ○ |
+| **summary** | ○ | ○ | ○ | ○ | ○ |
 
-Target subcommands:
+`fetch`, `gc`, `reprocess`, and `recover` hold the store-wide process lock (exclusive) and therefore cannot run concurrently with each other. `summary` does not acquire the store-wide process lock and can run concurrently with write subcommands.
+
+Concurrent execution of multiple `summary` instances is permitted by the summary consistency guard (shared lock) and poses no problem.
+
+---
+
+## 2. Store-Wide Process Lock
+
+### Purpose
+
+Serialize write subcommands against each other so that the state machine of the reset manifest, staging, and sentinel can be operated safely under the single-writer assumption.
+
+### Lock File
+
+`{root_dir}/.tlsrpt-digest-store.lock` (exclusive flock, non-blocking)
+
+If acquisition fails, another process is considered to be writing to the same store, and the subcommand fails immediately without waiting.
+
+### Target Subcommands
 
 - `fetch`
 - `gc`
 - `reprocess`
-- `recover --mode keep-old`
-- `recover --mode discard-old` (including dry-run without `--yes`)
-- `recover --mode discard-old --yes`
-- `recover --abort-reset --yes`
+- `recover` (any of `--mode keep-old` / `discard-old` / `--abort-reset`)
 
-Preconditions:
+### Contract
 
-1. All writers use the same lock path.
-2. The lock is acquired before `store.Open(...)`.
-3. The lock handle is held until the subcommand's processing is complete.
-4. If `store.Open(...)` fails, the lock handle is closed immediately; on success, it is held until processing is complete.
-5. `recover --mode discard-old --yes` and `recover --abort-reset --yes` use `OpenRecoverReset` while holding the lock.
-6. When CLI commands or internal tools call `ResetForRecovery` / `AbortReset` directly, the same writer lock must be held.
-7. When `internal/store` unit tests call `ResetForRecovery` / `AbortReset` directly, an OS-level writer lock is not required, but the single-writer assumption must be made explicit (e.g., by calling from a single goroutine).
-
-`ResetForRecovery` / `AbortReset` execute from manifest read through cleanup under the assumption of a single writer. Therefore, callers must hold the store-wide process lock to use these APIs safely.
+1. Acquire before opening the store (`store.Open(...)` call).
+2. Hold until processing is complete (including abnormal exit paths).
+3. `recover --mode discard-old --yes` / `recover --abort-reset --yes` must use `OpenRecoverReset` while holding the lock.
+4. Since `ResetForRecovery` / `AbortReset` are designed under the single-writer assumption, callers must always hold the store-wide process lock.
+5. When called directly from `internal/store` unit tests, an OS-level lock is not required, but the single-writer assumption must be made explicit (e.g., a single goroutine).
 
 ---
 
-## 3. Summary Consistency Guard Contract
+## 3. Summary Consistency Guard
 
-`summary` does not acquire the store-wide process lock. This is by design to allow it to run concurrently with `fetch`. Instead, `summary` acquires a shared lock via `AcquireSummaryConsistencyGuard()` and maintains a boundary within which the appearance of `recovery_required` can be detected, up until just before sending. The guard file path is `{root_dir}/.tlsrpt-digest-summary.lock`.
+### Why It Is Needed
 
-On the writer side, an exclusive lock on the summary consistency guard is required only for operations that create or clear `recovery_required`.
+`summary` does not acquire the store-wide process lock because it is designed to run concurrently with `fetch`. `fetch` writes the `recovery_required` sentinel when it detects a UID validity change. If `summary` sends aggregated results without noticing this write, an inconsistent summary will be delivered.
 
-Target:
+The summary consistency guard prevents this.
+
+### Lock File and Lock Type
+
+Lock file: `{root_dir}/.tlsrpt-digest-summary.lock`
+
+| Acquirer | flock type | Behavior on failure |
+|---|---|---|
+| `summary` (`AcquireSummaryConsistencyGuard`) | shared (`LOCK_SH\|LOCK_NB`) | Error exit |
+| Store APIs that modify `recovery_required` (`withGuardExclusive`) | exclusive (`LOCK_EX`) | Block (wait) |
+
+While `summary` holds the shared lock, a `fetch` that attempts to write to the `recovery_required` sentinel blocks on exclusive lock acquisition. `fetch` does not error out; it waits until `summary` releases the shared lock. The block occurs only at the `SaveRecoveryRequired` call site; prior operations such as mail fetching and report saving proceed concurrently with `summary`.
+
+### Store APIs That Modify `recovery_required` (Exclusive Lock Required)
 
 - `SaveRecoveryRequired`
 - `ClearRecoveryRequired`
 - `ApplyRecovery`
-- Commit processing within `ResetForRecovery` (`commitReset`)
+- Commit processing in `ResetForRecovery` (`commitReset`)
 
-Not a target:
+The following do not modify `recovery_required` and do not require the guard:
 
 - Initial manifest/staging creation in `ResetForRecovery`
-- `stageDataFile`
-- `stageEmailsDir`
+- `stageDataFile` / `stageEmailsDir`
 - Restore processing in `AbortReset`
 - Post-commit cleanup
 
-Operations not listed as targets do not modify `recovery_required`, so they do not need to be synchronized with summary's "no recovery needed" judgment. Conflicts between writers are handled by the store-wide process lock.
+### Only `fetch` Calls `SaveRecoveryRequired`
+
+`SaveRecoveryRequired` is currently called only by `fetch`. `gc`, `reprocess`, and `recover` can run concurrently with `summary` but do not write the `recovery_required` sentinel, so they are outside the scope of the summary consistency guard.
+
+**The only concurrency the summary consistency guard addresses is concurrent execution with `fetch`.**
 
 ---
 
-## 4. Policy for Avoiding Over-Protection
+## 4. Summary `recovery_required` Check Design
 
-The summary consistency guard must not be used as a substitute for the store-wide writer lock. The guard is a lock for protecting the visibility of `recovery_required`; it does not serialize the entire state machine of the reset manifest or staging.
+### Scope of the Shared Lock
 
-Examples to avoid:
+The shared lock is acquired during Bootstrap (`AcquireSummaryConsistencyGuard`) and held until `guard.Close()` (`boot.Close()`). That is, it is held throughout the entire execution of the `summary` command.
 
+During this time, `fetch`'s `SaveRecoveryRequired` is blocked from acquiring the exclusive lock, making it **physically impossible for the sentinel to be written during `summary` execution**.
+
+The only race window is the timing at which `fetch` writes the sentinel before Bootstrap acquires the shared lock.
+
+### Check Timing and Purpose
+
+`summary` calls `CheckRecoveryRequired` exactly once, before aggregation begins. This is to detect any sentinel that was written before the shared lock was acquired.
+
+```
+Bootstrap: acquire shared lock
+           CheckRecoveryRequired   ← detects sentinel writes that occurred before shared lock acquisition
+               ↓ found=true: notify and exit
+           GenerateSummary (store read)
+               ↓ ReportCount == 0: exitOK
+           buildNotifier
+           LogSummary / Flush (Slack send)
+boot.Close(): release shared lock
+           fetch: sentinel write becomes possible here
+```
+
+If `recovery_required` is set, the store data will be entirely deleted by the subsequent `recover`. Sending a summary of data that is about to be wiped would only cause confusion, so the command notifies and exits.
+
+### Why Not Re-check Just Before Sending
+
+Since `fetch`'s sentinel write is blocked while `summary` holds the shared lock, the sentinel cannot change after `CheckRecoveryRequired` passes. A re-check is unnecessary.
+
+---
+
+## 5. Policy for Avoiding Over-Protection
+
+The summary consistency guard must not be used as a substitute for the store-wide process lock. The guard protects only the visibility of `recovery_required`; it does not serialize the entire state machine of the manifest or staging.
+
+Patterns to avoid:
+
+- Wrapping operations that do not modify `recovery_required` in the summary guard, unnecessarily blocking `summary`
 - Wrapping only manifest creation in the summary guard while leaving subsequent staging / commit / cleanup unprotected
-- Wrapping operations that do not modify `recovery_required` in the summary guard for long periods, unnecessarily blocking `summary`
-- Conflating the responsibilities of the store-wide process lock and the summary guard through shared comments or API names
+- Conflating the responsibilities of the two lock types through shared comments or API names
 
-Preferred separation:
+Preferred responsibility split:
 
-- writer vs writer: store-wide process lock at the cmd layer
-- summary vs recovery_required writer: summary consistency guard in `internal/store`
-- crash recovery: reset manifest, staging, sentinel commit barrier
+| Problem | Solution |
+|---|---|
+| Serialization of write subcommands against each other | store-wide process lock (cmd layer) |
+| `summary` vs `fetch` `recovery_required` race | summary consistency guard (`internal/store` layer) |
+| Atomicity of crash recovery | reset manifest, staging, sentinel commit barrier |
 
 ---
 
-## 5. Implementation and Review Checklist
+## 6. Implementation and Review Checklist
 
-When adding or modifying write subcommands:
+**When adding or modifying write subcommands**
 
 - [ ] The store-wide process lock is acquired before opening the store
-- [ ] The lock handle is held until processing is complete
-- [ ] The lock handle is closed even on abnormal exit paths
-- [ ] `recover --mode discard-old --yes` / `recover --abort-reset --yes` uses `OpenRecoverReset` while holding the lock
-- [ ] When `ResetForRecovery` / `AbortReset` is called directly from CLI commands or internal tools, the same writer lock is held
-- [ ] When `ResetForRecovery` / `AbortReset` is called directly in `internal/store` unit tests, the single-writer assumption (e.g., single goroutine) is made explicit
+- [ ] The lock handle is held until processing is complete (including abnormal exit paths)
+- [ ] `recover --mode discard-old --yes` / `recover --abort-reset --yes` uses `OpenRecoverReset`
+  while holding the lock
+- [ ] `ResetForRecovery` / `AbortReset` is called only while holding the store-wide process lock
+- [ ] The single-writer assumption is made explicit when called directly from `internal/store`
+  unit tests
+- [ ] When newly calling `SaveRecoveryRequired`, the contract in section 3 is followed and
+  consistency with the summary consistency guard is verified
 
-When adding or modifying store APIs that modify `recovery_required`:
+**When adding or modifying store APIs that modify `recovery_required`**
 
-- [ ] An exclusive lock on `{root_dir}/.tlsrpt-digest-summary.lock` is acquired (using `withGuardExclusive`)
+- [ ] An exclusive lock on `{root_dir}/.tlsrpt-digest-summary.lock` is acquired
+  (using `withGuardExclusive`)
 - [ ] Operations that do not modify `recovery_required` are not wrapped in the summary guard
-- [ ] It is tested that `summary` does not send notifications based on a stale "no recovery needed" judgment
+- [ ] It is tested that `summary` does not send based on a stale "no recovery needed" judgment
+
+**When modifying the `summary` subcommand or `recovery_required` check design**
+
+- [ ] The `CheckRecoveryRequired` call timing and purpose are consistent with section 4
+- [ ] Section 4 is updated when check positions are added or modified
 
 ---
 
-## 6. Related Documents
+## 7. Related Documents
 
 - `docs/dev/adr/0003_reset_phase_design.ja.md`
 - `docs/tasks/0070_entrypoint/02_architecture.md` §3.3 / §6.4
