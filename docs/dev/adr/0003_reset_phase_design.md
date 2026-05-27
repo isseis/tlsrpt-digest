@@ -72,9 +72,9 @@ flowchart TD
     Normal -.->|"fetch detects UIDVALIDITY change"| RR
     RR -->|"recover --mode keep-old"| Normal
     RR -->|"recover --mode discard-old --yes"| P1
-    P1 -->|"stageDataFile complete"| P2
-    P2 -->|"stageEmailsDir complete"| P3
-    P3 -->|"commitReset complete"| P4
+    P1 -->|"recover --mode discard-old --yes<br>(stageDataFile)"| P2
+    P2 -->|"recover --mode discard-old --yes<br>(stageEmailsDir)"| P3
+    P3 -->|"recover --mode discard-old --yes<br>(commitReset)"| P4
     P4 -->|"Open runs cleanupCompletedReset"| Normal
     P1 -.->|"recover --abort-reset --yes"| P5
     P2 -.->|"recover --abort-reset --yes"| P5
