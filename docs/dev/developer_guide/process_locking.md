@@ -36,6 +36,8 @@ Concurrent execution of multiple `summary` instances is permitted by the summary
 
 Serialize write subcommands against each other so that the state machine of the reset manifest, staging, and sentinel can be operated safely under the single-writer assumption.
 
+The state machine here refers to the mechanism that tracks the progress of recovery operations (`ResetForRecovery` / `AbortReset`) triggered by UIDVALIDITY changes. It consists of three elements: the reset manifest (a progress ledger recording `resetPhase` values 1–5), the staging directory, and the sentinel (recording the committed state of `recovery_required` and `UIDValidity`). See [ADR-0003](../adr/0003_reset_phase_design.md) for details.
+
 ### Lock File
 
 `{root_dir}/.tlsrpt-digest-store.lock` (exclusive flock, non-blocking)
@@ -184,6 +186,6 @@ Preferred responsibility split:
 
 ## 7. Related Documents
 
-- `docs/dev/adr/0003_reset_phase_design.ja.md`
+- [ADR-0003: ResetForRecovery Phase Design and Post-Commit Cleanup](../adr/0003_reset_phase_design.md)
 - `docs/tasks/0070_entrypoint/02_architecture.md` §3.3 / §6.4
 - `docs/tasks/0070_entrypoint/03_implementation_plan.md` Step 1-5 / 3-3
