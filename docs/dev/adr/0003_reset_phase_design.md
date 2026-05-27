@@ -60,29 +60,29 @@ UIDValidity / recovery_required ─── true basis for whether the operation i
 ### State Transition Diagram
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Normal
+flowchart TD
+    Normal["Normal<br>(no manifest / no recovery_required)"]
+    RR["Recovery Required<br>(recovery_required set / no manifest)"]
+    P1["Phase 1<br>(manifest written)"]
+    P2["Phase 2<br>(data staged)"]
+    P3["Phase 3<br>(emails staged)"]
+    P4["Phase 4<br>(committed / cleanup pending)"]
+    P5["Phase 5<br>(abort in progress)"]
 
-    Normal : Normal (no manifest / no recovery_required)
-    RR : Recovery Required (recovery_required set / no manifest)
-    P1 : Phase 1 (manifest written)
-    P2 : Phase 2 (data staged)
-    P3 : Phase 3 (emails staged)
-    P4 : Phase 4 (committed / cleanup pending)
-    P5 : Phase 5 (abort in progress)
-
-    Normal --> RR : fetch detects UIDVALIDITY change
-    RR --> Normal : recover --mode keep-old
-    RR --> P1 : recover --mode discard-old --yes
-    P1 --> P2 : stageDataFile complete
-    P2 --> P3 : stageEmailsDir complete
-    P3 --> P4 : commitReset complete
-    P4 --> Normal : Open runs cleanupCompletedReset
-    P1 --> P5 : recover --abort-reset --yes
-    P2 --> P5 : recover --abort-reset --yes
-    P3 --> P5 : recover --abort-reset --yes
-    P5 --> RR : AbortReset complete
+    Normal -.->|"fetch detects UIDVALIDITY change"| RR
+    RR -->|"recover --mode keep-old"| Normal
+    RR -->|"recover --mode discard-old --yes"| P1
+    P1 -->|"stageDataFile complete"| P2
+    P2 -->|"stageEmailsDir complete"| P3
+    P3 -->|"commitReset complete"| P4
+    P4 -->|"Open runs cleanupCompletedReset"| Normal
+    P1 -.->|"recover --abort-reset --yes"| P5
+    P2 -.->|"recover --abort-reset --yes"| P5
+    P3 -.->|"recover --abort-reset --yes"| P5
+    P5 -->|"AbortReset complete"| RR
 ```
+
+Legend: solid = normal transition; dashed = exceptional event (UIDVALIDITY change) or manual abort.
 
 **Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent).
 
