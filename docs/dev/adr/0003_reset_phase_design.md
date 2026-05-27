@@ -308,7 +308,7 @@ A pure Go B+ tree KV store with production usage in etcd and Kubernetes.
 |---|---|
 | No SQL | Search and aggregation must be implemented in application code |
 | Implicit schema | The KV mapping is defined in application logic, so there are no DB-side type constraints or foreign keys |
-| Handling `.eml` | Storing large BLOBs in bbolt causes the DB file to grow large and requires manual GC implementation. The practical design is to keep `.eml` on the filesystem and accept the two-phase commit problem with bbolt |
+| Handling `.eml` | Storing large BLOBs in bbolt creates the following problems, so the practical design is to keep `.eml` on the filesystem and accept the two-phase commit problem with bbolt. ① bbolt mmaps all data, causing page-cache pressure. ② `db.Update` holds a write lock over the entire DB, so a large BLOB write blocks all other operations. ③ bbolt has no automatic space reclamation; after deleting `.eml` entries the file does not shrink, so GC would need to run a `Compact`-equivalent operation each time. ④ Files on the filesystem can be inspected and re-sent directly with tools like `cat` or `mutt`, whereas blobs inside bbolt require custom tooling or Go code, increasing the cost of manual recovery |
 | Migration representation | Schema versioning must be designed in application code |
 
 **Evaluation for this project**
