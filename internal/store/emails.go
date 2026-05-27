@@ -118,7 +118,7 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 
 	walkErr := filepath.WalkDir(emailsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			if d != nil && !d.IsDir() && filepath.Ext(path) == ".eml" {
+			if filepath.Ext(path) == ".eml" {
 				errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: err})
 				return nil
 			}
@@ -207,10 +207,13 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 
 func (s *storeImpl) loadIndexedEmailDates() map[emailKey]time.Time {
 	indexedDates := make(map[emailKey]time.Time)
-	if df, err := s.loadDataFile(); err == nil {
-		for _, entry := range df.Emails {
-			indexedDates[emailKey{entry.UID, entry.UIDValidity}] = entry.InternalDate
-		}
+	df, err := s.loadDataFile()
+	if err != nil {
+		slog.Warn("loadIndexedEmailDates: load data file failed; falling back to path-derived dates", "error", err)
+		return indexedDates
+	}
+	for _, entry := range df.Emails {
+		indexedDates[emailKey{entry.UID, entry.UIDValidity}] = entry.InternalDate
 	}
 	return indexedDates
 }

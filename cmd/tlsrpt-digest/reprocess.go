@@ -9,7 +9,6 @@ import (
 	"github.com/isseis/tlsrpt-digest/internal/mailparse"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
 	"github.com/isseis/tlsrpt-digest/internal/store"
-	"github.com/isseis/tlsrpt-digest/internal/tlsrpt"
 )
 
 // reprocessRunner implements SubcommandRunner for the reprocess subcommand.
@@ -49,7 +48,7 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 		slog.Warn("reprocess: some emails could not be loaded", "error", loadErr)
 		if notifyEnabled {
 			for _, failure := range loadFailures {
-				logWarnReprocess(ctx, boot.Notifier, notify.WarningKindParseFailure, failure.UID, failure.UIDValidity, "")
+				logWarn(ctx, boot.Notifier, notify.WarningKindParseFailure, failure.UID, failure.UIDValidity, "", "reprocess")
 			}
 		}
 	}
@@ -111,7 +110,7 @@ func reprocessCollectReports(ctx context.Context, notifier NotificationSink, max
 		if err != nil {
 			parseErrs = append(parseErrs, fmt.Errorf("reprocess: parse attachments uid=%d: %w", e.UID, err))
 			if sendNotifications {
-				logWarnReprocess(ctx, notifier, notify.WarningKindParseFailure, e.UID, e.UIDValidity, "")
+				logWarn(ctx, notifier, notify.WarningKindParseFailure, e.UID, e.UIDValidity, "", "reprocess")
 			}
 			continue
 		}
@@ -123,12 +122,12 @@ func reprocessCollectReports(ctx context.Context, notifier NotificationSink, max
 			if err != nil {
 				parseErrs = append(parseErrs, fmt.Errorf("reprocess: parse tlsrpt uid=%d: %w", e.UID, err))
 				if sendNotifications {
-					logWarnReprocess(ctx, notifier, notify.WarningKindParseFailure, e.UID, e.UIDValidity, "")
+					logWarn(ctx, notifier, notify.WarningKindParseFailure, e.UID, e.UIDValidity, "", "reprocess")
 				}
 				continue
 			}
 			if sendNotifications && report.HasFailure() {
-				reprocessSendAlerts(ctx, notifier, report)
+				logAlerts(ctx, notifier, report, "reprocess")
 			}
 			reports = append(reports, store.ReportInput{
 				Report:      *report,
@@ -169,41 +168,6 @@ func collectLoadEmailFailuresInto(err error, failures *[]*store.ErrLoadEmailFail
 		return true
 	}
 	return false
-}
-
-// reprocessSendAlerts logs one alert per failing policy in the report.
-func reprocessSendAlerts(ctx context.Context, notifier NotificationSink, report *tlsrpt.Report) {
-	for _, policy := range report.Policies {
-		if policy.Summary.TotalFailureSessionCount <= 0 {
-			continue
-		}
-		if err := notifier.LogAlert(ctx, notify.Alert{
-			OrganizationName: report.OrganizationName,
-			PolicyType:       notify.PolicyType(policy.Policy.PolicyType),
-			FailureCount:     policy.Summary.TotalFailureSessionCount,
-			DateRange: notify.DateRange{
-				Start: report.DateRange.StartDatetime,
-				End:   report.DateRange.EndDatetime,
-			},
-		}); err != nil {
-			slog.Error("reprocess: log alert", "error", err)
-		}
-	}
-}
-
-// logWarnReprocess buffers a reprocess warning; logs errors from LogWarning but does not abort.
-func logWarnReprocess(ctx context.Context, notifier NotificationSink, kind notify.WarningKind, uid, uidValidity uint32, messageID string) {
-	if notifier == nil {
-		return
-	}
-	if err := notifier.LogWarning(ctx, notify.Warning{
-		Kind:        kind,
-		UID:         uid,
-		UIDValidity: uidValidity,
-		MessageID:   messageID,
-	}); err != nil {
-		slog.Error("reprocess: log warning", "error", err)
-	}
 }
 
 // notifyReprocessSystemError logs a system error with component "reprocess" and flushes.
