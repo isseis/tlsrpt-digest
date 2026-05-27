@@ -54,6 +54,19 @@ type FakeStore struct {
 	PendingReset bool
 	// AcquireSummaryConsistencyGuardErr, if non-nil, is returned by AcquireSummaryConsistencyGuard.
 	AcquireSummaryConsistencyGuardErr error
+
+	// Error injection fields for individual operations.
+	LoadRecoveryRequiredErr error
+	SaveReportsErr          error
+	SaveEmailMetasErr       error
+	DeleteReportsBeforeErr  error
+	DeleteEmailsBeforeErr   error
+	LoadEmailsErr           error
+
+	// Call-count fields for ordering/invocation assertions.
+	SaveEmailMetasCallCount     int
+	SaveReportsCallCount        int
+	DeleteEmailsBeforeCallCount int
 }
 
 // NewFakeStore returns an empty FakeStore ready for use.
@@ -66,6 +79,10 @@ func NewFakeStore() *FakeStore {
 
 // SaveReports implements store.Store.
 func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
+	f.SaveReportsCallCount++
+	if f.SaveReportsErr != nil {
+		return f.SaveReportsErr
+	}
 	for _, input := range inputs {
 		f.Reports[input.Report.ReportID] = input.Report
 	}
@@ -74,6 +91,10 @@ func (f *FakeStore) SaveReports(inputs []store.ReportInput) error {
 
 // SaveEmailMetas implements store.Store.
 func (f *FakeStore) SaveEmailMetas(metas []store.EmailMeta) error {
+	f.SaveEmailMetasCallCount++
+	if f.SaveEmailMetasErr != nil {
+		return f.SaveEmailMetasErr
+	}
 	// Validate all entries before committing any, matching the real store's
 	// atomic semantics (either all succeed or nothing is persisted).
 	for _, meta := range metas {
@@ -129,6 +150,9 @@ func (f *FakeStore) SaveEmail(uid, uidValidity uint32, internalDate time.Time, r
 
 // LoadEmails implements store.Store.
 func (f *FakeStore) LoadEmails() ([]store.LoadedEmail, error) {
+	if f.LoadEmailsErr != nil {
+		return nil, f.LoadEmailsErr
+	}
 	result := make([]store.LoadedEmail, 0, len(f.Emails))
 	var errs []error
 
@@ -182,6 +206,9 @@ func (f *FakeStore) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time
 
 // LoadRecoveryRequired implements store.Store.
 func (f *FakeStore) LoadRecoveryRequired() (uint32, uint32, time.Time, bool, error) {
+	if f.LoadRecoveryRequiredErr != nil {
+		return 0, 0, time.Time{}, false, f.LoadRecoveryRequiredErr
+	}
 	if f.Recovery == nil {
 		return 0, 0, time.Time{}, false, nil
 	}
@@ -204,6 +231,9 @@ func (f *FakeStore) ApplyRecovery(newUIDValidity uint32) error {
 
 // DeleteReportsBefore implements store.Store.
 func (f *FakeStore) DeleteReportsBefore(cutoff time.Time) (int, error) {
+	if f.DeleteReportsBeforeErr != nil {
+		return 0, f.DeleteReportsBeforeErr
+	}
 	deleted := 0
 	for id, r := range f.Reports {
 		if r.DateRange.EndDatetime.Before(cutoff) {
@@ -216,6 +246,10 @@ func (f *FakeStore) DeleteReportsBefore(cutoff time.Time) (int, error) {
 
 // DeleteEmailsBefore implements store.Store.
 func (f *FakeStore) DeleteEmailsBefore(cutoff time.Time) (int, error) {
+	f.DeleteEmailsBeforeCallCount++
+	if f.DeleteEmailsBeforeErr != nil {
+		return 0, f.DeleteEmailsBeforeErr
+	}
 	deleted := 0
 	for key, entry := range f.Emails {
 		if entry.InternalDate.Before(cutoff) {

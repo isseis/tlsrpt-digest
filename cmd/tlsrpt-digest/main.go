@@ -167,8 +167,8 @@ func defaultRunners() map[SubcommandName]SubcommandRunner {
 	return map[SubcommandName]SubcommandRunner{
 		subcommandFetch:     newFetchRunner(),
 		subcommandSummary:   newSummaryRunner(),
-		subcommandReprocess: stubRunner{name: subcommandReprocess},
-		subcommandGC:        stubRunner{name: subcommandGC},
+		subcommandReprocess: newReprocessRunner(),
+		subcommandGC:        newGCRunner(),
 		subcommandRecover:   stubRunner{name: subcommandRecover},
 	}
 }

@@ -405,27 +405,27 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 カットオフ計算と各 API の呼び出し方針は `02_architecture.md` §3.2 の `gc.go` 行を参照。
 
-- [ ] `gc.go` に `gcRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
-- [ ] `main.go` のスタブを `gcRunner` で置き換える
-- [ ] 処理フローを以下の順で実装する:
+- [x] `gc.go` に `gcRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [x] `main.go` のスタブを `gcRunner` で置き換える
+- [x] 処理フローを以下の順で実装する:
   1. `LoadRecoveryRequired` で recovery-required 確認。`found=true` → stderr に英語の `recover` 実行案内を出力し、削除処理を行わず exit 1。`LoadRecoveryRequired` 自体が失敗した場合も fail closed とし、削除処理を行わず `LogSystemError(store_corruption)` + `Flush()` + exit 1（AC-29a）
   2. `--before` の `Duration.Cutoff(now)` を `DeleteReportsBefore(cutoff)` に渡す。失敗時は `LogSystemError(store_permission)` + `Flush()` + exit 1（AC-32 / AC-33）
   3. `--max-email-age` の `Duration.Cutoff(now)` を `DeleteEmailsBefore(cutoff)` に渡す。失敗時は `LogSystemError(store_permission)` + `Flush()` + exit 1（AC-32b / AC-33）。`DeleteEmailsBefore` の実装では、`.eml` ファイル削除後に親ディレクトリが空になった場合に限りディレクトリを削除する（事前に `os.ReadDir` で空確認。空でない場合は削除せず、エラーにもしない）
   4. JSON レコードと `.eml` それぞれの削除件数を `slog.Info` で出力する（AC-33）
-- [ ] `gc_test.go` に以下のテストを追加する（`storetestutil.FakeStore` を使用）:
-  - [ ] `--before` フラグが `FlagSet` に登録されており、`ParseDuration` でパースされること（AC-30）
-  - [ ] `--before` 指定時に `DeleteReportsBefore` が AC-07c に従った UTC 日付単位切り捨て済みカットオフで呼ばれること（AC-32）
-  - [ ] `--before` 未指定で設定値（`store.retention_days`）が使われること（AC-31）
-  - [ ] `--max-email-age` フラグが `FlagSet` に登録されており、`ParseDuration` でパースされること（AC-32a）
-  - [ ] `--max-email-age` 指定時に `DeleteEmailsBefore` が AC-07c に従ったカットオフで呼ばれること（AC-32b）
-  - [ ] `--max-email-age` 未指定で設定値（`store.max_email_age_days`）が使われること（AC-32a）
-  - [ ] JSON レコードと `.eml` それぞれの削除件数が INFO ログに出力されること（AC-33）
-  - [ ] recovery-required 残存 → stderr に英語の `recover` 実行案内を出力し、削除処理を行わず exit 1（AC-29a）
-  - [ ] `LoadRecoveryRequired` 失敗 → 削除処理を行わず `LogSystemError(store_corruption)` + `Flush()` + exit 1 となること
-  - [ ] `DeleteReportsBefore` 失敗 → `DeleteEmailsBefore` を呼ばず、成功 INFO 削除件数ログを出力せず、`LogSystemError(store_permission)` + `Flush()` + exit 1 となること（AC-33）
-  - [ ] `DeleteEmailsBefore` 失敗 → 成功 INFO 削除件数ログを出力せず、`LogSystemError(store_permission)` + `Flush()` + exit 1 となること（AC-33）
-  - [ ] `gc` を同じカットオフで 2 回連続実行しても 2 回目の削除件数が 0 件となること（冪等性確認）
-  - [ ] 正常完了 → exit 0、recovery-required 残存 / `DeleteReportsBefore` 失敗 → exit 1 となること（AC-34）
+- [x] `gc_test.go` に以下のテストを追加する（`storetestutil.FakeStore` を使用）:
+  - [x] `--before` フラグが `FlagSet` に登録されており、`ParseDuration` でパースされること（AC-30）
+  - [x] `--before` 指定時に `DeleteReportsBefore` が AC-07c に従った UTC 日付単位切り捨て済みカットオフで呼ばれること（AC-32）
+  - [x] `--before` 未指定で設定値（`store.retention_days`）が使われること（AC-31）
+  - [x] `--max-email-age` フラグが `FlagSet` に登録されており、`ParseDuration` でパースされること（AC-32a）
+  - [x] `--max-email-age` 指定時に `DeleteEmailsBefore` が AC-07c に従ったカットオフで呼ばれること（AC-32b）
+  - [x] `--max-email-age` 未指定で設定値（`store.max_email_age_days`）が使われること（AC-32a）
+  - [x] JSON レコードと `.eml` それぞれの削除件数が INFO ログに出力されること（AC-33）
+  - [x] recovery-required 残存 → stderr に英語の `recover` 実行案内を出力し、削除処理を行わず exit 1（AC-29a）
+  - [x] `LoadRecoveryRequired` 失敗 → 削除処理を行わず `LogSystemError(store_corruption)` + `Flush()` + exit 1 となること
+  - [x] `DeleteReportsBefore` 失敗 → `DeleteEmailsBefore` を呼ばず、成功 INFO 削除件数ログを出力せず、`LogSystemError(store_permission)` + `Flush()` + exit 1 となること（AC-33）
+  - [x] `DeleteEmailsBefore` 失敗 → 成功 INFO 削除件数ログを出力せず、`LogSystemError(store_permission)` + `Flush()` + exit 1 となること（AC-33）
+  - [x] `gc` を同じカットオフで 2 回連続実行しても 2 回目の削除件数が 0 件となること（冪等性確認）
+  - [x] 正常完了 → exit 0、recovery-required 残存 / `DeleteReportsBefore` 失敗 → exit 1 となること（AC-34）
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -440,27 +440,27 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 `SaveEmailMetas` と `SaveReports` の呼び出し順序の根拠は `02_architecture.md` §6.6 を参照。
 
-- [ ] `reprocess.go` に `reprocessRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
-- [ ] `main.go` のスタブを `reprocessRunner` で置き換える
-- [ ] 処理フローを以下の順で実装する:
+- [x] `reprocess.go` に `reprocessRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [x] `main.go` のスタブを `reprocessRunner` で置き換える
+- [x] 処理フローを以下の順で実装する:
   1. `LoadRecoveryRequired` で recovery-required 確認。`found=true` → stderr に英語の `recover` 実行案内を出力し、`.eml` 読み込みとストア書き込みを行わず exit 1。`LoadRecoveryRequired` 自体が失敗した場合も fail closed とし、`LoadEmails` へ進まず `LogSystemError(store_corruption)` + `Flush()` + exit 1（AC-21a）
   2. `LoadEmails` で `{root_dir}/emails/` 以下の `.eml` を再帰的に列挙する。列挙全体の失敗はコマンド全体を中断して exit 1、ファイル単位の読み込み失敗は記録して残りを継続する（AC-22 / AC-25）
   3. `SaveEmailMetas` でバッチ登録する（AC-23a）
   4. 各メールの添付 `.json.gz` をパースする。読み込み・パース失敗はスキップし記録して継続する（`--notify` 指定時のみ `LogWarning` 通知）（AC-25）
   5. パース成功レポートを `SaveReports` で一括 UPSERT する（AC-23）。失敗時はコマンド全体を中断して exit 1（AC-25）
   6. `--notify` 指定時のみ `Flush()` を呼ぶ。失敗時は exit 1（AC-24a）
-- [ ] `reprocess_test.go` に以下のテストを追加する（`testdata/` の実 `.eml` と `storetestutil.FakeStore` を使用）:
-  - [ ] recovery-required 残存 → stderr に英語の `recover` 実行案内を出力し、`LoadEmails` もストア書き込みも行わず exit 1（AC-21a）
-  - [ ] `LoadRecoveryRequired` 失敗 → `LoadEmails` もストア書き込みも行わず `LogSystemError(store_corruption)` + `Flush()` + exit 1（AC-21a）
-  - [ ] `--notify` なしで `LogAlert` が呼ばれないこと（AC-24）
-  - [ ] `--notify` あり + TLS failure → `LogAlert` が呼ばれること（AC-24）
-  - [ ] `--notify` あり + ファイル単位パース失敗 → `LogWarning` が呼ばれ残りのファイル処理が継続すること（AC-25）
-  - [ ] ファイル単位読み込み失敗 → 当該ファイルを記録してスキップし、残りのファイル処理が継続すること（AC-25）
-  - [ ] ストア書き込み失敗（`SaveReports`）→ コマンド全体中断・exit 1（AC-25）
-  - [ ] ストア書き込み失敗（`SaveEmailMetas`）→ パースと `SaveReports` を行わずコマンド全体中断・exit 1（AC-25）
-  - [ ] 正常完了 → exit 0、recovery-required 残存 / `SaveReports` 失敗 / `Flush()` 失敗 → exit 1 となること（AC-26）
-  - [ ] `SaveEmailMetas` が `SaveReports` より前に呼ばれること（AC-23a / AC-23）
-  - [ ] 重複実行しても結果が変わらないこと（冪等性）
+- [x] `reprocess_test.go` に以下のテストを追加する（`testdata/` の実 `.eml` と `storetestutil.FakeStore` を使用）:
+  - [x] recovery-required 残存 → stderr に英語の `recover` 実行案内を出力し、`LoadEmails` もストア書き込みも行わず exit 1（AC-21a）
+  - [x] `LoadRecoveryRequired` 失敗 → `LoadEmails` もストア書き込みも行わず `LogSystemError(store_corruption)` + `Flush()` + exit 1（AC-21a）
+  - [x] `--notify` なしで `LogAlert` が呼ばれないこと（AC-24）
+  - [x] `--notify` あり + TLS failure → `LogAlert` が呼ばれること（AC-24）
+  - [x] `--notify` あり + ファイル単位パース失敗 → `LogWarning` が呼ばれ残りのファイル処理が継続すること（AC-25）
+  - [x] ファイル単位読み込み失敗 → 当該ファイルを記録してスキップし、残りのファイル処理が継続すること（AC-25）
+  - [x] ストア書き込み失敗（`SaveReports`）→ コマンド全体中断・exit 1（AC-25）
+  - [x] ストア書き込み失敗（`SaveEmailMetas`）→ パースと `SaveReports` を行わずコマンド全体中断・exit 1（AC-25）
+  - [x] 正常完了 → exit 0、recovery-required 残存 / `SaveReports` 失敗 / `Flush()` 失敗 → exit 1 となること（AC-26）
+  - [x] `SaveEmailMetas` が `SaveReports` より前に呼ばれること（AC-23a / AC-23）
+  - [x] 重複実行しても結果が変わらないこと（冪等性）
 
 **完了確認**: `make test && make lint` がパスする
 
