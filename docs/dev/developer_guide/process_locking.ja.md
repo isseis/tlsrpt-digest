@@ -80,13 +80,14 @@
 
 ロックファイル: `{root_dir}/.tlsrpt-digest-summary.lock`
 
-| 取得者 | flock 種別 |
-|---|---|
-| `summary` | shared |
-| `recovery_required` を変更する store API | exclusive |
+| 取得者 | flock 種別 | 取得失敗時の動作 |
+|---|---|---|
+| `summary`（`AcquireSummaryConsistencyGuard`） | shared（`LOCK_SH\|LOCK_NB`） | エラー終了 |
+| `recovery_required` を変更する store API（`withGuardExclusive`） | exclusive（`LOCK_EX`） | ブロック（待機） |
 
-`summary` が shared lock を保持している間、`recovery_required` sentinel への
-書き込み（exclusive lock 取得）はブロックされる。fetch のその他の処理
+`summary` が shared lock を保持している間、`recovery_required` sentinel への書き込みを
+試みた fetch は exclusive lock 取得でブロック（待機）する。fetch はエラーにならず、
+summary が shared lock を解放するまで待ち続ける。fetch のその他の処理
 （メール取得・レポート保存など）は並走する。
 
 ### `recovery_required` を変更する store API（排他 lock が必要）
@@ -106,48 +107,51 @@
 ### `SaveRecoveryRequired` を呼ぶのは fetch のみ
 
 `SaveRecoveryRequired` を呼び出すのは現在 `fetch` だけである。
-`gc`・`reprocess`・`recover` は `recovery_required` sentinel を書き込まない。
-これらは store-wide process lock によって `fetch` とも `summary` とも
-同時実行されないため、summary consistency guard の対象外である。
+`gc`・`reprocess`・`recover` は `summary` と並走できるが、
+`recovery_required` sentinel を書き込まないため summary consistency guard の対象外である。
 
-**summary consistency guard が対象とする競合は `fetch` との並走のみ**であり、
-それ以外の競合は store-wide process lock が排除する。
+**summary consistency guard が対象とする競合は `fetch` との並走のみ**である。
 
 ---
 
 ## 4. summary の recovery_required チェック設計
 
-### チェックのタイミング
+### shared lock の保持範囲
 
-`summary` は集計開始前に `CheckRecoveryRequired` を 1 回だけ呼ぶ。
+shared lock は Bootstrap 時（`AcquireSummaryConsistencyGuard`）に取得され、
+`guard.Close()`（`boot.Close()`）まで保持される。
+つまり summary コマンドの実行全体にわたって保持される。
+
+この間、fetch の `SaveRecoveryRequired` は exclusive lock 取得でブロックされるため、
+**summary 実行中に sentinel が書き込まれることは物理的に不可能**である。
+
+唯一の競合ウィンドウは「Bootstrap が shared lock を取得する前に fetch が sentinel を
+書き込む」タイミングだけである。
+
+### チェックのタイミングと目的
+
+`summary` は `CheckRecoveryRequired` を集計開始前に 1 回だけ呼ぶ。
+これは shared lock 取得前に sentinel が書き込まれていた場合を検出するためである。
 
 ```
-CheckRecoveryRequired   ← 集計開始前
-    ↓ found=true: 通知して終了
-GenerateSummary（store 読み取り）
-    ↓ ReportCount == 0: exitOK
-buildNotifier
-LogSummary / Flush（Slack 送信）
+Bootstrap: shared lock 取得
+           CheckRecoveryRequired   ← shared lock 取得前の書き込みを検出
+               ↓ found=true: 通知して終了
+           GenerateSummary（store 読み取り）
+               ↓ ReportCount == 0: exitOK
+           buildNotifier
+           LogSummary / Flush（Slack 送信）
+boot.Close(): shared lock 解放
+           fetch: ここで sentinel 書き込みが可能になる
 ```
 
-### チェックの目的と保証範囲
-
-集計開始前に `recovery_required` が立っていれば、その後の `recover` でストアデータが
-すべて削除されることが確定している。消えるデータの集計を送信しても混乱を招くだけなので、
-通知して終了する。
-
-集計開始後に fetch が `recovery_required` を書き込んだ場合は、そのまま集計・送信を続ける。
-fetch がエラー通知を別途送るため、ユーザーは問題を把握できる。
-集計済みデータはその時点の正しいデータであり、送信しても問題ない。
+`recovery_required` が立っていれば、その後の `recover` でストアデータがすべて削除される
+ことが確定している。消えるデータの集計を送信しても混乱を招くだけなので、通知して終了する。
 
 ### なぜ送信直前の再チェックをしないか
 
-以下の理由から、集計後・送信直前の再チェックは不要と判断している。
-
-- 蓄積済みレポートデータは UID validity 変更の影響を受けない。
-  変更が起きても過去に正常処理されたレポートの内容は正しい。
-- fetch がエラー通知を送るため、ユーザーはすでに異常を把握している。
-- summary は定期スナップショットであり、わずかなタイミング差は許容範囲内である。
+summary が shared lock を保持している間は fetch の sentinel 書き込みがブロックされるため、
+`CheckRecoveryRequired` 通過後に sentinel が変化することはない。再チェックは不要である。
 
 ---
 
