@@ -187,7 +187,7 @@ func TestBootstrap_SlackURLsSecretWrappedImmediately(t *testing.T) {
 	assert.Equal(t, "[REDACTED]", gotError.String())
 }
 
-func TestBootstrap_NonFetchSubcommandsDoNotReadIMAPCredentials(t *testing.T) {
+func TestBootstrap_NonFetchSubcommandsSucceedWithoutIMAPCredentials(t *testing.T) {
 	for _, subcmd := range []SubcommandName{subcommandGC, subcommandRecover, subcommandReprocess} {
 		t.Run(string(subcmd), func(t *testing.T) {
 			_, err := Bootstrap(subcmd, "config.toml", "run-no-imap", BootstrapOptions{

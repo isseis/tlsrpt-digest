@@ -33,7 +33,7 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 	// about to be wiped by recovery and there is no point sending a summary.
 	found, err := guard.CheckRecoveryRequired(ctx)
 	if err != nil {
-		return exitError, fmt.Errorf("summary: check recovery required: %w", err)
+		return exitError, fmt.Errorf("summary: check recovery required (pre-aggregation): %w", err)
 	}
 	if found {
 		slog.Warn("recovery required: run tlsrpt-digest recover to resolve")
