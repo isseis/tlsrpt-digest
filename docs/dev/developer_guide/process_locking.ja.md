@@ -87,8 +87,9 @@
 
 `summary` が shared lock を保持している間、`recovery_required` sentinel への書き込みを
 試みた fetch は exclusive lock 取得でブロック（待機）する。fetch はエラーにならず、
-summary が shared lock を解放するまで待ち続ける。fetch のその他の処理
-（メール取得・レポート保存など）は並走する。
+summary が shared lock を解放するまで待ち続ける。ブロックが発生するのは
+`SaveRecoveryRequired` の呼び出し箇所のみであり、それ以前のメール取得や
+レポート保存は summary と並走して進む。
 
 ### `recovery_required` を変更する store API（排他 lock が必要）
 
