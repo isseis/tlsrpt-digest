@@ -114,6 +114,26 @@ func TestRecover_DiscardOldYesCallsResetForRecovery(t *testing.T) {
 	assert.Contains(t, output, "discard-old --yes")
 }
 
+// TestRecover_DiscardOldYesFreshStart verifies that discard-old --yes succeeds on a
+// first-time reset where no prior manifest exists (PendingReset = false).
+func TestRecover_DiscardOldYesFreshStart(t *testing.T) {
+	st := makeRecoveryStore(100, 200)
+	// PendingReset is false — no prior incomplete reset manifest.
+	var out bytes.Buffer
+	runner := &recoverRunner{stdout: &out}
+
+	opts := cliOptions{RecoverMode: "discard-old", RecoverYes: true}
+	code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
+
+	require.NoError(t, err)
+	assert.Equal(t, exitOK, code)
+	assert.Equal(t, 1, st.ResetForRecoveryCallCount)
+	assert.Nil(t, st.Recovery, "recovery-required should be cleared after reset")
+	output := out.String()
+	assert.NotContains(t, output, "Continuing incomplete reset", "fresh start should not show resume message")
+	assert.Contains(t, output, "Recovery completed")
+}
+
 // TestRecover_ResetForRecoveryFailure verifies that a ResetForRecovery error leaves
 // recovery-required and pending-reset state intact and returns exit 1.
 func TestRecover_ResetForRecoveryFailure(t *testing.T) {

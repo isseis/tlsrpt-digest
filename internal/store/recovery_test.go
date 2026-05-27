@@ -1017,3 +1017,21 @@ func TestSummaryConsistencyGuard_BlocksExclusiveWriter(t *testing.T) {
 		t.Fatal("exclusive writer did not complete after shared lock released")
 	}
 }
+
+func TestHasPendingReset_NoManifest(t *testing.T) {
+	s, _ := openRecoverResetStore(t)
+	found, err := s.HasPendingReset()
+	require.NoError(t, err)
+	assert.False(t, found)
+}
+
+func TestHasPendingReset_ManifestPresent(t *testing.T) {
+	s, rootDir := openRecoverResetStore(t)
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Phase:           resetPhaseManifestWritten,
+		CurrUIDValidity: 42,
+	}))
+	found, err := s.HasPendingReset()
+	require.NoError(t, err)
+	assert.True(t, found)
+}

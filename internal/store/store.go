@@ -96,8 +96,9 @@ type Store interface {
 	// The caller must hold the process-level store writer lock until this method returns.
 	AbortReset() error
 
-	// HasPendingReset reports whether an incomplete reset manifest exists in the store.
-	// Returns (true, nil) when a manifest is present regardless of commit state.
+	// HasPendingReset reports whether a reset manifest file exists in the store,
+	// including committed resets that are awaiting cleanup.
+	// Returns (true, nil) when a manifest is present.
 	// Returns (false, nil) when no manifest is found.
 	HasPendingReset() (bool, error)
 
