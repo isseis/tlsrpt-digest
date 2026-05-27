@@ -42,11 +42,7 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	reportCutoff := gcReportCutoff(boot.Options, boot.Config, now)
 	reportDeleted, err := boot.Store.DeleteReportsBefore(reportCutoff)
 	if err != nil {
-		kind := notify.SystemErrorKindStorePermission
-		if errors.Is(err, store.ErrDataCorrupted) {
-			kind = notify.SystemErrorKindStoreCorruption
-		}
-		_ = notifyGCSystemError(ctx, boot.Notifier, kind, mailbox)
+		_ = notifyGCSystemError(ctx, boot.Notifier, gcNotifyKind(err), mailbox)
 		return exitError, fmt.Errorf("gc: delete reports: %w", err)
 	}
 
@@ -54,11 +50,7 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	emailCutoff := gcEmailCutoff(boot.Options, boot.Config, now)
 	emailDeleted, err := boot.Store.DeleteEmailsBefore(emailCutoff)
 	if err != nil {
-		kind := notify.SystemErrorKindStorePermission
-		if errors.Is(err, store.ErrDataCorrupted) {
-			kind = notify.SystemErrorKindStoreCorruption
-		}
-		_ = notifyGCSystemError(ctx, boot.Notifier, kind, mailbox)
+		_ = notifyGCSystemError(ctx, boot.Notifier, gcNotifyKind(err), mailbox)
 		return exitError, fmt.Errorf("gc: delete emails: %w", err)
 	}
 
@@ -81,6 +73,14 @@ func gcEmailCutoff(opts cliOptions, cfg *config.Config, now time.Time) time.Time
 		return opts.MaxEmailAge.Cutoff(now)
 	}
 	return Duration{Days: cfg.Store.MaxEmailAgeDays}.Cutoff(now)
+}
+
+// gcNotifyKind maps a store error to the appropriate SystemErrorKind.
+func gcNotifyKind(err error) notify.SystemErrorKind {
+	if errors.Is(err, store.ErrDataCorrupted) {
+		return notify.SystemErrorKindStoreCorruption
+	}
+	return notify.SystemErrorKindStorePermission
 }
 
 // notifyGCSystemError logs a system error with component "gc" and flushes.
