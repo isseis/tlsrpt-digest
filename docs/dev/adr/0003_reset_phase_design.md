@@ -35,15 +35,10 @@ When an IMAP server changes UIDVALIDITY, the correspondence between existing UID
 
 `ResetForRecovery` records the progress of file operations as `resetPhase` (an integer value) in the reset manifest (`.tlsrpt-digest-reset-manifest.json`). The manifest is the progress ledger for the reset operation, and the sentinel file (`.tlsrpt-digest-meta.json`) holds the user-visible committed state (UIDValidity and the current value of recovery_required).
 
-```
-Manifest (progress ledger)
-  ↓  records
-resetPhase (integer) ─── code decides whether to resume or stop according to the phase
-
-Sentinel (committed state)
-  ↓  records
-UIDValidity / recovery_required ─── true basis for whether the operation is "committed"
-```
+| File | Contents | Role |
+|---|---|---|
+| Manifest (`.tlsrpt-digest-reset-manifest.json`) | `resetPhase` (integer 1–5) | Progress ledger for the reset operation. Used to decide where to resume or stop after a crash |
+| Sentinel (`.tlsrpt-digest-meta.json`) | `UIDValidity`, `recovery_required` | Committed-state ledger. `recovery_required == nil` is the authoritative signal that the commit is complete |
 
 ---
 
@@ -56,6 +51,40 @@ UIDValidity / recovery_required ─── true basis for whether the operation i
 | `resetPhaseEmailsStaged` | 3 | After staging of `emails/` is complete (checkpoint) | Records that renaming the email directory is complete. Likewise, `stageEmailsDir` is idempotent |
 | `resetPhaseCommitted` | 4 | Immediately after saving the sentinel (commit marker) | Records that the write to the sentinel (clearing recovery_required and setting the new UIDVALIDITY) is complete. After this, only the manifest and staging directory remain, so cleanup failure does not affect the normal data path |
 | `resetPhaseAborting` | 5 | Before executing `restoreFromStaging` (abort WAL entry) | **WAL entry for the abort operation**. `AbortReset` writes this phase before moving files back to their original locations. Even if the manifest remains after a later crash, `ResetForRecovery` sees this phase, refuses the operation, and prompts re-execution of `AbortReset` |
+
+### State Transition Diagram
+
+```mermaid
+flowchart TD
+    Normal["Normal<br>(no manifest / no recovery_required)"]
+    RR["Recovery Required<br>(recovery_required set / no manifest)"]
+    P4["Phase 4<br>(committed / cleanup pending)"]
+    P5["Phase 5<br>(abort in progress)"]
+
+    subgraph PendingReset["Pre-commit pending reset (phases 1–3)"]
+        P1["Phase 1<br>(manifest written)"]
+        P2["Phase 2<br>(data staged)"]
+        P3["Phase 3<br>(emails staged)"]
+    end
+
+    Normal -.->|"fetch detects UIDVALIDITY change"| RR
+    RR -->|"recover --mode keep-old"| Normal
+    RR -->|"recover --mode discard-old --yes"| P1
+    P1 -->|"stageDataFile complete"| P2
+    P2 -->|"stageEmailsDir complete"| P3
+    P3 -->|"commitReset complete"| P4
+    P4 -->|"Open runs cleanupCompletedReset"| Normal
+    PendingReset -.->|"recover --abort-reset --yes"| P5
+    P5 -->|"AbortReset complete"| RR
+```
+
+Legend: solid = normal transition; dashed = exceptional event (UIDVALIDITY change) or manual abort.
+
+**Crash recovery**: If the process stops at phases 1–3, re-running `recover --mode discard-old --yes` resumes from the current phase and the remaining steps continue automatically.
+
+**Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent).
+
+**Commit-window crash**: `commitReset` saves the sentinel before advancing the manifest to phase 4. A crash between those two writes leaves the manifest at phase 3, but `cleanupCompletedReset` uses `recovery_required` in the sentinel (not the phase number) to determine commit status, so cleanup runs the same as for phase 4 and the state converges to Normal (see §4). Data integrity is fully preserved, but the staging directory and manifest remain on disk until the next `fetch` or `gc` run (`summary` and `recover --mode discard-old --yes` do not trigger cleanup). Since `fetch` and `gc` are expected to run periodically, storage capacity estimates should account for one staging directory's worth of old data as a temporary overhead.
 
 ### Behavior During User Operations
 
@@ -82,13 +111,12 @@ If a crash occurs before writing the flag, the manifest does not exist, so the n
 
 ### Reason for Writing Phases 2 and 3 (Checkpoints) After Rename
 
-Because `rename(2)` is an atomic operation guaranteed by POSIX, files are moved only when the operation succeeds. By writing checkpoints after rename, the inference "checkpoint is written = rename is definitely complete" holds. When resuming after a crash:
+Because `rename(2)` is an atomic operation guaranteed by POSIX, files are moved only when the operation succeeds. By writing checkpoints after rename, the following inferences hold when resuming after a crash:
 
-```
-[Checkpoint for phase N is absent]
-  → "The operation for phase N may already be complete, or may not have run yet"
-  → Re-run the idempotent operation (if the file is absent, no-op)
-```
+| Checkpoint for phase N | Inference | Action on resume |
+|---|---|---|
+| Present | Rename is definitely complete | Skip |
+| Absent | May already be complete, or may not have run | Re-run the idempotent operation (if file absent, no-op) |
 
 Conversely, if the checkpoint were written before rename, a crash could create a state where the checkpoint was written but the rename was not complete, creating the risk that resume processing would incorrectly judge the operation as complete. This design chose the post-operation checkpoint pattern.
 
@@ -111,11 +139,10 @@ The operation in which `AbortReset` moves files back to their original locations
 
 To avoid this problem, `AbortReset` always updates the manifest to phase 5 (aborting) before moving any files. If `ResetForRecovery` sees phase 5, it returns `ErrResetAbortInProgress` and requires completion of `AbortReset`.
 
-```
-[Behavior when phase 5 is detected]
-  ResetForRecovery → refuse (ErrResetAbortInProgress)
-  AbortReset       → resume (restoreFromStaging is idempotent) → cleanup
-```
+| When phase 5 is detected | Behavior |
+|---|---|
+| `ResetForRecovery` | Refused (`ErrResetAbortInProgress`) |
+| `AbortReset` | Resumes (`restoreFromStaging` is idempotent) → cleanup |
 
 ---
 
@@ -191,38 +218,123 @@ The current abort processing is only one step, phase 5 (aborting). If the abort 
 
 ---
 
-## 8. Decision on SQLite / RDBMS Migration
+## 8. Evaluation of Alternative Storage Technologies
 
 ### Current Decision
 
-Do not migrate to SQLite or another RDBMS at this point. The current persistence targets are limited to `tlsrpt.json`, `emails/`, the sentinel, the reset manifest, and the staging directory, and phase management in `ResetForRecovery` / `AbortReset` covers the major crash scenarios.
+Do not migrate from the file-based design at this point. The current persistence targets are limited to `tlsrpt.json`, `emails/`, the sentinel, the reset manifest, and the staging directory, and the major crash scenarios are already covered by phase management in `ResetForRecovery` / `AbortReset`. The migration cost is judged to outweigh the simplification that would be gained.
 
-Introducing SQLite would reduce application-side multi-file phase management, but would increase operational and implementation costs such as schema design, existing data migration, driver dependencies, backup, VACUUM, and recovery procedures for DB corruption. At this point, these migration costs are judged to outweigh the simplification that would be gained.
+### Overview Comparison
 
-### Pros of SQLite Migration
+| Alternative | CGO | SQL | Primary applicability |
+|---|---|---|---|
+| SQLite (`mattn/go-sqlite3`) | Required | Yes | When SQL and schema management become necessary |
+| Pure Go SQLite (`modernc.org/sqlite`) | Not required | Yes | When SQL is needed while avoiding CGO |
+| bbolt | Not required | No | When only atomicity guarantees for state management are needed |
+| Pebble | Not required | No | When high write throughput is needed (overkill for this use case) |
+
+---
+
+### SQLite (`mattn/go-sqlite3`)
+
+CGO-based SQLite bindings. The most widely used option.
+
+**Pros**
 
 | Perspective | Content |
 |---|---|
-| Crash safety | `BEGIN` / `COMMIT` can keep updates to reports, emails, the sentinel, and recovery_required within one transaction |
+| Crash safety | `BEGIN` / `COMMIT` can keep updates to reports, the sentinel, and recovery_required within one transaction |
 | Reduction of phase management | Much of the current `resetPhase`, manifest, staging, and abort phase design can be replaced by DB atomic commit |
-| Integrity constraints | The correspondence between reports and emails, UIDVALIDITY, recovery_required, and similar data can be expressed more easily with table constraints and transaction boundaries |
-| Future search and aggregation | Compared with reading all JSON, conditional search and aggregation by period, UID, domain, and similar keys can be expressed more easily in SQL |
+| Integrity constraints | UIDVALIDITY, recovery_required, and similar data can be expressed easily with table constraints and transaction boundaries |
+| Future search and aggregation | Conditional search and aggregation by period, UID, domain, and similar keys can be expressed easily in SQL |
 | Explicit migration | Having a schema version makes it easier to manage changes to the persistent format in stages |
 
-### Cons of SQLite Migration
+**Cons**
 
 | Perspective | Content |
 |---|---|
-| Migration cost | Migration from the existing `tlsrpt.json`, `emails/`, and sentinel into the DB, and a rollback policy, become necessary |
-| Driver dependency | `github.com/mattn/go-sqlite3` requires CGO and affects distribution and cross-builds. If a pure Go driver is selected, compatibility and performance must still be checked |
-| Operational files | If WAL mode is used, `store.db-wal` / `store.db-shm` must be included in backup, permission, and deletion procedures in addition to `store.db` |
-| Size management | If `.eml` is stored as BLOBs, a policy for DB size, GC, VACUUM / incremental VACUUM is required |
-| Inspectability | If `.eml` is stored inside the DB rather than as normal files, manual investigation and emergency recovery must go through SQL or a dedicated tool |
-| Handling corruption | Procedures for detecting DB file corruption, restoring from backup, and partial recovery must be defined anew |
+| CGO dependency | Cross-builds are difficult. Setup costs for CI and distribution environments increase |
+| Migration cost | Migration from the existing files into the DB, and a rollback policy, become necessary |
+| Operational files | In WAL mode, `store.db-wal` / `store.db-shm` must be included in backup procedures |
+| Size management | If `.eml` is stored as BLOBs, a policy for VACUUM / incremental VACUUM is required |
+| Inspectability | If `.eml` is stored inside the DB, manual investigation and emergency recovery must go through SQL or a dedicated tool |
+| Handling corruption | Procedures for detecting DB file corruption and restoration must be defined anew |
+
+---
+
+### Pure Go SQLite (`modernc.org/sqlite`)
+
+An automatic pure Go translation of the SQLite C source. The API is largely compatible with `mattn/go-sqlite3`.
+
+**Pros**
+
+| Perspective | Content |
+|---|---|
+| No CGO | Cross-builds are straightforward. No impact on distribution environments |
+| Full SQLite functionality | WAL, transactions, constraints, and all other SQLite pros apply as-is |
+| Low migration cost | High API compatibility with `mattn/go-sqlite3`; in many cases a driver swap is sufficient |
+
+**Cons**
+
+| Perspective | Content |
+|---|---|
+| Slightly lower performance | Generally slower than the CGO version (roughly 1.5–2× for read-heavy workloads as a guideline). Not expected to be a problem at this project's access frequency |
+| Inherits SQLite cons | VACUUM, WAL file management, corruption handling, and other SQLite cons remain unchanged |
+
+**Evaluation for this project**
+
+The first choice when SQL and schema management are needed while avoiding CGO. Compared with `mattn/go-sqlite3`, the only meaningful additional cost is the performance gap.
+
+---
+
+### bbolt
+
+A pure Go B+ tree KV store with production usage in etcd and Kubernetes.
+
+**Pros**
+
+| Perspective | Content |
+|---|---|
+| Pure Go | No CGO required. No impact on cross-builds |
+| ACID transactions | `db.Update(func(tx) error { ... })` enables atomic updates spanning multiple buckets. Crash-safe |
+| Simple API | Only buckets (namespaces) and key-value pairs. Low learning curve |
+| Single file | Complete in one `.db` file (plus a lock file). No WAL auxiliary files |
+| Track record | Long-running production usage in etcd, InfluxDB, and others |
+| Fit for this use case | Sufficient for atomic updates of sentinel, manifest, recovery_required, and report metadata. No SQL needed given there are currently no search or aggregation requirements |
+
+**Cons**
+
+| Perspective | Content |
+|---|---|
+| No SQL | Search and aggregation must be implemented in application code |
+| Implicit schema | The KV mapping is defined in application logic, so there are no DB-side type constraints or foreign keys |
+| Handling `.eml` | `.eml` is kept on the filesystem rather than stored in bbolt (see rationale below). The two-phase commit problem with bbolt remains but is manageable |
+| Migration representation | Schema versioning must be designed in application code |
+
+**Why `.eml` is kept on the filesystem**
+
+| Reason | Detail |
+|---|---|
+| Memory pressure from mmap | bbolt mmaps all data, so storing a large number of `.eml` files of hundreds of KB to several MB each causes page-cache pressure |
+| Write-lock contention | `db.Update` holds a write lock over the entire DB, so writing a large BLOB blocks all other operations for its duration |
+| No automatic space reclamation | bbolt has no VACUUM equivalent; after deleting `.eml` entries the DB file does not shrink. A `Compact`-equivalent operation would need to be implemented and run during each gc pass |
+| Inspectability and manual recovery | Files on the filesystem can be inspected and re-sent directly with tools like `cat` or `mutt`. BLOBs stored inside bbolt require custom tooling or Go code, increasing the cost of manual recovery |
+
+**Evaluation for this project**
+
+A design that keeps `.eml` on the filesystem while atomically updating sentinel, recovery_required, UIDVALIDITY, and report metadata in bbolt transactions is natural. Much of the current phase management (resetPhase, manifest, staging) can be replaced by a single `db.Update`. However, because `.eml` and metadata still have the two-phase commit problem, operations that add or remove `.eml` files (saving during fetch, deleting during gc) require explicit crash-safe ordering design.
+
+---
+
+### Pebble
+
+A pure Go LSM tree KV store by the CockroachDB team. Write throughput is higher than bbolt, but there is no benefit at this project's access frequency (fetch approximately once per hour). Configuration and tuning is more complex than bbolt, making it overkill at this time.
+
+---
 
 ### Reconsideration Conditions
 
-Reconsider migration to SQLite / RDBMS if any of the following occur.
+Reconsider migration if any of the following occur.
 
 - Crash-safe update operations spanning multiple files increase in addition to `ResetForRecovery`
 - Additions of `stageXxx` and corresponding phases repeat, making the state space of `resetPhase` difficult to understand operationally
@@ -230,13 +342,15 @@ Reconsider migration to SQLite / RDBMS if any of the following occur.
 - The number of managed persistence files increases, making manual recovery procedures more complex than they are now
 - Reading all JSON becomes a problem for the performance or implementation of search, aggregation, or GC
 - Migration of the persistent format becomes continuously necessary, making schema management simpler than file-by-file migration
-- In backup and recovery operations, it becomes difficult to "save multiple files at a consistent point in time"
+- In backup and recovery operations, it becomes difficult to save multiple files at a consistent point in time
 
 ### Design Policy at Migration Time
 
-When migrating to SQLite, do not partially move only reports to the DB; instead, consolidate reports, emails, the sentinel, and recovery_required into the same DB as much as possible. If `.eml` remains on the file system, the two-phase commit problem between the DB and files remains, and complexity of the same kind as the current phase management reappears.
+When migrating to **SQLite** (`mattn/go-sqlite3` or `modernc.org/sqlite`), do not partially move only reports to the DB; instead, consolidate reports, the sentinel, and recovery_required into the same DB. If `.eml` remains on the file system, the two-phase commit problem between the DB and files remains, and complexity of the same kind as the current phase management reappears.
 
-Because the access frequency is about once per hour for `fetch`, about once per week for `summary`, and less than once per week for `gc`, the primary purpose of the initial migration is not read/write concurrency performance, but crash safety and simplification of state management. WAL mode is not required; it is acceptable to design first around rollback journal mode, short transactions, and the existing process exclusive lock.
+When migrating to **bbolt**, the practical design is to consolidate metadata (sentinel, recovery_required, UIDVALIDITY, and report metadata) into bbolt and keep `.eml` on the filesystem. In this case, operations involving adding or removing `.eml` files (saving during fetch, deleting during gc) require explicit design of the ordering between bbolt transactions and file operations to maintain crash safety.
+
+In either case, because the access frequency is low (fetch approximately once per hour, summary approximately once per week, gc less than once per week), the primary purpose of the initial migration is not read/write concurrency performance, but crash safety and simplification of state management.
 
 ---
 

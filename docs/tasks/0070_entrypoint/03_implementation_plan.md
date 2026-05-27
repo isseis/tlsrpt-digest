@@ -338,8 +338,8 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（ステップ 2-2 は新しいブランチで作業する）
+- [x] PR がマージされた
+- [x] 次のブランチへ切り替えた（ステップ 2-2 は新しいブランチで作業する）
 
 ---
 
@@ -352,29 +352,28 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 空ストア時の詳細シーケンスは `02_architecture.md` §6.7 を参照。
 
-- [ ] `summary.go` に `summaryRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
-- [ ] `main.go` のスタブを `summaryRunner` で置き換える
-- [ ] 処理フローを以下の順で実装する（`02_architecture.md` §6.7 参照）:
+- [x] `summary.go` に `summaryRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [x] `main.go` のスタブを `summaryRunner` で置き換える
+- [x] 処理フローを以下の順で実装する（`02_architecture.md` §6.7 参照）:
   1. `Bootstrap` が `OpenReadOnly` で開いた `boot.Store` と `boot.SummaryGuard` を使用する。`summary.go` では store を再オープンしない（AC-10c）
-  2. `boot.SummaryGuard` の第 1 回 `CheckRecoveryRequired` を呼ぶ。`found=true` → stderr に英語の `recover` 実行案内を出力し、W-3・W-4 で notifier を構築してから `LogSystemError(recovery_required)` + `Flush()` + exit 1（AC-27a）
+  2. `boot.SummaryGuard` の `CheckRecoveryRequired` を呼ぶ。`found=true` → W-3・W-4 で notifier を構築してから `LogSystemError(recovery_required)` + `Flush()` + exit 1（AC-27a）
   3. `notify.GenerateSummary(ctx, store, start=Duration.Cutoff(now), end=UTCDayStart(now), debugLogger)` を呼ぶ（AC-27）
-  4a. Summary が空の場合: guard の第 2 回 `CheckRecoveryRequired` を呼ぶ。`found=true` → stderr に英語の `recover` 実行案内を出力して exit 1（notifier 未構築のため Slack 通知なし）。`found=false` → `slog.Info("no reports to summarize")` を出力し exit 0（AC-10c）
+  4a. Summary が空の場合: `slog.Info("no reports to summarize")` を出力し exit 0（AC-10c）
   4b. Summary が非空の場合: W-3・W-4 で notifier を構築する
-  5. guard の第 2 回 `CheckRecoveryRequired`（Slack 送信直前）を呼ぶ。`found=true` → stderr に英語の `recover` 実行案内を出力し、`LogSystemError(recovery_required)` + `Flush()` + exit 1（AC-27a）。`found=false` → `LogSummary` + `Flush()` + exit 0（AC-28）
-- [ ] `summary_test.go` に以下のテストを追加する（`storetestutil.FakeStore`・`FakeSummaryConsistencyGuard`・`SpyNotificationSink` を使用）:
-  - [ ] `--window 7d` 指定時に `Duration.Cutoff(now)` が `start` として `GenerateSummary` へ渡されること（AC-07a / AC-07c）
-  - [ ] `--window` 未指定 + 設定値ありで設定値が `start` として使われること（AC-07a）
-  - [ ] `GenerateSummary` に渡される `end` が `UTCDayStart(now)` であること（AC-07d）
-  - [ ] `notify.GenerateSummary` 失敗 → notifier を構築せず exit 1 となること
-  - [ ] 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary.Period`）に含まれること（AC-28）
-  - [ ] recovery-required 残存（第 1 回確認）→ 集計・送信せず exit 1（AC-27a）
-  - [ ] 第 1 回または第 2 回 `CheckRecoveryRequired` がエラーを返した場合 → 集計・送信を行わず exit 1 となること
-  - [ ] 空集計 + recovery-required なし → `slog.Info` で `no reports to summarize` が出力され notifier 未構築・Slack URL 未設定でも exit 0（AC-10c）
-  - [ ] 空集計 + 第 2 回 `CheckRecoveryRequired` が `found=true` → stderr に英語の `recover` 実行案内を出力して exit 1（notifier 未構築のため Slack 通知なし）
-  - [ ] 非空集計 + Slack URL 未設定 → `BuildHandlers` 失敗で exit 1（空集計との対比）
-  - [ ] 非空集計 + 送信直前 recovery-required 出現 → 送信せず exit 1（AC-27a）
-  - [ ] `notify.GenerateSummary` を呼び、集計ロジックを `summary.go` で再実装しないこと
-  - [ ] 空集計 / 正常送信 → exit 0、recovery-required 残存 / `Flush()` 失敗 → exit 1 となること（AC-29）
+  5. `LogSummary` + `Flush()` + exit 0（AC-28）
+  > **設計注記**: 当初計画では `CheckRecoveryRequired` を集計前・送信直前の 2 回呼ぶ 2 フェーズ方式を予定していたが、ロック設計の分析（`docs/dev/developer_guide/process_locking.md` §4）により、shared lock 保持中は sentinel の書き込みが物理的にブロックされるため第 2 回チェックは不要と結論づけ、集計前の 1 回のみとした。
+- [x] `summary_test.go` に以下のテストを追加する（`storetestutil.FakeStore`・`FakeSummaryConsistencyGuard`・`SpyNotificationSink` を使用）:
+  - [x] `--window 7d` 指定時に `Duration.Cutoff(now)` が `start` として `GenerateSummary` へ渡されること（AC-07a / AC-07c）
+  - [x] `--window` 未指定 + 設定値ありで設定値が `start` として使われること（AC-07a）
+  - [x] `GenerateSummary` に渡される `end` が `UTCDayStart(now)` であること（AC-07d）
+  - [x] `notify.GenerateSummary` 失敗 → notifier を構築せず exit 1 となること
+  - [x] 集計対象期間（開始・終了日時）がメッセージ（`notify.Summary.Period`）に含まれること（AC-28）
+  - [x] recovery-required 残存（第 1 回確認）→ 集計・送信せず exit 1（AC-27a）
+  - [x] `CheckRecoveryRequired` がエラーを返した場合 → 集計・送信を行わず exit 1 となること
+  - [x] 空集計 + recovery-required なし → `slog.Info` で `no reports to summarize` が出力され notifier 未構築・Slack URL 未設定でも exit 0（AC-10c）
+  - [x] 非空集計 + Slack URL 未設定 → `BuildHandlers` 失敗で exit 1（空集計との対比）
+  - [x] `notify.GenerateSummary` を呼び、集計ロジックを `summary.go` で再実装しないこと
+  - [x] 空集計 / 正常送信 → exit 0、recovery-required 残存 / `Flush()` 失敗 → exit 1 となること（AC-29）
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -386,10 +385,10 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 **推奨タイトル**: `feat(task 0070): implement summary subcommand with consistency guard`
 
-**レビュー観点**: `SummaryConsistencyGuard` の 2 回確認ロジック / 空ストア時の notifier 遅延構築
+**レビュー観点**: `SummaryConsistencyGuard` による集計前 recovery-required チェック / 空ストア時の notifier 遅延構築
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/89）
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（フェーズ 3 は新しいブランチで作業する）
 
