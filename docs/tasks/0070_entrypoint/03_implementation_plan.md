@@ -529,7 +529,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 **レビュー観点**: `--mode` / `--yes` / `--abort-reset` のフラグ組み合わせ / `OpenRecoverReset` 選択 / 破壊的操作の fail-safe
 
 - [x] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/92）
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（フェーズ 4 は新しいブランチで作業する）
 
