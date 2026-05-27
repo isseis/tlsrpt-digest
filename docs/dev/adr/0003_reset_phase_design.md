@@ -139,11 +139,10 @@ The operation in which `AbortReset` moves files back to their original locations
 
 To avoid this problem, `AbortReset` always updates the manifest to phase 5 (aborting) before moving any files. If `ResetForRecovery` sees phase 5, it returns `ErrResetAbortInProgress` and requires completion of `AbortReset`.
 
-```
-[Behavior when phase 5 is detected]
-  ResetForRecovery → refuse (ErrResetAbortInProgress)
-  AbortReset       → resume (restoreFromStaging is idempotent) → cleanup
-```
+| When phase 5 is detected | Behavior |
+|---|---|
+| `ResetForRecovery` | Refused (`ErrResetAbortInProgress`) |
+| `AbortReset` | Resumes (`restoreFromStaging` is idempotent) → cleanup |
 
 ---
 

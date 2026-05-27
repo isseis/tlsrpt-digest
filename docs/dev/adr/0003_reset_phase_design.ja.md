@@ -139,11 +139,10 @@ flowchart TD
 
 この問題を回避するため、`AbortReset` はファイルを動かす前に必ずフェーズ 5（aborting）に更新する。`ResetForRecovery` はフェーズ 5 を見た場合に `ErrResetAbortInProgress` を返し、`AbortReset` の完了を要求する。
 
-```
-[フェーズ 5 検出時の動作]
-  ResetForRecovery → 拒否 (ErrResetAbortInProgress)
-  AbortReset       → 再開（restoreFromStaging は冪等）→ クリーンアップ
-```
+| フェーズ 5 検出時 | 動作 |
+|---|---|
+| `ResetForRecovery` | 拒否（`ErrResetAbortInProgress`） |
+| `AbortReset` | 再開（`restoreFromStaging` は冪等）→ クリーンアップ |
 
 ---
 
