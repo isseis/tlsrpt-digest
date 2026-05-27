@@ -196,14 +196,26 @@ func TestGC_DeleteCountLog(t *testing.T) {
 func TestGC_RecoveryRequiredStops(t *testing.T) {
 	st := storetestutil.NewFakeStore()
 	st.Recovery = &storetestutil.FakeRecovery{Prev: 1, Curr: 2, DetectedAt: time.Now()}
+	st.Reports["old"] = tlsrpt.Report{
+		ReportID: "old",
+		DateRange: tlsrpt.DateRange{
+			EndDatetime: time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	st.Emails[storetestutil.EmailKey{UID: 1, UIDValidity: 100}] = &storetestutil.FakeEmailEntry{
+		UID: 1, UIDValidity: 100, InternalDate: time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC),
+	}
 	spy := &SpyNotificationSink{}
 
 	runner := &gcRunner{now: time.Now}
 	code, err := runner.Run(context.Background(), makeGCBoot(t, st, spy, cliOptions{}, nil))
 	require.NoError(t, err)
 	assert.Equal(t, exitError, code)
-	// No deletion should happen.
 	assert.Empty(t, spy.SystemErrors)
+	assert.Equal(t, 0, st.DeleteReportsBeforeCallCount)
+	assert.Equal(t, 0, st.DeleteEmailsBeforeCallCount)
+	assert.Contains(t, st.Reports, "old")
+	assert.Contains(t, st.Emails, storetestutil.EmailKey{UID: 1, UIDValidity: 100})
 }
 
 func TestGC_LoadRecoveryRequiredFail(t *testing.T) {

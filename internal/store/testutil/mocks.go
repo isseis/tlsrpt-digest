@@ -64,9 +64,10 @@ type FakeStore struct {
 	LoadEmailsErr           error
 
 	// Call-count fields for ordering/invocation assertions.
-	SaveEmailMetasCallCount     int
-	SaveReportsCallCount        int
-	DeleteEmailsBeforeCallCount int
+	SaveEmailMetasCallCount      int
+	SaveReportsCallCount         int
+	DeleteReportsBeforeCallCount int
+	DeleteEmailsBeforeCallCount  int
 
 	// Cutoff capture fields for asserting the argument passed to delete operations.
 	DeleteReportsCutoff time.Time
@@ -241,6 +242,7 @@ func (f *FakeStore) ApplyRecovery(newUIDValidity uint32) error {
 
 // DeleteReportsBefore implements store.Store.
 func (f *FakeStore) DeleteReportsBefore(cutoff time.Time) (int, error) {
+	f.DeleteReportsBeforeCallCount++
 	f.DeleteReportsCutoff = cutoff
 	if f.DeleteReportsBeforeErr != nil {
 		return 0, f.DeleteReportsBeforeErr
