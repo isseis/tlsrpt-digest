@@ -80,6 +80,7 @@ func TestGC_BeforeDefault(t *testing.T) {
 	code, err := runner.Run(context.Background(), makeGCBoot(t, st, spy, cliOptions{}, cfg))
 	require.NoError(t, err)
 	assert.Equal(t, exitOK, code)
+	assert.Equal(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), st.DeleteReportsCutoff)
 }
 
 func TestGC_ReportsCutoff(t *testing.T) {
@@ -260,23 +261,34 @@ func TestGC_DeleteReportsFailDoesNotCallDeleteEmails(t *testing.T) {
 
 func TestGC_Idempotent(t *testing.T) {
 	st := storetestutil.NewFakeStore()
+	st.Reports["old"] = tlsrpt.Report{
+		ReportID: "old",
+		DateRange: tlsrpt.DateRange{
+			EndDatetime: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	st.Emails[storetestutil.EmailKey{UID: 1, UIDValidity: 100}] = &storetestutil.FakeEmailEntry{
+		UID: 1, UIDValidity: 100, InternalDate: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
 	spy := &SpyNotificationSink{}
 	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	dur := Duration{Days: 7}
-	opts := cliOptions{Before: &dur}
+	opts := cliOptions{Before: &dur, MaxEmailAge: &dur}
 
 	runner := &gcRunner{now: func() time.Time { return now }}
 	boot := makeGCBoot(t, st, spy, opts, nil)
 
-	// First run.
 	code, err := runner.Run(context.Background(), boot)
 	require.NoError(t, err)
 	assert.Equal(t, exitOK, code)
+	assert.Empty(t, st.Reports)
+	assert.Empty(t, st.Emails)
 
-	// Second run: nothing to delete.
 	code, err = runner.Run(context.Background(), boot)
 	require.NoError(t, err)
 	assert.Equal(t, exitOK, code)
+	assert.Empty(t, st.Reports)
+	assert.Empty(t, st.Emails)
 }
 
 func TestGC_ExitCodes(t *testing.T) {

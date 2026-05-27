@@ -186,16 +186,26 @@ func TestReprocess_AllFileReadFailuresContinueWithWarning(t *testing.T) {
 // TestReprocess_GlobalLoadFailureExitsError verifies that a global LoadEmails failure
 // (nil emails + error) causes exit 1 with a system error notification.
 func TestReprocess_GlobalLoadFailureExitsError(t *testing.T) {
-	st := storetestutil.NewFakeStore()
-	st.LoadEmailsErr = errors.New("disk I/O error")
-	spy := &SpyNotificationSink{}
+	for _, loadErr := range []error{
+		errors.New("disk I/O error"),
+		errors.Join(
+			&store.ErrLoadEmailFailed{UID: 2, UIDValidity: 100, Err: errors.New("bad file")},
+			errors.New("walk failed"),
+		),
+	} {
+		t.Run(loadErr.Error(), func(t *testing.T) {
+			st := storetestutil.NewFakeStore()
+			st.LoadEmailsErr = loadErr
+			spy := &SpyNotificationSink{}
 
-	code, err := newReprocessRunner().Run(context.Background(), makeReprocessBoot(t, st, spy, false))
-	assert.Error(t, err)
-	assert.Equal(t, exitError, code)
-	require.Len(t, spy.SystemErrors, 1)
-	assert.Equal(t, notify.SystemErrorKindStoreCorruption, spy.SystemErrors[0].Kind)
-	assert.Equal(t, 1, spy.FlushCount)
+			code, err := newReprocessRunner().Run(context.Background(), makeReprocessBoot(t, st, spy, false))
+			assert.Error(t, err)
+			assert.Equal(t, exitError, code)
+			require.Len(t, spy.SystemErrors, 1)
+			assert.Equal(t, notify.SystemErrorKindStoreCorruption, spy.SystemErrors[0].Kind)
+			assert.Equal(t, 1, spy.FlushCount)
+		})
+	}
 }
 
 func TestReprocess_SaveEmailMetasFail(t *testing.T) {

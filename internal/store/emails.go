@@ -22,6 +22,9 @@ var errTargetNotRegularFile = errors.New("store: target path is not a regular fi
 // ErrZeroInternalDate is returned when an InternalDate (IMAP INTERNALDATE) value is zero.
 var ErrZeroInternalDate = errors.New("store: internalDate must not be zero")
 
+// ErrEmailsPathNotDirectory is returned when the emails storage path is not a directory.
+var ErrEmailsPathNotDirectory = errors.New("store: emails path is not a directory")
+
 // buildEmailPath returns the storage path for a .eml file.
 // The uid is zero-padded to 10 digits. internalDate determines the YYYYMM directory component.
 func buildEmailPath(rootDir string, uid, uidValidity uint32, internalDate time.Time) string {
@@ -100,24 +103,26 @@ func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
 // LoadEmails implements Store.LoadEmails.
 func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 	emailsDir := s.emailsDirPath
-	if _, err := os.Stat(emailsDir); os.IsNotExist(err) {
+	found, err := validateEmailsDir(emailsDir)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
 		return []LoadedEmail{}, nil
 	}
 
-	indexedDates := make(map[emailKey]time.Time)
-	if df, err := s.loadDataFile(); err == nil {
-		for _, entry := range df.Emails {
-			indexedDates[emailKey{entry.UID, entry.UIDValidity}] = entry.InternalDate
-		}
-	}
+	indexedDates := s.loadIndexedEmailDates()
 
 	var result []LoadedEmail
 	var errs []error
 
 	walkErr := filepath.WalkDir(emailsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: err})
-			return nil
+			if d != nil && !d.IsDir() && filepath.Ext(path) == ".eml" {
+				errs = append(errs, &ErrLoadEmailFailed{Path: path, Err: err})
+				return nil
+			}
+			return err
 		}
 		if d.IsDir() {
 			return nil
@@ -198,6 +203,30 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 		result = []LoadedEmail{}
 	}
 	return result, errors.Join(errs...)
+}
+
+func (s *storeImpl) loadIndexedEmailDates() map[emailKey]time.Time {
+	indexedDates := make(map[emailKey]time.Time)
+	if df, err := s.loadDataFile(); err == nil {
+		for _, entry := range df.Emails {
+			indexedDates[emailKey{entry.UID, entry.UIDValidity}] = entry.InternalDate
+		}
+	}
+	return indexedDates
+}
+
+func validateEmailsDir(emailsDir string) (bool, error) {
+	info, err := os.Stat(emailsDir)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("LoadEmails: stat emails dir: %w", err)
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("%w: %s", ErrEmailsPathNotDirectory, emailsDir)
+	}
+	return true, nil
 }
 
 func internalDateFromEmailPath(relPath string) (time.Time, error) {

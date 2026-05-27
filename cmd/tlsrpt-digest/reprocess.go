@@ -40,8 +40,8 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 	// Step 2: Enumerate all locally stored .eml files.
 	emails, loadErr := boot.Store.LoadEmails()
 	if loadErr != nil {
-		loadFailures := collectLoadEmailFailures(loadErr)
-		if len(loadFailures) == 0 {
+		loadFailures, allPerFile := collectLoadEmailFailures(loadErr)
+		if !allPerFile {
 			slog.Error("reprocess: load emails", "error", loadErr)
 			_ = notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
 			return exitError, fmt.Errorf("reprocess: load emails: %w", loadErr)
@@ -140,29 +140,36 @@ func reprocessCollectReports(ctx context.Context, notifier NotificationSink, max
 	return reports, parseErrs
 }
 
-func collectLoadEmailFailures(err error) []*store.ErrLoadEmailFailed {
+func collectLoadEmailFailures(err error) ([]*store.ErrLoadEmailFailed, bool) {
 	if err == nil {
-		return nil
+		return nil, true
 	}
 	var failures []*store.ErrLoadEmailFailed
-	collectLoadEmailFailuresInto(err, &failures)
-	return failures
+	allPerFile := collectLoadEmailFailuresInto(err, &failures)
+	return failures, allPerFile && len(failures) > 0
 }
 
-func collectLoadEmailFailuresInto(err error, failures *[]*store.ErrLoadEmailFailed) {
+func collectLoadEmailFailuresInto(err error, failures *[]*store.ErrLoadEmailFailed) bool {
 	type multiUnwrapper interface {
 		Unwrap() []error
 	}
 	if joined, ok := err.(multiUnwrapper); ok {
-		for _, child := range joined.Unwrap() {
-			collectLoadEmailFailuresInto(child, failures)
+		children := joined.Unwrap()
+		if len(children) == 0 {
+			return false
 		}
-		return
+		allPerFile := true
+		for _, child := range children {
+			allPerFile = collectLoadEmailFailuresInto(child, failures) && allPerFile
+		}
+		return allPerFile
 	}
 	var loadFailure *store.ErrLoadEmailFailed
 	if errors.As(err, &loadFailure) {
 		*failures = append(*failures, loadFailure)
+		return true
 	}
+	return false
 }
 
 // reprocessSendAlerts logs one alert per failing policy in the report.
