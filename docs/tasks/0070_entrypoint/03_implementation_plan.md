@@ -475,7 +475,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 **レビュー観点**: カットオフ計算 / recovery-required ガード / `SaveEmailMetas` → `SaveReports` 呼び出し順序
 
 - [x] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/91）
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（ステップ 3-3 は新しいブランチで作業する）
 
