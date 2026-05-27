@@ -308,8 +308,17 @@ A pure Go B+ tree KV store with production usage in etcd and Kubernetes.
 |---|---|
 | No SQL | Search and aggregation must be implemented in application code |
 | Implicit schema | The KV mapping is defined in application logic, so there are no DB-side type constraints or foreign keys |
-| Handling `.eml` | Storing large BLOBs in bbolt creates the following problems, so the practical design is to keep `.eml` on the filesystem and accept the two-phase commit problem with bbolt. ① bbolt mmaps all data, causing page-cache pressure. ② `db.Update` holds a write lock over the entire DB, so a large BLOB write blocks all other operations. ③ bbolt has no automatic space reclamation; after deleting `.eml` entries the file does not shrink, so GC would need to run a `Compact`-equivalent operation each time. ④ Files on the filesystem can be inspected and re-sent directly with tools like `cat` or `mutt`, whereas blobs inside bbolt require custom tooling or Go code, increasing the cost of manual recovery |
+| Handling `.eml` | `.eml` is kept on the filesystem rather than stored in bbolt (see rationale below). The two-phase commit problem with bbolt remains but is manageable |
 | Migration representation | Schema versioning must be designed in application code |
+
+**Why `.eml` is kept on the filesystem**
+
+| Reason | Detail |
+|---|---|
+| Memory pressure from mmap | bbolt mmaps all data, so storing a large number of `.eml` files of hundreds of KB to several MB each causes page-cache pressure |
+| Write-lock contention | `db.Update` holds a write lock over the entire DB, so writing a large BLOB blocks all other operations for its duration |
+| No automatic space reclamation | bbolt has no VACUUM equivalent; after deleting `.eml` entries the DB file does not shrink. A `Compact`-equivalent operation would need to be implemented and run during each gc pass |
+| Inspectability and manual recovery | Files on the filesystem can be inspected and re-sent directly with tools like `cat` or `mutt`. BLOBs stored inside bbolt require custom tooling or Go code, increasing the cost of manual recovery |
 
 **Evaluation for this project**
 
