@@ -57,6 +57,35 @@ UIDValidity / recovery_required ─── true basis for whether the operation i
 | `resetPhaseCommitted` | 4 | Immediately after saving the sentinel (commit marker) | Records that the write to the sentinel (clearing recovery_required and setting the new UIDVALIDITY) is complete. After this, only the manifest and staging directory remain, so cleanup failure does not affect the normal data path |
 | `resetPhaseAborting` | 5 | Before executing `restoreFromStaging` (abort WAL entry) | **WAL entry for the abort operation**. `AbortReset` writes this phase before moving files back to their original locations. Even if the manifest remains after a later crash, `ResetForRecovery` sees this phase, refuses the operation, and prompts re-execution of `AbortReset` |
 
+### State Transition Diagram
+
+```mermaid
+stateDiagram-v2
+    [*] --> Normal
+
+    Normal : Normal (no manifest / no recovery_required)
+    RR : Recovery Required (recovery_required set / no manifest)
+    P1 : Phase 1 (manifest written)
+    P2 : Phase 2 (data staged)
+    P3 : Phase 3 (emails staged)
+    Committed : Committed (recovery_required absent / cleanup pending)
+    P5 : Phase 5 (abort in progress)
+
+    Normal --> RR : fetch detects UIDVALIDITY change
+    RR --> Normal : recover --mode keep-old
+    RR --> P1 : recover --mode discard-old --yes
+    P1 --> P2 : stageDataFile complete
+    P2 --> P3 : stageEmailsDir complete
+    P3 --> Committed : commitReset complete
+    Committed --> Normal : Open runs cleanupCompletedReset
+    P1 --> P5 : recover --abort-reset --yes
+    P2 --> P5 : recover --abort-reset --yes
+    P3 --> P5 : recover --abort-reset --yes
+    P5 --> RR : AbortReset complete
+```
+
+**Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent). A commit-window crash — where phase 3 is written, the sentinel is saved, but phase 4 has not yet been written — is treated as "Committed" because `cleanupCompletedReset` uses the sentinel (not the phase number) to determine commit status, and the state converges to Normal.
+
 ### Behavior During User Operations
 
 | State | `recover --mode keep-old` | `recover --mode discard-old` (without `--yes`) | `recover --mode discard-old --yes` | `recover --abort-reset --yes` |
