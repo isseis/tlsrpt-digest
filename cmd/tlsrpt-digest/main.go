@@ -25,7 +25,6 @@ const (
 
 var (
 	errInvalidRecoverMode  = errors.New("invalid recovery mode")
-	errSubcommandNotImpl   = errors.New("subcommand not yet implemented")
 	errUnexpectedArguments = errors.New("unexpected arguments")
 )
 
@@ -169,14 +168,6 @@ func defaultRunners() map[SubcommandName]SubcommandRunner {
 		subcommandSummary:   newSummaryRunner(),
 		subcommandReprocess: newReprocessRunner(),
 		subcommandGC:        newGCRunner(),
-		subcommandRecover:   stubRunner{name: subcommandRecover},
+		subcommandRecover:   newRecoverRunner(),
 	}
-}
-
-type stubRunner struct {
-	name SubcommandName
-}
-
-func (r stubRunner) Run(_ context.Context, _ *BootContext) (int, error) {
-	return exitError, fmt.Errorf("%w: %s", errSubcommandNotImpl, r.name)
 }

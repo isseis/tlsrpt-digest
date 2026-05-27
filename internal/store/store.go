@@ -96,6 +96,11 @@ type Store interface {
 	// The caller must hold the process-level store writer lock until this method returns.
 	AbortReset() error
 
+	// HasPendingReset reports whether an incomplete reset manifest exists in the store.
+	// Returns (true, nil) when a manifest is present regardless of commit state.
+	// Returns (false, nil) when no manifest is found.
+	HasPendingReset() (bool, error)
+
 	// AcquireSummaryConsistencyGuard acquires a shared flock on the guard file and
 	// returns a SummaryConsistencyGuard. While held, writer processes updating
 	// recovery-required in the sentinel must wait for the exclusive lock, ensuring

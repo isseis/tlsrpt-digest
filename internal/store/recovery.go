@@ -664,6 +664,19 @@ func (s *storeImpl) AbortReset() error {
 	return nil
 }
 
+// HasPendingReset implements Store.HasPendingReset.
+func (s *storeImpl) HasPendingReset() (bool, error) {
+	manifestPath := resetManifestPath(s.rootDir)
+	_, err := readResetManifest(manifestPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("HasPendingReset: %w", err)
+	}
+	return true, nil
+}
+
 // AcquireSummaryConsistencyGuard implements Store.AcquireSummaryConsistencyGuard.
 // When rootDir does not exist (empty-store OpenReadOnly path), a no-op guard is
 // returned: recovery-required cannot be set without a store directory, so
