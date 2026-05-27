@@ -68,7 +68,7 @@ stateDiagram-v2
     P1 : フェーズ 1（manifest 書き込み済み）
     P2 : フェーズ 2（data ステージング完了）
     P3 : フェーズ 3（emails ステージング完了）
-    Committed : コミット済み（recovery_required なし / cleanup 前）
+    P4 : フェーズ 4（コミット済み / cleanup 前）
     P5 : フェーズ 5（abort 処理中）
 
     Normal --> RR : fetch が UIDVALIDITY 変化を検出
@@ -76,15 +76,17 @@ stateDiagram-v2
     RR --> P1 : recover --mode discard-old --yes
     P1 --> P2 : stageDataFile 完了
     P2 --> P3 : stageEmailsDir 完了
-    P3 --> Committed : commitReset 完了
-    Committed --> Normal : Open で cleanupCompletedReset
+    P3 --> P4 : commitReset 完了
+    P4 --> Normal : Open で cleanupCompletedReset
     P1 --> P5 : recover --abort-reset --yes
     P2 --> P5 : recover --abort-reset --yes
     P3 --> P5 : recover --abort-reset --yes
     P5 --> RR : AbortReset 完了
 ```
 
-**クラッシュリカバリ**：各フェーズでのクラッシュ後は同じフェーズから再開可能（各ステージング操作は冪等）。コミットウィンドウクラッシュ（フェーズ 3 書き込み後、センチネル確定済み、フェーズ 4 未書き込みでクラッシュ）は、`cleanupCompletedReset` がセンチネルで判断するため「コミット済み」として扱われ Normal に収束する。
+**クラッシュリカバリ**：各フェーズでのクラッシュ後は同じフェーズから再開可能（各ステージング操作は冪等）。
+
+**コミットウィンドウクラッシュ**：`commitReset` はセンチネルを保存してから manifest をフェーズ 4 に進める。その間でクラッシュすると manifest はフェーズ 3 のまま残るが、`cleanupCompletedReset` はフェーズ番号ではなくセンチネルの `recovery_required` で判断するため、フェーズ 4 と同じく cleanup が実行されて Normal に収束する（§4 参照）。
 
 ### ユーザー操作時の挙動
 

@@ -68,7 +68,7 @@ stateDiagram-v2
     P1 : Phase 1 (manifest written)
     P2 : Phase 2 (data staged)
     P3 : Phase 3 (emails staged)
-    Committed : Committed (recovery_required absent / cleanup pending)
+    P4 : Phase 4 (committed / cleanup pending)
     P5 : Phase 5 (abort in progress)
 
     Normal --> RR : fetch detects UIDVALIDITY change
@@ -76,15 +76,17 @@ stateDiagram-v2
     RR --> P1 : recover --mode discard-old --yes
     P1 --> P2 : stageDataFile complete
     P2 --> P3 : stageEmailsDir complete
-    P3 --> Committed : commitReset complete
-    Committed --> Normal : Open runs cleanupCompletedReset
+    P3 --> P4 : commitReset complete
+    P4 --> Normal : Open runs cleanupCompletedReset
     P1 --> P5 : recover --abort-reset --yes
     P2 --> P5 : recover --abort-reset --yes
     P3 --> P5 : recover --abort-reset --yes
     P5 --> RR : AbortReset complete
 ```
 
-**Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent). A commit-window crash — where phase 3 is written, the sentinel is saved, but phase 4 has not yet been written — is treated as "Committed" because `cleanupCompletedReset` uses the sentinel (not the phase number) to determine commit status, and the state converges to Normal.
+**Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent).
+
+**Commit-window crash**: `commitReset` saves the sentinel before advancing the manifest to phase 4. A crash between those two writes leaves the manifest at phase 3, but `cleanupCompletedReset` uses `recovery_required` in the sentinel (not the phase number) to determine commit status, so cleanup runs the same as for phase 4 and the state converges to Normal (see §4).
 
 ### Behavior During User Operations
 
