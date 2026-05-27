@@ -13,7 +13,6 @@ import (
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
 	"github.com/isseis/tlsrpt-digest/internal/notify"
-	"github.com/isseis/tlsrpt-digest/internal/store"
 	storetestutil "github.com/isseis/tlsrpt-digest/internal/store/testutil"
 	"github.com/isseis/tlsrpt-digest/internal/tlsrpt"
 )
@@ -224,48 +223,6 @@ func TestSummary_EmptyStoreExitOK(t *testing.T) {
 	assert.Equal(t, 0, bed.notif.FlushCount)
 }
 
-func TestSummary_EmptySecondCheckRecoveryRequired(t *testing.T) {
-	bed := newSummaryTestBed(t)
-	bed.runner.buildNotifier = func(_ *BootContext) (NotificationSink, error) {
-		return bed.notif, nil
-	}
-
-	// First check passes, second check (for empty path) returns found=true.
-	bed.boot.SummaryGuard = &countingGuard{
-		responses: []guardResponse{
-			{found: false},
-			{found: true},
-		},
-	}
-
-	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
-	assert.Equal(t, exitError, exitCode)
-	require.NoError(t, err)
-	require.Len(t, bed.notif.SystemErrors, 1)
-	assert.Equal(t, notify.SystemErrorKindRecoveryRequired, bed.notif.SystemErrors[0].Kind)
-}
-
-func TestSummary_EmptySecondCheckError(t *testing.T) {
-	bed := newSummaryTestBed(t)
-	buildCalled := false
-	bed.runner.buildNotifier = func(_ *BootContext) (NotificationSink, error) {
-		buildCalled = true
-		return bed.notif, nil
-	}
-	checkErr := errors.New("guard failed")
-	bed.boot.SummaryGuard = &countingGuard{
-		responses: []guardResponse{
-			{found: false},
-			{err: checkErr},
-		},
-	}
-
-	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
-	assert.Equal(t, exitError, exitCode)
-	require.Error(t, err)
-	assert.False(t, buildCalled, "notifier must not be built for empty-path guard error")
-}
-
 // ── non-empty summary paths ───────────────────────────────────────────────────
 
 func TestSummary_NonEmptyNoSlackURLFails(t *testing.T) {
@@ -280,68 +237,6 @@ func TestSummary_NonEmptyNoSlackURLFails(t *testing.T) {
 	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
 	assert.Equal(t, exitError, exitCode)
 	require.Error(t, err)
-}
-
-func TestSummary_NonEmptyRecoveryRequiredBeforeSend(t *testing.T) {
-	bed := newSummaryTestBed(t)
-	bed.addReportInWindow()
-
-	// First check passes, second check (pre-send) detects recovery-required.
-	bed.boot.SummaryGuard = &countingGuard{
-		responses: []guardResponse{
-			{found: false},
-			{found: true},
-		},
-	}
-
-	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
-	assert.Equal(t, exitError, exitCode)
-	require.NoError(t, err)
-	require.Len(t, bed.notif.SystemErrors, 1)
-	assert.Equal(t, notify.SystemErrorKindRecoveryRequired, bed.notif.SystemErrors[0].Kind)
-	assert.Equal(t, 1, bed.notif.FlushCount)
-	assert.Empty(t, bed.notif.Summaries, "summary must not be sent when recovery-required detected before send")
-}
-
-func TestSummary_NonEmptyRecoveryRequiredBeforeSendFlushFailure(t *testing.T) {
-	bed := newSummaryTestBed(t)
-	bed.addReportInWindow()
-	bed.notif.FlushError = errors.New("slack flush failed")
-	bed.boot.SummaryGuard = &countingGuard{
-		responses: []guardResponse{
-			{found: false},
-			{found: true},
-		},
-	}
-
-	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
-	assert.Equal(t, exitError, exitCode)
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "notify recovery required before send")
-	require.Len(t, bed.notif.SystemErrors, 1)
-	assert.Equal(t, notify.SystemErrorKindRecoveryRequired, bed.notif.SystemErrors[0].Kind)
-	assert.Equal(t, 1, bed.notif.FlushCount)
-	assert.Empty(t, bed.notif.Summaries)
-}
-
-func TestSummary_NonEmptySecondCheckError(t *testing.T) {
-	bed := newSummaryTestBed(t)
-	bed.addReportInWindow()
-
-	checkErr := errors.New("guard read error")
-	bed.boot.SummaryGuard = &countingGuard{
-		responses: []guardResponse{
-			{found: false},
-			{err: checkErr},
-		},
-	}
-
-	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
-	assert.Equal(t, exitError, exitCode)
-	require.Error(t, err)
-	require.Len(t, bed.notif.SystemErrors, 1)
-	assert.Equal(t, notify.SystemErrorKindStoreCorruption, bed.notif.SystemErrors[0].Kind)
-	assert.Equal(t, 1, bed.notif.FlushCount)
 }
 
 func TestSummary_SendsLogSummaryAndFlushes(t *testing.T) {
@@ -449,28 +344,3 @@ type errorGetAllReportsStore struct {
 func (s *errorGetAllReportsStore) GetAllReports() ([]tlsrpt.Report, error) {
 	return nil, s.err
 }
-
-// guardResponse is a pre-programmed return value for countingGuard.
-type guardResponse struct {
-	found bool
-	err   error
-}
-
-// countingGuard returns pre-programmed responses in order, then (false, nil).
-type countingGuard struct {
-	responses []guardResponse
-	callIndex int
-}
-
-func (g *countingGuard) CheckRecoveryRequired(_ context.Context) (bool, error) {
-	if g.callIndex >= len(g.responses) {
-		return false, nil
-	}
-	resp := g.responses[g.callIndex]
-	g.callIndex++
-	return resp.found, resp.err
-}
-
-func (g *countingGuard) Close() error { return nil }
-
-var _ store.SummaryConsistencyGuard = (*countingGuard)(nil)
