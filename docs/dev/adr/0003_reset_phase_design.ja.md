@@ -89,7 +89,7 @@ flowchart TD
 
 **クラッシュリカバリ**：各フェーズでのクラッシュ後は同じフェーズから再開可能（各ステージング操作は冪等）。
 
-**コミットウィンドウクラッシュ**：`commitReset` はセンチネルを保存してから manifest をフェーズ 4 に進める。その間でクラッシュすると manifest はフェーズ 3 のまま残るが、`cleanupCompletedReset` はフェーズ番号ではなくセンチネルの `recovery_required` で判断するため、フェーズ 4 と同じく cleanup が実行されて Normal に収束する（§4 参照）。
+**コミットウィンドウクラッシュ**：`commitReset` はセンチネルを保存してから manifest をフェーズ 4 に進める。その間でクラッシュすると manifest はフェーズ 3 のまま残るが、`cleanupCompletedReset` はフェーズ番号ではなくセンチネルの `recovery_required` で判断するため、フェーズ 4 と同じく cleanup が実行されて Normal に収束する（§4 参照）。データ整合性は保たれるが、ステージングディレクトリと manifest は次に `fetch` または `gc` が実行されるまでディスクに残る（`summary` や `recover --mode discard-old --yes` では cleanup されない）。`fetch` と `gc` は定期実行が想定されるため、ストレージ容量の見積もりにはステージングディレクトリ 1 つ分（旧データファイル）を一時的な上振れとして考慮すればよい。
 
 ### ユーザー操作時の挙動
 

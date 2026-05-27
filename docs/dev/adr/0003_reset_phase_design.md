@@ -89,7 +89,7 @@ Legend: solid = normal transition; dashed = exceptional event (UIDVALIDITY chang
 
 **Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent).
 
-**Commit-window crash**: `commitReset` saves the sentinel before advancing the manifest to phase 4. A crash between those two writes leaves the manifest at phase 3, but `cleanupCompletedReset` uses `recovery_required` in the sentinel (not the phase number) to determine commit status, so cleanup runs the same as for phase 4 and the state converges to Normal (see §4).
+**Commit-window crash**: `commitReset` saves the sentinel before advancing the manifest to phase 4. A crash between those two writes leaves the manifest at phase 3, but `cleanupCompletedReset` uses `recovery_required` in the sentinel (not the phase number) to determine commit status, so cleanup runs the same as for phase 4 and the state converges to Normal (see §4). Data integrity is fully preserved, but the staging directory and manifest remain on disk until the next `fetch` or `gc` run (`summary` and `recover --mode discard-old --yes` do not trigger cleanup). Since `fetch` and `gc` are expected to run periodically, storage capacity estimates should account for one staging directory's worth of old data as a temporary overhead.
 
 ### Behavior During User Operations
 
