@@ -24,6 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - Use a cylinder shape for "data" nodes instead of the default rectangle (in Mermaid flowcharts a cylinder node can be written as `[(data)]`).
   - **Node label quoting**: Always wrap node labels in double quotes if they contain special characters (parentheses, brackets, colons, slashes, etc.). Example: `A["label (with parens)"]`
   - **Line breaks in labels**: Use `<br>` for line breaks inside node labels, not `\n`. Example: `A["line1<br>line2"]`
+- **Sentence-ending punctuation (Japanese documents only)**: Always end sentences with a Japanese period（。）, including inside bullet-point items and table cells. Noun phrases and short labels do not require punctuation, but any sentence ending with a verb or adjective must have one. When a cell or bullet contains multiple sentences, every sentence must end with 。.
 
 ### Translation Guidelines (Japanese to English)
 
