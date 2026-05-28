@@ -28,6 +28,7 @@ var (
 	errUnexpectedArguments    = errors.New("unexpected arguments")
 	errAbortResetRequiresYes  = errors.New("--abort-reset requires --yes to confirm")
 	errYesRequiresModeOrAbort = errors.New("--yes requires --mode or --abort-reset")
+	errAbortAndModeExclusive  = errors.New("--abort-reset and --mode are mutually exclusive")
 )
 
 type cliOptions struct {
@@ -151,6 +152,9 @@ func validateFlags(subcmd SubcommandName, opts cliOptions) error {
 			if opts.RecoverMode != recoverModeKeepOld && opts.RecoverMode != recoverModeDiscardOld {
 				return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
 			}
+		}
+		if opts.RecoverAbort && opts.RecoverMode != "" {
+			return errAbortAndModeExclusive
 		}
 		if opts.RecoverAbort && !opts.RecoverYes {
 			return errAbortResetRequiresYes
