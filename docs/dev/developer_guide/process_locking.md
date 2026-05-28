@@ -94,15 +94,23 @@ operations such as mail fetching and report saving proceed concurrently with `su
 
 - `SaveRecoveryRequired`
 - `ClearRecoveryRequired`
-- `ApplyRecovery`
+- `ApplyRecovery` (see note below)
 - Commit processing in `ResetForRecovery` (`commitReset`)
 
 The following do not modify `recovery_required` and do not require the guard:
 
 - Initial manifest/staging creation in `ResetForRecovery`
 - `stageDataFile` / `stageEmailsDir`
-- Restore processing in `AbortReset`
+- Restore processing in `AbortReset` (guard not required because the sentinel is not modified; however, `recovery_required` remains set in the sentinel throughout, so `summary` remains fail-closed)
 - Post-commit cleanup
+
+**Additional Protection in `ApplyRecovery`**
+
+`ApplyRecovery` (keep-old recovery) requires not only `withGuardExclusive` but also a **`HasPendingReset()` pre-check**.
+
+Reason: during a reset operation (phases 1–5), data files may have been moved to staging. Because `withGuardExclusive` only guarantees the visibility of the sentinel, clearing `recovery_required` while ignoring a pending reset produces the inconsistent state of "new UIDValidity + cleared recovery_required + no data."
+
+`ApplyRecovery` closes this path at the store layer by returning `ErrPendingReset` when a manifest is present. **When adding a new API that modifies `recovery_required`, likewise consider at design time whether it may be called during a pending reset, and add a `HasPendingReset()` pre-check if necessary.**
 
 ### Only `fetch` Calls `SaveRecoveryRequired`
 
@@ -196,6 +204,10 @@ Preferred responsibility split:
   (using `withGuardExclusive`)
 - [ ] Operations that do not modify `recovery_required` are not wrapped in the summary guard
 - [ ] It is tested that `summary` does not send based on a stale "no recovery needed" judgment
+- [ ] The behavior when called during a pending reset (manifest present) is designed:
+  because data files may have already been moved to staging, cases where clearing `recovery_required`
+  alone results in inconsistency must be considered. If this is a concern, add a `HasPendingReset()`
+  pre-check to return `ErrPendingReset` (see the `ApplyRecovery` implementation)
 
 **When modifying the `summary` subcommand or `recovery_required` check design**
 

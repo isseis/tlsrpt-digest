@@ -159,7 +159,7 @@ To avoid this problem, `AbortReset` always updates the manifest to phase 5 (abor
 
 ```
 1. Read the manifest
-   ├─ Absent → do nothing (normal)
+   ├─ Absent → remove orphaned staging directory on a best-effort basis and return normally (see note below)
    ├─ Version mismatch → error (fail closed)
    └─ Unknown phase → error (fail closed)
 
@@ -171,14 +171,19 @@ To avoid this problem, `AbortReset` always updates the manifest to phase 5 (abor
        └─ os.Remove(manifest)   ── required (if it fails, retry next time)
 ```
 
+**Note: Handling of Orphaned Staging**
+
+When a staging directory remains despite the manifest being absent, it means that in the previous reset, `Remove(manifest)` succeeded but `RemoveAll(staging)` failed. Because the WAL entry for the manifest (phase 1) is always written before any file is moved, no manifest means either "completed" or "not yet started," and the staging contents will never be used for restoration. Therefore it is safe to delete them on a best-effort basis.
+
 ### Covered Scenarios
 
-| Scenario | Manifest phase | sentinel.recovery_required | Result |
+| Scenario | Manifest presence | sentinel.recovery_required | Result |
 |---|---|---|---|
-| Operation in progress (pre-commit) | 1-3 | present | ErrPendingReset |
-| Abort interrupted | 5 | present | ErrPendingReset |
-| Post-commit cleanup failure | 4 | absent | Clean up and open normally |
-| Commit-window crash (phase 3 + sentinel committed) | 3 | absent | Clean up and open normally |
+| Operation in progress (pre-commit) | present (1-3) | present | ErrPendingReset |
+| Abort interrupted | present (5) | present | ErrPendingReset |
+| Post-commit cleanup failure | present (4) | absent | Clean up and open normally |
+| Commit-window crash (phase 3 + sentinel committed) | present (3) | absent | Clean up and open normally |
+| Orphaned staging (staging deletion failed after manifest deletion) | absent | absent | Remove staging best-effort and open normally |
 
 ---
 
@@ -191,6 +196,7 @@ To avoid this problem, `AbortReset` always updates the manifest to phase 5 (abor
 | Phase 3 is written => `emails/` exists in staging | `stageEmailsDir` is idempotent; phase 3 is written after rename |
 | Phase 4 or `recovery_required == nil` => the sentinel is committed | `commitReset` writes phase 4 after saving the sentinel |
 | Phase 5 is written => only `AbortReset` can continue | `ResetForRecovery` refuses phase 5 |
+| **Manifest absent ⟹ staging contents are orphaned (safe to remove)** | WAL design: phase 1 is written before any file is moved to staging; if the manifest is absent, no file was moved (or it is residue from a completed cleanup) |
 
 ---
 
@@ -207,6 +213,7 @@ To avoid this problem, `AbortReset` always updates the manifest to phase 5 (abor
 
 - Following `stageDataFile` and `stageEmailsDir`, add a corresponding `stageXxx` function and preserve idempotence
 - Add a new checkpoint phase (following the preceding "When Adding a Phase")
+- **Also update `cleanupCompletedReset` for orphaned staging deletion**: the current implementation uses `RemoveAll` on the entire `resetStagingPath` directory, so new sub-paths added inside the directory are automatically covered. If staging is extended to files outside the staging directory, add corresponding deletion logic to `cleanupCompletedReset`.
 
 ### When the Commit Operation Becomes Multiple Steps
 
