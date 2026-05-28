@@ -86,6 +86,15 @@ type BootstrapOptions struct {
 
 var errSlackWebhookURLRequired = errors.New("at least one Slack webhook URL is required")
 
+type nopNotifier struct{}
+
+func (nopNotifier) LogAlert(_ context.Context, _ notify.Alert) error       { return nil }
+func (nopNotifier) LogWarning(_ context.Context, _ notify.Warning) error   { return nil }
+func (nopNotifier) LogSystemError(_ context.Context, _ notify.SystemError) error { return nil }
+func (nopNotifier) LogSummary(_ context.Context, _ notify.Summary) error   { return nil }
+func (nopNotifier) Flush(_ context.Context) error                          { return nil }
+func (nopNotifier) IsDryRun() bool                                         { return false }
+
 type notificationSink struct {
 	handlers []*notify.SlackHandler
 	dryRun   bool
@@ -186,9 +195,13 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 		return nil, fmt.Errorf("prepare store root: %w", err)
 	}
 
-	boot.Notifier, err = opts.BuildNotifier(opts.SlackWebhookURLSuccess, opts.SlackWebhookURLError, cfg, runID, opts.DryRun)
-	if err != nil {
-		return nil, fmt.Errorf("build notifier: %w", err)
+	if subcmd == subcommandRecover {
+		boot.Notifier = nopNotifier{}
+	} else {
+		boot.Notifier, err = opts.BuildNotifier(opts.SlackWebhookURLSuccess, opts.SlackWebhookURLError, cfg, runID, opts.DryRun)
+		if err != nil {
+			return nil, fmt.Errorf("build notifier: %w", err)
+		}
 	}
 
 	boot.LockHandle, err = opts.AcquireWriterLock(cfg.Store.RootDir)

@@ -106,6 +106,60 @@ func readResetManifest(path string) (resetManifest, error) {
 	return m, nil
 }
 
+// initResetManifest validates fresh-start preconditions, wipes any stale staging
+// directory, creates a new staging directory, and writes the initial manifest.
+// It returns the written manifest so the caller can proceed to advanceResetPhases.
+func (s *storeImpl) initResetManifest(currUIDValidity uint32, stagingPath, manifestPath string) (resetManifest, error) {
+	_, sentinelCurr, _, found, err := s.LoadRecoveryRequired()
+	if err != nil {
+		return resetManifest{}, fmt.Errorf("ResetForRecovery: load recovery-required: %w", err)
+	}
+	if !found {
+		return resetManifest{}, ErrRecoveryRequiredMissing
+	}
+	if sentinelCurr != currUIDValidity {
+		return resetManifest{}, &ErrRecoveryUIDValidityMismatch{Got: currUIDValidity, Expected: sentinelCurr}
+	}
+
+	// Write manifest FIRST before any file moves.
+	// This makes the pending reset immediately visible to OpenReadWrite (→ ErrPendingReset)
+	// and to AbortReset, so the operation is rollback-able from this point onward.
+	// Caller-held process writer lock serializes this whole reset against other writers;
+	// the summary consistency guard is not needed here because recovery_required is not
+	// modified until commitReset.
+	//
+	// Wipe any stale staging dir first: a previous reset that committed but
+	// failed to clean up RemoveAll(staging) could leave files there, which
+	// would later make stageEmailsDir fail (rename onto a non-empty dir).
+	// At this point there is no manifest, so the staging contents (if any)
+	// are guaranteed stale and safe to remove.
+	if err := os.RemoveAll(stagingPath); err != nil {
+		return resetManifest{}, fmt.Errorf("ResetForRecovery: clean stale staging dir: %w", err)
+	}
+	if err := os.MkdirAll(stagingPath, dirPerm); err != nil {
+		return resetManifest{}, fmt.Errorf("ResetForRecovery: create staging dir: %w", err)
+	}
+	mfst := resetManifest{Version: resetManifestVersion, CurrUIDValidity: currUIDValidity, Phase: resetPhaseManifestWritten}
+	if err := writeResetManifest(manifestPath, mfst); err != nil {
+		return resetManifest{}, fmt.Errorf("ResetForRecovery: write manifest: %w", err)
+	}
+	return mfst, nil
+}
+
+// removeStaleCommittedManifest removes a reset manifest whose phase is already
+// committed along with any leftover staging directory.  It is used by
+// ResetForRecovery to clear bookkeeping from a previous reset whose final
+// cleanup failed, so a subsequent fresh-start reset proceeds cleanly.
+func removeStaleCommittedManifest(stagingPath, manifestPath string) error {
+	if err := os.RemoveAll(stagingPath); err != nil {
+		return fmt.Errorf("ResetForRecovery: clean stale staging: %w", err)
+	}
+	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("ResetForRecovery: remove stale committed manifest: %w", err)
+	}
+	return nil
+}
+
 // cleanupCompletedReset removes a leftover reset manifest (and any staging dir)
 // when the underlying commit has already been applied to the sentinel.  It is
 // called from Open(OpenReadWrite) so a crash between commit and final cleanup
@@ -446,47 +500,24 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 		if mfst.Phase == resetPhaseAborting {
 			return ErrResetAbortInProgress
 		}
+		// A committed manifest is a leftover from a previous reset that succeeded
+		// but whose cleanupCompletedReset failed best-effort.  A new recovery_required
+		// may have been written since then.  Clean up the stale manifest and staging
+		// so the fresh-start path below proceeds against the current recovery state.
+		if mfst.Phase == resetPhaseCommitted {
+			if err := removeStaleCommittedManifest(stagingPath, manifestPath); err != nil {
+				return err
+			}
+			manifestExists = false
+		}
 	}
 
 	if !manifestExists {
-		// Fresh start: validate preconditions before touching anything.
-		_, sentinelCurr, _, found, err := s.LoadRecoveryRequired()
+		var err error
+		mfst, err = s.initResetManifest(currUIDValidity, stagingPath, manifestPath)
 		if err != nil {
-			return fmt.Errorf("ResetForRecovery: load recovery-required: %w", err)
+			return err
 		}
-		if !found {
-			return ErrRecoveryRequiredMissing
-		}
-		if sentinelCurr != currUIDValidity {
-			return &ErrRecoveryUIDValidityMismatch{Got: currUIDValidity, Expected: sentinelCurr}
-		}
-
-		// Write manifest FIRST before any file moves.
-		// This makes the pending reset immediately visible to OpenReadWrite (→ ErrPendingReset)
-		// and to AbortReset, so the operation is rollback-able from this point onward.
-		// Caller-held process writer lock serializes this whole reset against other writers;
-		// the summary consistency guard is not needed here because recovery_required is not
-		// modified until commitReset.
-		//
-		// Wipe any stale staging dir first: a previous reset that committed but
-		// failed to clean up RemoveAll(staging) could leave files there, which
-		// would later make stageEmailsDir fail (rename onto a non-empty dir).
-		// At this point there is no manifest, so the staging contents (if any)
-		// are guaranteed stale and safe to remove.
-		if err := os.RemoveAll(stagingPath); err != nil {
-			return fmt.Errorf("ResetForRecovery: clean stale staging dir: %w", err)
-		}
-		if err := os.MkdirAll(stagingPath, dirPerm); err != nil {
-			return fmt.Errorf("ResetForRecovery: create staging dir: %w", err)
-		}
-		if err := writeResetManifest(manifestPath, resetManifest{
-			Version:         resetManifestVersion,
-			CurrUIDValidity: currUIDValidity,
-			Phase:           resetPhaseManifestWritten,
-		}); err != nil {
-			return fmt.Errorf("ResetForRecovery: write manifest: %w", err)
-		}
-		mfst = resetManifest{Version: resetManifestVersion, CurrUIDValidity: currUIDValidity, Phase: resetPhaseManifestWritten}
 	}
 
 	// Use CurrUIDValidity from manifest for idempotency on resume.
