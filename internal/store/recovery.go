@@ -186,6 +186,21 @@ func cleanupCompletedReset(rootDir string) error {
 	mfst, err := readResetManifest(manifestPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			// No manifest.  Check for an orphaned staging directory.
+			// A staging dir without a manifest is always stale: the manifest WAL
+			// entry (phase=1) is written before any file is moved into staging, so
+			// if the manifest is absent the staged contents can never be recovered
+			// and are safe to discard.  This covers the narrow window where
+			// RemoveAll(staging) failed after a successful manifest removal.
+			stagingPath := resetStagingPath(rootDir)
+			if _, statErr := os.Stat(stagingPath); statErr == nil {
+				if rmErr := os.RemoveAll(stagingPath); rmErr != nil {
+					slog.Warn("store: failed to remove orphaned staging directory; manual cleanup may be required",
+						slog.String("path", stagingPath),
+						slog.Any("error", rmErr),
+					)
+				}
+			}
 			return nil
 		}
 		return fmt.Errorf("cleanupCompletedReset: read manifest: %w", err)
@@ -438,6 +453,19 @@ func (s *storeImpl) ApplyRecovery(newUIDValidity uint32) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
+	// Refuse while a discard-old reset is in flight.  A pending manifest means
+	// that data files may have been moved to staging; clearing recovery_required
+	// without completing the reset would leave the store in an inconsistent state
+	// (stale staged data + new UIDValidity, no recovery_required to signal the
+	// problem).  The caller must resolve the pending reset via ResetForRecovery
+	// or AbortReset first.
+	pending, err := s.HasPendingReset()
+	if err != nil {
+		return fmt.Errorf("ApplyRecovery: check pending reset: %w", err)
+	}
+	if pending {
+		return ErrPendingReset
+	}
 	return s.withGuardExclusive(func() error {
 		sentinel, err := s.loadOrInitSentinelForWrite()
 		if err != nil {
@@ -687,6 +715,12 @@ func (s *storeImpl) AbortReset() error {
 		// write-ahead checkpoint for the abort path: once it is durable, any later
 		// crash leaves the manifest at phase=aborting, which only AbortReset may
 		// resume (ResetForRecovery refuses with ErrResetAbortInProgress).
+		//
+		// withGuardExclusive is NOT acquired here: AbortReset never writes to the
+		// sentinel, so there is no risk of a summary process observing a partial
+		// sentinel update.  The sentinel's recovery_required field is left intact
+		// throughout, ensuring that CheckRecoveryRequired keeps returning true until
+		// a subsequent ResetForRecovery or ApplyRecovery commits the sentinel.
 		if err := writeResetManifest(manifestPath, resetManifest{
 			Version:         resetManifestVersion,
 			CurrUIDValidity: mfst.CurrUIDValidity,

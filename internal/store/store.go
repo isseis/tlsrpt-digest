@@ -150,6 +150,11 @@ type storeImpl struct {
 // In read-only mode (OpenReadOnly):
 //   - No files or directories are created.
 //   - Missing data files are treated as empty state (no reports, no index).
+//   - rootDir is NOT validated for symlinks, directory type, or permissions.
+//     Callers that need those guarantees must call validateAndEnsureRootDir
+//     (cmd layer) before Open.  Read-only mode is used by the summary subcommand,
+//     which intentionally skips that check because it treats a missing rootDir as
+//     an empty store rather than an error.
 //
 // If the sentinel already exists, its stored IMAP identity is verified against the
 // supplied identity. A mismatch returns an error containing both the expected and

@@ -130,6 +130,35 @@ func TestApplyRecovery(t *testing.T) {
 	assert.False(t, recoveryFound, "recovery_required should be cleared after ApplyRecovery")
 }
 
+// TestApplyRecovery_RefusesPendingReset verifies that ApplyRecovery returns ErrPendingReset
+// when a reset manifest is present.  Without this guard, keep-old recovery could clear
+// recovery_required while data files are in staging, leaving the store inconsistent.
+func TestApplyRecovery_RefusesPendingReset(t *testing.T) {
+	rootDir := t.TempDir()
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// Plant a pre-commit manifest (phase=data_staged) to simulate an in-flight reset.
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhaseDataStaged,
+	}))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+
+	assert.ErrorIs(t, s.ApplyRecovery(200), ErrPendingReset,
+		"ApplyRecovery must refuse while a reset manifest is present")
+
+	// recovery_required must remain set.
+	_, _, _, found, err := s.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.True(t, found, "recovery_required must not be cleared by a refused ApplyRecovery")
+}
+
 // TestApplyRecovery_ReadOnly verifies that ApplyRecovery returns ErrReadOnly in read-only mode.
 func TestApplyRecovery_ReadOnly(t *testing.T) {
 	rootDir := t.TempDir()
@@ -1016,6 +1045,35 @@ func TestSummaryConsistencyGuard_BlocksExclusiveWriter(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("exclusive writer did not complete after shared lock released")
 	}
+}
+
+// TestOpen_CleansUpOrphanStagingDir verifies that Open(OpenReadWrite) removes a
+// staging directory that was left behind after the manifest was already deleted.
+// This covers the window where executeResetFromManifest removed the manifest
+// successfully but RemoveAll(staging) failed on a previous run.
+func TestOpen_CleansUpOrphanStagingDir(t *testing.T) {
+	rootDir := t.TempDir()
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+
+	// Plant an orphan staging dir (no manifest).
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(stagingPath, "emails", "100", "202601"), dirPerm))
+	require.NoError(t, os.WriteFile(filepath.Join(stagingPath, "tlsrpt.json"), []byte("stale"), filePerm))
+
+	// No manifest exists — Open(OpenReadWrite) should clean up the orphan.
+	s2, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(stagingPath)
+	assert.True(t, os.IsNotExist(statErr), "orphan staging dir must be removed by Open(OpenReadWrite)")
+
+	// Normal data operations continue to work.
+	v, found, err := s2.LoadUIDValidity()
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, uint32(100), v)
 }
 
 func TestHasPendingReset_NoManifest(t *testing.T) {
