@@ -501,14 +501,11 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 			return ErrResetAbortInProgress
 		}
 		// A committed manifest is a leftover from a previous reset that succeeded
-		// but whose cleanupCompletedReset failed best-effort.  A new recovery_required
-		// may have been written since then.  Clean up the stale manifest and staging
-		// so the fresh-start path below proceeds against the current recovery state.
+		// but whose cleanupCompletedReset failed best-effort.  The sentinel is already
+		// correct; if no new recovery_required exists, just clean up and return.
+		// If a new recovery_required was written since then, fall through to fresh-start.
 		if mfst.Phase == resetPhaseCommitted {
-			if err := removeStaleCommittedManifest(stagingPath, manifestPath); err != nil {
-				return err
-			}
-			manifestExists = false
+			return s.resumeOrCleanupCommitted(currUIDValidity, stagingPath, manifestPath)
 		}
 	}
 
@@ -520,13 +517,40 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 		}
 	}
 
-	// Use CurrUIDValidity from manifest for idempotency on resume.
-	currUIDValidity = mfst.CurrUIDValidity
+	return s.executeResetFromManifest(mfst, stagingPath, manifestPath)
+}
 
+// resumeOrCleanupCommitted handles a phase=committed manifest found at the start of
+// ResetForRecovery.  It removes the stale manifest and staging, then either:
+//   - returns nil when no new recovery_required exists (cleanup was all that was needed), or
+//   - initiates a fresh-start reset when a new recovery_required has been written since
+//     the committed cleanup failed.
+func (s *storeImpl) resumeOrCleanupCommitted(currUIDValidity uint32, stagingPath, manifestPath string) error {
+	if err := removeStaleCommittedManifest(stagingPath, manifestPath); err != nil {
+		return err
+	}
+	_, _, _, found, err := s.LoadRecoveryRequired()
+	if err != nil {
+		return fmt.Errorf("ResetForRecovery: reload recovery-required after committed cleanup: %w", err)
+	}
+	if !found {
+		return nil // sentinel already correct; nothing left to do
+	}
+	// A new recovery_required has been written; run a full fresh-start reset.
+	mfst, err := s.initResetManifest(currUIDValidity, stagingPath, manifestPath)
+	if err != nil {
+		return err
+	}
+	return s.executeResetFromManifest(mfst, stagingPath, manifestPath)
+}
+
+// executeResetFromManifest drives advanceResetPhases from the manifest's current phase
+// to committed, then removes the staging directory (best-effort) and manifest (required).
+func (s *storeImpl) executeResetFromManifest(mfst resetManifest, stagingPath, manifestPath string) error {
+	currUIDValidity := mfst.CurrUIDValidity
 	if err := s.advanceResetPhases(mfst.Phase, currUIDValidity, stagingPath, manifestPath); err != nil {
 		return err
 	}
-
 	// Staging dir cleanup is best-effort: a stale staging dir is harmless to normal
 	// data paths and is cleaned up on the next run.
 	if err := os.RemoveAll(stagingPath); err != nil {

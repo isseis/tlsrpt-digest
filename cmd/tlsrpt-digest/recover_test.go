@@ -277,6 +277,67 @@ func TestRecover_NoRecoveryRequired(t *testing.T) {
 	}
 }
 
+// TestRecover_CommittedCleanupPending_StatusDisplay verifies that when recovery_required is absent
+// but a pending-reset manifest exists (crash between commitReset sentinel write and final cleanup),
+// recover without --yes informs the operator and exits 1 without making store changes.
+func TestRecover_CommittedCleanupPending_StatusDisplay(t *testing.T) {
+	for _, opts := range []cliOptions{
+		{},
+		{RecoverMode: "keep-old"},
+		{RecoverMode: "discard-old"},
+		{RecoverAbort: true, RecoverYes: true},
+	} {
+		st := storetestutil.NewFakeStore() // no Recovery (found=false)
+		st.PendingReset = true
+		var out bytes.Buffer
+		runner := &recoverRunner{stdout: &out}
+
+		code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
+		require.NoError(t, err)
+		assert.Equal(t, exitError, code)
+		assert.Equal(t, 0, st.ResetForRecoveryCallCount)
+		assert.Equal(t, 0, st.ApplyRecoveryCallCount)
+		assert.Equal(t, 0, st.AbortResetCallCount)
+		output := out.String()
+		assert.Contains(t, output, "Previous reset committed")
+		assert.Contains(t, output, "discard-old --yes")
+	}
+}
+
+// TestRecover_CommittedCleanupPending_DiscardOldYes verifies that --mode discard-old --yes
+// calls ResetForRecovery to finalize cleanup when recovery_required is absent but a
+// pending-reset manifest is still present.
+func TestRecover_CommittedCleanupPending_DiscardOldYes(t *testing.T) {
+	st := storetestutil.NewFakeStore() // no Recovery (found=false)
+	st.PendingReset = true
+	var out bytes.Buffer
+	runner := &recoverRunner{stdout: &out}
+
+	opts := cliOptions{RecoverMode: "discard-old", RecoverYes: true}
+	code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
+
+	require.NoError(t, err)
+	assert.Equal(t, exitOK, code)
+	assert.Equal(t, 1, st.ResetForRecoveryCallCount)
+	assert.Contains(t, out.String(), "Recovery completed")
+}
+
+// TestRecover_CommittedCleanupPending_ResetForRecoveryFailure verifies that a
+// ResetForRecovery error in the cleanup-pending path returns exit 1 with an error.
+func TestRecover_CommittedCleanupPending_ResetForRecoveryFailure(t *testing.T) {
+	st := storetestutil.NewFakeStore()
+	st.PendingReset = true
+	st.ResetForRecoveryErr = errors.New("disk full")
+	var out bytes.Buffer
+	runner := &recoverRunner{stdout: &out}
+
+	opts := cliOptions{RecoverMode: "discard-old", RecoverYes: true}
+	code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
+
+	assert.Error(t, err)
+	assert.Equal(t, exitError, code)
+}
+
 // TestRecover_StatusDisplayNoMode verifies that plain recover (no mode) with recovery required
 // displays UIDVALIDITY/mailbox/path/mode and exits 1 without making changes.
 func TestRecover_StatusDisplayNoMode(t *testing.T) {

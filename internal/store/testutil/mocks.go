@@ -297,6 +297,12 @@ func (f *FakeStore) ResetForRecovery(currUIDValidity uint32) error {
 		return f.ResetForRecoveryErr
 	}
 	if f.Recovery == nil {
+		// Committed-cleanup-pending state: sentinel already correct, only leftover
+		// manifest/staging files remain. Clear the pending flag and return nil.
+		if f.PendingReset {
+			f.PendingReset = false
+			return nil
+		}
 		return store.ErrRecoveryRequiredMissing
 	}
 	if f.Recovery.Curr != currUIDValidity {

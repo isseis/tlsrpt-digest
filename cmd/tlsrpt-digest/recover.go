@@ -33,8 +33,7 @@ func (r *recoverRunner) Run(_ context.Context, boot *BootContext) (int, error) {
 		return exitError, fmt.Errorf("recover: load recovery-required: %w", err)
 	}
 	if !found {
-		_, _ = fmt.Fprintln(r.stdout, "No recovery required: store is in a consistent state.")
-		return exitError, nil
+		return r.handleNoRecoveryRequired(boot.Store, opts)
 	}
 
 	pendingReset, err := boot.Store.HasPendingReset()
@@ -140,4 +139,36 @@ func (r *recoverRunner) runDiscardOld(st store.Store, curr uint32, confirmed boo
 	}
 	_, _ = fmt.Fprintln(r.stdout, "Recovery completed. Store reset to empty state with current UIDVALIDITY.")
 	return exitOK, nil
+}
+
+// handleNoRecoveryRequired is called when LoadRecoveryRequired returns found=false.
+// It checks whether a pending-reset manifest is still present, which indicates that
+// a previous discard-old reset committed (sentinel updated) but the final manifest and
+// staging cleanup did not complete before the process was interrupted.  In that state
+// the data is already consistent; the operator just needs the leftover files cleaned up.
+func (r *recoverRunner) handleNoRecoveryRequired(st store.Store, opts cliOptions) (int, error) {
+	pendingReset, err := st.HasPendingReset()
+	if err != nil {
+		return exitError, fmt.Errorf("recover: check pending reset: %w", err)
+	}
+	if !pendingReset {
+		_, _ = fmt.Fprintln(r.stdout, "No recovery required: store is in a consistent state.")
+		return exitError, nil
+	}
+	// A previous discard-old reset committed but the cleanup (manifest and staging
+	// removal) did not finish.  The store is already correct; only the leftover
+	// files remain.  The next fetch/gc will clean them up automatically, or the
+	// operator can finalize now with --mode discard-old --yes.
+	if opts.RecoverMode == recoverModeDiscardOld && opts.RecoverYes {
+		if err := st.ResetForRecovery(0); err != nil {
+			return exitError, fmt.Errorf("recover: finalize pending cleanup: %w", err)
+		}
+		_, _ = fmt.Fprintln(r.stdout, "Recovery completed: previous reset cleanup finalized.")
+		return exitOK, nil
+	}
+	_, _ = fmt.Fprintln(r.stdout, "Previous reset committed: pending cleanup detected.")
+	_, _ = fmt.Fprintln(r.stdout, "The store is already in a consistent state; leftover files will be")
+	_, _ = fmt.Fprintln(r.stdout, "removed automatically on the next fetch or gc.")
+	_, _ = fmt.Fprintln(r.stdout, "Or finalize now: tlsrpt-digest recover --mode discard-old --yes")
+	return exitError, nil
 }
