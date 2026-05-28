@@ -33,12 +33,15 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 
 ## 2. フェーズ設計の概要
 
-`ResetForRecovery` はファイル操作の進捗を `resetPhase`（整数値）としてリセットマニフェスト（`.tlsrpt-digest-reset-manifest.json`）に記録する。マニフェストはリセット操作の進捗台帳であり、センチネルファイル（`.tlsrpt-digest-meta.json`）はユーザー可視の確定状態（UIDValidity・recovery_required の現在値）を保持する。
+`ResetForRecovery` はファイル操作の進捗を `resetPhase`（整数値）としてリセットマニフェスト（`.tlsrpt-digest-reset-manifest.json`）に記録する。リセット操作は以下の 3 種類のファイル/ディレクトリで管理される。
 
-| ファイル | 記録内容 | 役割 |
+**ステージングディレクトリ**（`.tlsrpt-digest-staging/`）は `ResetForRecovery` が旧データを一時退避する専用ディレクトリである。リセット中、`tlsrpt.json` と `emails/` は `rename(2)` でアトミックにこのディレクトリへ移動される。コミット前であれば `AbortReset` によってステージング内のファイルを元の場所（ストアルート直下）に戻すことができる。コミット後は旧データとして廃棄される。
+
+| ファイル/ディレクトリ | 記録内容 | 役割 |
 |---|---|---|
 | マニフェスト (`.tlsrpt-digest-reset-manifest.json`) | `resetPhase`（整数 1–5） | リセット操作の進捗台帳。クラッシュ後の再開・中断判断に使う |
 | センチネル (`.tlsrpt-digest-meta.json`) | `UIDValidity`・`recovery_required` | 確定状態の台帳。`recovery_required == nil` がコミット完了の真の根拠 |
+| ステージングディレクトリ (`.tlsrpt-digest-staging/`) | `tlsrpt.json`・`emails/`（リセット中の旧データ） | コミット前の旧データ一時保管場所。コミット前は `AbortReset` で元の場所に復元できる。コミット後は cleanup で削除される |
 
 ---
 
@@ -51,6 +54,19 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 | `resetPhaseEmailsStaged` | 3 | `emails/` のステージング完了後（チェックポイント） | メールディレクトリのリネームが完了したことを記録する。同様に冪等 |
 | `resetPhaseCommitted` | 4 | センチネル保存直後（コミットマーカー） | センチネルへの書き込み（recovery_required クリア・新 UIDVALIDITY 設定）が完了したことを記録する。この後はマニフェストとステージングディレクトリのみが残存するため、クリーンアップ失敗は通常データパスに影響しない |
 | `resetPhaseAborting` | 5 | `restoreFromStaging` 実行前（中断 WAL エントリ） | **中断操作の WAL エントリ**。`AbortReset` がファイルを元の場所に戻す前にこのフェーズを書く。以降のクラッシュでマニフェストが残存しても、`ResetForRecovery` はこのフェーズを見て操作を拒否し、`AbortReset` の再実行を促す |
+
+### フェーズ別ファイル配置
+
+各フェーズでストアルートとステージングディレクトリに存在する主要ファイルを示す。
+
+| フェーズ | ストアルート | ステージング (`.tlsrpt-digest-staging/`) |
+|---|---|---|
+| 通常 / 要復旧 | `tlsrpt.json`・`emails/` | なし |
+| フェーズ 1（マニフェスト書き込み済み） | `tlsrpt.json`・`emails/` | 空ディレクトリ（作成済み） |
+| フェーズ 2（data ステージング完了） | `emails/` のみ | `tlsrpt.json` |
+| フェーズ 3・4（emails ステージング完了 / コミット済み） | なし | `tlsrpt.json`・`emails/`（旧） |
+
+フェーズ 4 → 通常への遷移（cleanup）は `Open(OpenReadWrite)` 内で実行される。ステージング削除と `tlsrpt.json`・`emails/` の再初期化が同一の Open 呼び出しで完了し、以後は通常状態に戻る。
 
 ### 状態遷移図
 
@@ -70,12 +86,12 @@ flowchart TD
     Normal -.->|"fetch が UIDVALIDITY 変化を検出"| RR
     RR -->|"recover --mode keep-old"| Normal
     RR -->|"recover --mode discard-old --yes"| P1
-    P1 -->|"stageDataFile 完了"| P2
-    P2 -->|"stageEmailsDir 完了"| P3
+    P1 -->|"stageDataFile:<br>tlsrpt.json → .staging/"| P2
+    P2 -->|"stageEmailsDir:<br>emails/ → .staging/"| P3
     P3 -->|"commitReset 完了"| P4
-    P4 -->|"Open で cleanupCompletedReset"| Normal
+    P4 -->|"Open で cleanupCompletedReset:<br>.staging/ 削除"| Normal
     PendingReset -.->|"recover --abort-reset --yes"| P5
-    P5 -->|"AbortReset 完了"| RR
+    P5 -->|"AbortReset 完了:<br>.staging/ → ルートに復元"| RR
 ```
 
 凡例：実線 = 正常系の遷移、破線 = 例外イベント（UIDVALIDITY 変化）または手動中断（abort）
