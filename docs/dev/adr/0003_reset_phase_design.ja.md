@@ -159,7 +159,7 @@ flowchart TD
 
 ```
 1. マニフェストを読む
-   ├─ 不在 → 何もしない（正常）
+   ├─ 不在 → 孤児 staging を best-effort 削除して正常終了（※後述）
    ├─ バージョン不一致 → エラー（fail-closed）
    └─ 不明フェーズ → エラー（fail-closed）
 
@@ -171,14 +171,23 @@ flowchart TD
        └─ os.Remove(manifest)   ── 必須（失敗すると次回も試みる）
 ```
 
+**※ 孤児 staging の扱い**
+
+マニフェストが存在しないにもかかわらずステージングディレクトリが残っている場合は、
+前回のリセットで `Remove(manifest)` は成功したが `RemoveAll(staging)` が失敗した
+ことを意味する。マニフェストの WAL エントリ（フェーズ 1）はファイルを動かす前に
+必ず書かれるため、マニフェストなし = 完了済みまたは未開始のいずれかであり、
+staging の内容は復元に使われることがない。したがって best-effort で削除して安全である。
+
 ### カバーするシナリオ
 
-| シナリオ | マニフェストフェーズ | sentinel.recovery_required | 結果 |
+| シナリオ | マニフェスト有無 | sentinel.recovery_required | 結果 |
 |---|---|---|---|
-| 操作進行中（コミット前） | 1〜3 | あり | ErrPendingReset |
-| abort 中断 | 5 | あり | ErrPendingReset |
-| コミット後クリーンアップ失敗 | 4 | なし | クリーンアップして通常 Open |
-| コミットウィンドウクラッシュ（フェーズ 3 + センチネル確定） | 3 | なし | クリーンアップして通常 Open |
+| 操作進行中（コミット前） | あり（1〜3） | あり | ErrPendingReset |
+| abort 中断 | あり（5） | あり | ErrPendingReset |
+| コミット後クリーンアップ失敗 | あり（4） | なし | クリーンアップして通常 Open |
+| コミットウィンドウクラッシュ（フェーズ 3 + センチネル確定） | あり（3） | なし | クリーンアップして通常 Open |
+| 孤児 staging（manifest 削除後に staging 削除が失敗） | なし | なし | staging を best-effort 削除して通常 Open |
 
 ---
 
@@ -191,6 +200,7 @@ flowchart TD
 | フェーズ 3 が書かれている ⟹ `emails/` はステージングに存在する | `stageEmailsDir` が冪等・フェーズ 3 はリネーム後に書く |
 | フェーズ 4 または `recovery_required == nil` ⟹ センチネルはコミット済み | `commitReset` がセンチネル保存後にフェーズ 4 を書く |
 | フェーズ 5 が書かれている ⟹ `AbortReset` のみが続行できる | `ResetForRecovery` がフェーズ 5 を拒否 |
+| **マニフェストなし ⟹ ステージングの内容は孤児（安全に削除可能）** | WAL 設計：フェーズ 1 はファイル移動より前に書かれるため、マニフェストがなければファイルは動いていない（または完了済みの cleanup 残滓） |
 
 ---
 
@@ -207,6 +217,10 @@ flowchart TD
 
 - `stageDataFile`・`stageEmailsDir` に倣い、対応する `stageXxx` 関数を追加して冪等性を保つ
 - 新しいチェックポイントフェーズを追加する（上記「フェーズを追加する場合」に準じる）
+- **`cleanupCompletedReset` の孤児 staging 削除も合わせて更新する**：現在の実装は
+  `resetStagingPath` ディレクトリ全体を `RemoveAll` するため、ディレクトリ内に新たな
+  サブパスを追加しても自動的に対象に含まれる。staging をディレクトリ以外のファイルに
+  拡張した場合は `cleanupCompletedReset` 側に対応する削除処理を追加すること。
 
 ### コミット操作が複数ステップになる場合
 
