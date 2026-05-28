@@ -88,12 +88,12 @@ var errSlackWebhookURLRequired = errors.New("at least one Slack webhook URL is r
 
 type nopNotifier struct{}
 
-func (nopNotifier) LogAlert(_ context.Context, _ notify.Alert) error       { return nil }
-func (nopNotifier) LogWarning(_ context.Context, _ notify.Warning) error   { return nil }
+func (nopNotifier) LogAlert(_ context.Context, _ notify.Alert) error             { return nil }
+func (nopNotifier) LogWarning(_ context.Context, _ notify.Warning) error         { return nil }
 func (nopNotifier) LogSystemError(_ context.Context, _ notify.SystemError) error { return nil }
-func (nopNotifier) LogSummary(_ context.Context, _ notify.Summary) error   { return nil }
-func (nopNotifier) Flush(_ context.Context) error                          { return nil }
-func (nopNotifier) IsDryRun() bool                                         { return false }
+func (nopNotifier) LogSummary(_ context.Context, _ notify.Summary) error         { return nil }
+func (nopNotifier) Flush(_ context.Context) error                                { return nil }
+func (nopNotifier) IsDryRun() bool                                               { return false }
 
 type notificationSink struct {
 	handlers []*notify.SlackHandler
