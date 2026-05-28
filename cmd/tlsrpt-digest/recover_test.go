@@ -248,10 +248,10 @@ func TestRecover_YesAlone(t *testing.T) {
 	assert.Contains(t, stderr.String(), "--yes requires --mode or --abort-reset")
 }
 
-// TestRecover_NoRecoveryRequired verifies that all modes exit 1 with an explanation when
-// no recovery-required state exists, without making any store changes.
+// TestRecover_NoRecoveryRequired verifies that all modes exit 0 with an explanation when
+// no recovery-required state exists and the store is clean, without making any store changes.
 func TestRecover_NoRecoveryRequired(t *testing.T) {
-	st := storetestutil.NewFakeStore() // no Recovery set
+	st := storetestutil.NewFakeStore() // no Recovery set, PendingReset=false
 	var out bytes.Buffer
 	runner := &recoverRunner{stdout: &out}
 
@@ -269,7 +269,7 @@ func TestRecover_NoRecoveryRequired(t *testing.T) {
 
 		code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
 		require.NoError(t, err)
-		assert.Equal(t, exitError, code)
+		assert.Equal(t, exitOK, code, "store is consistent: exit 0 expected for opts %+v", opts)
 		assert.Equal(t, 0, st.ApplyRecoveryCallCount)
 		assert.Equal(t, 0, st.ResetForRecoveryCallCount)
 		assert.Equal(t, 0, st.AbortResetCallCount)
@@ -546,10 +546,10 @@ func TestRecover_ExitCodes(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "no recovery required exits 1",
+			name:     "no recovery required exits 0",
 			opts:     cliOptions{RecoverMode: "keep-old"},
 			recovery: false,
-			wantCode: exitError,
+			wantCode: exitOK,
 			wantErr:  false,
 		},
 		{

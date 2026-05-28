@@ -137,7 +137,6 @@ type storeImpl struct {
 	readOnly      bool
 	dataPath      string
 	emailsDirPath string
-	sentinel      *internalSentinelFile
 }
 
 // Open opens the store at rootDir with the given identity in the specified mode.
@@ -214,22 +213,11 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 		if err := verifySentinelIdentity(rootDir, sentinel, identity); err != nil {
 			return nil, err
 		}
-	} else {
-		// In read-only mode, don't create sentinel; return empty store
-		if readOnly {
-			sentinel = &internalSentinelFile{
-				FormatVersion: SentinelFormatVersion,
-				IMAPHost:      identity.Host,
-				IMAPPort:      identity.Port,
-				IMAPMailbox:   identity.Mailbox,
-			}
-		} else {
-			// In read-write mode, initialize sentinel
-			newSentinel, err := initSentinel(rootDir, identity)
-			if err != nil {
-				return nil, fmt.Errorf("Open: init sentinel: %w", err)
-			}
-			sentinel = newSentinel
+	} else if !readOnly {
+		// In read-write mode, initialize the sentinel file on disk.
+		// Read-only mode leaves the sentinel absent (empty store is valid).
+		if _, err := initSentinel(rootDir, identity); err != nil {
+			return nil, fmt.Errorf("Open: init sentinel: %w", err)
 		}
 	}
 
@@ -252,7 +240,6 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 		readOnly:      readOnly,
 		dataPath:      dataFilePath(rootDir),
 		emailsDirPath: emailsPath(rootDir),
-		sentinel:      sentinel,
 	}
 
 	return store, nil

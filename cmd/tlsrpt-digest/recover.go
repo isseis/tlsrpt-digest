@@ -153,13 +153,18 @@ func (r *recoverRunner) handleNoRecoveryRequired(st store.Store, opts cliOptions
 	}
 	if !pendingReset {
 		_, _ = fmt.Fprintln(r.stdout, "No recovery required: store is in a consistent state.")
-		return exitError, nil
+		return exitOK, nil
 	}
 	// A previous discard-old reset committed but the cleanup (manifest and staging
 	// removal) did not finish.  The store is already correct; only the leftover
 	// files remain.  The next fetch/gc will clean them up automatically, or the
 	// operator can finalize now with --mode discard-old --yes.
 	if opts.RecoverMode == recoverModeDiscardOld && opts.RecoverYes {
+		// currUIDValidity=0: the sentinel is already committed (recovery_required cleared),
+		// so ResetForRecovery will resume from the existing manifest's stored CurrUIDValidity
+		// rather than starting a fresh reset. The 0 is never used for a new reset here
+		// because initResetManifest is only reached when LoadRecoveryRequired returns
+		// found=true — which cannot happen while recover holds the writer process lock.
 		if err := st.ResetForRecovery(0); err != nil {
 			return exitError, fmt.Errorf("recover: finalize pending cleanup: %w", err)
 		}

@@ -223,10 +223,7 @@ func cleanupCompletedReset(rootDir string) error {
 		)
 	}
 	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		slog.Warn("store: failed to remove stale reset manifest; manual cleanup may be required",
-			slog.String("path", manifestPath),
-			slog.Any("error", err),
-		)
+		return fmt.Errorf("cleanupCompletedReset: remove manifest: %w", err)
 	}
 	return nil
 }
@@ -365,7 +362,6 @@ func (s *storeImpl) SaveUIDValidity(v uint32) error {
 	if err := saveSentinel(s.rootDir, sentinel); err != nil {
 		return fmt.Errorf("SaveUIDValidity: save sentinel: %w", err)
 	}
-	s.sentinel = sentinel
 	return nil
 }
 
@@ -399,7 +395,6 @@ func (s *storeImpl) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time
 		if err := saveSentinel(s.rootDir, sentinel); err != nil {
 			return fmt.Errorf("SaveRecoveryRequired: save sentinel: %w", err)
 		}
-		s.sentinel = sentinel
 		return nil
 	})
 }
@@ -434,7 +429,6 @@ func (s *storeImpl) ClearRecoveryRequired() error {
 		if err := saveSentinel(s.rootDir, sentinel); err != nil {
 			return fmt.Errorf("ClearRecoveryRequired: save sentinel: %w", err)
 		}
-		s.sentinel = sentinel
 		return nil
 	})
 }
@@ -454,7 +448,6 @@ func (s *storeImpl) ApplyRecovery(newUIDValidity uint32) error {
 		if err := saveSentinel(s.rootDir, sentinel); err != nil {
 			return fmt.Errorf("ApplyRecovery: save sentinel: %w", err)
 		}
-		s.sentinel = sentinel
 		return nil
 	})
 }
@@ -625,7 +618,6 @@ func (s *storeImpl) commitReset(manifestPath string, currUIDValidity uint32) err
 		if err := saveSentinel(s.rootDir, sentinel); err != nil {
 			return fmt.Errorf("commitReset: save sentinel: %w", err)
 		}
-		s.sentinel = sentinel
 		return writeResetManifest(manifestPath, resetManifest{
 			Version: resetManifestVersion, CurrUIDValidity: currUIDValidity,
 			Phase: resetPhaseCommitted,
@@ -752,7 +744,7 @@ func (s *storeImpl) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, e
 		}
 		return nil, fmt.Errorf("AcquireSummaryConsistencyGuard: open guard file: %w", err)
 	}
-	if err := unix.Flock(int(f.Fd()), unix.LOCK_SH|unix.LOCK_NB); err != nil { //nolint:gosec // fd fits int on all supported platforms
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_SH); err != nil { //nolint:gosec // fd fits int on all supported platforms
 		_ = f.Close()
 		return nil, fmt.Errorf("AcquireSummaryConsistencyGuard: acquire shared lock: %w", err)
 	}

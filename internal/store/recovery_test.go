@@ -1035,3 +1035,74 @@ func TestHasPendingReset_ManifestPresent(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, found)
 }
+
+// TestResetForRecovery_CommitCrashWindow_ZeroUID simulates the narrow crash window in
+// commitReset where the sentinel has been saved (recovery_required cleared, new
+// UIDValidity written) but the manifest has not yet been advanced from phase=3 to
+// phase=committed.  This is the state seen by handleNoRecoveryRequired in the recover
+// subcommand, which calls ResetForRecovery(0).
+//
+// The key property being verified is that ResetForRecovery resumes using the
+// CurrUIDValidity stored in the manifest (200), NOT the caller-supplied 0, and that
+// the full cleanup (staging + manifest removal) completes successfully.
+func TestResetForRecovery_CommitCrashWindow_ZeroUID(t *testing.T) {
+	rootDir := t.TempDir()
+
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(sRW, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	// Simulate the crash window: data/emails staged, sentinel committed, manifest still
+	// at phase=emails_staged (commit saved sentinel but did not write phase=committed).
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, os.Rename(dataFilePath(rootDir), filepath.Join(stagingPath, "tlsrpt.json")))
+	require.NoError(t, os.Rename(emailsPath(rootDir), filepath.Join(stagingPath, "emails")))
+	sentinel, _, err := loadSentinel(rootDir)
+	require.NoError(t, err)
+	newUID := uint32(200)
+	sentinel.UIDValidity = &newUID
+	sentinel.RecoveryRequired = nil
+	require.NoError(t, saveSentinel(rootDir, sentinel))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseEmailsStaged,
+	}))
+
+	// handleNoRecoveryRequired calls ResetForRecovery(0) because LoadRecoveryRequired
+	// returns found=false but HasPendingReset returns true.
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s.ResetForRecovery(0))
+
+	// Sentinel must retain the committed UIDValidity.
+	v, found, err := s.LoadUIDValidity()
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, uint32(200), v)
+
+	// Recovery-required must remain absent.
+	_, _, _, recFound, err := s.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.False(t, recFound)
+
+	// Manifest and staging must be cleaned up.
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.True(t, os.IsNotExist(err), "manifest must be removed")
+	_, err = os.Stat(stagingPath)
+	assert.True(t, os.IsNotExist(err), "staging dir must be removed")
+
+	// Store must be openable for normal use with empty data.
+	s2, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	reports, err := s2.GetAllReports()
+	require.NoError(t, err)
+	assert.Empty(t, reports, "store must be empty after cleanup (old data was in staging)")
+}
