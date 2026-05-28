@@ -263,6 +263,7 @@
 |--------|---------|------|
 | 操作 | operation | |
 | オプション | optional | |
+| 残留（staging 文脈） | orphaned | クリーンアップされずに残ったステージングファイル・ディレクトリ |
 | 最適化 | optimize / optimization | |
 | 出力 | output | |
 | 出力ファイル | output file | |
