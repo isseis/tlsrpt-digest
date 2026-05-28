@@ -264,6 +264,7 @@
 |--------|---------|------|
 | 操作 | operation | |
 | オプション | optional | |
+| 残留（修飾語） | leftover / residual | 名詞を修飾する場合（「残留マニフェスト」→ "leftover manifest"） |
 | 残留（ステージング文脈） | orphaned | クリーンアップされずに残ったステージングファイル・ディレクトリ |
 | 残留物 | residual / leftover | 述語名詞として使う場合（「内容は残留物」→ "contents are leftover residue"） |
 | 最適化 | optimize / optimization | |

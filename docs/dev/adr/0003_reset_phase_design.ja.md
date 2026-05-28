@@ -92,7 +92,7 @@ flowchart TD
 |---|---|---|---|---|
 | マニフェストなし・`recovery_required` あり | `ApplyRecovery` を実行し、旧データを保持したまま UIDVALIDITY を更新して `recovery_required` を解除する | 実行予定を表示するだけで、破壊的変更を行わず exit 1 | fresh start として `ResetForRecovery` を開始する | pending reset がないため `ErrResetNotPending` |
 | フェーズ 1〜3（コミット前 pending reset） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。継続または abort の選択肢を表示する | pending reset の存在と、継続または abort の選択肢を表示する。破壊的変更なし | 該当フェーズから `ResetForRecovery` を再開し、空ストア + current UIDVALIDITY + `recovery_required` 解消へ収束する | `AbortReset` を実行し、旧データ保持 + `recovery_required` 残存へ戻す |
-| フェーズ 4 または `recovery_required` なし（コミット済み） | 通常 open 時に leftover マニフェスト/ステージングをクリーンアップする。その後は recovery-required 不在として復旧不要扱い | 同左 | クリーンアップして終了する。実質的に冪等 | コミット後のため `ErrResetNotPending` |
+| フェーズ 4 または `recovery_required` なし（コミット済み） | 通常 open 時に残留マニフェスト/ステージングをクリーンアップする。その後は recovery-required 不在として復旧不要扱い | 同左 | クリーンアップして終了する。実質的に冪等 | コミット後のため `ErrResetNotPending` |
 | フェーズ 5（abort 中断） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。abort 完了を促す | pending reset の存在と、abort 完了が必要であることを表示する。破壊的変更なし | `ErrResetAbortInProgress` を返し、先に `AbortReset` の完了を要求する | `AbortReset` を再開し、`restoreFromStaging` を冪等に実行してマニフェストを削除する |
 | 不明フェーズ・バージョン不一致・マニフェスト破損 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 |
 
