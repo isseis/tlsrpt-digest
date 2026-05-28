@@ -73,7 +73,6 @@ type NotificationSink interface {
 
 type BootstrapOptions struct {
 	DryRun                 bool
-	RecoverResetMode       bool
 	Logger                 *slog.Logger
 	LoadConfig             func(path string) (*config.Config, error)
 	BuildNotifier          func(successURL, errorURL config.Secret, cfg *config.Config, runID string, dryRun bool) (NotificationSink, error)
@@ -202,15 +201,9 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 		return nil, fmt.Errorf("acquire store writer lock: %w", err)
 	}
 
-	mode := storeOpenMode(subcmd, opts)
+	mode := storeOpenMode(subcmd)
 	boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
 	if err != nil {
-		if subcmd == subcommandRecover && errors.Is(err, store.ErrPendingReset) {
-			boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, store.OpenRecoverReset)
-			if err == nil {
-				return boot, nil
-			}
-		}
 		kind := classifyOpenError(err)
 		_ = notifySystemError(context.Background(), boot.Notifier, kind, cfg)
 		if errors.Is(err, store.ErrPendingReset) {
@@ -259,11 +252,11 @@ func notifySystemError(ctx context.Context, notifier NotificationSink, kind noti
 	return errors.Join(err, notifier.Flush(ctx))
 }
 
-func storeOpenMode(subcmd SubcommandName, opts BootstrapOptions) store.OpenMode {
+func storeOpenMode(subcmd SubcommandName) store.OpenMode {
 	if subcmd == subcommandSummary {
 		return store.OpenReadOnly
 	}
-	if subcmd == subcommandRecover && opts.RecoverResetMode {
+	if subcmd == subcommandRecover {
 		return store.OpenRecoverReset
 	}
 	return store.OpenReadWrite

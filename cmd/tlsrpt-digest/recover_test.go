@@ -364,10 +364,10 @@ func TestRecover_PendingReset_NonResetModesShowOptions(t *testing.T) {
 	}
 }
 
-// TestRecover_PendingResetBootstrapFallsBackToStatusDisplay verifies that recover can
-// open a store with an incomplete reset, show the operator status, and avoid destructive
-// actions for status-only and unconfirmed modes.
-func TestRecover_PendingResetBootstrapFallsBackToStatusDisplay(t *testing.T) {
+// TestRecover_PendingResetShowsStatusForNonDestructiveModes verifies that recover always
+// opens the store with OpenRecoverReset, so a pending reset does not block status display
+// or unconfirmed modes — and that no destructive store operations are called.
+func TestRecover_PendingResetShowsStatusForNonDestructiveModes(t *testing.T) {
 	tests := []struct {
 		name string
 		opts cliOptions
@@ -381,7 +381,6 @@ func TestRecover_PendingResetBootstrapFallsBackToStatusDisplay(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			st := makeRecoveryStore(100, 200)
 			st.PendingReset = true
-			var modes []store.OpenMode
 
 			boot, err := Bootstrap(subcommandRecover, "config.toml", "run-recover-pending", BootstrapOptions{
 				LoadConfig: func(string) (*config.Config, error) {
@@ -391,10 +390,7 @@ func TestRecover_PendingResetBootstrapFallsBackToStatusDisplay(t *testing.T) {
 					return &SpyNotificationSink{}, nil
 				},
 				OpenStore: func(_ string, _ store.IMAPIdentity, mode store.OpenMode) (store.Store, error) {
-					modes = append(modes, mode)
-					if mode == store.OpenReadWrite {
-						return nil, store.ErrPendingReset
-					}
+					assert.Equal(t, store.OpenRecoverReset, mode)
 					return st, nil
 				},
 			})
@@ -408,7 +404,6 @@ func TestRecover_PendingResetBootstrapFallsBackToStatusDisplay(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, exitError, code)
-			assert.Equal(t, []store.OpenMode{store.OpenReadWrite, store.OpenRecoverReset}, modes)
 			assert.Equal(t, 0, st.ApplyRecoveryCallCount)
 			assert.Equal(t, 0, st.ResetForRecoveryCallCount)
 			assert.Equal(t, 0, st.AbortResetCallCount)

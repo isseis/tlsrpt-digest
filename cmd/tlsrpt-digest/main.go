@@ -67,7 +67,6 @@ func runCLI(ctx context.Context, args []string, stderr io.Writer, bootOpts Boots
 	logger.Info("tlsrpt-digest starting", "subcommand", inv.Subcommand, "dry_run", inv.Options.DryRun)
 
 	bootOpts.DryRun = inv.Options.DryRun
-	bootOpts.RecoverResetMode = inv.Options.RecoverYes && (inv.Options.RecoverMode == "discard-old" || inv.Options.RecoverAbort)
 	bootOpts.Logger = logger
 	boot, err := Bootstrap(inv.Subcommand, inv.Options.ConfigPath, runID, bootOpts)
 	if err != nil {
