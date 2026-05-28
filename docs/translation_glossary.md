@@ -34,6 +34,7 @@
 |--------|---------|------|
 | バックアップ | backup | |
 | ベストエフォート | best-effort | 失敗しても警告のみで続行する方針。「ベストエフォートで削除」→ "remove … on a best-effort basis" |
+| 保留リセット | pending reset | リセット操作開始後、コミット完了前の中間状態（フェーズ 1〜3 および フェーズ 5）。コード上は `ErrPendingReset`・`HasPendingReset()` として参照される。 |
 | ブートストラップ | bootstrap | システム初期化処理の文脈 |
 | バッチ処理 | batch processing | |
 | ベースライン | baseline | |
@@ -329,7 +330,7 @@
 | 正規表現 | regex | "regular expression" の略 |
 | 定期的 | regular | |
 | リリース | release | |
-| レポート | report | |
+| レポート | report | fetch が取得したメールから抽出・蓄積する解析済み TLSRPT レポート（RFC 8460 JSON）。`tlsrpt.json` に保存される。 |
 | リポジトリ | repository | |
 | 再利用可能 | reusable | |
 | 必須 | required | |
