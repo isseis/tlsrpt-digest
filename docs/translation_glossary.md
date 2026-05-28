@@ -33,6 +33,7 @@
 | 日本語 | English | 備考 |
 |--------|---------|------|
 | バックアップ | backup | |
+| ベストエフォート | best-effort | 失敗しても警告のみで続行する方針。「ベストエフォートで削除」→ "remove … on a best-effort basis" |
 | ブートストラップ | bootstrap | システム初期化処理の文脈 |
 | バッチ処理 | batch processing | |
 | ベースライン | baseline | |
