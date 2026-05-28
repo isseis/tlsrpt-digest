@@ -146,21 +146,20 @@ func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 }
 
 func validateFlags(subcmd SubcommandName, opts cliOptions) error {
-	if subcmd == subcommandRecover {
-		if opts.RecoverMode != "" {
-			if opts.RecoverMode != recoverModeKeepOld && opts.RecoverMode != recoverModeDiscardOld {
-				return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
-			}
-		}
-		if opts.RecoverAbort && opts.RecoverMode != "" {
-			return errAbortAndModeExclusive
-		}
-		if opts.RecoverAbort && !opts.RecoverYes {
-			return errAbortResetRequiresYes
-		}
-		if opts.RecoverYes && !opts.RecoverAbort && opts.RecoverMode == "" {
-			return errYesRequiresModeOrAbort
-		}
+	if subcmd != subcommandRecover {
+		return nil
+	}
+	if opts.RecoverMode != "" && opts.RecoverMode != recoverModeKeepOld && opts.RecoverMode != recoverModeDiscardOld {
+		return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
+	}
+	if opts.RecoverAbort && opts.RecoverMode != "" {
+		return errAbortAndModeExclusive
+	}
+	if opts.RecoverAbort && !opts.RecoverYes {
+		return errAbortResetRequiresYes
+	}
+	if opts.RecoverYes && !opts.RecoverAbort && opts.RecoverMode == "" {
+		return errYesRequiresModeOrAbort
 	}
 	return nil
 }
