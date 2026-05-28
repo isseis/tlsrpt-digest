@@ -226,6 +226,7 @@
 | 日本語 | English | 備考 |
 |--------|---------|------|
 | 保守性 | maintainability | |
+| マニフェスト | manifest / reset manifest | リセット操作の進捗台帳（`.tlsrpt-digest-reset-manifest.json`）。英語版では文脈に応じて "manifest" または "reset manifest" と表記 |
 | メンテナンス | maintenance | |
 | 管理 | manage / management | |
 | 手動 | manual | |
@@ -263,7 +264,8 @@
 |--------|---------|------|
 | 操作 | operation | |
 | オプション | optional | |
-| 残留（staging 文脈） | orphaned | クリーンアップされずに残ったステージングファイル・ディレクトリ |
+| 残留（ステージング文脈） | orphaned | クリーンアップされずに残ったステージングファイル・ディレクトリ |
+| 残留物 | residual / leftover | 述語名詞として使う場合（「内容は残留物」→ "contents are leftover residue"） |
 | 最適化 | optimize / optimization | |
 | 出力 | output | |
 | 出力ファイル | output file | |
@@ -346,6 +348,7 @@
 | rollback journal mode | rollback journal mode | SQLite のジャーナルモード |
 | ルート | root | |
 | 根本原因 | root cause | |
+| 残滓 | residue | "完了済みの cleanup 残滓" → "residue from a completed cleanup" |
 | ランタイム | runtime | |
 
 ### S
