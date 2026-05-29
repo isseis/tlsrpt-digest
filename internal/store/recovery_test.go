@@ -1047,6 +1047,45 @@ func TestSummaryConsistencyGuard_BlocksExclusiveWriter(t *testing.T) {
 	}
 }
 
+// TestSummaryConsistencyGuard_MissingGuardFileCreated verifies that
+// AcquireSummaryConsistencyGuard creates the guard file when it is absent for an
+// existing store (e.g. a store created before the guard file was introduced).
+// The created guard must hold a real LOCK_SH that blocks concurrent exclusive writers.
+func TestSummaryConsistencyGuard_MissingGuardFileCreated(t *testing.T) {
+	s, rootDir := openTestStore(t)
+
+	// Remove the guard file to simulate a pre-feature or manually-deleted state.
+	require.NoError(t, os.Remove(guardFilePath(rootDir)))
+
+	guard, err := s.AcquireSummaryConsistencyGuard()
+	require.NoError(t, err)
+
+	// Guard file must have been recreated.
+	_, err = os.Stat(guardFilePath(rootDir))
+	require.NoError(t, err, "guard file must be recreated by AcquireSummaryConsistencyGuard")
+
+	// The guard must hold a real LOCK_SH that blocks an exclusive writer.
+	done := make(chan error, 1)
+	go func() {
+		done <- s.SaveRecoveryRequired(1, 2, time.Now())
+	}()
+
+	select {
+	case err := <-done:
+		t.Fatalf("exclusive writer should have been blocked; got: %v", err)
+	case <-time.After(50 * time.Millisecond):
+		// Expected: goroutine is blocked.
+	}
+
+	require.NoError(t, guard.Close())
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("exclusive writer did not complete after shared lock released")
+	}
+}
+
 // TestOpen_CleansUpOrphanStagingDir verifies that Open(OpenReadWrite) removes a
 // staging directory that was left behind after the manifest was already deleted.
 // This covers the window where executeResetFromManifest removed the manifest

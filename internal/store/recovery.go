@@ -712,6 +712,7 @@ func (s *fileStore) HasPendingReset() (bool, error) {
 // When rootDir does not exist (empty-store OpenReadOnly path), a no-op guard is
 // returned: recovery-required cannot be set without a store directory, so
 // CheckRecoveryRequired always returns false and Close is a no-op.
+// See docs/dev/developer_guide/process_locking.md §3 for the concurrency design.
 func (s *fileStore) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error) {
 	if _, err := os.Stat(s.rootDir); errors.Is(err, os.ErrNotExist) {
 		return noopSummaryConsistencyGuard{}, nil
@@ -719,10 +720,18 @@ func (s *fileStore) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, e
 	guardPath := guardFilePath(s.rootDir)
 	f, err := os.OpenFile(guardPath, os.O_RDONLY, filePerm) //nolint:gosec
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("AcquireSummaryConsistencyGuard: open guard file: %w", err)
+		}
+		// Guard file absent for an existing store (store pre-dates the guard file, or
+		// file was manually removed). Attempt to create it so we can hold a real LOCK_SH.
+		// If creation fails (e.g. read-only mount), the same failure prevents any writer
+		// from reaching withGuardExclusive, so SaveRecoveryRequired cannot write
+		// recovery_required and a no-op guard is safe.
+		f, err = os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, filePerm) //nolint:gosec
+		if err != nil {
 			return noopSummaryConsistencyGuard{}, nil
 		}
-		return nil, fmt.Errorf("AcquireSummaryConsistencyGuard: open guard file: %w", err)
 	}
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_SH); err != nil { //nolint:gosec // fd fits int on all supported platforms
 		_ = f.Close()
