@@ -141,6 +141,7 @@ func (r *recoverRunner) runDiscardOld(st store.Store, curr uint32, confirmed boo
 // handleNoRecoveryRequired is called when LoadRecoveryRequired returns found=false.
 // A manifest may still exist if a prior discard-old reset committed but its cleanup
 // was interrupted; the store is already consistent and only leftover files remain.
+// See ADR-0003 §5 for the post-commit cleanup scenario.
 func (r *recoverRunner) handleNoRecoveryRequired(st store.Store, opts cliOptions) (int, error) {
 	pendingReset, err := st.HasPendingReset()
 	if err != nil {

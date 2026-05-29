@@ -547,6 +547,7 @@ func (s *fileStore) executeResetFromManifest(mfst resetManifest, stagingPath, ma
 
 // advanceResetPhases drives phase progression from phase to committed,
 // writing a checkpoint manifest after each idempotent file operation.
+// See ADR-0003 §3–4 for the WAL/checkpoint pattern and idempotence invariants.
 func (s *fileStore) advanceResetPhases(phase resetPhase, currUIDValidity uint32, stagingPath, manifestPath string) error {
 	if phase <= resetPhaseManifestWritten {
 		// MkdirAll is defensive: staging dir should already exist from the initial write,
@@ -589,6 +590,8 @@ func (s *fileStore) advanceResetPhases(phase resetPhase, currUIDValidity uint32,
 
 // commitReset atomically clears recovery_required, writes the new UIDValidity, and
 // advances the manifest to resetPhaseCommitted under the exclusive guard lock.
+// The guard serializes against concurrent summary processes reading recovery_required;
+// see docs/dev/developer_guide/process_locking.md §3.
 func (s *fileStore) commitReset(manifestPath string, currUIDValidity uint32) error {
 	return s.withGuardExclusive(func() error {
 		sentinel, err := s.loadOrInitSentinelForWrite()
