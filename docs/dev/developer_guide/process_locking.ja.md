@@ -145,19 +145,27 @@ sequenceDiagram
     participant F as fetch
 
     S->>G: flock(LOCK_SH) 取得
+    activate G
+    Note over G: LOCK_SH
     S->>Sen: CheckRecoveryRequired
     Sen-->>S: found=false → 続行
 
-    F->>G: flock(LOCK_EX) 試行
+    F->>G: flock(LOCK_EX) 試行（取得待ち）
+    activate F
     Note right of G: LOCK_SH 保持中のためブロック
 
     S->>Sen: GenerateSummary（読み取り）
     S->>Sen: LogSummary / Flush
     S->>G: guard.Close() — LOCK_SH 解放
+    deactivate G
 
     G-->>F: LOCK_EX 取得（ブロック解除）
+    deactivate F
+    activate G
+    Note over G: LOCK_EX
     F->>Sen: recovery_required 書き込み
     F->>G: LOCK_EX 解放
+    deactivate G
 ```
 
 ### 3.4 `recovery_required` を変更するストア API（排他ロックが必要）
