@@ -98,6 +98,19 @@
 | `rootDir` あり・ガードファイル不在 | `O_CREATE\|O_RDWR` でガードファイルを作成し `LOCK_SH` を取得（手動削除の救済） |
 | `rootDir` あり・ガードファイル不在・作成失敗 | エラーを返す（fail-closed） |
 
+```mermaid
+flowchart TD
+    Start["AcquireSummaryConsistencyGuard 呼び出し"] --> CheckRoot{"rootDir<br>存在？"}
+    CheckRoot -- "No" --> Noop["no-op ガードを返す<br>(空ストア)"]
+    CheckRoot -- "Yes" --> CheckGuard{"ガードファイル<br>存在？"}
+    CheckGuard -- "Yes" --> OpenRO["O_RDONLY で開く"]
+    CheckGuard -- "No" --> TryCreate["O_CREATE|O_RDWR で<br>作成を試みる"]
+    TryCreate -- "成功" --> OpenRO
+    TryCreate -- "失敗" --> Err["エラーを返す<br>(fail-closed)"]
+    OpenRO --> Lock["flock(LOCK_SH) 取得"]
+    Lock --> Return["summaryConsistencyGuardImpl を返す"]
+```
+
 ### 3.3 ロック種別と動作
 
 ロックファイル: `{root_dir}/.tlsrpt-digest-summary.lock`
@@ -112,6 +125,29 @@
 summary が shared lock を解放するまで待ち続ける。ブロックが発生するのは
 `SaveRecoveryRequired` の呼び出し箇所のみであり、それ以前のメール取得や
 レポート保存は summary と並走して進む。
+
+```mermaid
+sequenceDiagram
+    participant S as summary
+    participant G as "ガードファイル"
+    participant Sen as "センチネル"
+    participant F as fetch
+
+    S->>G: flock(LOCK_SH) 取得
+    S->>Sen: CheckRecoveryRequired
+    Sen-->>S: found=false → 続行
+
+    F->>G: flock(LOCK_EX) 試行
+    Note right of G: LOCK_SH 保持中のためブロック
+
+    S->>Sen: GenerateSummary（読み取り）
+    S->>Sen: LogSummary / Flush
+    S->>G: guard.Close() — LOCK_SH 解放
+
+    G-->>F: LOCK_EX 取得（ブロック解除）
+    F->>Sen: recovery_required 書き込み
+    F->>G: LOCK_EX 解放
+```
 
 ### 3.4 `recovery_required` を変更する store API（排他 lock が必要）
 
