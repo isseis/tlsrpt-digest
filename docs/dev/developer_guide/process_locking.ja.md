@@ -131,9 +131,9 @@ flowchart TD
 | `summary`（`AcquireSummaryConsistencyGuard`） | 共有ロック（`LOCK_SH`） | ブロック（待機） |
 | `recovery_required` を変更するストア API（`withGuardExclusive`） | 排他ロック（`LOCK_EX`） | ブロック（待機） |
 
-`summary` が shared lock を保持している間、`recovery_required` センチネルへの書き込みを
-試みた fetch は exclusive lock 取得でブロック（待機）する。fetch はエラーにならず、
-summary が shared lock を解放するまで待ち続ける。ブロックが発生するのは
+`summary` が共有ロックを保持している間、`recovery_required` センチネルへの書き込みを
+試みた fetch は排他ロック取得でブロック（待機）する。fetch はエラーにならず、
+summary が共有ロックを解放するまで待ち続ける。ブロックが発生するのは
 `SaveRecoveryRequired` の呼び出し箇所のみであり、それ以前のメール取得や
 レポート保存は summary と並走して進む。
 
@@ -192,32 +192,32 @@ recovery_required + データなし」という矛盾状態が生じる。
 
 ### 3.5 summary の recovery_required チェック設計
 
-**shared lock の保持範囲**
+**共有ロックの保持範囲**
 
-shared lock は Bootstrap 時（`AcquireSummaryConsistencyGuard`）に取得され、
+共有ロックは Bootstrap 時（`AcquireSummaryConsistencyGuard`）に取得され、
 `guard.Close()`（`boot.Close()`）まで保持される。
 つまり summary コマンドの実行全体にわたって保持される。
 
-この間、fetch の `SaveRecoveryRequired` は exclusive lock 取得でブロックされるため、
+この間、fetch の `SaveRecoveryRequired` は排他ロック取得でブロックされるため、
 **summary 実行中にセンチネルが書き込まれることは物理的に不可能**である。
 
-唯一の競合ウィンドウは「Bootstrap が shared lock を取得する前に fetch がセンチネルを
+唯一の競合ウィンドウは「Bootstrap が共有ロックを取得する前に fetch がセンチネルを
 書き込む」タイミングだけである。
 
 **チェックのタイミングと目的**
 
 `summary` は `CheckRecoveryRequired` を集計開始前に 1 回だけ呼ぶ。
-これは shared lock 取得前にセンチネルが書き込まれていた場合を検出するためである。
+これは共有ロック取得前にセンチネルが書き込まれていた場合を検出するためである。
 
 ```
-Bootstrap: shared lock 取得
-           CheckRecoveryRequired   ← shared lock 取得前の書き込みを検出
+Bootstrap: 共有ロック取得
+           CheckRecoveryRequired   ← 共有ロック取得前の書き込みを検出
                ↓ found=true: 通知して終了
            GenerateSummary（ストア読み取り）
                ↓ ReportCount == 0: exitOK
            buildNotifier
            LogSummary / Flush（Slack 送信）
-boot.Close(): shared lock 解放
+boot.Close(): 共有ロック解放
            fetch: ここでセンチネル書き込みが可能になる
 ```
 
@@ -226,7 +226,7 @@ boot.Close(): shared lock 解放
 
 **なぜ送信直前の再チェックをしないか**
 
-summary が shared lock を保持している間は fetch のセンチネル書き込みがブロックされるため、
+summary が共有ロックを保持している間は fetch のセンチネル書き込みがブロックされるため、
 `CheckRecoveryRequired` 通過後にセンチネルが変化することはない。再チェックは不要である。
 
 ### 3.6 `SaveRecoveryRequired` を呼ぶのは fetch のみ
