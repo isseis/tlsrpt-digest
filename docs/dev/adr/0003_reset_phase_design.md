@@ -88,9 +88,7 @@ The transition from phase 4 to Normal (cleanup) is executed inside `Open(OpenRea
 
 ```mermaid
 flowchart TD
-    Normal["Normal<br>(no manifest / no recovery_required)"]
     RR["Recovery Required<br>(recovery_required set / no manifest)"]
-    P4["Phase 4<br>(committed / cleanup pending)"]
     P5["Phase 5<br>(abort in progress)"]
 
     subgraph PendingReset["Pre-commit pending reset (phases 1–3)"]
@@ -99,18 +97,25 @@ flowchart TD
         P3["Phase 3<br>(emails staged)"]
     end
 
-    Normal -.->|"fetch detects UIDVALIDITY change"| RR
+    P4["Phase 4<br>(committed / cleanup pending)"]
+    StaleM["Stale manifest<br>(phases 1–3 + recovery_required present<br>CurrUIDValidity mismatch)"]
+    Normal["Normal<br>(no manifest / no recovery_required)"]
+
     RR -->|"recover --mode keep-old"| Normal
     RR -->|"recover --mode discard-old --yes"| P1
     P1 -->|"stageDataFile:<br>tlsrpt.json → .staging/"| P2
     P2 -->|"stageEmailsDir:<br>emails/ → .staging/"| P3
     P3 -->|"commitReset complete"| P4
-    P4 -->|"Open runs cleanupCompletedReset:<br>delete .staging/"| Normal
+    P4 -.->|"manifest deletion failed<br>new UIDVALIDITY change occurs"| StaleM
+    P4 -->|"ResetForRecovery removes<br>staging/manifest"| Normal
+    P4 -->|"after crash: Open runs<br>cleanupCompletedReset"| Normal
+    StaleM -->|"Open detects mismatch and<br>cleans up manifest"| RR
     PendingReset -.->|"recover --abort-reset --yes"| P5
-    P5 -->|"AbortReset complete"| RR
+    P5 -->|"AbortReset complete:<br>.staging/ → restore to root"| RR
+    Normal -.->|"fetch detects UIDVALIDITY change"| RR
 ```
 
-Legend: solid = normal transition; dashed = exceptional event (UIDVALIDITY change) or manual abort.
+Legend: solid = normal transition; dashed = exceptional event (UIDVALIDITY change or cleanup failure) or manual abort.
 
 **Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent). If the process stops at phases 1–3, re-running `recover --mode discard-old --yes` resumes from the current phase automatically.
 
@@ -120,7 +125,7 @@ Legend: solid = normal transition; dashed = exceptional event (UIDVALIDITY chang
 
 - **Normal convergence**: `cleanupCompletedReset` uses `recovery_required` in the sentinel (not the phase number) to determine commit status, so cleanup runs the same as for phase 4 and the state converges to Normal (see §4). Data integrity is preserved.
 - **When the manifest persists**: If `cleanupCompletedReset` succeeds in removing staging but fails to remove the manifest (best-effort), the manifest remains on disk at phase 3. What happens next depends on subsequent events:
-  - If a new UIDVALIDITY change occurs: when `recover --mode discard-old --yes` is run, `ResetForRecovery` detects the `CurrUIDValidity` mismatch, removes the stale manifest, and performs a fresh start.
+  - If a new UIDVALIDITY change occurs: `Open(OpenReadWrite)` → `cleanupCompletedReset` detects the `CurrUIDValidity` mismatch and cleans up the manifest/staging (Open succeeds). Both `recover --mode keep-old` and `recover --mode discard-old --yes` then work normally. `recover --abort-reset --yes` causes `AbortReset` to detect the mismatch and return `ErrResetNotPending`.
   - If no new UIDVALIDITY change occurs: the next time `fetch` or `gc` runs, `Open(OpenReadWrite)` → `cleanupCompletedReset` retries the removal.
 
 Since `fetch` and `gc` are expected to run periodically, storage capacity estimates should account for one staging directory's worth of old data as a temporary overhead.
@@ -130,7 +135,8 @@ Since `fetch` and `gc` are expected to run periodically, storage capacity estima
 | State | `recover --mode keep-old` | `recover --mode discard-old` (without `--yes`) | `recover --mode discard-old --yes` | `recover --abort-reset --yes` |
 |---|---|---|---|---|
 | No manifest and `recovery_required` present | Executes `ApplyRecovery`, updates UIDVALIDITY while preserving old data, and clears `recovery_required` | Only displays the planned operation, performs no destructive changes, and exits 1 | Starts `ResetForRecovery` as a fresh start | Returns `ErrResetNotPending` because there is no pending reset |
-| Phases 1-3 (pre-commit pending reset) | Cannot execute because `Open(OpenReadWrite)` returns `ErrPendingReset`. Displays the options to continue or abort | Displays the presence of the pending reset and the options to continue or abort. No destructive changes | Resumes `ResetForRecovery` from the corresponding phase and converges to empty store + current UIDVALIDITY + `recovery_required` resolved | Executes `AbortReset` and returns to old data preserved + `recovery_required` remains |
+| Phases 1-3 (pre-commit pending reset, CurrUIDValidity match) | Cannot execute because `Open(OpenReadWrite)` returns `ErrPendingReset`. Displays the options to continue or abort | Displays the presence of the pending reset and the options to continue or abort. No destructive changes | Resumes `ResetForRecovery` from the corresponding phase and converges to empty store + current UIDVALIDITY + `recovery_required` resolved | Executes `AbortReset` and returns to old data preserved + `recovery_required` remains |
+| Phases 1-3 (stale manifest, CurrUIDValidity mismatch) | `cleanupCompletedReset` removes the manifest and Open succeeds. Executes `ApplyRecovery` | Same as left (Open succeeds; display only) | `cleanupCompletedReset` removes the manifest and Open succeeds. Starts `ResetForRecovery` as a fresh start | `AbortReset` detects the mismatch, removes the manifest, and returns `ErrResetNotPending` |
 | Phase 4 or no `recovery_required` (committed) | Cleans up leftover manifest/staging during normal open. After that, treated as no recovery required | Same as left | Cleans up and exits. Effectively idempotent | Returns `ErrResetNotPending` because this is after commit |
 | Phase 5 (abort interrupted) | Cannot execute because `Open(OpenReadWrite)` returns `ErrPendingReset`. Prompts completion of abort | Displays the presence of the pending reset and that abort must be completed. No destructive changes | Returns `ErrResetAbortInProgress` and requires completion of `AbortReset` first | Resumes `AbortReset`, idempotently executes `restoreFromStaging`, and removes the manifest |
 | Unknown phase, version mismatch, or manifest corruption | Fail closed. Manual confirmation is required | Fail closed. Manual confirmation is required | Fail closed. Manual confirmation is required | Fail closed. Manual confirmation is required |
@@ -219,25 +225,31 @@ To avoid this problem, `AbortReset` always updates the manifest to phase 5 (abor
 
 2. Read the sentinel
    ├─ Absent → ErrPendingReset (irregular state; fail closed)
-   ├─ recovery_required present → ErrPendingReset (operation in progress)
+   ├─ recovery_required present and manifest.CurrUIDValidity == recovery_required.CurrUIDValidity → ErrPendingReset (operation in progress)
+   ├─ recovery_required present and manifest.CurrUIDValidity ≠ recovery_required.CurrUIDValidity → stale manifest → clean up and return normally (see note ※② below)
    └─ recovery_required absent → committed → execute cleanup
        ├─ os.RemoveAll(staging) ── best-effort
        └─ os.Remove(manifest)   ── best-effort (logs a warning on failure; retried on the next Open call)
 ```
 
-**※ Handling of Orphaned Staging**
+**※① Handling of Orphaned Staging**
 
 When a staging directory remains despite the manifest being absent, it means that in the previous reset, `Remove(manifest)` succeeded but `RemoveAll(staging)` failed. Because the WAL entry for the manifest (phase 1) is always written before any file is moved, no manifest means either "completed" or "not yet started," and the staging contents will never be used for restoration. Therefore it is safe to delete them on a best-effort basis.
+
+**※② Handling of Stale Manifests**
+
+When `manifest.CurrUIDValidity ≠ recovery_required.CurrUIDValidity`, the manifest is leftover cleanup residue from a previous reset (one that handled a different UIDVALIDITY change). Because it is unrelated to the current `recovery_required`, the manifest/staging are removed on a best-effort basis and the function returns normally. This allows `Open(OpenReadWrite)` to succeed so that `recover --mode keep-old` and status display become available.
 
 ### Covered Scenarios
 
 | Scenario | Manifest presence | sentinel.recovery_required | Result |
 |---|---|---|---|
-| Operation in progress (pre-commit) | present (1-3) | present | ErrPendingReset |
+| Operation in progress (pre-commit, CurrUIDValidity match) | present (1-3) | present (CurrUIDValidity match) | ErrPendingReset |
 | Abort interrupted | present (5) | present | ErrPendingReset |
+| Stale manifest (CurrUIDValidity mismatch) | present (1-3) | present (CurrUIDValidity mismatch) | Clean up manifest/staging and open normally (※②) |
 | Post-commit cleanup failure | present (4) | absent | Clean up and open normally |
 | Commit-window crash (phase 3 + sentinel committed) | present (3) | absent | Clean up and open normally |
-| Orphaned staging (staging deletion failed after manifest deletion) | absent | absent | Remove staging best-effort and open normally |
+| Orphaned staging (staging deletion failed after manifest deletion) | absent | absent | Remove staging on a best-effort basis and open normally (※①) |
 
 ---
 
