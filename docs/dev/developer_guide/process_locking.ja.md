@@ -137,6 +137,8 @@ flowchart TD
 `SaveRecoveryRequired` の呼び出し箇所のみであり、それ以前のメール取得や
 レポート保存は `summary` と並走して進む。
 
+`summary` サブコマンド実行中に `fetch` が実行された場合の処理フローを次に示す。
+
 ```mermaid
 sequenceDiagram
     participant S as summary
@@ -214,16 +216,16 @@ sequenceDiagram
 `summary` は `CheckRecoveryRequired` を集計開始前に 1 回だけ呼ぶ。
 これは共有ロック取得前にセンチネルが書き込まれていた場合を検出するためである。
 
-```
-Bootstrap: 共有ロック取得
-           CheckRecoveryRequired   ← 共有ロック取得前の書き込みを検出
-               ↓ found=true: 通知して終了
-           GenerateSummary（ストア読み取り）
-               ↓ ReportCount == 0: exitOK
-           buildNotifier
-           LogSummary / Flush（Slack 送信）
-boot.Close(): 共有ロック解放
-           fetch: ここでセンチネル書き込みが可能になる
+```mermaid
+flowchart TD
+    A["Bootstrap: 共有ロック取得"] --> B{"CheckRecoveryRequired"}
+    N[/"← 共有ロック取得前の書き込みを検出"/] -.-> B
+    B -- "found=true" --> C(["通知して終了"])
+    B -- "found=false" --> D["GenerateSummary（ストア読み取り）"]
+    D -- "ReportCount == 0" --> E(["exitOK"])
+    D -- "ReportCount > 0" --> F["buildNotifier"]
+    F --> G["LogSummary / Flush（Slack 送信）"]
+    G --> H["boot.Close(): 共有ロック解放"]
 ```
 
 `recovery_required` が立っていれば、その後の `recover` でストアデータがすべて削除される
