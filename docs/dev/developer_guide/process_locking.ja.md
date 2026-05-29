@@ -182,8 +182,7 @@ sequenceDiagram
 
 理由：リセット操作中（フェーズ 1〜5）にはデータファイルがステージングに移動されている
 可能性がある。`withGuardExclusive` はセンチネルの可視性しか保証しないため、
-保留リセットを無視して `recovery_required` を消すと「new UIDValidity + cleared
-recovery_required + データなし」という矛盾状態が生じる。
+保留リセットを無視して `recovery_required` を消すと「UIDValidity 更新済み + `recovery_required` クリア済み + データなし」という矛盾状態が生じる。
 
 `ApplyRecovery` はマニフェストが存在する場合に `ErrPendingReset` を返すことで、
 この経路をストア層で閉じている。**`recovery_required` を変更する新しい API を追加する
