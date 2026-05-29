@@ -195,6 +195,32 @@ func cleanupCompletedReset(rootDir string) error {
 		return ErrPendingReset
 	}
 	if sentinel.RecoveryRequired != nil {
+		// If the manifest's CurrUIDValidity differs from the sentinel's current
+		// recovery_required, the manifest is stale residue from a previous reset
+		// whose cleanup partially failed. Clean it up so that the operator can
+		// proceed with keep-old or other non-destructive actions without being
+		// blocked by a manifest that has nothing to do with the new UIDVALIDITY event.
+		if mfst.CurrUIDValidity != sentinel.RecoveryRequired.CurrUIDValidity {
+			slog.Warn("store: removing stale reset manifest (CurrUIDValidity mismatch with current recovery_required)",
+				slog.String("root_dir", rootDir),
+				slog.Int("manifest_phase", int(mfst.Phase)),
+				slog.Uint64("manifest_uid", uint64(mfst.CurrUIDValidity)),
+				slog.Uint64("recovery_uid", uint64(sentinel.RecoveryRequired.CurrUIDValidity)),
+			)
+			if err := os.RemoveAll(resetStagingPath(rootDir)); err != nil {
+				slog.Warn("store: failed to remove stale staging directory; manual cleanup may be required",
+					slog.String("path", resetStagingPath(rootDir)),
+					slog.Any("error", err),
+				)
+			}
+			if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				slog.Warn("store: failed to remove stale manifest; manual cleanup may be required",
+					slog.String("path", manifestPath),
+					slog.Any("error", err),
+				)
+			}
+			return nil
+		}
 		return ErrPendingReset
 	}
 
@@ -664,11 +690,33 @@ func (s *fileStore) AbortReset() error {
 		// recovery_required is the commit barrier: commitReset saves the sentinel
 		// before advancing to phase=4, so a missing recovery_required means the
 		// commit already happened even if the manifest is still at phase 3.
-		_, _, _, found, err := s.LoadRecoveryRequired()
+		_, sentinelCurr, _, found, err := s.LoadRecoveryRequired()
 		if err != nil {
 			return fmt.Errorf("AbortReset: check recovery-required: %w", err)
 		}
 		if !found {
+			return ErrResetNotPending
+		}
+		// Stale manifest: CurrUIDValidity doesn't match the current recovery_required.
+		// Restoring from this manifest's staging would put data from the wrong epoch
+		// back into the store root. Clean up the stale manifest and report no active reset.
+		if mfst.CurrUIDValidity != sentinelCurr {
+			slog.Warn("store: removing stale reset manifest in AbortReset (CurrUIDValidity mismatch)",
+				slog.Uint64("manifest_uid", uint64(mfst.CurrUIDValidity)),
+				slog.Uint64("recovery_uid", uint64(sentinelCurr)),
+			)
+			if err := os.RemoveAll(stagingPath); err != nil {
+				slog.Warn("store: failed to remove stale staging directory",
+					slog.String("path", stagingPath),
+					slog.Any("error", err),
+				)
+			}
+			if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				slog.Warn("store: failed to remove stale manifest",
+					slog.String("path", manifestPath),
+					slog.Any("error", err),
+				)
+			}
 			return ErrResetNotPending
 		}
 
