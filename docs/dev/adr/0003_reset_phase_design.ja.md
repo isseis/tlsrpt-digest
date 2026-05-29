@@ -120,7 +120,7 @@ flowchart TD
 
 - **通常の収束**：`cleanupCompletedReset` はフェーズ番号ではなくセンチネルの `recovery_required` で判断するため、フェーズ 4 と同じくクリーンアップが実行されて通常状態に収束する（§4 参照）。データ整合性は保たれる。
 - **マニフェスト残存時**：`cleanupCompletedReset` がステージングの削除に成功してもマニフェストの削除に失敗した場合（ベストエフォート）、マニフェストはフェーズ 3 のままディスクに残る。その後の挙動はつぎの 2 通りに分かれる。
-  - 新たな UIDVALIDITY 変化が発生した場合：`recover --mode discard-old --yes` 実行時に `ResetForRecovery` が `CurrUIDValidity` の不一致を検出し、古いマニフェストを削除してから fresh start を行う。
+  - 新たな UIDVALIDITY 変化が発生した場合：`Open(OpenReadWrite)` → `cleanupCompletedReset` が `CurrUIDValidity` の不一致を検出してマニフェスト/ステージングをクリーンアップする（Open は成功）。`recover --mode keep-old` や `recover --mode discard-old --yes` はどちらも正常に動作する。`recover --abort-reset --yes` は `AbortReset` が不一致を検出して `ErrResetNotPending` を返す。
   - 新たな UIDVALIDITY 変化が発生しない場合：次に `fetch` または `gc` が実行されたときに `Open(OpenReadWrite)` → `cleanupCompletedReset` で再試行される。
 
 `fetch` と `gc` は定期実行が想定されるため、ストレージ容量の見積もりにはステージングディレクトリ 1 つ分（旧データファイル）を一時的な上振れとして考慮すればよい。
@@ -130,7 +130,8 @@ flowchart TD
 | 状態 | `recover --mode keep-old` | `recover --mode discard-old`（`--yes` なし） | `recover --mode discard-old --yes` | `recover --abort-reset --yes` |
 |---|---|---|---|---|
 | マニフェストなし・`recovery_required` あり | `ApplyRecovery` を実行し、旧データを保持したまま UIDVALIDITY を更新して `recovery_required` を解除する | 実行予定を表示するだけで、破壊的変更を行わず exit 1 | fresh start として `ResetForRecovery` を開始する | 保留リセットがないため `ErrResetNotPending` |
-| フェーズ 1〜3（コミット前の保留リセット） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。継続または中断の選択肢を表示する。 | 保留リセットの存在と、継続または中断の選択肢を表示する。破壊的変更なし。 | 該当フェーズから `ResetForRecovery` を再開し、空ストア + current UIDVALIDITY + `recovery_required` 解消へ収束する | `AbortReset` を実行し、旧データ保持 + `recovery_required` 残存へ戻す |
+| フェーズ 1〜3（コミット前の保留リセット、CurrUIDValidity 一致） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。継続または中断の選択肢を表示する。 | 保留リセットの存在と、継続または中断の選択肢を表示する。破壊的変更なし。 | 該当フェーズから `ResetForRecovery` を再開し、空ストア + current UIDVALIDITY + `recovery_required` 解消へ収束する | `AbortReset` を実行し、旧データ保持 + `recovery_required` 残存へ戻す |
+| フェーズ 1〜3（ステールなマニフェスト、CurrUIDValidity 不一致） | `cleanupCompletedReset` がマニフェストを削除して Open 成功。`ApplyRecovery` を実行する | 同左（Open 成功・表示のみ） | `cleanupCompletedReset` がマニフェストを削除して Open 成功。`ResetForRecovery` を fresh start で開始する | `AbortReset` が不一致を検出してマニフェストを削除し `ErrResetNotPending` を返す |
 | フェーズ 4 または `recovery_required` なし（コミット済み） | 通常 open 時に残留マニフェスト/ステージングをクリーンアップする。その後は recovery-required 不在として復旧不要扱い。 | 同左 | クリーンアップして終了する。実質的に冪等。 | コミット後のため `ErrResetNotPending` |
 | フェーズ 5（中断処理中） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。中断処理の完了を促す。 | 保留リセットの存在と、中断処理の完了が必要であることを表示する。破壊的変更なし。 | `ErrResetAbortInProgress` を返し、先に `AbortReset` の完了を要求する | `AbortReset` を再開し、`restoreFromStaging` を冪等に実行してマニフェストを削除する |
 | 不明フェーズ・バージョン不一致・マニフェスト破損 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 |
@@ -219,13 +220,14 @@ flowchart TD
 
 2. センチネルを読む
    ├─ 不在 → ErrPendingReset（非正規状態・fail-closed）
-   ├─ recovery_required あり → ErrPendingReset（操作進行中）
+   ├─ recovery_required あり かつ manifest.CurrUIDValidity == recovery_required.CurrUIDValidity → ErrPendingReset（操作進行中）
+   ├─ recovery_required あり かつ manifest.CurrUIDValidity ≠ recovery_required.CurrUIDValidity → ステールなマニフェスト → クリーンアップして正常終了（※後述②）
    └─ recovery_required なし → コミット済み → クリーンアップ実行
        ├─ os.RemoveAll(staging) ── ベストエフォート
        └─ os.Remove(manifest)   ── ベストエフォート（失敗すると警告ログを出力し次回 Open 時に再試行）
 ```
 
-**※ 残留ステージングの扱い**
+**※① 残留ステージングの扱い**
 
 マニフェストが存在しないにもかかわらずステージングディレクトリが残っている場合は、
 前回のリセットで `Remove(manifest)` は成功したが `RemoveAll(staging)` が失敗した
@@ -233,15 +235,24 @@ flowchart TD
 必ず書かれるため、マニフェストなし = 完了済みまたは未開始のいずれかであり、
 ステージングの内容は復元に使われることがない。したがってベストエフォートで削除して安全である。
 
+**※② ステールなマニフェストの扱い**
+
+`manifest.CurrUIDValidity ≠ recovery_required.CurrUIDValidity` の場合、マニフェストは
+以前のリセット（別の UIDVALIDITY 変化に対するもの）のクリーンアップ残滓である。
+今回の `recovery_required` とは無関係なため、マニフェスト/ステージングをベストエフォートで
+削除して正常終了する。これにより `Open(OpenReadWrite)` が成功し、`recover --mode keep-old`
+やステータス表示が利用可能になる。
+
 ### カバーするシナリオ
 
 | シナリオ | マニフェスト有無 | sentinel.recovery_required | 結果 |
 |---|---|---|---|
-| 操作進行中（コミット前） | あり（1〜3） | あり | ErrPendingReset |
+| 操作進行中（コミット前・CurrUIDValidity 一致） | あり（1〜3） | あり（CurrUIDValidity 一致） | ErrPendingReset |
 | 中断処理中 | あり（5） | あり | ErrPendingReset |
+| ステールなマニフェスト（CurrUIDValidity 不一致） | あり（1〜3） | あり（CurrUIDValidity 不一致） | マニフェスト/ステージングをクリーンアップして通常 Open（※②） |
 | コミット後クリーンアップ失敗 | あり（4） | なし | クリーンアップして通常 Open |
 | コミットウィンドウクラッシュ（フェーズ 3 + センチネル確定） | あり（3） | なし | クリーンアップして通常 Open |
-| 残留ステージング（マニフェスト削除後にステージング削除が失敗） | なし | なし | ステージングをベストエフォートで削除して通常 Open |
+| 残留ステージング（マニフェスト削除後にステージング削除が失敗） | なし | なし | ステージングをベストエフォートで削除して通常 Open（※①） |
 
 ---
 
