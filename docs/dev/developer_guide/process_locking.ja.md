@@ -207,7 +207,6 @@ sequenceDiagram
 
 この間、`fetch` の `SaveRecoveryRequired` は排他ロック取得でブロックされるため、
 **`summary` 実行中にセンチネルが書き込まれることは物理的に不可能**である。
-
 唯一の競合ウィンドウは「Bootstrap が共有ロックを取得する前に `fetch` がセンチネルを
 書き込む」タイミングだけである。
 
@@ -218,8 +217,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A["Bootstrap: 共有ロック取得"] --> B{"CheckRecoveryRequired"}
-    N[/"← 共有ロック取得前の書き込みを検出"/] -.-> B
+    A["Bootstrap: 共有ロック取得"] --> B{"CheckRecoveryRequired<br>（共有ロック取得前の書き込みを検出）"}
     B -- "found=true" --> C(["通知して終了"])
     B -- "found=false" --> D["GenerateSummary（ストア読み取り）"]
     D -- "ReportCount == 0" --> E(["exitOK"])
