@@ -129,8 +129,8 @@ type Store interface {
 	DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)
 }
 
-// storeImpl is the concrete implementation of Store.
-type storeImpl struct {
+// fileStore is the concrete implementation of Store.
+type fileStore struct {
 	rootDir       string
 	identity      IMAPIdentity
 	mode          OpenMode
@@ -238,7 +238,7 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 		checkFilePermissions(dataFilePath(rootDir))
 	}
 
-	store := &storeImpl{
+	store := &fileStore{
 		rootDir:       rootDir,
 		identity:      identity,
 		mode:          mode,

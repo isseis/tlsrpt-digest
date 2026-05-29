@@ -109,7 +109,7 @@ func readResetManifest(path string) (resetManifest, error) {
 // initResetManifest validates fresh-start preconditions, wipes any stale staging
 // directory, creates a new staging directory, and writes the initial manifest.
 // It returns the written manifest so the caller can proceed to advanceResetPhases.
-func (s *storeImpl) initResetManifest(currUIDValidity uint32, stagingPath, manifestPath string) (resetManifest, error) {
+func (s *fileStore) initResetManifest(currUIDValidity uint32, stagingPath, manifestPath string) (resetManifest, error) {
 	_, sentinelCurr, _, found, err := s.LoadRecoveryRequired()
 	if err != nil {
 		return resetManifest{}, fmt.Errorf("ResetForRecovery: load recovery-required: %w", err)
@@ -249,7 +249,7 @@ func cleanupCompletedReset(rootDir string) error {
 // calls fn, and releases the lock when fn returns (or on deferred close).
 // Writers that modify recovery-required in the sentinel must call this to prevent
 // a race with summary processes holding a shared flock on the same file.
-func (s *storeImpl) withGuardExclusive(fn func() error) error {
+func (s *fileStore) withGuardExclusive(fn func() error) error {
 	guardPath := guardFilePath(s.rootDir)
 	f, err := os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, filePerm) //nolint:gosec
 	if err != nil {
@@ -347,7 +347,7 @@ func restoreFromStaging(rootDir, stagingPath string) error {
 // loadOrInitSentinelForWrite loads the sentinel for modification.
 // If the sentinel file does not exist, it returns a freshly initialised
 // sentinel so callers can modify and persist it without a separate nil check.
-func (s *storeImpl) loadOrInitSentinelForWrite() (*internalSentinelFile, error) {
+func (s *fileStore) loadOrInitSentinelForWrite() (*internalSentinelFile, error) {
 	sentinel, _, err := loadSentinel(s.rootDir)
 	if err != nil {
 		return nil, err
@@ -365,7 +365,7 @@ func (s *storeImpl) loadOrInitSentinelForWrite() (*internalSentinelFile, error) 
 }
 
 // SaveUIDValidity implements Store.SaveUIDValidity.
-func (s *storeImpl) SaveUIDValidity(v uint32) error {
+func (s *fileStore) SaveUIDValidity(v uint32) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -381,7 +381,7 @@ func (s *storeImpl) SaveUIDValidity(v uint32) error {
 }
 
 // LoadUIDValidity implements Store.LoadUIDValidity.
-func (s *storeImpl) LoadUIDValidity() (v uint32, found bool, err error) {
+func (s *fileStore) LoadUIDValidity() (v uint32, found bool, err error) {
 	sentinel, exists, err := loadSentinel(s.rootDir)
 	if err != nil {
 		return 0, false, fmt.Errorf("LoadUIDValidity: load sentinel: %w", err)
@@ -393,7 +393,7 @@ func (s *storeImpl) LoadUIDValidity() (v uint32, found bool, err error) {
 }
 
 // SaveRecoveryRequired implements Store.SaveRecoveryRequired.
-func (s *storeImpl) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time) error {
+func (s *fileStore) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -415,7 +415,7 @@ func (s *storeImpl) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time
 }
 
 // LoadRecoveryRequired implements Store.LoadRecoveryRequired.
-func (s *storeImpl) LoadRecoveryRequired() (prev, curr uint32, detectedAt time.Time, found bool, err error) {
+func (s *fileStore) LoadRecoveryRequired() (prev, curr uint32, detectedAt time.Time, found bool, err error) {
 	sentinel, exists, err := loadSentinel(s.rootDir)
 	if err != nil {
 		return 0, 0, time.Time{}, false, fmt.Errorf("LoadRecoveryRequired: load sentinel: %w", err)
@@ -428,7 +428,7 @@ func (s *storeImpl) LoadRecoveryRequired() (prev, curr uint32, detectedAt time.T
 }
 
 // ClearRecoveryRequired implements Store.ClearRecoveryRequired.
-func (s *storeImpl) ClearRecoveryRequired() error {
+func (s *fileStore) ClearRecoveryRequired() error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -449,7 +449,7 @@ func (s *storeImpl) ClearRecoveryRequired() error {
 }
 
 // ApplyRecovery implements Store.ApplyRecovery.
-func (s *storeImpl) ApplyRecovery(newUIDValidity uint32) error {
+func (s *fileStore) ApplyRecovery(newUIDValidity uint32) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -495,7 +495,7 @@ func (s *storeImpl) ApplyRecovery(newUIDValidity uint32) error {
 // If the manifest is found in the aborting phase (5), this method refuses with
 // ErrResetAbortInProgress: the operator must finish AbortReset first to restore
 // data back to root before any further action.
-func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
+func (s *fileStore) ResetForRecovery(currUIDValidity uint32) error {
 	if s.mode != OpenRecoverReset {
 		return ErrInvalidStoreMode
 	}
@@ -546,7 +546,7 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 //   - returns nil when no new recovery_required exists (cleanup was all that was needed), or
 //   - initiates a fresh-start reset when a new recovery_required has been written since
 //     the committed cleanup failed.
-func (s *storeImpl) resumeOrCleanupCommitted(currUIDValidity uint32, stagingPath, manifestPath string) error {
+func (s *fileStore) resumeOrCleanupCommitted(currUIDValidity uint32, stagingPath, manifestPath string) error {
 	if err := removeStaleCommittedManifest(stagingPath, manifestPath); err != nil {
 		return err
 	}
@@ -567,7 +567,7 @@ func (s *storeImpl) resumeOrCleanupCommitted(currUIDValidity uint32, stagingPath
 
 // executeResetFromManifest drives advanceResetPhases from the manifest's current phase
 // to committed, then removes the staging directory (best-effort) and manifest (required).
-func (s *storeImpl) executeResetFromManifest(mfst resetManifest, stagingPath, manifestPath string) error {
+func (s *fileStore) executeResetFromManifest(mfst resetManifest, stagingPath, manifestPath string) error {
 	currUIDValidity := mfst.CurrUIDValidity
 	if err := s.advanceResetPhases(mfst.Phase, currUIDValidity, stagingPath, manifestPath); err != nil {
 		return err
@@ -593,7 +593,7 @@ func (s *storeImpl) executeResetFromManifest(mfst resetManifest, stagingPath, ma
 // the manifest as a checkpoint.  A crash before the checkpoint leaves the manifest
 // at the previous phase; on resume the operation re-runs idempotently and the
 // checkpoint write is retried.
-func (s *storeImpl) advanceResetPhases(phase resetPhase, currUIDValidity uint32, stagingPath, manifestPath string) error {
+func (s *fileStore) advanceResetPhases(phase resetPhase, currUIDValidity uint32, stagingPath, manifestPath string) error {
 	if phase <= resetPhaseManifestWritten {
 		// MkdirAll is defensive: staging dir should already exist from the initial write,
 		// but guard against edge cases (e.g. partial RemoveAll from a previous run).
@@ -635,7 +635,7 @@ func (s *storeImpl) advanceResetPhases(phase resetPhase, currUIDValidity uint32,
 
 // commitReset atomically clears recovery_required, writes the new UIDValidity, and
 // advances the manifest to resetPhaseCommitted under the exclusive guard lock.
-func (s *storeImpl) commitReset(manifestPath string, currUIDValidity uint32) error {
+func (s *fileStore) commitReset(manifestPath string, currUIDValidity uint32) error {
 	return s.withGuardExclusive(func() error {
 		sentinel, err := s.loadOrInitSentinelForWrite()
 		if err != nil {
@@ -666,7 +666,7 @@ func (s *storeImpl) commitReset(manifestPath string, currUIDValidity uint32) err
 // pending forward reset.  ResetForRecovery refuses phase=aborting with
 // ErrResetAbortInProgress, forcing the operator to re-run AbortReset, which
 // idempotently completes the restore and removes the manifest.
-func (s *storeImpl) AbortReset() error {
+func (s *fileStore) AbortReset() error {
 	if s.mode != OpenRecoverReset {
 		return ErrInvalidStoreMode
 	}
@@ -750,7 +750,7 @@ func (s *storeImpl) AbortReset() error {
 }
 
 // HasPendingReset implements Store.HasPendingReset.
-func (s *storeImpl) HasPendingReset() (bool, error) {
+func (s *fileStore) HasPendingReset() (bool, error) {
 	manifestPath := resetManifestPath(s.rootDir)
 	_, err := readResetManifest(manifestPath)
 	if err != nil {
@@ -766,7 +766,7 @@ func (s *storeImpl) HasPendingReset() (bool, error) {
 // When rootDir does not exist (empty-store OpenReadOnly path), a no-op guard is
 // returned: recovery-required cannot be set without a store directory, so
 // CheckRecoveryRequired always returns false and Close is a no-op.
-func (s *storeImpl) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error) {
+func (s *fileStore) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error) {
 	if _, err := os.Stat(s.rootDir); errors.Is(err, os.ErrNotExist) {
 		return noopSummaryConsistencyGuard{}, nil
 	}

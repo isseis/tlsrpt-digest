@@ -291,7 +291,7 @@ func TestSaveReports_ReadOnlyReturnsError(t *testing.T) {
 
 // loadDataFileFromPath is a test-only helper that loads the raw data file from a root dir.
 func loadDataFileFromPath(rootDir string) (*internalDataFile, error) {
-	impl := &storeImpl{
+	impl := &fileStore{
 		dataPath: dataFilePath(rootDir),
 	}
 	return impl.loadDataFile()
