@@ -263,7 +263,7 @@ summary consistency guard は `recovery_required` の可視性のみを守るも
 |---|---|
 | 書き込み系サブコマンド同士の直列化 | store-wide process lock（cmd 層） |
 | `summary` vs `fetch` の `recovery_required` 競合 | summary consistency guard（`internal/store` 層） |
-| crash recovery の原子性 | リセットマニフェスト・ステージング・センチネル commit barrier |
+| crash recovery の原子性 | リセットマニフェスト・ステージング・センチネルのコミット境界 |
 
 ---
 
@@ -272,7 +272,7 @@ summary consistency guard は `recovery_required` の可視性のみを守るも
 **書き込み系サブコマンドを追加・変更するとき**
 
 - [ ] store open 前に store-wide process lock を取得している
-- [ ] 処理完了まで（異常終了パスを含む）lock handle を保持している
+- [ ] 処理完了まで（異常終了パスを含む）ロックハンドルを保持している
 - [ ] `recover --mode discard-old --yes` / `recover --abort-reset --yes` は
   lock 保持中に `OpenRecoverReset` を使っている
 - [ ] `ResetForRecovery` / `AbortReset` を直接呼ぶ場合は store-wide process lock を
@@ -283,10 +283,10 @@ summary consistency guard は `recovery_required` の可視性のみを守るも
 
 **`recovery_required` を変更するストア API を追加・変更するとき**
 
-- [ ] `{root_dir}/.tlsrpt-digest-summary.lock` に対して排他 lock を取得している
+- [ ] `{root_dir}/.tlsrpt-digest-summary.lock` に対して排他ロックを取得している
   （`withGuardExclusive` を使用）
 - [ ] `recovery_required` を変更しない処理を summary consistency guard で囲んでいない
-- [ ] `summary` が stale な「復旧不要」判断で送信しないことをテストしている
+- [ ] `summary` が陳腐化した「復旧不要」判断で送信しないことをテストしている
 - [ ] 保留リセット中（マニフェスト存在時）に呼ばれた場合の挙動を設計している：
   データファイルがステージングに移動済みの可能性があるため、`recovery_required` を
   クリアするだけでは不整合になるケースを考慮する。問題がある場合は `HasPendingReset()`
