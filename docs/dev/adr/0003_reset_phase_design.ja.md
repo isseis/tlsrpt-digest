@@ -163,6 +163,21 @@ flowchart TD
 | `AbortReset` のロールバック可否 | `sentinel.recovery_required != nil` | 「コミット後の中断」を防ぐ |
 | `Open(OpenReadWrite)` のクリーンアップ可否 | `sentinel.recovery_required == nil` | 「コミット後のクリーンアップ失敗」を検出してデータパスをブロックしない |
 
+### フェーズ 4（コミットマーカー）を設ける理由
+
+`recovery_required == nil` だけでコミット完了を判定できるにもかかわらずフェーズ 4 を設けるのは、**`advanceResetPhases`（`recover --mode discard-old --yes` の再実行パス）でフェーズ 3 の意味を一意に保つ**ためである。
+
+フェーズ 4 がない場合、コミット直後にクラッシュするとマニフェストはフェーズ 3 のまま残る。この状態で `recover --mode discard-old --yes` を再実行すると、`advanceResetPhases` はフェーズ 3 を「コミット前」と判断して `commitReset` を再度呼び出す。`commitReset` はセンチネルの再書き込みが冪等なので壊れはしないが、フェーズ 3 が「コミット前」と「コミット後のクラッシュウィンドウ」という 2 つの意味を持つことになり、制御フローが曖昧になる。
+
+フェーズ 4 を設けることで `advanceResetPhases` はセンチネルを読まずに判断できる。
+
+| フェーズ | 意味 | `advanceResetPhases` の動作 |
+|---|---|---|
+| 3 | コミット前（メールステージング完了） | `commitReset` を呼ぶ |
+| 4 | コミット済み（クリーンアップ待ち） | `cleanupCompletedReset` に直行 |
+
+一方、`Open(OpenReadWrite)` 内の `cleanupCompletedReset` はセンチネルで判断する（フェーズ 3 のままクラッシュした「コミットウィンドウクラッシュ」も拾う必要があるため）。フェーズ 4 とセンチネルはそれぞれ異なる呼び出しパスで使い分けられる。
+
 ### フェーズ 5（中断 WAL エントリ）を設ける理由
 
 `AbortReset` がファイルを元の場所に戻す（`restoreFromStaging`）操作は途中でクラッシュしうる。クラッシュ後の状態は「マニフェストはフェーズ 3 のまま、ファイルは root に復元済み」になる可能性がある。この状態で `ResetForRecovery` を実行するとフェーズ 3 として扱われ、空のステージングへのコミットが行われてしまう（「新 UIDVALIDITY + recovery_required クリア + 旧データが root に残存」という矛盾状態）。
