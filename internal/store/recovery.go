@@ -206,7 +206,10 @@ func cleanupCompletedReset(rootDir string) error {
 		)
 	}
 	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("cleanupCompletedReset: remove manifest: %w", err)
+		slog.Warn("store: failed to remove reset manifest; manual cleanup may be required",
+			slog.String("path", manifestPath),
+			slog.Any("error", err),
+		)
 	}
 	return nil
 }
@@ -686,6 +689,7 @@ func (s *fileStore) AbortReset() error {
 // A phase=committed manifest is leftover cleanup bookkeeping, not an active reset:
 // the sentinel is already committed, so it must not block ApplyRecovery or
 // show as a pending reset to the operator.
+// Returns an error for unknown versions or out-of-range phases (fail closed).
 func (s *fileStore) HasPendingReset() (bool, error) {
 	manifestPath := resetManifestPath(s.rootDir)
 	mfst, err := readResetManifest(manifestPath)
@@ -694,6 +698,12 @@ func (s *fileStore) HasPendingReset() (bool, error) {
 			return false, nil
 		}
 		return false, fmt.Errorf("HasPendingReset: %w", err)
+	}
+	if mfst.Version != resetManifestVersion {
+		return false, &ErrResetManifestVersionMismatch{Got: mfst.Version, Want: resetManifestVersion}
+	}
+	if err := validateManifestPhase(mfst.Phase); err != nil {
+		return false, err
 	}
 	return mfst.Phase != resetPhaseCommitted, nil
 }

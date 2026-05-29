@@ -82,6 +82,10 @@ type BootstrapOptions struct {
 	SlackWebhookURLError   config.Secret
 	Stderr                 *os.File
 	SummaryGuardOpened     func(store.SummaryConsistencyGuard)
+	// StoreOpenModeOverride, when non-nil, overrides the default mode derived
+	// from the subcommand name. Used by recover to select OpenReadWrite for
+	// non-destructive modes and OpenRecoverReset for discard-old/abort-reset.
+	StoreOpenModeOverride *store.OpenMode
 }
 
 var errSlackWebhookURLRequired = errors.New("at least one Slack webhook URL is required")
@@ -214,7 +218,12 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 		return nil, fmt.Errorf("acquire store writer lock: %w", err)
 	}
 
-	mode := storeOpenMode(subcmd)
+	var mode store.OpenMode
+	if opts.StoreOpenModeOverride != nil {
+		mode = *opts.StoreOpenModeOverride
+	} else {
+		mode = storeOpenMode(subcmd)
+	}
 	boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
 	if err != nil {
 		kind := classifyOpenError(err)
@@ -268,9 +277,6 @@ func notifySystemError(ctx context.Context, notifier NotificationSink, kind noti
 func storeOpenMode(subcmd SubcommandName) store.OpenMode {
 	if subcmd == subcommandSummary {
 		return store.OpenReadOnly
-	}
-	if subcmd == subcommandRecover {
-		return store.OpenRecoverReset
 	}
 	return store.OpenReadWrite
 }

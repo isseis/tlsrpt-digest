@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/isseis/tlsrpt-digest/internal/store"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -73,6 +74,10 @@ func runCLI(ctx context.Context, args []string, stderr io.Writer, bootOpts Boots
 
 	bootOpts.DryRun = inv.Options.DryRun
 	bootOpts.Logger = logger
+	if inv.Subcommand == subcommandRecover {
+		m := recoverStoreOpenMode(inv.Options)
+		bootOpts.StoreOpenModeOverride = &m
+	}
 	boot, err := Bootstrap(inv.Subcommand, inv.Options.ConfigPath, runID, bootOpts)
 	if err != nil {
 		logger.Error("bootstrap failed", "error", err)
@@ -167,6 +172,16 @@ func validateFlags(subcmd SubcommandName, opts cliOptions) error {
 		return errYesRequiresModeOrAbort
 	}
 	return nil
+}
+
+// recoverStoreOpenMode returns OpenRecoverReset for destructive recover operations
+// (discard-old --yes, abort-reset --yes) and OpenReadWrite for all others.
+func recoverStoreOpenMode(opts cliOptions) store.OpenMode {
+	if (opts.RecoverMode == recoverModeDiscardOld && opts.RecoverYes) ||
+		(opts.RecoverAbort && opts.RecoverYes) {
+		return store.OpenRecoverReset
+	}
+	return store.OpenReadWrite
 }
 
 func printUsage(w io.Writer) {

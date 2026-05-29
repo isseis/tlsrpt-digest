@@ -441,7 +441,7 @@ func TestRecover_PendingResetShowsStatusForNonDestructiveModes(t *testing.T) {
 					return &SpyNotificationSink{}, nil
 				},
 				OpenStore: func(_ string, _ store.IMAPIdentity, mode store.OpenMode) (store.Store, error) {
-					assert.Equal(t, store.OpenRecoverReset, mode)
+					assert.Equal(t, store.OpenReadWrite, mode)
 					return st, nil
 				},
 			})

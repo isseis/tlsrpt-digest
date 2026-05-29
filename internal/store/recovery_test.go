@@ -1086,6 +1086,7 @@ func TestHasPendingReset_NoManifest(t *testing.T) {
 func TestHasPendingReset_ManifestPresent(t *testing.T) {
 	s, rootDir := openRecoverResetStore(t)
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
 		Phase:           resetPhaseManifestWritten,
 		CurrUIDValidity: 42,
 	}))

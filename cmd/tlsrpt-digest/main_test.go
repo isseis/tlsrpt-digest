@@ -92,12 +92,12 @@ func TestRunCLI_RecoverResetOpenMode(t *testing.T) {
 		{
 			name:     "keep old confirmed",
 			args:     []string{"recover", "-mode", "keep-old", "-yes"},
-			wantMode: store.OpenRecoverReset,
+			wantMode: store.OpenReadWrite,
 		},
 		{
 			name:     "discard old unconfirmed",
 			args:     []string{"recover", "-mode", "discard-old"},
-			wantMode: store.OpenRecoverReset,
+			wantMode: store.OpenReadWrite,
 		},
 	}
 
