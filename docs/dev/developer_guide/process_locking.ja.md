@@ -248,7 +248,7 @@ flowchart TD
     G --> H["boot.Close(): 共有ロック解放"]
 ```
 
-`recovery_required` が立っていれば、その後のオペレーター操作（`recover`）によってストアデータが変更される見込みである。集計結果が陳腐化している可能性が高いため、通知して終了する。
+`recovery_required` が立っていれば、その後のオペレーター操作（`recover`）によってストアデータが変更される見込みである。集計結果が古くなっている可能性が高いため、通知して終了する。
 
 **なぜ送信直前の再チェックをしないか**
 
@@ -308,7 +308,7 @@ summary consistency guard は `recovery_required` の可視性のみを守るも
 - [ ] `{root_dir}/.tlsrpt-digest-summary.lock` に対して排他ロックを取得している
   （`withGuardExclusive` を使用）
 - [ ] `recovery_required` を変更しない処理を summary consistency guard で囲んでいない
-- [ ] `summary` が陳腐化した「復旧不要」判断で送信しないことをテストしている
+- [ ] `summary` が古くなった「復旧不要」判断で送信しないことをテストしている
 - [ ] 保留リセット中（マニフェスト存在時）に呼ばれた場合の挙動を設計している：
   データファイルがステージングに移動済みの可能性があるため、`recovery_required` を
   クリアするだけでは不整合になるケースを考慮する。問題がある場合は `HasPendingReset()`
