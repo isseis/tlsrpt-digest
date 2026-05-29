@@ -106,7 +106,7 @@ flowchart TD
     P1 -->|"stageDataFile:<br>tlsrpt.json → .staging/"| P2
     P2 -->|"stageEmailsDir:<br>emails/ → .staging/"| P3
     P3 -->|"commitReset 完了"| P4
-    P4 -.->|"マニフェスト削除失敗<br>新 UIDVALIDITY 変化が発生"| StaleM
+    P4 -.->|"マニフェスト削除失敗<br>fetch が UIDVALIDITY 変化を検出"| StaleM
     P4 -->|"ResetForRecovery が<br>staging/manifest を削除"| Normal
     P4 -->|"クラッシュ後: Open で<br>cleanupCompletedReset"| Normal
     StaleM -->|"Open が不一致を検出し<br>マニフェストをクリーンアップ"| RR
