@@ -35,20 +35,9 @@ func resetStagingPath(rootDir string) string {
 }
 
 // resetPhase records how far a discard-old reset has progressed.
-// See docs/dev/adr/0003_reset_phase_design.md for the crash-safety
-// rationale behind the phase values and commit/abort boundaries.
-//
-// Forward (commit) progression: 1 → 2 → 3 → 4.
-// Phase 1 (manifest_written) is a write-ahead log entry written before any
-// destructive operation, making the reset visible to Open and AbortReset from
-// that point on.  Phases 2–4 are checkpoints written after each idempotent
-// operation; a crash before a checkpoint is safe to resume by re-running the
-// (idempotent) operation.
-//
-// Backward (abort) progression: → 5 (aborting).
-// AbortReset writes phase=aborting before moving any file back to root, so a
-// crash mid-restore cannot be confused with a forward-progressing reset.
-// ResetForRecovery refuses phase=aborting with ErrResetAbortInProgress.
+// Forward: 1 (manifest_written, WAL) → 2 (data_staged) → 3 (emails_staged) → 4 (committed).
+// Backward: → 5 (aborting, WAL entry for AbortReset).
+// See docs/dev/adr/0003_reset_phase_design.md for rationale.
 type resetPhase int
 
 const (
@@ -121,18 +110,9 @@ func (s *fileStore) initResetManifest(currUIDValidity uint32, stagingPath, manif
 		return resetManifest{}, &ErrRecoveryUIDValidityMismatch{Got: currUIDValidity, Expected: sentinelCurr}
 	}
 
-	// Write manifest FIRST before any file moves.
-	// This makes the pending reset immediately visible to OpenReadWrite (→ ErrPendingReset)
-	// and to AbortReset, so the operation is rollback-able from this point onward.
-	// Caller-held process writer lock serializes this whole reset against other writers;
-	// the summary consistency guard is not needed here because recovery_required is not
-	// modified until commitReset.
-	//
-	// Wipe any stale staging dir first: a previous reset that committed but
-	// failed to clean up RemoveAll(staging) could leave files there, which
-	// would later make stageEmailsDir fail (rename onto a non-empty dir).
-	// At this point there is no manifest, so the staging contents (if any)
-	// are guaranteed stale and safe to remove.
+	// Wipe stale staging before writing the manifest: a prior committed-but-not-cleaned
+	// reset may leave files there, causing stageEmailsDir to fail on rename.
+	// No manifest means any staging contents are guaranteed stale (see ADR-0003 §6).
 	if err := os.RemoveAll(stagingPath); err != nil {
 		return resetManifest{}, fmt.Errorf("ResetForRecovery: clean stale staging dir: %w", err)
 	}
@@ -161,26 +141,14 @@ func removeStaleCommittedManifest(stagingPath, manifestPath string) error {
 }
 
 // cleanupCompletedReset removes a leftover reset manifest (and any staging dir)
-// when the underlying commit has already been applied to the sentinel.  It is
-// called from Open(OpenReadWrite) so a crash between commit and final cleanup
-// does not permanently fail-close the normal data path.
+// when the underlying commit has already been applied to the sentinel.
+// Called from Open(OpenReadWrite); uses sentinel.recovery_required as the commit
+// signal rather than the phase value, so it handles commit-window crashes correctly.
+// See docs/dev/adr/0003_reset_phase_design.md §5 for the decision logic.
 //
-// Invariants used here:
-//   - The sentinel's recovery_required field is the TRUE commit barrier.
-//     commitReset always saves the sentinel BEFORE advancing the manifest to
-//     phase=committed, so once recovery_required is nil the user-visible reset
-//     is complete and the manifest/staging are leftover bookkeeping.
-//   - The remaining staging contents (if any) are old data the operator
-//     explicitly asked to discard via ResetForRecovery, so RemoveAll is safe.
-//
-// Returns:
-//   - nil if there is no manifest, or the manifest was cleaned up (or cleanup failed
-//     best-effort — the failure is logged as WARN and does not block the caller).
-//   - ErrPendingReset if the manifest exists and recovery_required is still set
-//     (i.e. a forward reset is genuinely in progress, or an AbortReset is
-//     partially applied — both must be resolved via OpenRecoverReset).
-//   - A *ErrResetManifestVersionMismatch / *ErrResetManifestPhaseUnknown for
-//     unreadable or out-of-range manifests (fail closed for manual handling).
+// Returns ErrPendingReset if a reset or abort is still in progress.
+// Returns *ErrResetManifestVersionMismatch / *ErrResetManifestPhaseUnknown on
+// unreadable manifests (fail closed for manual handling).
 func cleanupCompletedReset(rootDir string) error {
 	manifestPath := resetManifestPath(rootDir)
 	mfst, err := readResetManifest(manifestPath)
@@ -481,20 +449,9 @@ func (s *fileStore) ApplyRecovery(newUIDValidity uint32) error {
 }
 
 // ResetForRecovery implements Store.ResetForRecovery.
-//
-// Crash safety: the initial manifest (phase=manifest_written) is written BEFORE any
-// destructive file operation, so OpenReadWrite fails with ErrPendingReset and
-// AbortReset can roll back from any point.  Subsequent phases are checkpoints
-// written AFTER each (idempotent) operation completes; re-running after any crash
-// resumes from the last durable phase and converges to "empty store + current
-// UIDVALIDITY + recovery-required cleared".
-//
-// Forward progression: manifest_written(1) → data_staged(2) → emails_staged(3) →
-// committed(4) → cleanup.
-//
-// If the manifest is found in the aborting phase (5), this method refuses with
-// ErrResetAbortInProgress: the operator must finish AbortReset first to restore
-// data back to root before any further action.
+// Drives phases 1→2→3→4→cleanup, resuming from the current manifest phase on re-run.
+// Phase=5 (aborting) is refused with ErrResetAbortInProgress.
+// See docs/dev/adr/0003_reset_phase_design.md §3–4 for crash-safety rationale.
 func (s *fileStore) ResetForRecovery(currUIDValidity uint32) error {
 	if s.mode != OpenRecoverReset {
 		return ErrInvalidStoreMode
@@ -588,11 +545,8 @@ func (s *fileStore) executeResetFromManifest(mfst resetManifest, stagingPath, ma
 	return nil
 }
 
-// advanceResetPhases drives the phase progression from the given phase to committed.
-// Each step performs an idempotent file operation and then writes the new phase to
-// the manifest as a checkpoint.  A crash before the checkpoint leaves the manifest
-// at the previous phase; on resume the operation re-runs idempotently and the
-// checkpoint write is retried.
+// advanceResetPhases drives phase progression from phase to committed,
+// writing a checkpoint manifest after each idempotent file operation.
 func (s *fileStore) advanceResetPhases(phase resetPhase, currUIDValidity uint32, stagingPath, manifestPath string) error {
 	if phase <= resetPhaseManifestWritten {
 		// MkdirAll is defensive: staging dir should already exist from the initial write,
@@ -654,18 +608,9 @@ func (s *fileStore) commitReset(manifestPath string, currUIDValidity uint32) err
 }
 
 // AbortReset implements Store.AbortReset.
-//
-// Valid when the manifest is in any pre-commit phase (1–3) or already in the
-// aborting phase (5) from a previously-crashed AbortReset.  Phase=4 (committed)
-// returns ErrResetNotPending.
-//
-// Crash safety: before any file is restored, the manifest is advanced to
-// resetPhaseAborting.  This single durable checkpoint switches the manifest from
-// "forward-progressing reset" to "abort in progress", so a crash mid-restore
-// (or between restore and manifest removal) cannot be misinterpreted as a
-// pending forward reset.  ResetForRecovery refuses phase=aborting with
-// ErrResetAbortInProgress, forcing the operator to re-run AbortReset, which
-// idempotently completes the restore and removes the manifest.
+// Valid for pre-commit phases (1–3) and the aborting phase (5); phase=4 returns ErrResetNotPending.
+// Advances the manifest to phase=aborting before restoring any file (WAL entry).
+// See docs/dev/adr/0003_reset_phase_design.md §4 for rationale.
 func (s *fileStore) AbortReset() error {
 	if s.mode != OpenRecoverReset {
 		return ErrInvalidStoreMode
@@ -693,16 +638,9 @@ func (s *fileStore) AbortReset() error {
 	}
 
 	if mfst.Phase != resetPhaseAborting {
-		// Forward-progressing manifest (phases 1–3): check the commit barrier and
-		// transition the manifest to the aborting phase.
-		//
-		// The commit barrier is sentinel.recovery_required: commit writes the sentinel
-		// first and only then advances the manifest to phase=4, so a crash between
-		// sentinel save and phase=4 write leaves the manifest at phase=3 with the
-		// sentinel already committed.  Treating that state as abortable would restore
-		// stale data on top of the new sentinel, producing a
-		// "new UIDValidity + cleared recovery-required + old data" inconsistency.
-		// Therefore: if recovery_required is gone, the commit happened — refuse.
+		// recovery_required is the commit barrier: commitReset saves the sentinel
+		// before advancing to phase=4, so a missing recovery_required means the
+		// commit already happened even if the manifest is still at phase 3.
 		_, _, _, found, err := s.LoadRecoveryRequired()
 		if err != nil {
 			return fmt.Errorf("AbortReset: check recovery-required: %w", err)
@@ -711,16 +649,8 @@ func (s *fileStore) AbortReset() error {
 			return ErrResetNotPending
 		}
 
-		// Mark the manifest as aborting BEFORE touching any file.  This is the
-		// write-ahead checkpoint for the abort path: once it is durable, any later
-		// crash leaves the manifest at phase=aborting, which only AbortReset may
-		// resume (ResetForRecovery refuses with ErrResetAbortInProgress).
-		//
-		// withGuardExclusive is NOT acquired here: AbortReset never writes to the
-		// sentinel, so there is no risk of a summary process observing a partial
-		// sentinel update.  The sentinel's recovery_required field is left intact
-		// throughout, ensuring that CheckRecoveryRequired keeps returning true until
-		// a subsequent ResetForRecovery or ApplyRecovery commits the sentinel.
+		// Write-ahead: mark aborting before moving any file, so a crash mid-restore
+		// cannot be misread as a forward-progressing reset by ResetForRecovery.
 		if err := writeResetManifest(manifestPath, resetManifest{
 			Version:         resetManifestVersion,
 			CurrUIDValidity: mfst.CurrUIDValidity,
