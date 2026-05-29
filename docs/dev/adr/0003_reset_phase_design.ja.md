@@ -88,11 +88,8 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 
 ```mermaid
 flowchart TD
-    Normal["通常<br>(マニフェストなし / recovery_required なし)"]
     RR["要復旧<br>(recovery_required あり / マニフェストなし)"]
-    P4["フェーズ 4<br>(コミット済み / クリーンアップ前)"]
     P5["フェーズ 5<br>(中断処理中)"]
-    StaleM["残留マニフェスト<br>(フェーズ 1–3 + recovery_required あり<br>CurrUIDValidity 不一致)"]
 
     subgraph PendingReset["コミット前の保留リセット（フェーズ 1–3）"]
         P1["フェーズ 1<br>(マニフェスト書き込み済み)"]
@@ -100,7 +97,10 @@ flowchart TD
         P3["フェーズ 3<br>(メールステージング完了)"]
     end
 
-    Normal -.->|"fetch が UIDVALIDITY 変化を検出"| RR
+    P4["フェーズ 4<br>(コミット済み / クリーンアップ前)"]
+    StaleM["残留マニフェスト<br>(フェーズ 1–3 + recovery_required あり<br>CurrUIDValidity 不一致)"]
+    Normal["通常<br>(マニフェストなし / recovery_required なし)"]
+
     RR -->|"recover --mode keep-old"| Normal
     RR -->|"recover --mode discard-old --yes"| P1
     P1 -->|"stageDataFile:<br>tlsrpt.json → .staging/"| P2
@@ -112,6 +112,7 @@ flowchart TD
     StaleM -->|"Open が不一致を検出し<br>マニフェストをクリーンアップ"| RR
     PendingReset -.->|"recover --abort-reset --yes"| P5
     P5 -->|"AbortReset 完了:<br>.staging/ → ルートに復元"| RR
+    Normal -.->|"fetch が UIDVALIDITY 変化を検出"| RR
 ```
 
 凡例：実線 = 正常系の遷移、破線 = 例外イベント（UIDVALIDITY 変化・クリーンアップ失敗）または手動中断
