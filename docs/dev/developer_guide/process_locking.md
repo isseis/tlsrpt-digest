@@ -42,7 +42,7 @@ staging, and sentinel can be operated safely under the single-writer assumption.
 The state machine here refers to the mechanism that tracks the progress of recovery operations
 (`ResetForRecovery` / `AbortReset`) triggered by UIDVALIDITY changes. It consists of three elements:
 the reset manifest (a progress ledger recording `resetPhase` values 1–5), the staging directory,
-and the sentinel (recording the committed state of `recovery_required` and `UIDValidity`).
+and the sentinel (recording the finalized state of `recovery_required` and `UIDValidity`).
 See [ADR-0003](../adr/0003_reset_phase_design.md) for details.
 
 ### Lock File
@@ -80,9 +80,9 @@ The summary consistency guard prevents this.
 
 Lock file: `{root_dir}/.tlsrpt-digest-summary.lock`
 
-| Acquirer | flock type | Behavior on failure |
+| Acquirer | flock type | Behavior when acquisition fails |
 |---|---|---|
-| `summary` (`AcquireSummaryConsistencyGuard`) | shared (`LOCK_SH\|LOCK_NB`) | Error exit |
+| `summary` (`AcquireSummaryConsistencyGuard`) | shared (`LOCK_SH`) | Block (wait) |
 | Store APIs that modify `recovery_required` (`withGuardExclusive`) | exclusive (`LOCK_EX`) | Block (wait) |
 
 While `summary` holds the shared lock, a `fetch` that attempts to write to the `recovery_required`
@@ -133,7 +133,7 @@ The shared lock is acquired during Bootstrap (`AcquireSummaryConsistencyGuard`) 
 During this time, `fetch`'s `SaveRecoveryRequired` is blocked from acquiring the exclusive lock,
 making it **physically impossible for the sentinel to be written during `summary` execution**.
 
-The only race window is the timing at which `fetch` writes the sentinel before Bootstrap acquires the shared lock.
+The only race window is the moment `fetch` writes the sentinel before Bootstrap acquires the shared lock.
 
 ### Check Timing and Purpose
 
