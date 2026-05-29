@@ -92,6 +92,7 @@ flowchart TD
     RR["要復旧<br>(recovery_required あり / マニフェストなし)"]
     P4["フェーズ 4<br>(コミット済み / クリーンアップ前)"]
     P5["フェーズ 5<br>(中断処理中)"]
+    StaleM["残留マニフェスト<br>(フェーズ 1–3 + recovery_required あり<br>CurrUIDValidity 不一致)"]
 
     subgraph PendingReset["コミット前の保留リセット（フェーズ 1–3）"]
         P1["フェーズ 1<br>(マニフェスト書き込み済み)"]
@@ -105,12 +106,14 @@ flowchart TD
     P1 -->|"stageDataFile:<br>tlsrpt.json → .staging/"| P2
     P2 -->|"stageEmailsDir:<br>emails/ → .staging/"| P3
     P3 -->|"commitReset 完了"| P4
+    P4 -.->|"マニフェスト削除失敗（ベストエフォート）<br>→ fetch が新 UIDVALIDITY 変化を検出"| StaleM
     P4 -->|"Open で cleanupCompletedReset:<br>.staging/ 削除"| Normal
+    StaleM -->|"Open が不一致を検出し<br>マニフェストをクリーンアップ"| RR
     PendingReset -.->|"recover --abort-reset --yes"| P5
     P5 -->|"AbortReset 完了:<br>.staging/ → ルートに復元"| RR
 ```
 
-凡例：実線 = 正常系の遷移、破線 = 例外イベント（UIDVALIDITY 変化）または手動中断
+凡例：実線 = 正常系の遷移、破線 = 例外イベント（UIDVALIDITY 変化・クリーンアップ失敗）または手動中断
 
 **クラッシュリカバリ**：各フェーズでのクラッシュ後は同じフェーズから再開可能（各ステージング操作は冪等）。フェーズ 1–3 でプロセスが停止した場合は、`recover --mode discard-old --yes` を再実行すると現在のフェーズから自動的に再開される。
 
