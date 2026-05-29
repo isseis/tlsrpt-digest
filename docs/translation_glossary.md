@@ -50,6 +50,9 @@
 | 日本語 | English | 備考 |
 |--------|---------|------|
 | チェックボックス | checkbox | なし → `[ ]`、完了 → `[x]`、スキップ → `[-]` |
+| コミット境界 | commit boundary | センチネルの recovery_required が nil であることがコミット完了の正式な根拠となる境界 |
+| 共有ロック | shared lock | flock の LOCK_SH。summary consistency guard が summary サブコマンドに対して取得するロック |
+| 排他ロック | exclusive lock | flock の LOCK_EX。store-wide process lock や withGuardExclusive が取得するロック |
 | クラス図 | class diagram | Mermaid classDiagram の文脈 |
 | キャッシュ | cache | |
 | キャプチャ | capture | |
@@ -401,6 +404,9 @@
 | 静的 | static | |
 | ステージング | staging | |
 | ステージングディレクトリ | staging directory | |
+| 状態機械 | state machine | UIDVALIDITY 変化時の復旧操作の進捗を管理する仕組み。リセットマニフェスト・ステージングディレクトリ・センチネルの 3 ファイルで構成される |
+| 陳腐化した | stale | 共有ロック取得前に書き込まれた recovery_required によって無効化された判断・集計結果を指す。英語訳は "stale" |
+| 書き込み系サブコマンド | write subcommands | store-wide process lock を取得して動作するサブコマンド群（fetch / gc / reprocess / recover） |
 | 文字列 | string | |
 | 構造体 | struct | Go言語の文脈 |
 | シンボリックリンク | symlink | "symbolic link" の略 |
