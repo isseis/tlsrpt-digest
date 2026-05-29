@@ -13,9 +13,9 @@ import (
 )
 
 // Store represents the persistence layer for TLSRPT reports and emails.
-// Write operations require a single writer. Command-layer callers must hold
-// the process-level store writer lock while using a read-write store.
-// Read-only mode (OpenReadOnly) prevents write operations and creation of files/directories.
+// Write operations require a single writer; cmd-layer callers must hold the
+// process-level store writer lock before opening a read-write store.
+// See docs/dev/developer_guide/process_locking.md for the locking design.
 type Store interface {
 	// SaveReports persists a batch of TLSRPT reports in a single atomic write.
 	// Reports are UPSERT'd by report-id (a duplicate replaces the existing entry).
@@ -103,10 +103,10 @@ type Store interface {
 	HasPendingReset() (bool, error)
 
 	// AcquireSummaryConsistencyGuard acquires a shared flock on the guard file and
-	// returns a SummaryConsistencyGuard. While held, writer processes updating
-	// recovery-required in the sentinel must wait for the exclusive lock, ensuring
-	// that CheckRecoveryRequired results are consistent through LogSummary/Flush.
-	// The caller must call Close() on the returned guard after use.
+	// returns a SummaryConsistencyGuard. While held, writes to recovery-required
+	// in the sentinel are blocked, keeping CheckRecoveryRequired results stable.
+	// The caller must call Close() after use.
+	// See docs/dev/developer_guide/process_locking.md §3 for the concurrency design.
 	AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)
 
 	// DeleteReportsBefore deletes all report records whose date-range.end-datetime < cutoff
@@ -160,23 +160,17 @@ type fileStore struct {
 // supplied identity. A mismatch returns an error containing both the expected and
 // actual identifiers along with rootDir.
 func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
-	// Determine if read-only based on mode
 	readOnly := mode == OpenReadOnly
 
-	// OpenReadWrite must fail closed while a forward-progressing reset is still
-	// in flight, but a manifest left behind AFTER commit must not permanently
-	// block the normal data path after cleanup fails. cleanupCompletedReset distinguishes
-	// the two cases by inspecting sentinel.recovery_required (the true commit
-	// barrier): if it is cleared, the leftover manifest/staging are removed
-	// here; otherwise ErrPendingReset is returned for the operator to resolve
-	// via OpenRecoverReset.
+	// cleanupCompletedReset: removes a leftover manifest/staging when the commit
+	// already landed in the sentinel, without blocking for a live reset in flight.
+	// See ADR-0003 §5 for the sentinel-based decision logic.
 	if mode == OpenReadWrite {
 		if err := cleanupCompletedReset(rootDir); err != nil {
 			return nil, err
 		}
 	}
 
-	// In read-write mode, ensure directories exist
 	if !readOnly {
 		if err := ensureDirExists(rootDir); err != nil {
 			return nil, fmt.Errorf("Open: ensure root dir: %w", err)
@@ -207,33 +201,28 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 		_ = f.Close()
 	}
 
-	// Load or initialize sentinel
 	sentinel, sentinelExists, err := loadSentinel(rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("Open: load sentinel: %w", err)
 	}
 
 	if sentinelExists {
-		// Verify identity matches
 		if err := verifySentinelIdentity(rootDir, sentinel, identity); err != nil {
 			return nil, err
 		}
 	} else if !readOnly {
-		// In read-write mode, initialize the sentinel file on disk.
 		// Read-only mode leaves the sentinel absent (empty store is valid).
 		if _, err := initSentinel(rootDir, identity); err != nil {
 			return nil, fmt.Errorf("Open: init sentinel: %w", err)
 		}
 	}
 
-	// Check permissions on existing sentinel file and warn if loose.
 	if sentinelExists {
 		checkFilePermissions(sentinelPath(rootDir))
 	}
 
-	// Check permissions on the data file when it already exists.
-	// initDataFile creates it with 0600, but a pre-existing file may have looser
-	// permissions that went undetected until now.
+	// initDataFile creates data file with 0600, but a pre-existing file may have
+	// looser permissions that went undetected until now.
 	if _, statErr := os.Stat(dataFilePath(rootDir)); statErr == nil {
 		checkFilePermissions(dataFilePath(rootDir))
 	}
