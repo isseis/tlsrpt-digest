@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"strings"
 	"testing"
 	"time"
 
@@ -269,7 +268,7 @@ func TestRecover_NoRecoveryRequired(t *testing.T) {
 
 		code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
 		require.NoError(t, err)
-		assert.Equal(t, exitOK, code, "store is consistent: exit 0 expected for opts %+v", opts)
+		assert.Equal(t, exitError, code, "store is consistent: exit 1 expected for opts %+v", opts)
 		assert.Equal(t, 0, st.ApplyRecoveryCallCount)
 		assert.Equal(t, 0, st.ResetForRecoveryCallCount)
 		assert.Equal(t, 0, st.AbortResetCallCount)
@@ -396,33 +395,24 @@ func TestRecover_NoPendingResetShowsNone(t *testing.T) {
 	assert.NotContains(t, output, "Available options")
 }
 
-// TestRecover_PendingReset_NonResetModesShowOptions verifies that when pending reset
-// causes Bootstrap to fail for non-reset modes, the guidance message includes both
-// recovery options and no destructive changes are made.
-func TestRecover_PendingReset_NonResetModesShowOptions(t *testing.T) {
-	recoverModes := [][]string{
-		{"recover"},
-		{"recover", "--mode", "keep-old"},
-		{"recover", "--mode", "discard-old"},
-	}
-	for _, args := range recoverModes {
-		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			_, err := Bootstrap(subcommandRecover, "config.toml", "run-id", BootstrapOptions{
-				LoadConfig: func(string) (*config.Config, error) {
-					return configForRoot(secureStoreRoot(t)), nil
-				},
-				BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
-					return &SpyNotificationSink{}, nil
-				},
-				OpenStore: func(string, store.IMAPIdentity, store.OpenMode) (store.Store, error) {
-					return nil, store.ErrPendingReset
-				},
-			})
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), "recover --mode discard-old --yes")
-			assert.Contains(t, err.Error(), "recover --abort-reset --yes")
-		})
-	}
+// TestBootstrap_PendingResetShowsGuidance verifies that when OpenReadWrite fails with
+// ErrPendingReset (e.g. during fetch or gc), the Bootstrap error includes guidance for
+// both continue and abort paths.
+func TestBootstrap_PendingResetShowsGuidance(t *testing.T) {
+	_, err := Bootstrap(subcommandFetch, "config.toml", "run-id", BootstrapOptions{
+		LoadConfig: func(string) (*config.Config, error) {
+			return configForRoot(secureStoreRoot(t)), nil
+		},
+		BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
+			return &SpyNotificationSink{}, nil
+		},
+		OpenStore: func(string, store.IMAPIdentity, store.OpenMode) (store.Store, error) {
+			return nil, store.ErrPendingReset
+		},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "recover --mode discard-old --yes")
+	assert.Contains(t, err.Error(), "recover --abort-reset --yes")
 }
 
 // TestRecover_PendingResetShowsStatusForNonDestructiveModes verifies that recover always
@@ -546,10 +536,10 @@ func TestRecover_ExitCodes(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name:     "no recovery required exits 0",
+			name:     "no recovery required exits 1",
 			opts:     cliOptions{RecoverMode: "keep-old"},
 			recovery: false,
-			wantCode: exitOK,
+			wantCode: exitError,
 			wantErr:  false,
 		},
 		{

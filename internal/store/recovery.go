@@ -683,16 +683,19 @@ func (s *fileStore) AbortReset() error {
 }
 
 // HasPendingReset implements Store.HasPendingReset.
+// A phase=committed manifest is leftover cleanup bookkeeping, not an active reset:
+// the sentinel is already committed, so it must not block ApplyRecovery or
+// show as a pending reset to the operator.
 func (s *fileStore) HasPendingReset() (bool, error) {
 	manifestPath := resetManifestPath(s.rootDir)
-	_, err := readResetManifest(manifestPath)
+	mfst, err := readResetManifest(manifestPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
 		return false, fmt.Errorf("HasPendingReset: %w", err)
 	}
-	return true, nil
+	return mfst.Phase != resetPhaseCommitted, nil
 }
 
 // AcquireSummaryConsistencyGuard implements Store.AcquireSummaryConsistencyGuard.

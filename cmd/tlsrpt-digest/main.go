@@ -59,6 +59,11 @@ func runCLI(ctx context.Context, args []string, stderr io.Writer, bootOpts Boots
 
 	inv, err := parseCLI(args, stderr)
 	if err != nil {
+		// recover-specific confirmation errors are non-destructive operator prompts,
+		// not usage errors — return exitError (1) not exitUsage (2) per AC-40/arch §8.
+		if errors.Is(err, errAbortResetRequiresYes) || errors.Is(err, errYesRequiresModeOrAbort) {
+			return exitError
+		}
 		return exitUsage
 	}
 

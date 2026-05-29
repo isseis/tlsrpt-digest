@@ -149,7 +149,7 @@ func (r *recoverRunner) handleNoRecoveryRequired(st store.Store, opts cliOptions
 	}
 	if !pendingReset {
 		_, _ = fmt.Fprintln(r.stdout, "No recovery required: store is in a consistent state.")
-		return exitOK, nil
+		return exitError, nil
 	}
 	// Post-commit cleanup was interrupted: store is correct but manifest/staging remain.
 	if opts.RecoverMode == recoverModeDiscardOld && opts.RecoverYes {
