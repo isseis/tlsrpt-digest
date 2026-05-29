@@ -192,6 +192,28 @@ sequenceDiagram
 可能性がある。`withGuardExclusive` はセンチネルの可視性しか保証しないため、
 保留リセットを無視して `recovery_required` を消すと「UIDValidity 更新済み + `recovery_required` クリア済み + データなし」という矛盾状態が生じる。
 
+以下は `HasPendingReset()` チェックがない場合に矛盾が生じるシーケンスを示す。
+
+```mermaid
+sequenceDiagram
+    participant Op as オペレーター
+    participant API as "ApplyRecovery<br>（HasPendingReset チェックなし）"
+    participant Stg as "ステージング"
+    participant Sen as "センチネル"
+
+    Note over Stg,Sen: 【前提】ResetForRecovery がフェーズ 2–3 で中断<br>tlsrpt.json・emails/ がステージングに移動済み<br>ストアルートにデータなし・マニフェスト残存
+
+    Op->>API: recover --mode keep-old
+    API->>Sen: UIDValidity 更新 + recovery_required クリア
+    Note right of Sen: withGuardExclusive のみ実行<br>ステージングは操作しない
+
+    Note over Stg,Sen: 【矛盾状態】<br>センチネル: 復旧完了に見える（recovery_required なし）<br>ステージング: tlsrpt.json・emails/ が残存<br>ストアルート: データなし
+
+    Op->>API: 次回 Open(OpenReadWrite)
+    API->>Stg: cleanupCompletedReset → RemoveAll(staging)
+    Note over Stg: 旧データ消失<br>keep-old の意図に反する結果になる
+```
+
 `ApplyRecovery` はマニフェストが存在する場合に `ErrPendingReset` を返すことで、
 この経路をストア層で閉じている。**`recovery_required` を変更する新しい API を追加する
 場合も同様に、保留リセット中の呼び出し可否を設計時に検討し、必要なら
@@ -283,10 +305,10 @@ summary consistency guard は `recovery_required` の可視性のみを守るも
 
 **`recovery_required` を変更するストア API を追加・変更するとき**
 
-- [ ] `{root_dir}/.tlsrpt-digest-summary.lock` に対して排他ロックを取得している
+- [ ] `{root_dir}/.tlsrpt-digest-summary.lock` に対して排他 lock を取得している
   （`withGuardExclusive` を使用）
 - [ ] `recovery_required` を変更しない処理を summary consistency guard で囲んでいない
-- [ ] `summary` が陳腐化した「復旧不要」判断で送信しないことをテストしている
+- [ ] `summary` が stale な「復旧不要」判断で送信しないことをテストしている
 - [ ] 保留リセット中（マニフェスト存在時）に呼ばれた場合の挙動を設計している：
   データファイルがステージングに移動済みの可能性があるため、`recovery_required` を
   クリアするだけでは不整合になるケースを考慮する。問題がある場合は `HasPendingReset()`
