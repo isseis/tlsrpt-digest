@@ -34,7 +34,7 @@
 |--------|---------|------|
 | バックアップ | backup | |
 | ベストエフォート | best-effort | 失敗しても警告のみで続行する方針。「ベストエフォートで削除」→ "remove … on a best-effort basis" |
-| 保留リセット | pending reset | リセット操作開始後、コミット完了前の中間状態（フェーズ 1〜3 および フェーズ 5）。コード上は `ErrPendingReset`・`HasPendingReset()` として参照される。 |
+| 保留リセット | pending reset | リセット操作開始後、コミット完了前の中間状態（フェーズ 1〜3 および フェーズ 5）。コード上では `ErrPendingReset` として参照される。`HasPendingReset()` はこの状態を検出するが、フェーズ 4（committed、コミット後クリーンアップ残滓）に対しては false を返す。 |
 | ブートストラップ | bootstrap | システム初期化処理の文脈 |
 | バッチ処理 | batch processing | |
 | ベースライン | baseline | |

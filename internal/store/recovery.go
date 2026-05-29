@@ -168,6 +168,11 @@ func cleanupCompletedReset(rootDir string) error {
 						slog.Any("error", rmErr),
 					)
 				}
+			} else if !errors.Is(statErr, os.ErrNotExist) {
+				slog.Warn("store: failed to stat staging directory; manual inspection may be required",
+					slog.String("path", stagingPath),
+					slog.Any("error", statErr),
+				)
 			}
 			return nil
 		}
@@ -686,9 +691,9 @@ func (s *fileStore) AbortReset() error {
 }
 
 // HasPendingReset implements Store.HasPendingReset.
-// A phase=committed manifest is leftover cleanup bookkeeping, not an active reset:
-// the sentinel is already committed, so it must not block ApplyRecovery or
-// show as a pending reset to the operator.
+// Returns true only for active-phase resets (phases 1–3 or 5).
+// Phase=committed is leftover cleanup bookkeeping (sentinel already committed),
+// not an active reset, so it returns false.
 // Returns an error for unknown versions or out-of-range phases (fail closed).
 func (s *fileStore) HasPendingReset() (bool, error) {
 	manifestPath := resetManifestPath(s.rootDir)

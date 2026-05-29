@@ -31,7 +31,7 @@ When an IMAP server changes UIDVALIDITY, the correspondence between existing UID
 
 `ResetForRecovery` involves multiple file operations, so even if a crash occurs partway through, it must be possible to resume or abort safely.
 
-In this document, the series of operations performed by `ResetForRecovery` is called a **reset**. The intermediate state from the start of a reset until the commit is complete (the write clearing `recovery_required` in the sentinel is complete) is called a **pending reset**. In code, this is referenced as `ErrPendingReset` and `HasPendingReset()`.
+In this document, the series of operations performed by `ResetForRecovery` is called a **reset**. The intermediate state from the start of a reset until the commit is complete (the write clearing `recovery_required` in the sentinel is complete) is called a **pending reset**. In code, this is referenced as `ErrPendingReset` and `HasPendingReset()`. Note: `HasPendingReset()` returns false for phase=committed manifests (post-commit cleanup residue), which are not an active pending reset.
 
 ### Requirements (from 02_architecture.md)
 

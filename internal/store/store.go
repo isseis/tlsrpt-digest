@@ -96,10 +96,11 @@ type Store interface {
 	// The caller must hold the process-level store writer lock until this method returns.
 	AbortReset() error
 
-	// HasPendingReset reports whether a reset manifest file exists in the store,
-	// including committed resets that are awaiting cleanup.
-	// Returns (true, nil) when a manifest is present.
-	// Returns (false, nil) when no manifest is found.
+	// HasPendingReset reports whether an active reset is in progress (phases 1–3 or 5).
+	// A committed manifest (phase=committed) is leftover cleanup bookkeeping rather than
+	// an active reset, so it returns false for that phase.
+	// Returns (true, nil) when an active-phase reset manifest is present.
+	// Returns (false, nil) when no manifest is found or the manifest is committed.
 	HasPendingReset() (bool, error)
 
 	// AcquireSummaryConsistencyGuard acquires a shared flock on the guard file and

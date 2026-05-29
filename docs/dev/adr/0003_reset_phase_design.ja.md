@@ -31,7 +31,7 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 
 `ResetForRecovery` は複数のファイル操作を伴うため、途中でクラッシュした場合でも安全に再開または取り消しができる必要がある。
 
-本文書では `ResetForRecovery` による一連の操作を**リセット**と呼ぶ。リセット開始後、コミット完了（センチネルへの `recovery_required` クリア書き込み完了）までの中間状態を**保留リセット**と呼ぶ。コード上では `ErrPendingReset`・`HasPendingReset()` として参照される。
+本文書では `ResetForRecovery` による一連の操作を**リセット**と呼ぶ。リセット開始後、コミット完了（センチネルへの `recovery_required` クリア書き込み完了）までの中間状態を**保留リセット**と呼ぶ。コード上では `ErrPendingReset`・`HasPendingReset()` として参照される。なお `HasPendingReset()` はフェーズ 4（committed）のマニフェストに対しては false を返す（コミット後クリーンアップ残滓であり、保留リセットではない）。
 
 ### 要件（02_architecture.md より）
 

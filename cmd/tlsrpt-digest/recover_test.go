@@ -247,7 +247,7 @@ func TestRecover_YesAlone(t *testing.T) {
 	assert.Contains(t, stderr.String(), "--yes requires --mode or --abort-reset")
 }
 
-// TestRecover_NoRecoveryRequired verifies that all modes exit 0 with an explanation when
+// TestRecover_NoRecoveryRequired verifies that all modes exit 1 with an explanation when
 // no recovery-required state exists and the store is clean, without making any store changes.
 func TestRecover_NoRecoveryRequired(t *testing.T) {
 	st := storetestutil.NewFakeStore() // no Recovery set, PendingReset=false
@@ -415,9 +415,9 @@ func TestBootstrap_PendingResetShowsGuidance(t *testing.T) {
 	assert.Contains(t, err.Error(), "recover --abort-reset --yes")
 }
 
-// TestRecover_PendingResetShowsStatusForNonDestructiveModes verifies that recover always
-// opens the store with OpenRecoverReset, so a pending reset does not block status display
-// or unconfirmed modes — and that no destructive store operations are called.
+// TestRecover_PendingResetShowsStatusForNonDestructiveModes verifies that recover opens
+// the store with OpenReadWrite for non-destructive modes, and that even when the FakeStore
+// reports a pending reset the runner shows status and does not call destructive operations.
 func TestRecover_PendingResetShowsStatusForNonDestructiveModes(t *testing.T) {
 	tests := []struct {
 		name string
