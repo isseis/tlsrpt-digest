@@ -725,12 +725,11 @@ func (s *fileStore) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, e
 		}
 		// Guard file absent for an existing store (store pre-dates the guard file, or
 		// file was manually removed). Attempt to create it so we can hold a real LOCK_SH.
-		// If creation fails (e.g. read-only mount), the same failure prevents any writer
-		// from reaching withGuardExclusive, so SaveRecoveryRequired cannot write
-		// recovery_required and a no-op guard is safe.
+		// Fail closed on error: proceeding without a guard could miss a concurrent
+		// recovery_required write.
 		f, err = os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, filePerm) //nolint:gosec
 		if err != nil {
-			return noopSummaryConsistencyGuard{}, nil
+			return nil, fmt.Errorf("AcquireSummaryConsistencyGuard: create guard file: %w", err)
 		}
 	}
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_SH); err != nil { //nolint:gosec // fd fits int on all supported platforms

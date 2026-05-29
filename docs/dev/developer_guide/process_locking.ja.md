@@ -90,12 +90,12 @@ shared lock を取得できる。
 
 `AcquireSummaryConsistencyGuard` は呼び出し状態に応じて次のように動作する。
 
-| 状態 | 動作 | 安全性の根拠 |
-|---|---|---|
-| `rootDir` 不在 | no-op ガードを返す | 空ストア。writer が存在できないため `recovery_required` の書き込みも不可能 |
-| `rootDir` あり・ガードファイルあり | `LOCK_SH` を取得 | 通常パス |
-| `rootDir` あり・ガードファイル不在 | `O_CREATE\|O_RDWR` でガードファイルを作成し `LOCK_SH` を取得 | 機能導入前の store や手動削除の救済。作成後は通常と同じ排他保護が得られる |
-| `rootDir` あり・ガードファイル不在・作成失敗 | no-op ガードを返す | 読み取り専用マウント等では `withGuardExclusive` も同様に失敗するため `SaveRecoveryRequired` が書き込み不可 |
+| 状態 | 動作 |
+|---|---|
+| `rootDir` 不在 | no-op ガードを返す（空ストア。writer が存在できないため `recovery_required` の書き込みも不可能） |
+| `rootDir` あり・ガードファイルあり | `LOCK_SH` を取得（通常パス） |
+| `rootDir` あり・ガードファイル不在 | `O_CREATE\|O_RDWR` でガードファイルを作成し `LOCK_SH` を取得（機能導入前の store や手動削除の救済） |
+| `rootDir` あり・ガードファイル不在・作成失敗 | エラーを返す（fail-closed）。読み取り専用マウントは動作保証対象外 |
 
 ### 3.3 ロック種別と動作
 
