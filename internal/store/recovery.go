@@ -493,6 +493,18 @@ func (s *fileStore) ResetForRecovery(currUIDValidity uint32) error {
 		if mfst.Phase == resetPhaseCommitted {
 			return s.resumeOrCleanupCommitted(currUIDValidity, stagingPath, manifestPath)
 		}
+		// A pre-commit manifest (phases 1–3) whose CurrUIDValidity doesn't match the
+		// caller's currUIDValidity is a stale residue from a previous reset attempt
+		// (e.g. cleanupCompletedReset deleted staging but failed to remove the manifest).
+		// Remove it and start fresh so the new UIDVALIDITY is committed correctly.
+		// currUIDValidity==0 is the special cleanup path used by handleNoRecoveryRequired
+		// (no recovery_required in sentinel); skip the stale check in that case.
+		if mfst.Phase <= resetPhaseEmailsStaged && currUIDValidity != 0 && mfst.CurrUIDValidity != currUIDValidity {
+			if err := removeStaleCommittedManifest(stagingPath, manifestPath); err != nil {
+				return err
+			}
+			manifestExists = false
+		}
 	}
 
 	if !manifestExists {
