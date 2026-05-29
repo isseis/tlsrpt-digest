@@ -569,7 +569,7 @@ func (s *fileStore) resumeOrCleanupCommitted(currUIDValidity uint32, stagingPath
 }
 
 // executeResetFromManifest drives advanceResetPhases from the manifest's current phase
-// to committed, then removes the staging directory (best-effort) and manifest (required).
+// to committed, then removes the staging directory (best-effort) and manifest (best-effort via error return).
 func (s *fileStore) executeResetFromManifest(mfst resetManifest, stagingPath, manifestPath string) error {
 	currUIDValidity := mfst.CurrUIDValidity
 	if err := s.advanceResetPhases(mfst.Phase, currUIDValidity, stagingPath, manifestPath); err != nil {
@@ -583,8 +583,9 @@ func (s *fileStore) executeResetFromManifest(mfst resetManifest, stagingPath, ma
 			slog.Any("error", err),
 		)
 	}
-	// Manifest removal is required: if the manifest survives, Open(OpenReadWrite)
-	// will permanently return ErrPendingReset.
+	// Manifest removal failure is returned to the caller. A phase=committed manifest
+	// left behind is handled best-effort by cleanupCompletedReset on the next open,
+	// but removing it here keeps the store clean for the happy path.
 	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("ResetForRecovery: remove manifest: %w", err)
 	}

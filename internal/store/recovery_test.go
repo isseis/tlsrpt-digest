@@ -1106,7 +1106,7 @@ func TestOpen_CleansUpOrphanStagingDir(t *testing.T) {
 	require.NoError(t, err)
 
 	_, statErr := os.Stat(stagingPath)
-	assert.True(t, os.IsNotExist(statErr), "orphan staging dir must be removed by Open(OpenReadWrite)")
+	assert.ErrorIs(t, statErr, os.ErrNotExist, "orphan staging dir must be removed by Open(OpenReadWrite)")
 
 	// Normal data operations continue to work.
 	v, found, err := s2.LoadUIDValidity()
@@ -1193,9 +1193,9 @@ func TestResetForRecovery_CommitCrashWindow_ZeroUID(t *testing.T) {
 
 	// Manifest and staging must be cleaned up.
 	_, err = os.Stat(resetManifestPath(rootDir))
-	assert.True(t, os.IsNotExist(err), "manifest must be removed")
+	assert.ErrorIs(t, err, os.ErrNotExist, "manifest must be removed")
 	_, err = os.Stat(stagingPath)
-	assert.True(t, os.IsNotExist(err), "staging dir must be removed")
+	assert.ErrorIs(t, err, os.ErrNotExist, "staging dir must be removed")
 
 	// Store must be openable for normal use with empty data.
 	s2, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
