@@ -114,7 +114,16 @@ Legend: solid = normal transition; dashed = exceptional event (UIDVALIDITY chang
 
 **Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent). If the process stops at phases 1–3, re-running `recover --mode discard-old --yes` resumes from the current phase automatically.
 
-**Commit-window crash**: `commitReset` saves the sentinel before advancing the manifest to phase 4. A crash between those two writes leaves the manifest at phase 3, but `cleanupCompletedReset` uses `recovery_required` in the sentinel (not the phase number) to determine commit status, so cleanup runs the same as for phase 4 and the state converges to Normal (see §4). Data integrity is fully preserved, but the staging directory and manifest remain on disk until the next `fetch` or `gc` run (`summary` and `recover --mode discard-old --yes` do not trigger cleanup). Since `fetch` and `gc` are expected to run periodically, storage capacity estimates should account for one staging directory's worth of old data as a temporary overhead.
+**Commit-window crash** (the window between sentinel save completing and the phase 4 update completing)
+
+`commitReset` saves the sentinel before advancing the manifest to phase 4. A crash between those two writes leaves the manifest at phase 3.
+
+- **Normal convergence**: `cleanupCompletedReset` uses `recovery_required` in the sentinel (not the phase number) to determine commit status, so cleanup runs the same as for phase 4 and the state converges to Normal (see §4). Data integrity is preserved.
+- **When the manifest persists**: If `cleanupCompletedReset` succeeds in removing staging but fails to remove the manifest (best-effort), the manifest remains on disk at phase 3. What happens next depends on subsequent events:
+  - If a new UIDVALIDITY change occurs: when `recover --mode discard-old --yes` is run, `ResetForRecovery` detects the `CurrUIDValidity` mismatch, removes the stale manifest, and performs a fresh start.
+  - If no new UIDVALIDITY change occurs: the next time `fetch` or `gc` runs, `Open(OpenReadWrite)` → `cleanupCompletedReset` retries the removal.
+
+Since `fetch` and `gc` are expected to run periodically, storage capacity estimates should account for one staging directory's worth of old data as a temporary overhead.
 
 ### Behavior During User Operations
 
@@ -213,7 +222,7 @@ To avoid this problem, `AbortReset` always updates the manifest to phase 5 (abor
    ├─ recovery_required present → ErrPendingReset (operation in progress)
    └─ recovery_required absent → committed → execute cleanup
        ├─ os.RemoveAll(staging) ── best-effort
-       └─ os.Remove(manifest)   ── required (if it fails, retry next time)
+       └─ os.Remove(manifest)   ── best-effort (logs a warning on failure; retried on the next Open call)
 ```
 
 **※ Handling of Orphaned Staging**
