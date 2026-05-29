@@ -84,9 +84,10 @@
 ### 3.2 ガードファイルのライフサイクル
 
 ガードファイルが実際に存在することが guard 機能の前提条件である。
-ガードファイルは **`Open(OpenReadWrite)` が作成する**。
-これにより `summary` は `O_CREATE` を必要とせず、読み取り専用マウント上でも
-shared lock を取得できる。
+ガードファイルは **§2 で述べた書き込み系サブコマンドが store を開くとき**に作成される。
+具体的には、store-wide process lock を保持した状態で store を書き込みモードで開く際に
+ガードファイルが存在しなければ新規作成する。`summary` は store を読み取り専用で開くため、
+ガードファイルの作成は書き込み系サブコマンドの責務として分離されている。
 
 `AcquireSummaryConsistencyGuard` は呼び出し状態に応じて次のように動作する。
 
@@ -94,8 +95,8 @@ shared lock を取得できる。
 |---|---|
 | `rootDir` 不在 | no-op ガードを返す（空ストア。writer が存在できないため `recovery_required` の書き込みも不可能） |
 | `rootDir` あり・ガードファイルあり | `LOCK_SH` を取得（通常パス） |
-| `rootDir` あり・ガードファイル不在 | `O_CREATE\|O_RDWR` でガードファイルを作成し `LOCK_SH` を取得（機能導入前の store や手動削除の救済） |
-| `rootDir` あり・ガードファイル不在・作成失敗 | エラーを返す（fail-closed）。読み取り専用マウントは動作保証対象外 |
+| `rootDir` あり・ガードファイル不在 | `O_CREATE\|O_RDWR` でガードファイルを作成し `LOCK_SH` を取得（手動削除の救済） |
+| `rootDir` あり・ガードファイル不在・作成失敗 | エラーを返す（fail-closed） |
 
 ### 3.3 ロック種別と動作
 
