@@ -88,8 +88,12 @@ The transition from phase 4 to Normal (cleanup) is executed inside `Open(OpenRea
 
 ```mermaid
 flowchart TD
-    RR["Recovery Required<br>(recovery_required present / no manifest)"]
     P5["Phase 5<br>(abort in progress)"]
+
+    subgraph RecoveryReq["Recovery Required (recovery_required present)"]
+        RR(["No manifest"])
+        StaleM(["Stale manifest<br>(phases 1–3 + CurrUIDValidity mismatch)"])
+    end
 
     subgraph PendingReset["Pre-commit pending reset (phases 1–3)"]
         P1["Phase 1<br>(manifest written)"]
@@ -102,7 +106,6 @@ flowchart TD
         P4b(["Crash leftover<br>(staging/manifest present)"])
     end
 
-    StaleM["Stale manifest<br>(phases 1–3 + recovery_required present<br>CurrUIDValidity mismatch)"]
     Normal["Normal<br>(no manifest / no recovery_required)"]
 
     RR -->|"recover --mode keep-old"| Normal
@@ -120,7 +123,7 @@ flowchart TD
     Normal -.->|"fetch detects UIDVALIDITY change"| RR
 ```
 
-Legend: rectangle = disk state; stadium shape = transient execution state (same on-disk state); solid line = normal transition; dashed line = exceptional event (crash or UIDVALIDITY change) or manual abort.
+Legend: rectangle = disk state; stadium shape = substate within subgraph; solid line = normal transition; dashed line = exceptional event (crash or UIDVALIDITY change) or manual abort.
 
 **Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent). If the process stops at phases 1–3, re-running `recover --mode discard-old --yes` resumes from the current phase automatically.
 
