@@ -114,7 +114,7 @@ flowchart TD
     P4a -.->|"crash"| P4b
     P4b -->|"next fetch/summary/gc's Open<br>runs cleanupCompletedReset"| Normal
     P4b -.->|"next fetch detects<br>new UIDVALIDITY change"| StaleM
-    StaleM -->|"Open detects CurrUIDValidity mismatch<br>and cleans up manifest"| RR
+    StaleM -->|"next fetch/gc Open detects CurrUIDValidity mismatch<br>and cleans up manifest"| RR
     PendingReset -.->|"recover --abort-reset --yes"| P5
     P5 -->|"AbortReset complete:<br>.staging/ → restore to root"| RR
     Normal -.->|"fetch detects UIDVALIDITY change"| RR
