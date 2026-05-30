@@ -405,6 +405,7 @@
 | ステージング | staging | |
 | ステージングディレクトリ | staging directory | |
 | 状態機械 | state machine | UIDVALIDITY 変化時の復旧操作の進捗を管理する仕組み。リセットマニフェスト・ステージングディレクトリ・センチネルの 3 ファイルで構成される |
+| 状態遷移図 | state diagram | Mermaid stateDiagram-v2 の文脈 |
 | 古くなった | stale (outdated) | 共有ロック取得前に書き込まれた recovery_required によって有効性を失った判断・集計結果を指す。英語訳は "stale" |
 | 残留マニフェスト | stale manifest | 以前のリセットがコミット済みにもかかわらずクリーンアップが完了せず残存するマニフェスト。CurrUIDValidity が現在の recovery_required と一致しないことで識別できる。 |
 | 書き込み系サブコマンド | write subcommands | store-wide process lock を取得して動作するサブコマンド群（fetch / gc / reprocess / recover） |
