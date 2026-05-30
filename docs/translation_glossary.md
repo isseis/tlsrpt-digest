@@ -98,7 +98,7 @@
 | デフォルト設定 | default settings | |
 | 定義 | define / definition | |
 | デプロイ | deploy / deployment | |
-| 廃止 | deprecated / deprecation | |
+| 廃止 | deprecated / deprecation | ソフトウェアライフサイクルの文脈（API・機能の非推奨化）。設計変更で「削除・除去する」意味では "removal / elimination" を使用 |
 | デメリット | disadvantage | |
 | 説明 | description | |
 | デザイン | design | |
