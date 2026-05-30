@@ -34,7 +34,7 @@ func buildEmailPath(rootDir string, uid, uidValidity uint32, internalDate time.T
 }
 
 // SaveEmail implements Store.SaveEmail.
-func (s *storeImpl) SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error {
+func (s *fileStore) SaveEmail(uid, uidValidity uint32, internalDate time.Time, rawEML []byte) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -68,7 +68,7 @@ func (s *storeImpl) SaveEmail(uid, uidValidity uint32, internalDate time.Time, r
 }
 
 // SaveEmailMetas implements Store.SaveEmailMetas.
-func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
+func (s *fileStore) SaveEmailMetas(metas []EmailMeta) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -101,7 +101,7 @@ func (s *storeImpl) SaveEmailMetas(metas []EmailMeta) error {
 }
 
 // LoadEmails implements Store.LoadEmails.
-func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
+func (s *fileStore) LoadEmails() ([]LoadedEmail, error) {
 	emailsDir := s.emailsDirPath
 	found, err := validateEmailsDir(emailsDir)
 	if err != nil {
@@ -205,7 +205,7 @@ func (s *storeImpl) LoadEmails() ([]LoadedEmail, error) {
 	return result, errors.Join(errs...)
 }
 
-func (s *storeImpl) loadIndexedEmailDates() map[emailKey]time.Time {
+func (s *fileStore) loadIndexedEmailDates() map[emailKey]time.Time {
 	indexedDates := make(map[emailKey]time.Time)
 	df, err := s.loadDataFile()
 	if err != nil {
@@ -246,7 +246,7 @@ func internalDateFromEmailPath(relPath string) (time.Time, error) {
 }
 
 // DeleteEmailsBefore implements Store.DeleteEmailsBefore.
-func (s *storeImpl) DeleteEmailsBefore(cutoff time.Time) (deleted int, err error) {
+func (s *fileStore) DeleteEmailsBefore(cutoff time.Time) (deleted int, err error) {
 	if s.readOnly {
 		return 0, ErrReadOnly
 	}
@@ -312,7 +312,7 @@ func (s *storeImpl) DeleteEmailsBefore(cutoff time.Time) (deleted int, err error
 
 // cleanupEmptyDirs removes empty {uidvalidity}/{YYYYMM} and {uidvalidity} directories
 // for the given GC'd entries. Failures are logged as WARN and never returned as errors.
-func (s *storeImpl) cleanupEmptyDirs(gcEntries []internalEmailIndexEntry) {
+func (s *fileStore) cleanupEmptyDirs(gcEntries []internalEmailIndexEntry) {
 	emailsDir := s.emailsDirPath
 
 	// Collect unique {uidvalidity}/{YYYYMM} dirs and {uidvalidity} dirs.

@@ -57,11 +57,15 @@ type FakeStore struct {
 
 	// Error injection fields for individual operations.
 	LoadRecoveryRequiredErr error
+	HasPendingResetErr      error
 	SaveReportsErr          error
 	SaveEmailMetasErr       error
 	DeleteReportsBeforeErr  error
 	DeleteEmailsBeforeErr   error
 	LoadEmailsErr           error
+	ApplyRecoveryErr        error
+	ResetForRecoveryErr     error
+	AbortResetErr           error
 
 	// Call-count fields for ordering/invocation assertions.
 	SaveEmailMetasCallCount      int
@@ -69,6 +73,9 @@ type FakeStore struct {
 	LoadEmailsCallCount          int
 	DeleteReportsBeforeCallCount int
 	DeleteEmailsBeforeCallCount  int
+	ApplyRecoveryCallCount       int
+	ResetForRecoveryCallCount    int
+	AbortResetCallCount          int
 
 	// Cutoff capture fields for asserting the argument passed to delete operations.
 	DeleteReportsCutoff time.Time
@@ -236,6 +243,10 @@ func (f *FakeStore) ClearRecoveryRequired() error {
 
 // ApplyRecovery implements store.Store.
 func (f *FakeStore) ApplyRecovery(newUIDValidity uint32) error {
+	f.ApplyRecoveryCallCount++
+	if f.ApplyRecoveryErr != nil {
+		return f.ApplyRecoveryErr
+	}
 	vCopy := newUIDValidity
 	f.UIDValidity = &vCopy
 	f.Recovery = nil
@@ -281,7 +292,17 @@ func (f *FakeStore) DeleteEmailsBefore(cutoff time.Time) (int, error) {
 // clears Recovery. Returns ErrRecoveryRequiredMissing if Recovery is nil,
 // or ErrRecoveryUIDValidityMismatch if currUIDValidity does not match.
 func (f *FakeStore) ResetForRecovery(currUIDValidity uint32) error {
+	f.ResetForRecoveryCallCount++
+	if f.ResetForRecoveryErr != nil {
+		return f.ResetForRecoveryErr
+	}
 	if f.Recovery == nil {
+		// Committed-cleanup-pending state: sentinel already correct, only leftover
+		// manifest/staging files remain. Clear the pending flag and return nil.
+		if f.PendingReset {
+			f.PendingReset = false
+			return nil
+		}
 		return store.ErrRecoveryRequiredMissing
 	}
 	if f.Recovery.Curr != currUIDValidity {
@@ -295,9 +316,21 @@ func (f *FakeStore) ResetForRecovery(currUIDValidity uint32) error {
 	return nil
 }
 
+// HasPendingReset implements store.Store.
+func (f *FakeStore) HasPendingReset() (bool, error) {
+	if f.HasPendingResetErr != nil {
+		return false, f.HasPendingResetErr
+	}
+	return f.PendingReset, nil
+}
+
 // AbortReset implements store.Store.
 // Returns ErrResetNotPending if there is no pending reset.
 func (f *FakeStore) AbortReset() error {
+	f.AbortResetCallCount++
+	if f.AbortResetErr != nil {
+		return f.AbortResetErr
+	}
 	if !f.PendingReset {
 		return store.ErrResetNotPending
 	}

@@ -120,8 +120,8 @@ func TestOpen_ReadOnlyMode_EmptyStore(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, store)
 
-	impl, ok := store.(*storeImpl)
-	require.True(t, ok, "store should be *storeImpl")
+	impl, ok := store.(*fileStore)
+	require.True(t, ok, "store should be *fileStore")
 	assert.True(t, impl.readOnly, "store should be read-only")
 }
 

@@ -35,20 +35,9 @@ func resetStagingPath(rootDir string) string {
 }
 
 // resetPhase records how far a discard-old reset has progressed.
-// See docs/dev/adr/0003_reset_phase_design.md for the crash-safety
-// rationale behind the phase values and commit/abort boundaries.
-//
-// Forward (commit) progression: 1 → 2 → 3 → 4.
-// Phase 1 (manifest_written) is a write-ahead log entry written before any
-// destructive operation, making the reset visible to Open and AbortReset from
-// that point on.  Phases 2–4 are checkpoints written after each idempotent
-// operation; a crash before a checkpoint is safe to resume by re-running the
-// (idempotent) operation.
-//
-// Backward (abort) progression: → 5 (aborting).
-// AbortReset writes phase=aborting before moving any file back to root, so a
-// crash mid-restore cannot be confused with a forward-progressing reset.
-// ResetForRecovery refuses phase=aborting with ErrResetAbortInProgress.
+// Forward: 1 (manifest_written, WAL) → 2 (data_staged) → 3 (emails_staged) → 4 (committed).
+// Backward: → 5 (aborting, WAL entry for AbortReset).
+// See docs/dev/adr/0003_reset_phase_design.md for rationale.
 type resetPhase int
 
 const (
@@ -106,31 +95,85 @@ func readResetManifest(path string) (resetManifest, error) {
 	return m, nil
 }
 
+// initResetManifest validates fresh-start preconditions, wipes any stale staging
+// directory, creates a new staging directory, and writes the initial manifest.
+// It returns the written manifest so the caller can proceed to advanceResetPhases.
+func (s *fileStore) initResetManifest(currUIDValidity uint32, stagingPath, manifestPath string) (resetManifest, error) {
+	_, sentinelCurr, _, found, err := s.LoadRecoveryRequired()
+	if err != nil {
+		return resetManifest{}, fmt.Errorf("ResetForRecovery: load recovery-required: %w", err)
+	}
+	if !found {
+		return resetManifest{}, ErrRecoveryRequiredMissing
+	}
+	if sentinelCurr != currUIDValidity {
+		return resetManifest{}, &ErrRecoveryUIDValidityMismatch{Got: currUIDValidity, Expected: sentinelCurr}
+	}
+
+	// Wipe stale staging before writing the manifest: a prior committed-but-not-cleaned
+	// reset may leave files there, causing stageEmailsDir to fail on rename.
+	// No manifest means any staging contents are guaranteed stale (see ADR-0003 §6).
+	if err := os.RemoveAll(stagingPath); err != nil {
+		return resetManifest{}, fmt.Errorf("ResetForRecovery: clean stale staging dir: %w", err)
+	}
+	if err := os.MkdirAll(stagingPath, dirPerm); err != nil {
+		return resetManifest{}, fmt.Errorf("ResetForRecovery: create staging dir: %w", err)
+	}
+	mfst := resetManifest{Version: resetManifestVersion, CurrUIDValidity: currUIDValidity, Phase: resetPhaseManifestWritten}
+	if err := writeResetManifest(manifestPath, mfst); err != nil {
+		return resetManifest{}, fmt.Errorf("ResetForRecovery: write manifest: %w", err)
+	}
+	return mfst, nil
+}
+
+// removeStaleCommittedManifest removes a reset manifest whose phase is already
+// committed along with any leftover staging directory.  It is used by
+// ResetForRecovery to clear bookkeeping from a previous reset whose final
+// cleanup failed, so a subsequent fresh-start reset proceeds cleanly.
+func removeStaleCommittedManifest(stagingPath, manifestPath string) error {
+	if err := os.RemoveAll(stagingPath); err != nil {
+		return fmt.Errorf("ResetForRecovery: clean stale staging: %w", err)
+	}
+	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("ResetForRecovery: remove stale committed manifest: %w", err)
+	}
+	return nil
+}
+
 // cleanupCompletedReset removes a leftover reset manifest (and any staging dir)
-// when the underlying commit has already been applied to the sentinel.  It is
-// called from Open(OpenReadWrite) so a crash between commit and final cleanup
-// does not permanently fail-close the normal data path.
+// when the underlying commit has already been applied to the sentinel.
+// Called from Open(OpenReadWrite); uses sentinel.recovery_required as the commit
+// signal rather than the phase value, so it handles commit-window crashes correctly.
+// See docs/dev/adr/0003_reset_phase_design.md §5 for the decision logic.
 //
-// Invariants used here:
-//   - The sentinel's recovery_required field is the TRUE commit barrier.
-//     commitReset always saves the sentinel BEFORE advancing the manifest to
-//     phase=committed, so once recovery_required is nil the user-visible reset
-//     is complete and the manifest/staging are leftover bookkeeping.
-//   - The remaining staging contents (if any) are old data the operator
-//     explicitly asked to discard via ResetForRecovery, so RemoveAll is safe.
-//
-// Returns:
-//   - nil if there is no manifest, or the manifest was cleaned up.
-//   - ErrPendingReset if the manifest exists and recovery_required is still set
-//     (i.e. a forward reset is genuinely in progress, or an AbortReset is
-//     partially applied — both must be resolved via OpenRecoverReset).
-//   - A *ErrResetManifestVersionMismatch / *ErrResetManifestPhaseUnknown for
-//     unreadable or out-of-range manifests (fail closed for manual handling).
+// Returns ErrPendingReset if a reset or abort is still in progress.
+// Returns *ErrResetManifestVersionMismatch / *ErrResetManifestPhaseUnknown on
+// unreadable manifests (fail closed for manual handling).
 func cleanupCompletedReset(rootDir string) error {
 	manifestPath := resetManifestPath(rootDir)
 	mfst, err := readResetManifest(manifestPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			// No manifest.  Check for an orphaned staging directory.
+			// A staging dir without a manifest is always stale: the manifest WAL
+			// entry (phase=1) is written before any file is moved into staging, so
+			// if the manifest is absent the staged contents can never be recovered
+			// and are safe to discard.  This covers the narrow window where
+			// RemoveAll(staging) failed after a successful manifest removal.
+			stagingPath := resetStagingPath(rootDir)
+			if _, statErr := os.Stat(stagingPath); statErr == nil {
+				if rmErr := os.RemoveAll(stagingPath); rmErr != nil {
+					slog.Warn("store: failed to remove orphaned staging directory; manual cleanup may be required",
+						slog.String("path", stagingPath),
+						slog.Any("error", rmErr),
+					)
+				}
+			} else if !errors.Is(statErr, os.ErrNotExist) {
+				slog.Warn("store: failed to stat staging directory; manual inspection may be required",
+					slog.String("path", stagingPath),
+					slog.Any("error", statErr),
+				)
+			}
 			return nil
 		}
 		return fmt.Errorf("cleanupCompletedReset: read manifest: %w", err)
@@ -152,6 +195,32 @@ func cleanupCompletedReset(rootDir string) error {
 		return ErrPendingReset
 	}
 	if sentinel.RecoveryRequired != nil {
+		// If the manifest's CurrUIDValidity differs from the sentinel's current
+		// recovery_required, the manifest is stale residue from a previous reset
+		// whose cleanup partially failed. Clean it up so that the operator can
+		// proceed with keep-old or other non-destructive actions without being
+		// blocked by a manifest that has nothing to do with the new UIDVALIDITY event.
+		if mfst.CurrUIDValidity != sentinel.RecoveryRequired.CurrUIDValidity {
+			slog.Warn("store: removing stale reset manifest (CurrUIDValidity mismatch with current recovery_required)",
+				slog.String("root_dir", rootDir),
+				slog.Int("manifest_phase", int(mfst.Phase)),
+				slog.Uint64("manifest_uid", uint64(mfst.CurrUIDValidity)),
+				slog.Uint64("recovery_uid", uint64(sentinel.RecoveryRequired.CurrUIDValidity)),
+			)
+			if err := os.RemoveAll(resetStagingPath(rootDir)); err != nil {
+				slog.Warn("store: failed to remove stale staging directory; manual cleanup may be required",
+					slog.String("path", resetStagingPath(rootDir)),
+					slog.Any("error", err),
+				)
+			}
+			if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				slog.Warn("store: failed to remove stale manifest; manual cleanup may be required",
+					slog.String("path", manifestPath),
+					slog.Any("error", err),
+				)
+			}
+			return nil
+		}
 		return ErrPendingReset
 	}
 
@@ -168,7 +237,10 @@ func cleanupCompletedReset(rootDir string) error {
 		)
 	}
 	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("cleanupCompletedReset: remove manifest: %w", err)
+		slog.Warn("store: failed to remove reset manifest; manual cleanup may be required",
+			slog.String("path", manifestPath),
+			slog.Any("error", err),
+		)
 	}
 	return nil
 }
@@ -179,7 +251,7 @@ func cleanupCompletedReset(rootDir string) error {
 // calls fn, and releases the lock when fn returns (or on deferred close).
 // Writers that modify recovery-required in the sentinel must call this to prevent
 // a race with summary processes holding a shared flock on the same file.
-func (s *storeImpl) withGuardExclusive(fn func() error) error {
+func (s *fileStore) withGuardExclusive(fn func() error) error {
 	guardPath := guardFilePath(s.rootDir)
 	f, err := os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, filePerm) //nolint:gosec
 	if err != nil {
@@ -277,7 +349,7 @@ func restoreFromStaging(rootDir, stagingPath string) error {
 // loadOrInitSentinelForWrite loads the sentinel for modification.
 // If the sentinel file does not exist, it returns a freshly initialised
 // sentinel so callers can modify and persist it without a separate nil check.
-func (s *storeImpl) loadOrInitSentinelForWrite() (*internalSentinelFile, error) {
+func (s *fileStore) loadOrInitSentinelForWrite() (*internalSentinelFile, error) {
 	sentinel, _, err := loadSentinel(s.rootDir)
 	if err != nil {
 		return nil, err
@@ -295,7 +367,7 @@ func (s *storeImpl) loadOrInitSentinelForWrite() (*internalSentinelFile, error) 
 }
 
 // SaveUIDValidity implements Store.SaveUIDValidity.
-func (s *storeImpl) SaveUIDValidity(v uint32) error {
+func (s *fileStore) SaveUIDValidity(v uint32) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -307,12 +379,11 @@ func (s *storeImpl) SaveUIDValidity(v uint32) error {
 	if err := saveSentinel(s.rootDir, sentinel); err != nil {
 		return fmt.Errorf("SaveUIDValidity: save sentinel: %w", err)
 	}
-	s.sentinel = sentinel
 	return nil
 }
 
 // LoadUIDValidity implements Store.LoadUIDValidity.
-func (s *storeImpl) LoadUIDValidity() (v uint32, found bool, err error) {
+func (s *fileStore) LoadUIDValidity() (v uint32, found bool, err error) {
 	sentinel, exists, err := loadSentinel(s.rootDir)
 	if err != nil {
 		return 0, false, fmt.Errorf("LoadUIDValidity: load sentinel: %w", err)
@@ -324,7 +395,7 @@ func (s *storeImpl) LoadUIDValidity() (v uint32, found bool, err error) {
 }
 
 // SaveRecoveryRequired implements Store.SaveRecoveryRequired.
-func (s *storeImpl) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time) error {
+func (s *fileStore) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -341,13 +412,12 @@ func (s *storeImpl) SaveRecoveryRequired(prev, curr uint32, detectedAt time.Time
 		if err := saveSentinel(s.rootDir, sentinel); err != nil {
 			return fmt.Errorf("SaveRecoveryRequired: save sentinel: %w", err)
 		}
-		s.sentinel = sentinel
 		return nil
 	})
 }
 
 // LoadRecoveryRequired implements Store.LoadRecoveryRequired.
-func (s *storeImpl) LoadRecoveryRequired() (prev, curr uint32, detectedAt time.Time, found bool, err error) {
+func (s *fileStore) LoadRecoveryRequired() (prev, curr uint32, detectedAt time.Time, found bool, err error) {
 	sentinel, exists, err := loadSentinel(s.rootDir)
 	if err != nil {
 		return 0, 0, time.Time{}, false, fmt.Errorf("LoadRecoveryRequired: load sentinel: %w", err)
@@ -360,7 +430,7 @@ func (s *storeImpl) LoadRecoveryRequired() (prev, curr uint32, detectedAt time.T
 }
 
 // ClearRecoveryRequired implements Store.ClearRecoveryRequired.
-func (s *storeImpl) ClearRecoveryRequired() error {
+func (s *fileStore) ClearRecoveryRequired() error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -376,15 +446,27 @@ func (s *storeImpl) ClearRecoveryRequired() error {
 		if err := saveSentinel(s.rootDir, sentinel); err != nil {
 			return fmt.Errorf("ClearRecoveryRequired: save sentinel: %w", err)
 		}
-		s.sentinel = sentinel
 		return nil
 	})
 }
 
 // ApplyRecovery implements Store.ApplyRecovery.
-func (s *storeImpl) ApplyRecovery(newUIDValidity uint32) error {
+func (s *fileStore) ApplyRecovery(newUIDValidity uint32) error {
 	if s.readOnly {
 		return ErrReadOnly
+	}
+	// Refuse while a discard-old reset is in flight.  A pending manifest means
+	// that data files may have been moved to staging; clearing recovery_required
+	// without completing the reset would leave the store in an inconsistent state
+	// (stale staged data + new UIDValidity, no recovery_required to signal the
+	// problem).  The caller must resolve the pending reset via ResetForRecovery
+	// or AbortReset first.
+	pending, err := s.HasPendingReset()
+	if err != nil {
+		return fmt.Errorf("ApplyRecovery: check pending reset: %w", err)
+	}
+	if pending {
+		return ErrPendingReset
 	}
 	return s.withGuardExclusive(func() error {
 		sentinel, err := s.loadOrInitSentinelForWrite()
@@ -396,27 +478,15 @@ func (s *storeImpl) ApplyRecovery(newUIDValidity uint32) error {
 		if err := saveSentinel(s.rootDir, sentinel); err != nil {
 			return fmt.Errorf("ApplyRecovery: save sentinel: %w", err)
 		}
-		s.sentinel = sentinel
 		return nil
 	})
 }
 
 // ResetForRecovery implements Store.ResetForRecovery.
-//
-// Crash safety: the initial manifest (phase=manifest_written) is written BEFORE any
-// destructive file operation, so OpenReadWrite fails with ErrPendingReset and
-// AbortReset can roll back from any point.  Subsequent phases are checkpoints
-// written AFTER each (idempotent) operation completes; re-running after any crash
-// resumes from the last durable phase and converges to "empty store + current
-// UIDVALIDITY + recovery-required cleared".
-//
-// Forward progression: manifest_written(1) → data_staged(2) → emails_staged(3) →
-// committed(4) → cleanup.
-//
-// If the manifest is found in the aborting phase (5), this method refuses with
-// ErrResetAbortInProgress: the operator must finish AbortReset first to restore
-// data back to root before any further action.
-func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
+// Drives phases 1→2→3→4→cleanup, resuming from the current manifest phase on re-run.
+// Phase=5 (aborting) is refused with ErrResetAbortInProgress.
+// See docs/dev/adr/0003_reset_phase_design.md §3–4 for crash-safety rationale.
+func (s *fileStore) ResetForRecovery(currUIDValidity uint32) error {
 	if s.mode != OpenRecoverReset {
 		return ErrInvalidStoreMode
 	}
@@ -442,56 +512,69 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 		if mfst.Phase == resetPhaseAborting {
 			return ErrResetAbortInProgress
 		}
+		// A committed manifest is a leftover from a previous reset that succeeded
+		// but whose cleanupCompletedReset failed best-effort.  The sentinel is already
+		// correct; if no new recovery_required exists, just clean up and return.
+		// If a new recovery_required was written since then, fall through to fresh-start.
+		if mfst.Phase == resetPhaseCommitted {
+			return s.resumeOrCleanupCommitted(currUIDValidity, stagingPath, manifestPath)
+		}
+		// A pre-commit manifest (phases 1–3) whose CurrUIDValidity doesn't match the
+		// caller's currUIDValidity is a stale residue from a previous reset attempt
+		// (e.g. cleanupCompletedReset deleted staging but failed to remove the manifest).
+		// Remove it and start fresh so the new UIDVALIDITY is committed correctly.
+		// currUIDValidity==0 is the special cleanup path used by handleNoRecoveryRequired
+		// (no recovery_required in sentinel); skip the stale check in that case.
+		if mfst.Phase <= resetPhaseEmailsStaged && currUIDValidity != 0 && mfst.CurrUIDValidity != currUIDValidity {
+			if err := removeStaleCommittedManifest(stagingPath, manifestPath); err != nil {
+				return err
+			}
+			manifestExists = false
+		}
 	}
 
 	if !manifestExists {
-		// Fresh start: validate preconditions before touching anything.
-		_, sentinelCurr, _, found, err := s.LoadRecoveryRequired()
+		var err error
+		mfst, err = s.initResetManifest(currUIDValidity, stagingPath, manifestPath)
 		if err != nil {
-			return fmt.Errorf("ResetForRecovery: load recovery-required: %w", err)
+			return err
 		}
-		if !found {
-			return ErrRecoveryRequiredMissing
-		}
-		if sentinelCurr != currUIDValidity {
-			return &ErrRecoveryUIDValidityMismatch{Got: currUIDValidity, Expected: sentinelCurr}
-		}
-
-		// Write manifest FIRST before any file moves.
-		// This makes the pending reset immediately visible to OpenReadWrite (→ ErrPendingReset)
-		// and to AbortReset, so the operation is rollback-able from this point onward.
-		// Caller-held process writer lock serializes this whole reset against other writers;
-		// the summary consistency guard is not needed here because recovery_required is not
-		// modified until commitReset.
-		//
-		// Wipe any stale staging dir first: a previous reset that committed but
-		// failed to clean up RemoveAll(staging) could leave files there, which
-		// would later make stageEmailsDir fail (rename onto a non-empty dir).
-		// At this point there is no manifest, so the staging contents (if any)
-		// are guaranteed stale and safe to remove.
-		if err := os.RemoveAll(stagingPath); err != nil {
-			return fmt.Errorf("ResetForRecovery: clean stale staging dir: %w", err)
-		}
-		if err := os.MkdirAll(stagingPath, dirPerm); err != nil {
-			return fmt.Errorf("ResetForRecovery: create staging dir: %w", err)
-		}
-		if err := writeResetManifest(manifestPath, resetManifest{
-			Version:         resetManifestVersion,
-			CurrUIDValidity: currUIDValidity,
-			Phase:           resetPhaseManifestWritten,
-		}); err != nil {
-			return fmt.Errorf("ResetForRecovery: write manifest: %w", err)
-		}
-		mfst = resetManifest{Version: resetManifestVersion, CurrUIDValidity: currUIDValidity, Phase: resetPhaseManifestWritten}
 	}
 
-	// Use CurrUIDValidity from manifest for idempotency on resume.
-	currUIDValidity = mfst.CurrUIDValidity
+	return s.executeResetFromManifest(mfst, stagingPath, manifestPath)
+}
 
+// resumeOrCleanupCommitted handles a phase=committed manifest found at the start of
+// ResetForRecovery.  It removes the stale manifest and staging, then either:
+//   - returns nil when no new recovery_required exists (cleanup was all that was needed), or
+//   - initiates a fresh-start reset when a new recovery_required has been written since
+//     the committed cleanup failed.
+func (s *fileStore) resumeOrCleanupCommitted(currUIDValidity uint32, stagingPath, manifestPath string) error {
+	if err := removeStaleCommittedManifest(stagingPath, manifestPath); err != nil {
+		return err
+	}
+	_, _, _, found, err := s.LoadRecoveryRequired()
+	if err != nil {
+		return fmt.Errorf("ResetForRecovery: reload recovery-required after committed cleanup: %w", err)
+	}
+	if !found {
+		return nil // sentinel already correct; nothing left to do
+	}
+	// A new recovery_required has been written; run a full fresh-start reset.
+	mfst, err := s.initResetManifest(currUIDValidity, stagingPath, manifestPath)
+	if err != nil {
+		return err
+	}
+	return s.executeResetFromManifest(mfst, stagingPath, manifestPath)
+}
+
+// executeResetFromManifest drives advanceResetPhases from the manifest's current phase
+// to committed, then removes the staging directory (best-effort) and manifest (best-effort via error return).
+func (s *fileStore) executeResetFromManifest(mfst resetManifest, stagingPath, manifestPath string) error {
+	currUIDValidity := mfst.CurrUIDValidity
 	if err := s.advanceResetPhases(mfst.Phase, currUIDValidity, stagingPath, manifestPath); err != nil {
 		return err
 	}
-
 	// Staging dir cleanup is best-effort: a stale staging dir is harmless to normal
 	// data paths and is cleaned up on the next run.
 	if err := os.RemoveAll(stagingPath); err != nil {
@@ -500,20 +583,19 @@ func (s *storeImpl) ResetForRecovery(currUIDValidity uint32) error {
 			slog.Any("error", err),
 		)
 	}
-	// Manifest removal is required: if the manifest survives, Open(OpenReadWrite)
-	// will permanently return ErrPendingReset.
+	// Manifest removal failure is returned to the caller. A phase=committed manifest
+	// left behind is handled best-effort by cleanupCompletedReset on the next open,
+	// but removing it here keeps the store clean for the happy path.
 	if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("ResetForRecovery: remove manifest: %w", err)
 	}
 	return nil
 }
 
-// advanceResetPhases drives the phase progression from the given phase to committed.
-// Each step performs an idempotent file operation and then writes the new phase to
-// the manifest as a checkpoint.  A crash before the checkpoint leaves the manifest
-// at the previous phase; on resume the operation re-runs idempotently and the
-// checkpoint write is retried.
-func (s *storeImpl) advanceResetPhases(phase resetPhase, currUIDValidity uint32, stagingPath, manifestPath string) error {
+// advanceResetPhases drives phase progression from phase to committed,
+// writing a checkpoint manifest after each idempotent file operation.
+// See ADR-0003 §3–4 for the WAL/checkpoint pattern and idempotence invariants.
+func (s *fileStore) advanceResetPhases(phase resetPhase, currUIDValidity uint32, stagingPath, manifestPath string) error {
 	if phase <= resetPhaseManifestWritten {
 		// MkdirAll is defensive: staging dir should already exist from the initial write,
 		// but guard against edge cases (e.g. partial RemoveAll from a previous run).
@@ -555,7 +637,9 @@ func (s *storeImpl) advanceResetPhases(phase resetPhase, currUIDValidity uint32,
 
 // commitReset atomically clears recovery_required, writes the new UIDValidity, and
 // advances the manifest to resetPhaseCommitted under the exclusive guard lock.
-func (s *storeImpl) commitReset(manifestPath string, currUIDValidity uint32) error {
+// The guard serializes against concurrent summary processes reading recovery_required;
+// see docs/dev/developer_guide/process_locking.md §3.
+func (s *fileStore) commitReset(manifestPath string, currUIDValidity uint32) error {
 	return s.withGuardExclusive(func() error {
 		sentinel, err := s.loadOrInitSentinelForWrite()
 		if err != nil {
@@ -566,7 +650,6 @@ func (s *storeImpl) commitReset(manifestPath string, currUIDValidity uint32) err
 		if err := saveSentinel(s.rootDir, sentinel); err != nil {
 			return fmt.Errorf("commitReset: save sentinel: %w", err)
 		}
-		s.sentinel = sentinel
 		return writeResetManifest(manifestPath, resetManifest{
 			Version: resetManifestVersion, CurrUIDValidity: currUIDValidity,
 			Phase: resetPhaseCommitted,
@@ -575,19 +658,10 @@ func (s *storeImpl) commitReset(manifestPath string, currUIDValidity uint32) err
 }
 
 // AbortReset implements Store.AbortReset.
-//
-// Valid when the manifest is in any pre-commit phase (1–3) or already in the
-// aborting phase (5) from a previously-crashed AbortReset.  Phase=4 (committed)
-// returns ErrResetNotPending.
-//
-// Crash safety: before any file is restored, the manifest is advanced to
-// resetPhaseAborting.  This single durable checkpoint switches the manifest from
-// "forward-progressing reset" to "abort in progress", so a crash mid-restore
-// (or between restore and manifest removal) cannot be misinterpreted as a
-// pending forward reset.  ResetForRecovery refuses phase=aborting with
-// ErrResetAbortInProgress, forcing the operator to re-run AbortReset, which
-// idempotently completes the restore and removes the manifest.
-func (s *storeImpl) AbortReset() error {
+// Valid for pre-commit phases (1–3) and the aborting phase (5); phase=4 returns ErrResetNotPending.
+// Advances the manifest to phase=aborting before restoring any file (WAL entry).
+// See docs/dev/adr/0003_reset_phase_design.md §4 for rationale.
+func (s *fileStore) AbortReset() error {
 	if s.mode != OpenRecoverReset {
 		return ErrInvalidStoreMode
 	}
@@ -614,28 +688,41 @@ func (s *storeImpl) AbortReset() error {
 	}
 
 	if mfst.Phase != resetPhaseAborting {
-		// Forward-progressing manifest (phases 1–3): check the commit barrier and
-		// transition the manifest to the aborting phase.
-		//
-		// The commit barrier is sentinel.recovery_required: commit writes the sentinel
-		// first and only then advances the manifest to phase=4, so a crash between
-		// sentinel save and phase=4 write leaves the manifest at phase=3 with the
-		// sentinel already committed.  Treating that state as abortable would restore
-		// stale data on top of the new sentinel, producing a
-		// "new UIDValidity + cleared recovery-required + old data" inconsistency.
-		// Therefore: if recovery_required is gone, the commit happened — refuse.
-		_, _, _, found, err := s.LoadRecoveryRequired()
+		// recovery_required is the commit barrier: commitReset saves the sentinel
+		// before advancing to phase=4, so a missing recovery_required means the
+		// commit already happened even if the manifest is still at phase 3.
+		_, sentinelCurr, _, found, err := s.LoadRecoveryRequired()
 		if err != nil {
 			return fmt.Errorf("AbortReset: check recovery-required: %w", err)
 		}
 		if !found {
 			return ErrResetNotPending
 		}
+		// Stale manifest: CurrUIDValidity doesn't match the current recovery_required.
+		// Restoring from this manifest's staging would put data from the wrong epoch
+		// back into the store root. Clean up the stale manifest and report no active reset.
+		if mfst.CurrUIDValidity != sentinelCurr {
+			slog.Warn("store: removing stale reset manifest in AbortReset (CurrUIDValidity mismatch)",
+				slog.Uint64("manifest_uid", uint64(mfst.CurrUIDValidity)),
+				slog.Uint64("recovery_uid", uint64(sentinelCurr)),
+			)
+			if err := os.RemoveAll(stagingPath); err != nil {
+				slog.Warn("store: failed to remove stale staging directory",
+					slog.String("path", stagingPath),
+					slog.Any("error", err),
+				)
+			}
+			if err := os.Remove(manifestPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				slog.Warn("store: failed to remove stale manifest",
+					slog.String("path", manifestPath),
+					slog.Any("error", err),
+				)
+			}
+			return ErrResetNotPending
+		}
 
-		// Mark the manifest as aborting BEFORE touching any file.  This is the
-		// write-ahead checkpoint for the abort path: once it is durable, any later
-		// crash leaves the manifest at phase=aborting, which only AbortReset may
-		// resume (ResetForRecovery refuses with ErrResetAbortInProgress).
+		// Write-ahead: mark aborting before moving any file, so a crash mid-restore
+		// cannot be misread as a forward-progressing reset by ResetForRecovery.
 		if err := writeResetManifest(manifestPath, resetManifest{
 			Version:         resetManifestVersion,
 			CurrUIDValidity: mfst.CurrUIDValidity,
@@ -664,23 +751,54 @@ func (s *storeImpl) AbortReset() error {
 	return nil
 }
 
+// HasPendingReset implements Store.HasPendingReset.
+// Returns true only for active-phase resets (phases 1–3 or 5).
+// Phase=committed is leftover cleanup bookkeeping (sentinel already committed),
+// not an active reset, so it returns false.
+// Returns an error for unknown versions or out-of-range phases (fail closed).
+func (s *fileStore) HasPendingReset() (bool, error) {
+	manifestPath := resetManifestPath(s.rootDir)
+	mfst, err := readResetManifest(manifestPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("HasPendingReset: %w", err)
+	}
+	if mfst.Version != resetManifestVersion {
+		return false, &ErrResetManifestVersionMismatch{Got: mfst.Version, Want: resetManifestVersion}
+	}
+	if err := validateManifestPhase(mfst.Phase); err != nil {
+		return false, err
+	}
+	return mfst.Phase != resetPhaseCommitted, nil
+}
+
 // AcquireSummaryConsistencyGuard implements Store.AcquireSummaryConsistencyGuard.
 // When rootDir does not exist (empty-store OpenReadOnly path), a no-op guard is
 // returned: recovery-required cannot be set without a store directory, so
 // CheckRecoveryRequired always returns false and Close is a no-op.
-func (s *storeImpl) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error) {
+// See docs/dev/developer_guide/process_locking.md §3 for the concurrency design.
+func (s *fileStore) AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error) {
 	if _, err := os.Stat(s.rootDir); errors.Is(err, os.ErrNotExist) {
 		return noopSummaryConsistencyGuard{}, nil
 	}
 	guardPath := guardFilePath(s.rootDir)
 	f, err := os.OpenFile(guardPath, os.O_RDONLY, filePerm) //nolint:gosec
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return noopSummaryConsistencyGuard{}, nil
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("AcquireSummaryConsistencyGuard: open guard file: %w", err)
 		}
-		return nil, fmt.Errorf("AcquireSummaryConsistencyGuard: open guard file: %w", err)
+		// Guard file absent for an existing store (store pre-dates the guard file, or
+		// file was manually removed). Attempt to create it so we can hold a real LOCK_SH.
+		// Fail closed on error: proceeding without a guard could miss a concurrent
+		// recovery_required write.
+		f, err = os.OpenFile(guardPath, os.O_CREATE|os.O_RDWR, filePerm) //nolint:gosec
+		if err != nil {
+			return nil, fmt.Errorf("AcquireSummaryConsistencyGuard: create guard file: %w", err)
+		}
 	}
-	if err := unix.Flock(int(f.Fd()), unix.LOCK_SH|unix.LOCK_NB); err != nil { //nolint:gosec // fd fits int on all supported platforms
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_SH); err != nil { //nolint:gosec // fd fits int on all supported platforms
 		_ = f.Close()
 		return nil, fmt.Errorf("AcquireSummaryConsistencyGuard: acquire shared lock: %w", err)
 	}

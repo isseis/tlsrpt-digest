@@ -476,8 +476,8 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/91）
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（ステップ 3-3 は新しいブランチで作業する）
+- [x] PR がマージされた
+- [x] 次のブランチへ切り替えた（ステップ 3-3 は新しいブランチで作業する）
 
 ---
 
@@ -490,31 +490,31 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 オペレータ向け表示内容・モード別挙動・エラー境界は `02_architecture.md` §6.4 を参照。
 
-- [ ] `recover.go` に `recoverRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
-- [ ] `main.go` のスタブを `recoverRunner` で置き換える
-- [ ] `recover` の `FlagSet` 解析結果から `BootstrapOptions.StoreOpenMode` を決定する: 通常表示・`keep-old`・`discard-old` dry-run は `OpenReadWrite`、`discard-old --yes` と `--abort-reset --yes` は `OpenRecoverReset` を指定する
-- [ ] 通常表示・`keep-old`・`discard-old` dry-run で `store.ErrPendingReset` を受け取った場合は、`ApplyRecovery` / `ResetForRecovery` を呼ばず、pending reset 状態と `discard-old --yes` 継続・`abort-reset --yes` ロールバックの選択肢を英語で表示して exit 1 とする（AC-45）
-- [ ] 実行前に stdout へ英語のオペレータ向け情報を表示する: previous UIDVALIDITY・current UIDVALIDITY・mailbox 識別子・local data path・選択 mode・pending reset 状態（AC-36 / AC-45）
-- [ ] `keep-old` モード: 英語の旧エポックデータ混入リスク警告を表示してから `ApplyRecovery(currUIDValidity)` を呼ぶ（AC-37）
-- [ ] `discard-old --yes` モード: stdout の英語メッセージに、レポート store と `.eml` store を空状態へ置き換えること、sentinel の `uid_validity` を current へ更新すること、`initialized_at` と mailbox 識別子を保持することを含めてから `ResetForRecovery(currUIDValidity)` を呼ぶ（AC-38）
-- [ ] `discard-old`（`--yes` なし）: 英語の実行予定内容を表示するのみで破壊的変更を行わず exit 1 とする（AC-39）
-- [ ] `--abort-reset --yes` フラグの組み合わせ: `BootstrapOptions.StoreOpenMode=OpenRecoverReset` で開いた store に対して `AbortReset()` を呼ぶ（AC-42 / AC-43）
-- [ ] `--abort-reset` 単独・`--yes` 単独は英語のエラーメッセージを出力して exit 1 とする（AC-42）
-- [ ] recovery-required 不在 → 英語の説明付きで exit 1（変更しない）（AC-40）
-- [ ] pending reset 検出時に利用可能な選択肢（`discard-old --yes` の継続・`abort-reset --yes` のロールバック）を stdout の英語メッセージへ追加表示する（AC-45）
-- [ ] `recover_test.go` に以下のテストを追加する（`storetestutil.FakeStore` を使用）:
-  - [ ] `--mode` フラグが `FlagSet` に登録されており、`keep-old` / `discard-old` のいずれかが受け付けられること（AC-35）
-  - [ ] `keep-old` で `ApplyRecovery` が呼ばれること。stdout に previous/current UIDVALIDITY・mailbox・mode・旧エポックデータ混入警告の英語メッセージが表示されること（AC-36 / AC-37 / AC-45）
-  - [ ] pending reset 中の `keep-old` は `ApplyRecovery` を呼ばず、継続/ロールバック選択肢を英語で表示して exit 1 となること（AC-45）
-  - [ ] `ApplyRecovery` 失敗 → recovery-required 状態を残し exit 1 となること（AC-41）
-  - [ ] `discard-old --yes` で `ResetForRecovery` が呼ばれること（AC-38）
-  - [ ] `ResetForRecovery` 失敗 → pending reset / recovery-required を保持して exit 1 となること（AC-41）
-  - [ ] `discard-old`（`--yes` なし）が破壊的変更を行わず exit 1 となること。stdout の英語メッセージに、レポート store と `.eml` store が空状態へ置き換わること・sentinel の `uid_validity` が current へ更新されることが含まれること（`02_architecture.md` §6.4 参照）（AC-39）
-  - [ ] `--abort-reset --yes` で `AbortReset` が呼ばれること（AC-42 / AC-43）
-  - [ ] `AbortReset` 失敗 → recovery-required を保持して exit 1 となること（AC-43 / AC-44）
-  - [ ] `--abort-reset` 単独・`--yes` 単独 → exit 1（破壊的変更なし）（AC-42）
-  - [ ] pending reset 検出時に、通常の `recover` 状態表示・`--mode keep-old`・`discard-old`（`--yes` なし）の各パスで破壊的変更を行わず、`discard-old --yes` と `abort-reset --yes` の選択肢が stdout に英語で表示されること（AC-45）
-  - [ ] recovery-required 不在 → 説明付きで exit 1（AC-40）
+- [x] `recover.go` に `recoverRunner` 構造体と `Run(ctx context.Context, boot *BootContext) (int, error)` を実装する
+- [x] `main.go` のスタブを `recoverRunner` で置き換える
+- [x] `recover` の `FlagSet` 解析結果から `BootstrapOptions.StoreOpenMode` を決定する: 通常表示・`keep-old`・`discard-old` dry-run は `OpenReadWrite`、`discard-old --yes` と `--abort-reset --yes` は `OpenRecoverReset` を指定する
+- [x] 通常表示・`keep-old`・`discard-old` dry-run で `store.ErrPendingReset` を受け取った場合は、`ApplyRecovery` / `ResetForRecovery` を呼ばず、pending reset 状態と `discard-old --yes` 継続・`abort-reset --yes` ロールバックの選択肢を英語で表示して exit 1 とする（AC-45）
+- [x] 実行前に stdout へ英語のオペレータ向け情報を表示する: previous UIDVALIDITY・current UIDVALIDITY・mailbox 識別子・local data path・選択 mode・pending reset 状態（AC-36 / AC-45）
+- [x] `keep-old` モード: 英語の旧エポックデータ混入リスク警告を表示してから `ApplyRecovery(currUIDValidity)` を呼ぶ（AC-37）
+- [x] `discard-old --yes` モード: stdout の英語メッセージに、レポート store と `.eml` store を空状態へ置き換えること、sentinel の `uid_validity` を current へ更新すること、`initialized_at` と mailbox 識別子を保持することを含めてから `ResetForRecovery(currUIDValidity)` を呼ぶ（AC-38）
+- [x] `discard-old`（`--yes` なし）: 英語の実行予定内容を表示するのみで破壊的変更を行わず exit 1 とする（AC-39）
+- [x] `--abort-reset --yes` フラグの組み合わせ: `BootstrapOptions.StoreOpenMode=OpenRecoverReset` で開いた store に対して `AbortReset()` を呼ぶ（AC-42 / AC-43）
+- [x] `--abort-reset` 単独・`--yes` 単独は英語のエラーメッセージを出力して exit 1 とする（AC-42）
+- [x] recovery-required 不在 → 英語の説明付きで exit 1（変更しない）（AC-40）
+- [x] pending reset 検出時に利用可能な選択肢（`discard-old --yes` の継続・`abort-reset --yes` のロールバック）を stdout の英語メッセージへ追加表示する（AC-45）
+- [x] `recover_test.go` に以下のテストを追加する（`storetestutil.FakeStore` を使用）:
+  - [x] `--mode` フラグが `FlagSet` に登録されており、`keep-old` / `discard-old` のいずれかが受け付けられること（AC-35）
+  - [x] `keep-old` で `ApplyRecovery` が呼ばれること。stdout に previous/current UIDVALIDITY・mailbox・mode・旧エポックデータ混入警告の英語メッセージが表示されること（AC-36 / AC-37 / AC-45）
+  - [x] pending reset 中の `keep-old` は `ApplyRecovery` を呼ばず、継続/ロールバック選択肢を英語で表示して exit 1 となること（AC-45）
+  - [x] `ApplyRecovery` 失敗 → recovery-required 状態を残し exit 1 となること（AC-41）
+  - [x] `discard-old --yes` で `ResetForRecovery` が呼ばれること（AC-38）
+  - [x] `ResetForRecovery` 失敗 → pending reset / recovery-required を保持して exit 1 となること（AC-41）
+  - [x] `discard-old`（`--yes` なし）が破壊的変更を行わず exit 1 となること。stdout の英語メッセージに、レポート store と `.eml` store が空状態へ置き換わること・sentinel の `uid_validity` が current へ更新されることが含まれること（`02_architecture.md` §6.4 参照）（AC-39）
+  - [x] `--abort-reset --yes` で `AbortReset` が呼ばれること（AC-42 / AC-43）
+  - [x] `AbortReset` 失敗 → recovery-required を保持して exit 1 となること（AC-43 / AC-44）
+  - [x] `--abort-reset` 単独・`--yes` 単独 → exit 1（破壊的変更なし）（AC-42）
+  - [x] pending reset 検出時に、通常の `recover` 状態表示・`--mode keep-old`・`discard-old`（`--yes` なし）の各パスで破壊的変更を行わず、`discard-old --yes` と `abort-reset --yes` の選択肢が stdout に英語で表示されること（AC-45）
+  - [x] recovery-required 不在 → 説明付きで exit 1（AC-40）
 
 **完了確認**: `make test && make lint` がパスする
 
@@ -528,8 +528,8 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 **レビュー観点**: `--mode` / `--yes` / `--abort-reset` のフラグ組み合わせ / `OpenRecoverReset` 選択 / 破壊的操作の fail-safe
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した（https://github.com/isseis/tlsrpt-digest/pull/92）
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（フェーズ 4 は新しいブランチで作業する）
 
@@ -704,7 +704,7 @@ at-least-once 保証・ダウンロード対象選定の詳細は `02_architectu
 
 ### PR-5b: `recover` サブコマンド（ステップ 3-3）
 
-- [ ] ステップ 3-3: `recover.go` と単体テスト完了
+- [x] ステップ 3-3: `recover.go` と単体テスト完了
 - [ ] PR-5b 作成・マージ完了
 
 ### PR-6: セキュリティテスト・統合テスト・ドキュメント（ステップ 4-1 / 4-2）

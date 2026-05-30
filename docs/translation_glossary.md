@@ -33,6 +33,8 @@
 | 日本語 | English | 備考 |
 |--------|---------|------|
 | バックアップ | backup | |
+| ベストエフォート | best-effort | 失敗しても警告のみで続行する方針。「ベストエフォートで削除」→ "remove … on a best-effort basis" |
+| 保留リセット | pending reset | リセット操作開始後、コミット完了前の中間状態（フェーズ 1〜3 および フェーズ 5）。コード上では `ErrPendingReset` として参照される。`HasPendingReset()` はこの状態を検出するが、フェーズ 4（committed、コミット後クリーンアップ残滓）に対しては false を返す。 |
 | ブートストラップ | bootstrap | システム初期化処理の文脈 |
 | バッチ処理 | batch processing | |
 | ベースライン | baseline | |
@@ -48,6 +50,9 @@
 | 日本語 | English | 備考 |
 |--------|---------|------|
 | チェックボックス | checkbox | なし → `[ ]`、完了 → `[x]`、スキップ → `[-]` |
+| コミット境界 | commit boundary | センチネルの recovery_required が nil であることがコミット完了の正式な根拠となる境界 |
+| 共有ロック | shared lock | flock の LOCK_SH。summary consistency guard が summary サブコマンドに対して取得するロック |
+| 排他ロック | exclusive lock | flock の LOCK_EX。store-wide process lock や withGuardExclusive が取得するロック |
 | クラス図 | class diagram | Mermaid classDiagram の文脈 |
 | キャッシュ | cache | |
 | キャプチャ | capture | |
@@ -93,7 +98,7 @@
 | デフォルト設定 | default settings | |
 | 定義 | define / definition | |
 | デプロイ | deploy / deployment | |
-| 廃止 | deprecated / deprecation | |
+| 廃止 | deprecated / deprecation | ソフトウェアライフサイクルの文脈（API・機能の非推奨化）。設計変更で「削除・除去する」意味では "removal / elimination" を使用 |
 | デメリット | disadvantage | |
 | 説明 | description | |
 | デザイン | design | |
@@ -226,6 +231,7 @@
 | 日本語 | English | 備考 |
 |--------|---------|------|
 | 保守性 | maintainability | |
+| マニフェスト | manifest / reset manifest | リセット操作の進捗台帳（`.tlsrpt-digest-reset-manifest.json`）。英語版では文脈に応じて "manifest" または "reset manifest" と表記 |
 | メンテナンス | maintenance | |
 | 管理 | manage / management | |
 | 手動 | manual | |
@@ -263,6 +269,9 @@
 |--------|---------|------|
 | 操作 | operation | |
 | オプション | optional | |
+| 残留（修飾語） | leftover / residual | 名詞を修飾する場合（「残留マニフェスト」→ "leftover manifest"） |
+| 残留（ステージング文脈） | orphaned | クリーンアップされずに残ったステージングファイル・ディレクトリ |
+| 残留物 | residual / leftover | 述語名詞として使う場合（「内容は残留物」→ "contents are leftover residue"） |
 | 最適化 | optimize / optimization | |
 | 出力 | output | |
 | 出力ファイル | output file | |
@@ -324,7 +333,7 @@
 | 正規表現 | regex | "regular expression" の略 |
 | 定期的 | regular | |
 | リリース | release | |
-| レポート | report | |
+| レポート | report | fetch が取得したメールから抽出・蓄積する解析済み TLSRPT レポート（RFC 8460 JSON）。`tlsrpt.json` に保存される。 |
 | リポジトリ | repository | |
 | 再利用可能 | reusable | |
 | 必須 | required | |
@@ -345,6 +354,7 @@
 | rollback journal mode | rollback journal mode | SQLite のジャーナルモード |
 | ルート | root | |
 | 根本原因 | root cause | |
+| 残滓 | residue | "完了済みの cleanup 残滓" → "residue from a completed cleanup" |
 | ランタイム | runtime | |
 
 ### S
@@ -394,6 +404,10 @@
 | 静的 | static | |
 | ステージング | staging | |
 | ステージングディレクトリ | staging directory | |
+| 状態機械 | state machine | UIDVALIDITY 変化時の復旧操作の進捗を管理する仕組み。リセットマニフェスト・ステージングディレクトリ・センチネルの 3 ファイルで構成される |
+| 古くなった | stale (outdated) | 共有ロック取得前に書き込まれた recovery_required によって有効性を失った判断・集計結果を指す。英語訳は "stale" |
+| 残留マニフェスト | stale manifest | 以前のリセットがコミット済みにもかかわらずクリーンアップが完了せず残存するマニフェスト。CurrUIDValidity が現在の recovery_required と一致しないことで識別できる。 |
+| 書き込み系サブコマンド | write subcommands | store-wide process lock を取得して動作するサブコマンド群（fetch / gc / reprocess / recover） |
 | 文字列 | string | |
 | 構造体 | struct | Go言語の文脈 |
 | シンボリックリンク | symlink | "symbolic link" の略 |

@@ -49,3 +49,4 @@ test/performance/large_scale.toml
 
 # Private test data
 testdata/private/
+tmp/

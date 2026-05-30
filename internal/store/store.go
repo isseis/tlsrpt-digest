@@ -13,9 +13,9 @@ import (
 )
 
 // Store represents the persistence layer for TLSRPT reports and emails.
-// Write operations require a single writer. Command-layer callers must hold
-// the process-level store writer lock while using a read-write store.
-// Read-only mode (OpenReadOnly) prevents write operations and creation of files/directories.
+// Write operations require a single writer; cmd-layer callers must hold the
+// process-level store writer lock before opening a read-write store.
+// See docs/dev/developer_guide/process_locking.md for the locking design.
 type Store interface {
 	// SaveReports persists a batch of TLSRPT reports in a single atomic write.
 	// Reports are UPSERT'd by report-id (a duplicate replaces the existing entry).
@@ -96,11 +96,18 @@ type Store interface {
 	// The caller must hold the process-level store writer lock until this method returns.
 	AbortReset() error
 
+	// HasPendingReset reports whether an active reset is in progress (phases 1–3 or 5).
+	// A committed manifest (phase=committed) is leftover cleanup bookkeeping rather than
+	// an active reset, so it returns false for that phase.
+	// Returns (true, nil) when an active-phase reset manifest is present.
+	// Returns (false, nil) when no manifest is found or the manifest is committed.
+	HasPendingReset() (bool, error)
+
 	// AcquireSummaryConsistencyGuard acquires a shared flock on the guard file and
-	// returns a SummaryConsistencyGuard. While held, writer processes updating
-	// recovery-required in the sentinel must wait for the exclusive lock, ensuring
-	// that CheckRecoveryRequired results are consistent through LogSummary/Flush.
-	// The caller must call Close() on the returned guard after use.
+	// returns a SummaryConsistencyGuard. While held, writes to recovery-required
+	// in the sentinel are blocked, keeping CheckRecoveryRequired results stable.
+	// The caller must call Close() after use.
+	// See docs/dev/developer_guide/process_locking.md §3 for the concurrency design.
 	AcquireSummaryConsistencyGuard() (SummaryConsistencyGuard, error)
 
 	// DeleteReportsBefore deletes all report records whose date-range.end-datetime < cutoff
@@ -123,15 +130,14 @@ type Store interface {
 	DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)
 }
 
-// storeImpl is the concrete implementation of Store.
-type storeImpl struct {
+// fileStore is the concrete implementation of Store.
+type fileStore struct {
 	rootDir       string
 	identity      IMAPIdentity
 	mode          OpenMode
 	readOnly      bool
 	dataPath      string
 	emailsDirPath string
-	sentinel      *internalSentinelFile
 }
 
 // Open opens the store at rootDir with the given identity in the specified mode.
@@ -145,29 +151,27 @@ type storeImpl struct {
 // In read-only mode (OpenReadOnly):
 //   - No files or directories are created.
 //   - Missing data files are treated as empty state (no reports, no index).
+//   - rootDir is NOT validated for symlinks, directory type, or permissions.
+//     Callers that need those guarantees must call validateAndEnsureRootDir
+//     (cmd layer) before Open.  Read-only mode is used by the summary subcommand,
+//     which intentionally skips that check because it treats a missing rootDir as
+//     an empty store rather than an error.
 //
 // If the sentinel already exists, its stored IMAP identity is verified against the
 // supplied identity. A mismatch returns an error containing both the expected and
 // actual identifiers along with rootDir.
 func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
-	// Determine if read-only based on mode
 	readOnly := mode == OpenReadOnly
 
-	// OpenReadWrite must fail closed while a forward-progressing reset is still
-	// in flight, but a manifest left behind AFTER commit must not permanently
-	// block the normal data path (see 02_architecture.md, "commit 後の cleanup
-	// 失敗は通常データパスへ影響させず").  cleanupCompletedReset distinguishes
-	// the two cases by inspecting sentinel.recovery_required (the true commit
-	// barrier): if it is cleared, the leftover manifest/staging are removed
-	// here; otherwise ErrPendingReset is returned for the operator to resolve
-	// via OpenRecoverReset.
+	// cleanupCompletedReset: removes a leftover manifest/staging when the commit
+	// already landed in the sentinel, without blocking for a live reset in flight.
+	// See ADR-0003 §5 for the sentinel-based decision logic.
 	if mode == OpenReadWrite {
 		if err := cleanupCompletedReset(rootDir); err != nil {
 			return nil, err
 		}
 	}
 
-	// In read-write mode, ensure directories exist
 	if !readOnly {
 		if err := ensureDirExists(rootDir); err != nil {
 			return nil, fmt.Errorf("Open: ensure root dir: %w", err)
@@ -198,56 +202,39 @@ func Open(rootDir string, identity IMAPIdentity, mode OpenMode) (Store, error) {
 		_ = f.Close()
 	}
 
-	// Load or initialize sentinel
 	sentinel, sentinelExists, err := loadSentinel(rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("Open: load sentinel: %w", err)
 	}
 
 	if sentinelExists {
-		// Verify identity matches
 		if err := verifySentinelIdentity(rootDir, sentinel, identity); err != nil {
 			return nil, err
 		}
-	} else {
-		// In read-only mode, don't create sentinel; return empty store
-		if readOnly {
-			sentinel = &internalSentinelFile{
-				FormatVersion: SentinelFormatVersion,
-				IMAPHost:      identity.Host,
-				IMAPPort:      identity.Port,
-				IMAPMailbox:   identity.Mailbox,
-			}
-		} else {
-			// In read-write mode, initialize sentinel
-			newSentinel, err := initSentinel(rootDir, identity)
-			if err != nil {
-				return nil, fmt.Errorf("Open: init sentinel: %w", err)
-			}
-			sentinel = newSentinel
+	} else if !readOnly {
+		// Read-only mode leaves the sentinel absent (empty store is valid).
+		if _, err := initSentinel(rootDir, identity); err != nil {
+			return nil, fmt.Errorf("Open: init sentinel: %w", err)
 		}
 	}
 
-	// Check permissions on existing sentinel file and warn if loose.
 	if sentinelExists {
 		checkFilePermissions(sentinelPath(rootDir))
 	}
 
-	// Check permissions on the data file when it already exists.
-	// initDataFile creates it with 0600, but a pre-existing file may have looser
-	// permissions that went undetected until now.
+	// initDataFile creates data file with 0600, but a pre-existing file may have
+	// looser permissions that went undetected until now.
 	if _, statErr := os.Stat(dataFilePath(rootDir)); statErr == nil {
 		checkFilePermissions(dataFilePath(rootDir))
 	}
 
-	store := &storeImpl{
+	store := &fileStore{
 		rootDir:       rootDir,
 		identity:      identity,
 		mode:          mode,
 		readOnly:      readOnly,
 		dataPath:      dataFilePath(rootDir),
 		emailsDirPath: emailsPath(rootDir),
-		sentinel:      sentinel,
 	}
 
 	return store, nil

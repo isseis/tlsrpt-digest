@@ -73,7 +73,6 @@ type NotificationSink interface {
 
 type BootstrapOptions struct {
 	DryRun                 bool
-	RecoverResetMode       bool
 	Logger                 *slog.Logger
 	LoadConfig             func(path string) (*config.Config, error)
 	BuildNotifier          func(successURL, errorURL config.Secret, cfg *config.Config, runID string, dryRun bool) (NotificationSink, error)
@@ -83,9 +82,22 @@ type BootstrapOptions struct {
 	SlackWebhookURLError   config.Secret
 	Stderr                 *os.File
 	SummaryGuardOpened     func(store.SummaryConsistencyGuard)
+	// StoreOpenModeOverride, when non-nil, overrides the default mode derived
+	// from the subcommand name. Used by recover to select OpenReadWrite for
+	// non-destructive modes and OpenRecoverReset for discard-old/abort-reset.
+	StoreOpenModeOverride *store.OpenMode
 }
 
 var errSlackWebhookURLRequired = errors.New("at least one Slack webhook URL is required")
+
+type nopNotifier struct{}
+
+func (nopNotifier) LogAlert(_ context.Context, _ notify.Alert) error             { return nil }
+func (nopNotifier) LogWarning(_ context.Context, _ notify.Warning) error         { return nil }
+func (nopNotifier) LogSystemError(_ context.Context, _ notify.SystemError) error { return nil }
+func (nopNotifier) LogSummary(_ context.Context, _ notify.Summary) error         { return nil }
+func (nopNotifier) Flush(_ context.Context) error                                { return nil }
+func (nopNotifier) IsDryRun() bool                                               { return false }
 
 type notificationSink struct {
 	handlers []*notify.SlackHandler
@@ -187,9 +199,13 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 		return nil, fmt.Errorf("prepare store root: %w", err)
 	}
 
-	boot.Notifier, err = opts.BuildNotifier(opts.SlackWebhookURLSuccess, opts.SlackWebhookURLError, cfg, runID, opts.DryRun)
-	if err != nil {
-		return nil, fmt.Errorf("build notifier: %w", err)
+	if subcmd == subcommandRecover {
+		boot.Notifier = nopNotifier{}
+	} else {
+		boot.Notifier, err = opts.BuildNotifier(opts.SlackWebhookURLSuccess, opts.SlackWebhookURLError, cfg, runID, opts.DryRun)
+		if err != nil {
+			return nil, fmt.Errorf("build notifier: %w", err)
+		}
 	}
 
 	boot.LockHandle, err = opts.AcquireWriterLock(cfg.Store.RootDir)
@@ -202,7 +218,12 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 		return nil, fmt.Errorf("acquire store writer lock: %w", err)
 	}
 
-	mode := storeOpenMode(subcmd, opts)
+	var mode store.OpenMode
+	if opts.StoreOpenModeOverride != nil {
+		mode = *opts.StoreOpenModeOverride
+	} else {
+		mode = storeOpenMode(subcmd)
+	}
 	boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
 	if err != nil {
 		kind := classifyOpenError(err)
@@ -253,12 +274,9 @@ func notifySystemError(ctx context.Context, notifier NotificationSink, kind noti
 	return errors.Join(err, notifier.Flush(ctx))
 }
 
-func storeOpenMode(subcmd SubcommandName, opts BootstrapOptions) store.OpenMode {
+func storeOpenMode(subcmd SubcommandName) store.OpenMode {
 	if subcmd == subcommandSummary {
 		return store.OpenReadOnly
-	}
-	if subcmd == subcommandRecover && opts.RecoverResetMode {
-		return store.OpenRecoverReset
 	}
 	return store.OpenReadWrite
 }

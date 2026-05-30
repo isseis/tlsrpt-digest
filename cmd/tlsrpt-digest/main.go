@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/isseis/tlsrpt-digest/internal/store"
 	"github.com/oklog/ulid/v2"
 )
 
@@ -24,9 +25,11 @@ const (
 )
 
 var (
-	errInvalidRecoverMode  = errors.New("invalid recovery mode")
-	errSubcommandNotImpl   = errors.New("subcommand not yet implemented")
-	errUnexpectedArguments = errors.New("unexpected arguments")
+	errInvalidRecoverMode     = errors.New("invalid recovery mode")
+	errUnexpectedArguments    = errors.New("unexpected arguments")
+	errAbortResetRequiresYes  = errors.New("--abort-reset requires --yes to confirm")
+	errYesRequiresModeOrAbort = errors.New("--yes requires --mode or --abort-reset")
+	errAbortAndModeExclusive  = errors.New("--abort-reset and --mode are mutually exclusive")
 )
 
 type cliOptions struct {
@@ -57,6 +60,11 @@ func runCLI(ctx context.Context, args []string, stderr io.Writer, bootOpts Boots
 
 	inv, err := parseCLI(args, stderr)
 	if err != nil {
+		// recover-specific confirmation errors are non-destructive operator prompts,
+		// not usage errors — return exitError (1) not exitUsage (2) per AC-40/arch §8.
+		if errors.Is(err, errAbortResetRequiresYes) || errors.Is(err, errYesRequiresModeOrAbort) {
+			return exitError
+		}
 		return exitUsage
 	}
 
@@ -65,8 +73,11 @@ func runCLI(ctx context.Context, args []string, stderr io.Writer, bootOpts Boots
 	logger.Info("tlsrpt-digest starting", "subcommand", inv.Subcommand, "dry_run", inv.Options.DryRun)
 
 	bootOpts.DryRun = inv.Options.DryRun
-	bootOpts.RecoverResetMode = inv.Options.RecoverYes && (inv.Options.RecoverMode == "discard-old" || inv.Options.RecoverAbort)
 	bootOpts.Logger = logger
+	if inv.Subcommand == subcommandRecover {
+		m := recoverStoreOpenMode(inv.Options)
+		bootOpts.StoreOpenModeOverride = &m
+	}
 	boot, err := Bootstrap(inv.Subcommand, inv.Options.ConfigPath, runID, bootOpts)
 	if err != nil {
 		logger.Error("bootstrap failed", "error", err)
@@ -145,12 +156,32 @@ func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 }
 
 func validateFlags(subcmd SubcommandName, opts cliOptions) error {
-	if subcmd == subcommandRecover && opts.RecoverMode != "" {
-		if opts.RecoverMode != "keep-old" && opts.RecoverMode != "discard-old" {
-			return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
-		}
+	if subcmd != subcommandRecover {
+		return nil
+	}
+	if opts.RecoverMode != "" && opts.RecoverMode != recoverModeKeepOld && opts.RecoverMode != recoverModeDiscardOld {
+		return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
+	}
+	if opts.RecoverAbort && opts.RecoverMode != "" {
+		return errAbortAndModeExclusive
+	}
+	if opts.RecoverAbort && !opts.RecoverYes {
+		return errAbortResetRequiresYes
+	}
+	if opts.RecoverYes && !opts.RecoverAbort && opts.RecoverMode == "" {
+		return errYesRequiresModeOrAbort
 	}
 	return nil
+}
+
+// recoverStoreOpenMode returns OpenRecoverReset for destructive recover operations
+// (discard-old --yes, abort-reset --yes) and OpenReadWrite for all others.
+func recoverStoreOpenMode(opts cliOptions) store.OpenMode {
+	if (opts.RecoverMode == recoverModeDiscardOld && opts.RecoverYes) ||
+		(opts.RecoverAbort && opts.RecoverYes) {
+		return store.OpenRecoverReset
+	}
+	return store.OpenReadWrite
 }
 
 func printUsage(w io.Writer) {
@@ -169,14 +200,6 @@ func defaultRunners() map[SubcommandName]SubcommandRunner {
 		subcommandSummary:   newSummaryRunner(),
 		subcommandReprocess: newReprocessRunner(),
 		subcommandGC:        newGCRunner(),
-		subcommandRecover:   stubRunner{name: subcommandRecover},
+		subcommandRecover:   newRecoverRunner(),
 	}
-}
-
-type stubRunner struct {
-	name SubcommandName
-}
-
-func (r stubRunner) Run(_ context.Context, _ *BootContext) (int, error) {
-	return exitError, fmt.Errorf("%w: %s", errSubcommandNotImpl, r.name)
 }

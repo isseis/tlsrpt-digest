@@ -13,7 +13,7 @@ import (
 
 // loadDataFile loads and parses the data file (tlsrpt.json).
 // If the file does not exist, it returns an empty data file (for read-only mode).
-func (s *storeImpl) loadDataFile() (*internalDataFile, error) {
+func (s *fileStore) loadDataFile() (*internalDataFile, error) {
 	// G304: s.dataPath is derived from an application-controlled path.
 	data, err := os.ReadFile(s.dataPath) //nolint:gosec
 	if errors.Is(err, os.ErrNotExist) {
@@ -44,7 +44,7 @@ func (s *storeImpl) loadDataFile() (*internalDataFile, error) {
 }
 
 // saveDataFile serializes and writes the data file atomically.
-func (s *storeImpl) saveDataFile(df *internalDataFile) error {
+func (s *fileStore) saveDataFile(df *internalDataFile) error {
 	data, err := json.Marshal(df)
 	if err != nil {
 		return fmt.Errorf("saveDataFile: marshal: %w", err)
@@ -53,7 +53,7 @@ func (s *storeImpl) saveDataFile(df *internalDataFile) error {
 }
 
 // SaveReports implements Store.SaveReports.
-func (s *storeImpl) SaveReports(inputs []ReportInput) error {
+func (s *fileStore) SaveReports(inputs []ReportInput) error {
 	if s.readOnly {
 		return ErrReadOnly
 	}
@@ -81,7 +81,7 @@ func (s *storeImpl) SaveReports(inputs []ReportInput) error {
 }
 
 // GetAllReports implements Store.GetAllReports.
-func (s *storeImpl) GetAllReports() ([]tlsrpt.Report, error) {
+func (s *fileStore) GetAllReports() ([]tlsrpt.Report, error) {
 	df, err := s.loadDataFile()
 	if err != nil {
 		return nil, fmt.Errorf("GetAllReports: load data file: %w", err)
@@ -92,7 +92,7 @@ func (s *storeImpl) GetAllReports() ([]tlsrpt.Report, error) {
 }
 
 // DeleteReportsBefore implements Store.DeleteReportsBefore.
-func (s *storeImpl) DeleteReportsBefore(cutoff time.Time) (deleted int, err error) {
+func (s *fileStore) DeleteReportsBefore(cutoff time.Time) (deleted int, err error) {
 	if s.readOnly {
 		return 0, ErrReadOnly
 	}
