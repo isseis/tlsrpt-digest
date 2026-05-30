@@ -97,7 +97,11 @@ flowchart TD
         P3["フェーズ 3<br>(メールステージング完了)"]
     end
 
-    P4["フェーズ 4<br>(コミット済み / クリーンアップ前)"]
+    subgraph Phase4["フェーズ 4（コミット済み）"]
+        P4a(["クリーンアップ実行中<br>(ステージング/マニフェスト あり)"])
+        P4b(["クラッシュ残留<br>(ステージング/マニフェスト あり)"])
+    end
+
     StaleM["残留マニフェスト<br>(フェーズ 1–3 + recovery_required あり<br>CurrUIDValidity 不一致)"]
     Normal["通常<br>(マニフェストなし / recovery_required なし)"]
 
@@ -105,17 +109,18 @@ flowchart TD
     RR -->|"recover --mode discard-old --yes"| P1
     P1 -->|"stageDataFile:<br>tlsrpt.json → .staging/"| P2
     P2 -->|"stageEmailsDir:<br>emails/ → .staging/"| P3
-    P3 -->|"commitReset 完了"| P4
-    P4 -.->|"マニフェスト削除失敗<br>fetch が UIDVALIDITY 変化を検出"| StaleM
-    P4 -->|"ResetForRecovery が<br>staging/manifest を削除"| Normal
-    P4 -->|"クラッシュ後: Open で<br>cleanupCompletedReset"| Normal
-    StaleM -->|"Open が不一致を検出し<br>マニフェストをクリーンアップ"| RR
+    P3 -->|"commitReset 完了"| P4a
+    P4a -->|"ステージング/マニフェスト を削除"| Normal
+    P4a -.->|"クラッシュ"| P4b
+    P4b -->|"次回 fetch/summary/gc の<br>Open が cleanupCompletedReset を実行"| Normal
+    P4b -.->|"次回 fetch が<br>新たな UIDVALIDITY 変化を検出"| StaleM
+    StaleM -->|"Open が CurrUIDValidity 不一致を検出し<br>マニフェストをクリーンアップ"| RR
     PendingReset -.->|"recover --abort-reset --yes"| P5
     P5 -->|"AbortReset 完了:<br>.staging/ → ルートに復元"| RR
     Normal -.->|"fetch が UIDVALIDITY 変化を検出"| RR
 ```
 
-凡例：実線 = 正常系の遷移、破線 = 例外イベント（UIDVALIDITY 変化・クリーンアップ失敗）または手動中断
+凡例：矩形 = ディスク状態、スタジアム形状 = 遷移中の実行状態（ディスク上は同一）、実線 = 正常系の遷移、破線 = 例外イベント（クラッシュ・UIDVALIDITY 変化）または手動中断
 
 **クラッシュリカバリ**：各フェーズでのクラッシュ後は同じフェーズから再開可能（各ステージング操作は冪等）。フェーズ 1–3 でプロセスが停止した場合は、`recover --mode discard-old --yes` を再実行すると現在のフェーズから自動的に再開される。
 
