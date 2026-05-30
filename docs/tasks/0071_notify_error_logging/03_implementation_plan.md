@@ -69,7 +69,7 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 
 ### Phase 1: テストヘルパーの整備
 
-- [ ] **1.1** slog 出力キャプチャヘルパーの追加
+- [x] **1.1** slog 出力キャプチャヘルパーの追加
   - ファイル: `cmd/tlsrpt-digest/slog_capture_test.go`（新規、先頭に `//go:build test`）
   - 作業内容: gc_test.go:180-182 の idiom を共通化する関数を追加する。`*testing.T` を受け取り `*bytes.Buffer` を返し、`slog.SetDefault` で `slog.NewTextHandler` を設定し、`t.Cleanup` で元のロガーを復元する。テストはキャプチャ結果を文字列として検査し、`level=WARN`／`level=ERROR` と `error=` フィールドの有無を確認できるようにする。
   - 配置根拠: このヘルパーは `*testing.T`／`t.Cleanup` を使うため `testing` を import する。リポジトリの既存慣習では `*testing.T` を使うヘルパー（`newSummaryTestBed` 等）は `_test.go` に置かれており（`test_helpers.go` は `testing` を import しない `SpyNotificationSink` のみ）、この慣習に合わせて `_test.go` に配置する。同一 `package main` 内のため他テストファイルから利用できる。[test_organization.md](../../dev/developer_guide/test_organization.md) の Classification B（パッケージ内テストヘルパー）に該当し、`//go:build test` タグを付す。
@@ -195,7 +195,7 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 
 ## 7. 実装チェックリスト
 
-- [ ] Phase 1: slog キャプチャヘルパー追加
+- [x] Phase 1: slog キャプチャヘルパー追加
 - [ ] Phase 2: notify_helpers.go 修正 + テスト
 - [ ] Phase 3: boot.go 修正 + テスト
 - [ ] Phase 4: summary.go 修正 + テスト更新・追加
