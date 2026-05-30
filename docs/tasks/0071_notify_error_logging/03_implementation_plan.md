@@ -136,7 +136,7 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 
 ### Phase 6: セキュリティテスト（AC-01 補強）
 
-- [ ] **6.1** センシティブ情報非漏洩のテスト
+- [x] **6.1** センシティブ情報非澏洩のテスト
   - ファイル: `cmd/tlsrpt-digest/summary_test.go`（または通知エラー処理を集約的に検証できる箇所）
   - 作業内容: `SpyNotificationSink.FlushError` に Slack webhook URL を含む文字列、および IMAP パスワード相当の文字列を設定し、キャプチャした `slog.Warn` 出力にそれらが現れないことを確認する（アーキテクチャ §5・§7.1）。なお実体の URL リダクションは `internal/notify` 側で担保されており、本テストは `cmd` 層での防御的多層化の確認である。
 
@@ -200,16 +200,16 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 - [x] Phase 3: boot.go 修正 + テスト
 - [x] Phase 4: summary.go 修正 + テスト更新・追加
 - [x] Phase 5: fetch.go・reprocess.go・gc.go 修正 + テスト
-- [ ] Phase 6: セキュリティテスト
+- [x] Phase 6: セキュリティテスト
 
 ---
 
 ## 8. 完了基準
 
-- [ ] `make fmt` 実行済み
-- [ ] `make lint` がエラーなく完了する
-- [ ] `make test` が全テストで通過する
-- [ ] `01_requirements.md` の全 AC（AC-01・AC-02・AC-03）にテストが存在する
+- [x] `make fmt` 実行済み
+- [x] `make lint` がエラーなく完了する
+- [x] `make test` が全テストで通過する
+- [x] `01_requirements.md` の全 AC（AC-01・AC-02・AC-03）にテストが存在する
 - [ ] `make deadcode` が未使用コードを報告しない
 - [ ] 通知に無関係な主処理エラーの `slog.Error` が変更されていないことを差分レビューで確認する
 

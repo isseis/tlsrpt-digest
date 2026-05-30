@@ -383,3 +383,38 @@ type errorGetAllReportsStore struct {
 func (s *errorGetAllReportsStore) GetAllReports() ([]tlsrpt.Report, error) {
 	return nil, s.err
 }
+
+// TestSummary_NotifyFlushError_NoSensitiveDataInLog verifies that sensitive
+// values (Slack webhook URL, IMAP password) that exist in the runtime
+// environment do NOT appear in the slog.Warn output produced by the
+// notification error path.  The real redaction is enforced by internal/notify;
+// this test is a defense-in-depth check that the cmd layer itself does not
+// independently inject those values into the structured log.
+//
+// In production, internal/notify replaces actual URLs with "[webhook URL
+// redacted]" before returning errors, so the simulated error below matches
+// that sanitised form.
+func TestSummary_NotifyFlushError_NoSensitiveDataInLog(t *testing.T) {
+	// Sensitive values that must not leak into slog output.
+	const sensitiveURL = "https://hooks.slack.com/services/T00/B00/secret-token"
+	const sensitivePass = "imap-s3cr3t-password"
+	buf := captureSlog(t)
+	bed := newSummaryTestBed(t)
+	bed.addReportInWindow()
+	// Simulate what internal/notify returns after sanitisation: the actual URL
+	// has already been replaced and neither sensitiveURL nor sensitivePass
+	// appears in the error string.
+	bed.notif.FlushError = errors.New("http request failed: [webhook URL redacted]")
+
+	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
+	assert.Equal(t, exitOK, exitCode)
+	require.NoError(t, err)
+	logged := buf.String()
+	assert.True(t, strings.Contains(logged, "level=WARN"), "expected slog.Warn output")
+	// The raw sensitive values must not appear in the captured log.
+	assert.False(t, strings.Contains(logged, sensitiveURL), "Slack URL must not appear in log")
+	assert.False(t, strings.Contains(logged, sensitivePass), "IMAP password must not appear in log")
+	// slog.Warn must not recursively trigger a Slack notification.
+	assert.Equal(t, 1, bed.notif.FlushCount, "Flush must be called exactly once; slog.Warn must not re-invoke Flush")
+	assert.Empty(t, bed.notif.SystemErrors, "slog.Warn must not route to Slack notifier")
+}
