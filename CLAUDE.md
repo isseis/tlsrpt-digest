@@ -32,6 +32,7 @@ When translating Japanese documentation to English:
 1. **Translation Workflow**:
    - First create and commit the Japanese version
    - Then create the English version based on the Japanese original
+   - **Edit one language at a time**: When updating existing bilingual documents, always edit the primary language (Japanese) first. Apply changes to the other language exclusively via `/mktrans` — never edit both files directly in the same session.
 
 2. **Translation Principles**:
    - **Accuracy over fluency**: Prioritize precise translation over natural-sounding English
