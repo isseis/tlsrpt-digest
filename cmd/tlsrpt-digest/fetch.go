@@ -79,26 +79,26 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	_, _, _, recoveryFound, err := boot.Store.LoadRecoveryRequired()
 	if err != nil {
 		slog.Error("fetch: load recovery-required", "error", err)
-		notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+		logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
 		return exitError, fmt.Errorf("fetch: load recovery-required: %w", err)
 	}
 	if recoveryFound {
 		slog.Error("fetch: recovery required; run tlsrpt-digest recover to resolve")
-		notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindRecoveryRequired, mailbox)
+		logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindRecoveryRequired, mailbox))
 		return exitError, nil
 	}
 
 	// Step 2: Retrieve IMAP credentials.
 	username, password := r.credentials()
 	if username == "" || string(password) == "" {
-		notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPCredentialsMissing, mailbox)
+		logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPCredentialsMissing, mailbox))
 		return exitError, nil
 	}
 
 	// Step 3: Connect to IMAP server.
 	fetcher, err := r.newMailFetcher(buildIMAPConfig(boot.Config, IMAPCredentials{Username: username, Password: password}))
 	if err != nil {
-		notifyFetchSystemError(ctx, boot.Notifier, classifyIMAPClientError(err), mailbox)
+		logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, classifyIMAPClientError(err), mailbox))
 		return exitError, fmt.Errorf("fetch: create imap client: %w", err)
 	}
 	defer func() {
@@ -110,7 +110,7 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	// Step 4: Fetch message metadata from the mailbox.
 	fetchResult, err := fetcher.FetchMeta(ctx, fetchSince(boot.Options, boot.Config, now))
 	if err != nil {
-		notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPOperationFailed, mailbox)
+		logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPOperationFailed, mailbox))
 		return exitError, fmt.Errorf("fetch: fetch meta: %w", err)
 	}
 	currentUID := fetchResult.UIDValidity
@@ -175,13 +175,13 @@ func fetchValidateUID(ctx context.Context, boot *BootContext, now time.Time, cur
 	storedUID, uidFound, err := boot.Store.LoadUIDValidity()
 	if err != nil {
 		slog.Error("fetch: load uidvalidity", "error", err)
-		notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+		logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
 		return exitError, fmt.Errorf("fetch: load uidvalidity: %w", err)
 	}
 	if !uidFound {
 		if err := boot.Store.SaveUIDValidity(currentUID); err != nil {
 			slog.Error("fetch: save initial uidvalidity", "error", err)
-			notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+			logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
 			return exitError, fmt.Errorf("fetch: save uidvalidity: %w", err)
 		}
 		return fetchContinue, nil
@@ -189,11 +189,11 @@ func fetchValidateUID(ctx context.Context, boot *BootContext, now time.Time, cur
 	if storedUID != currentUID {
 		if saveErr := boot.Store.SaveRecoveryRequired(storedUID, currentUID, now); saveErr != nil {
 			slog.Error("fetch: save recovery-required after uidvalidity change", "error", saveErr)
-			notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+			logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
 			return exitError, fmt.Errorf("fetch: save recovery-required: %w", saveErr)
 		}
 		slog.Error("fetch: uidvalidity changed; run tlsrpt-digest recover to resolve")
-		notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindUIDValidityChanged, mailbox)
+		logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindUIDValidityChanged, mailbox))
 		return exitError, nil
 	}
 	return fetchContinue, nil
@@ -230,7 +230,7 @@ func (r *fetchRunner) fetchDownloadAndSave(ctx context.Context, boot *BootContex
 
 	downloaded, err := fetcher.Download(ctx, downloadUIDs)
 	if err != nil {
-		notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPOperationFailed, mailbox)
+		logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPOperationFailed, mailbox))
 		return fmt.Errorf("fetch: download: %w", err)
 	}
 
@@ -240,7 +240,7 @@ func (r *fetchRunner) fetchDownloadAndSave(ctx context.Context, boot *BootContex
 		}
 		rawEML, ok := downloaded[states[i].meta.UID]
 		if !ok {
-			notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPOperationFailed, mailbox)
+			logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindIMAPOperationFailed, mailbox))
 			return fmt.Errorf("fetch: %w: %d", errFetchDownloadMissingUID, states[i].meta.UID)
 		}
 		if int64(len(rawEML)) != int64(states[i].meta.Size) {
@@ -383,13 +383,13 @@ func classifyIMAPClientError(err error) notify.SystemErrorKind {
 	return notify.SystemErrorKindIMAPConnectFailed
 }
 
-// notifyFetchSystemError logs a system error with component "fetch", flushes,
-// and emits slog.Warn if the notification itself fails.
-func notifyFetchSystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, mailbox string) {
+// notifyFetchSystemError logs a system error with component "fetch" and flushes.
+// It returns any notification failure to the caller for logging.
+func notifyFetchSystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, mailbox string) error {
 	if notifier == nil {
-		return
+		return nil
 	}
-	err := errors.Join(
+	return errors.Join(
 		notifier.LogSystemError(ctx, notify.SystemError{
 			Kind:      kind,
 			Component: "fetch",
@@ -397,7 +397,4 @@ func notifyFetchSystemError(ctx context.Context, notifier NotificationSink, kind
 		}),
 		notifier.Flush(ctx),
 	)
-	if err != nil {
-		slog.Warn("fetch: notify system error", "error", err)
-	}
 }

@@ -30,7 +30,7 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	_, _, _, recoveryFound, err := boot.Store.LoadRecoveryRequired()
 	if err != nil {
 		slog.Error("gc: load recovery-required", "error", err)
-		notifyGCSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+		logNotifyError("gc: notify system error", notifyGCSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
 		return exitError, fmt.Errorf("gc: load recovery-required: %w", err)
 	}
 	if recoveryFound {
@@ -42,7 +42,7 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	reportCutoff := gcReportCutoff(boot.Options, boot.Config, now)
 	reportDeleted, err := boot.Store.DeleteReportsBefore(reportCutoff)
 	if err != nil {
-		notifyGCSystemError(ctx, boot.Notifier, gcNotifyKind(err), mailbox)
+		logNotifyError("gc: notify system error", notifyGCSystemError(ctx, boot.Notifier, gcNotifyKind(err), mailbox))
 		return exitError, fmt.Errorf("gc: delete reports: %w", err)
 	}
 
@@ -50,7 +50,7 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	emailCutoff := gcEmailCutoff(boot.Options, boot.Config, now)
 	emailDeleted, err := boot.Store.DeleteEmailsBefore(emailCutoff)
 	if err != nil {
-		notifyGCSystemError(ctx, boot.Notifier, gcNotifyKind(err), mailbox)
+		logNotifyError("gc: notify system error", notifyGCSystemError(ctx, boot.Notifier, gcNotifyKind(err), mailbox))
 		return exitError, fmt.Errorf("gc: delete emails: %w", err)
 	}
 
@@ -83,13 +83,13 @@ func gcNotifyKind(err error) notify.SystemErrorKind {
 	return notify.SystemErrorKindStorePermission
 }
 
-// notifyGCSystemError logs a system error with component "gc", flushes,
-// and emits slog.Warn if the notification itself fails.
-func notifyGCSystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, mailbox string) {
+// notifyGCSystemError logs a system error with component "gc" and flushes.
+// It returns any notification failure to the caller for logging.
+func notifyGCSystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, mailbox string) error {
 	if notifier == nil {
-		return
+		return nil
 	}
-	err := errors.Join(
+	return errors.Join(
 		notifier.LogSystemError(ctx, notify.SystemError{
 			Kind:      kind,
 			Component: "gc",
@@ -97,7 +97,4 @@ func notifyGCSystemError(ctx context.Context, notifier NotificationSink, kind no
 		}),
 		notifier.Flush(ctx),
 	)
-	if err != nil {
-		slog.Warn("gc: notify system error", "error", err)
-	}
 }

@@ -28,7 +28,7 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 	_, _, _, recoveryFound, err := boot.Store.LoadRecoveryRequired()
 	if err != nil {
 		slog.Error("reprocess: load recovery-required", "error", err)
-		notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+		logNotifyError("reprocess: notify system error", notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
 		return exitError, fmt.Errorf("reprocess: load recovery-required: %w", err)
 	}
 	if recoveryFound {
@@ -42,7 +42,7 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 		loadFailures, allPerFile := collectLoadEmailFailures(loadErr)
 		if !allPerFile {
 			slog.Error("reprocess: load emails", "error", loadErr)
-			notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+			logNotifyError("reprocess: notify system error", notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
 			return exitError, fmt.Errorf("reprocess: load emails: %w", loadErr)
 		}
 		slog.Warn("reprocess: some emails could not be loaded", "error", loadErr)
@@ -170,13 +170,13 @@ func collectLoadEmailFailuresInto(err error, failures *[]*store.ErrLoadEmailFail
 	return false
 }
 
-// notifyReprocessSystemError logs a system error with component "reprocess", flushes,
-// and emits slog.Warn if the notification itself fails.
-func notifyReprocessSystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, mailbox string) {
+// notifyReprocessSystemError logs a system error with component "reprocess" and flushes.
+// It returns any notification failure to the caller for logging.
+func notifyReprocessSystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, mailbox string) error {
 	if notifier == nil {
-		return
+		return nil
 	}
-	err := errors.Join(
+	return errors.Join(
 		notifier.LogSystemError(ctx, notify.SystemError{
 			Kind:      kind,
 			Component: "reprocess",
@@ -184,7 +184,4 @@ func notifyReprocessSystemError(ctx context.Context, notifier NotificationSink, 
 		}),
 		notifier.Flush(ctx),
 	)
-	if err != nil {
-		slog.Warn("reprocess: notify system error", "error", err)
-	}
 }

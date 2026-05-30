@@ -44,3 +44,9 @@ func logWarn(ctx context.Context, notifier NotificationSink, kind notify.Warning
 		slog.Warn(component+": log warning", "error", err)
 	}
 }
+
+func logNotifyError(message string, err error) {
+	if err != nil {
+		slog.Warn(message, "error", err)
+	}
+}
