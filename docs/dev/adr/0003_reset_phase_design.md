@@ -92,7 +92,7 @@ flowchart TD
 
     subgraph RecoveryReq["Recovery Required (recovery_required present)"]
         RR(["No manifest"])
-        StaleM(["Stale manifest<br>(phases 1–3 + CurrUIDValidity mismatch)"])
+        StaleM(["Stale manifest<br>(CurrUIDValidity mismatch)"])
     end
 
     subgraph PendingReset["Pre-commit pending reset"]
