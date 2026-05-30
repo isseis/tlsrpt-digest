@@ -224,7 +224,91 @@ graph TB
 
 ---
 
-## 7. Checklist
+## 7. State Diagrams (stateDiagram-v2)
+
+Use when representing **states that the system persistently occupies on disk or in memory** and the transitions between them. Use §3 flowcharts for sequences of processing steps or flows with conditional branching.
+
+### When to use stateDiagram-v2 vs. flowchart
+
+| Criterion | Choose `stateDiagram-v2` | Choose `flowchart` |
+|---|---|---|
+| Subject | Persistent states (e.g., store open mode, reset phase) | Processing steps or conditional branches (e.g., decisions inside a function) |
+| Color-coding of state groups | Not needed | Needed per group |
+| Edge types | A single type suffices | Multiple types needed (e.g., solid for normal transitions, dashed for exceptions/crashes) |
+
+**ADR-0003 reference example**: The State Transition Diagram in [`docs/dev/adr/0003_reset_phase_design.md`](../adr/0003_reset_phase_design.md) is a true state machine representing persistent store states such as `Normal`, `Recovery Required`, and `Pending Reset`. While `stateDiagram-v2` would be semantically appropriate, it uses `flowchart` because color-coded state groups and dashed edges for crash transitions are required. Choose `flowchart` when `classDef` color-coding or multiple edge styles are needed.
+
+### Basic Syntax
+
+```mermaid
+stateDiagram-v2
+    [*] --> Normal
+
+    state "Recovery Required" as RecoveryRequired
+    Normal --> RecoveryRequired : UIDVALIDITY change detected
+    RecoveryRequired --> Normal : recover --mode keep-old
+
+    state Resetting {
+        [*] --> Phase1
+        Phase1 --> Phase4 : staging complete → commit
+        Phase4 --> [*]
+    }
+
+    RecoveryRequired --> Resetting : recover --mode discard-old --yes
+    Resetting --> Normal : cleanup complete
+```
+
+Arrow A → B represents "transition from A to B triggered by an event or operation". `[*]` denotes the initial or terminal state.
+
+### Nested States (Composite States)
+
+Composite states with multiple sub-states are expressed using `state "Label" { ... }`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+
+    state Processing {
+        [*] --> Connect
+        Connect --> Fetch
+        Fetch --> Save
+        Save --> [*]
+    }
+
+    Idle --> Processing : trigger
+    Processing --> Idle : complete
+    Processing --> Error : failure
+    Error --> [*]
+```
+
+### Notes (Annotations)
+
+Use `note` to attach supplementary information to a state.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Normal
+
+    state "Recovery Required" as RecoveryRequired
+    Normal --> RecoveryRequired : UIDVALIDITY change
+
+    note right of RecoveryRequired
+        fetch / summary / gc
+        halt in fail-closed mode
+    end note
+
+    RecoveryRequired --> Normal : recover complete
+```
+
+### Usage Notes
+
+- `stateDiagram-v2` does not support `classDef` color-coding. Choose `flowchart` if you need to distinguish states by color.
+- Edge labels follow the `:` separator (e.g., `A --> B : event name`).
+- State labels containing special characters (parentheses, colons, etc.) must be wrapped in double quotes (e.g., `state "Phase 1 (WAL)" as P1`).
+
+---
+
+## 8. Checklist
 
 Review this checklist when creating diagrams:
 
