@@ -207,14 +207,14 @@ type NotificationSink interface {
 本ドキュメント内では通知ヘルパーを次の 2 種類に区別する。
 
 - **ログヘルパー**: `notify_helpers.go` 内の `logAlerts`・`logWarn`。アラートや警告を `NotificationSink` に渡し、エラー時に `slog.Warn` を出力する汎用ヘルパー。
-- **システムエラー通知ヘルパー**: 各サブコマンドの `notifyXxxSystemError`（`notifyFetchSystemError`・`notifyReprocessSystemError`・`notifyGCSystemError`）。`LogSystemError` と `Flush` をまとめてエラーを返す。
+- **システムエラー通知ヘルパー**: 各サブコマンドのシステムエラー通知関数（`notifyFetchSystemError`・`notifyReprocessSystemError`・`notifyGCSystemError`・`logSummarySystemError`）。`LogSystemError` と `Flush` をまとめてエラーを返す。
 
 | ファイル | 変更種別 | 変更内容 |
 |---|---|---|
 | `cmd/tlsrpt-digest/notify_helpers.go` | 修正 | ログヘルパー（`logAlerts`・`logWarn`）内の `slog.Error` を `slog.Warn` に変更 |
 | `cmd/tlsrpt-digest/boot.go` | 修正 | `notifySystemError` 呼び出し箇所の戻り値破棄（`_ =`）を廃止し、`slog.Warn` で出力する |
 | `cmd/tlsrpt-digest/fetch.go` | 修正 | （a）システムエラー通知ヘルパー（`notifyFetchSystemError`）の戻り値破棄（`_ =`）を全 11 箇所で廃止し `slog.Warn` でログ出力（該当行: 82, 87, 94, 101, 113, 178, 184, 192, 196, 233, 243）；（b）`boot.Notifier.Flush(ctx)` の直接呼び出し箇所（ヘルパー経由ではない）の `slog.Error` を `slog.Warn` に変更 |
-| `cmd/tlsrpt-digest/summary.go` | 修正 | `LogSummary` エラーを呼び出し元に返す代わりに `slog.Warn` でログ出力して継続；`Flush` エラーの `slog.Error` を `slog.Warn` に変更。`summary.go` は `LogWarning` を直接呼ばないため `logWarn` の変更対象には含まれない |
+| `cmd/tlsrpt-digest/summary.go` | 修正 | （a）`LogSummary` エラーを呼び出し元に返す代わりに `slog.Warn` でログ出力して継続；（b）`Flush` エラーの `slog.Error` を `slog.Warn` に変更；（c）recovery-required 分岐での `logSummarySystemError` の戻り値をエラーとして返す代わりに `slog.Warn` でログ出力する（recovery-required 自体による `exitError` は維持。下記 4.2 参照）。`summary.go` は `LogWarning` を直接呼ばないため `logWarn` の変更対象には含まれない |
 | `cmd/tlsrpt-digest/reprocess.go` | 修正 | システムエラー通知ヘルパー呼び出しの戻り値破棄を廃止し `slog.Warn` でログ出力；`Flush` エラーの `slog.Error` を `slog.Warn` に変更 |
 | `cmd/tlsrpt-digest/gc.go` | 修正 | システムエラー通知ヘルパー呼び出しの戻り値破棄を廃止し `slog.Warn` でログ出力。なお `gc.go` にある `slog.Error` 呼び出し（ストア操作失敗など、通知とは無関係な主処理エラー）は本タスクの対象外であり変更しない |
 
@@ -244,7 +244,11 @@ type NotificationSink interface {
 
 ### 4.2 `summary.go` の挙動変更
 
-現状 `summary.go` は `LogSummary` のエラーを呼び出し元に返し、終了コード非ゼロを引き起こしている。これは「通知失敗は終了コードに影響しない」という設計方針と矛盾する。変更後は `LogSummary` のエラーを `slog.Warn` で出力し、処理を継続する。
+`summary.go` には通知失敗が終了コードに影響しうるパスが 2 つある。
+
+**(a) 通常のサマリ送信パス**: 現状 `LogSummary` のエラーを呼び出し元に返し、終了コード非ゼロを引き起こしている。これは「通知失敗は終了コードに影響しない」という設計方針と矛盾する。変更後は `LogSummary` のエラーを `slog.Warn` で出力し、処理を継続する。
+
+**(b) recovery-required 分岐パス**: store が recovery-required 状態のとき、`summary.go` は `logSummarySystemError`（`LogSystemError` + `Flush`）でシステムエラー通知を試み、その戻り値が非 nil の場合は現状エラーとして呼び出し元に返している。この分岐は recovery-required 状態という主処理側の事情により、通知の成否にかかわらず `exitError` を返す（通知成功時も `exitError` を返す既存仕様）。したがって AC-02 上、終了コードを決めているのは recovery-required 状態であり通知失敗ではない。これは 6.1 の Bootstrap パスと同じ構造である。変更後は `logSummarySystemError` の戻り値を `slog.Warn` でログ出力し（AC-01）、recovery-required による `exitError` 自体は維持する。これにより通知失敗が `slog.Error`（`main.go` の "subcommand failed" ログ）として扱われていた現状を是正する。
 
 ---
 
@@ -348,7 +352,9 @@ sequenceDiagram
 
 *参加者の役割：Sub = 変更対象サブコマンド（fetch / summary / reprocess）、NH = ログヘルパー（変更対象）、NS = インタフェース（変更なし）、Log = プロセスログ出力先*
 
-### 6.3 `summary.go` の `LogSummary` 失敗フロー（AC-02）
+### 6.3 `summary.go` の通知失敗フロー（AC-01・AC-02）
+
+#### 6.3.1 通常のサマリ送信パス
 
 矢印 A ->> B は同期呼び出し、A -->> B は戻り値を表す。
 
@@ -379,6 +385,33 @@ sequenceDiagram
 
 *参加者の役割：Sum = 変更対象、NS = インタフェース（変更なし）、Log = プロセスログ出力先*
 
+#### 6.3.2 recovery-required 分岐パス
+
+store が recovery-required 状態のとき、`summary.go` は `logSummarySystemError` でシステムエラー通知を試みる。この分岐は通知の成否にかかわらず recovery-required を理由に `exitError` を返す。
+
+矢印 A ->> B は同期呼び出し、A -->> B は戻り値を表す。
+
+```mermaid
+sequenceDiagram
+    participant Sum as summary.go
+    participant NS as NotificationSink
+    participant Log as slog
+
+    Note over Sum: store が recovery-required 状態
+    Sum->>NS: logSummarySystemError（LogSystemError + Flush）
+    NS-->>Sum: nil または error
+    alt error != nil かつ 変更前
+        Note over Sum: return exitError, fmt.Errorf(...)
+    else error != nil かつ 変更後
+        Sum->>Log: Warn("summary: notify recovery required", "error", err)
+    end
+    Note over Sum: recovery-required により exitError を返す（通知の成否に依存しない）
+```
+
+*参加者の役割：Sum = 変更対象、NS = インタフェース（変更なし）、Log = プロセスログ出力先*
+
+このパスの `exitError` は recovery-required 状態に起因し、通知失敗には起因しない。したがって 6.1 の Bootstrap パスと同様、AC-02 と矛盾しない。
+
 ---
 
 ## 7. テスト戦略
@@ -397,9 +430,8 @@ sequenceDiagram
 
 **AC-02 の検証方針**
 
-- `summary_test.go` に `LogSummary` 失敗シナリオを追加する
-- 終了コードが 0 であることを確認する
-- `slog.Warn` が呼ばれることを確認する
+- 通常のサマリ送信パス: `summary_test.go` に `LogSummary` 失敗シナリオを追加し、終了コードが 0 であることと `slog.Warn` が呼ばれることを確認する
+- recovery-required 分岐パス: store が recovery-required 状態かつ `logSummarySystemError`（`LogSystemError`/`Flush`）が失敗するシナリオを追加し、（i）`slog.Warn` が呼ばれること、（ii）終了コードが recovery-required 由来の `exitError` のままで通知失敗による追加の `slog.Error`（"subcommand failed"）が発生しないことを確認する
 
 **AC-03 の検証方針**
 
