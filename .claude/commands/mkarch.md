@@ -23,7 +23,7 @@ Work in the following order.
 - Check the relevant packages under `cmd/` and `internal/`.
 - Identify existing components that should be reused.
 - Do not design new logic that duplicates responsibilities already handled elsewhere in the repository.
-- For any diagram edge that involves an existing component (not a newly added one), verify that the depicted data flow or call relationship reflects actual code behavior, not only design intent.
+- For any diagram edge that depicts the *current* behavior of existing components (i.e., relationships that already exist in code today, not new relationships this feature is introducing), verify that it accurately reflects actual code behavior. Edges that show newly planned relationships introduced by this feature do not need to match existing code, but should be clearly distinguishable from current-behavior edges (e.g., by using the `enhanced` class or an explanatory label).
 
 7. Create `02_architecture.md` in the same task directory.
 - Write in Japanese.
