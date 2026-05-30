@@ -114,7 +114,7 @@ flowchart TD
     P4a -.->|"クラッシュ"| P4b
     P4b -->|"次回 fetch/summary/gc の<br>Open が cleanupCompletedReset を実行"| Normal
     P4b -.->|"次回 fetch が<br>新たな UIDVALIDITY 変化を検出"| StaleM
-    StaleM -->|"Open が CurrUIDValidity 不一致を検出し<br>マニフェストをクリーンアップ"| RR
+    StaleM -->|"次回 fetch/gc の Open が CurrUIDValidity 不一致を検出し<br>マニフェストをクリーンアップ"| RR
     PendingReset -.->|"recover --abort-reset --yes"| P5
     P5 -->|"AbortReset 完了:<br>.staging/ → ルートに復元"| RR
     Normal -.->|"fetch が UIDVALIDITY 変化を検出"| RR
