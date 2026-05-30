@@ -88,8 +88,12 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 
 ```mermaid
 flowchart TD
-    RR["要復旧<br>(recovery_required あり / マニフェストなし)"]
     P5["フェーズ 5<br>(中断処理中)"]
+
+    subgraph RecoveryReq["要復旧（recovery_required あり）"]
+        RR(["マニフェストなし"])
+        StaleM(["残留マニフェスト<br>(フェーズ 1–3 + CurrUIDValidity 不一致)"])
+    end
 
     subgraph PendingReset["コミット前の保留リセット（フェーズ 1–3）"]
         P1["フェーズ 1<br>(マニフェスト書き込み済み)"]
@@ -102,7 +106,6 @@ flowchart TD
         P4b(["クラッシュ残留<br>(ステージング/マニフェスト あり)"])
     end
 
-    StaleM["残留マニフェスト<br>(フェーズ 1–3 + recovery_required あり<br>CurrUIDValidity 不一致)"]
     Normal["通常<br>(マニフェストなし / recovery_required なし)"]
 
     RR -->|"recover --mode keep-old"| Normal
@@ -120,7 +123,7 @@ flowchart TD
     Normal -.->|"fetch が UIDVALIDITY 変化を検出"| RR
 ```
 
-凡例：矩形 = ディスク状態、スタジアム形状 = 遷移中の実行状態（ディスク上は同一）、実線 = 正常系の遷移、破線 = 例外イベント（クラッシュ・UIDVALIDITY 変化）または手動中断
+凡例：矩形 = ディスク状態、スタジアム形状 = サブグラフ内の亜状態、実線 = 正常系の遷移、破線 = 例外イベント（クラッシュ・UIDVALIDITY 変化）または手動中断
 
 **クラッシュリカバリ**：各フェーズでのクラッシュ後は同じフェーズから再開可能（各ステージング操作は冪等）。フェーズ 1–3 でプロセスが停止した場合は、`recover --mode discard-old --yes` を再実行すると現在のフェーズから自動的に再開される。
 
