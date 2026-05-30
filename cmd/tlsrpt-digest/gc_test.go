@@ -340,6 +340,20 @@ func TestGC_Idempotent(t *testing.T) {
 	assert.Empty(t, st.Emails)
 }
 
+func TestGC_NotifySystemErrorFlushFailureLogsWarn(t *testing.T) {
+	buf := captureSlog(t)
+	st := storetestutil.NewFakeStore()
+	st.LoadRecoveryRequiredErr = errors.New("disk error")
+	spy := &SpyNotificationSink{FlushError: errors.New("flush fail")}
+
+	runner := &gcRunner{now: time.Now}
+	code, err := runner.Run(context.Background(), makeGCBoot(t, st, spy, cliOptions{}, nil))
+	assert.Error(t, err)
+	assert.Equal(t, exitError, code)
+	assert.True(t, strings.Contains(buf.String(), "level=WARN"), "expected slog.Warn output")
+	assert.True(t, strings.Contains(buf.String(), "error="), "expected error field in log")
+}
+
 func TestGC_ExitCodes(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -932,3 +933,19 @@ var (
 	_ store.Store = (*errStore)(nil)
 	_ store.Store = (*countingStore)(nil)
 )
+
+func TestFetch_NotifySystemErrorFlushFailureLogsWarn(t *testing.T) {
+	buf := captureSlog(t)
+	bed := newFetchTestBed(t)
+	bed.boot.Store = newErrStore(storetestutil.NewFakeStore(), errStoreOpts{
+		loadRecoveryRequiredErr: errors.New("io error"),
+		uidValidity:             testUIDValidity,
+	})
+	bed.notif.FlushError = errors.New("flush fail")
+
+	code, err := bed.runner.Run(context.Background(), bed.boot)
+	require.Error(t, err)
+	assert.Equal(t, exitError, code)
+	assert.True(t, strings.Contains(buf.String(), "level=WARN"), "expected slog.Warn output")
+	assert.True(t, strings.Contains(buf.String(), "error="), "expected error field in log")
+}

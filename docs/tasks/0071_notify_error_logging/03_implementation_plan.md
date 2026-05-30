@@ -118,19 +118,19 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 
 ### Phase 5: fetch.go・reprocess.go・gc.go の修正（AC-01）
 
-- [ ] **5.1** fetch.go のログレベル変更
+- [x] **5.1** fetch.go のログレベル変更
   - ファイル: `cmd/tlsrpt-digest/fetch.go`
   - 作業内容: (a) 11 箇所の `_ = notifyFetchSystemError(...)`（1.3 の該当行）を、戻り値を受け取り非 nil 時に `slog.Warn` で出力する形に変更する。(b) 152行 `Flush` エラーの `slog.Error` を `slog.Warn` に変更する。**153行の `return exitError, fmt.Errorf(...)` は維持する**（at-least-once 保証、1.3 参照）。1.3 に挙げた主処理エラーの `slog.Error` は変更しない。
 
-- [ ] **5.2** reprocess.go のログレベル変更
+- [x] **5.2** reprocess.go のログレベル変更
   - ファイル: `cmd/tlsrpt-digest/reprocess.go`
   - 作業内容: 31, 45行の `_ = notifyReprocessSystemError(...)` を戻り値受け取り + `slog.Warn` に変更する。76行 `Flush` エラーの `slog.Error` を `slog.Warn` に変更し、**77行の `return exitError` は維持する**。30, 35, 44行の主処理エラーは変更しない。
 
-- [ ] **5.3** gc.go のログレベル変更
+- [x] **5.3** gc.go のログレベル変更
   - ファイル: `cmd/tlsrpt-digest/gc.go`
   - 作業内容: 33, 45, 53行の `_ = notifyGCSystemError(...)` を戻り値受け取り + `slog.Warn` に変更する。32, 37行の主処理エラーの `slog.Error` は変更しない。
 
-- [ ] **5.4** fetch・reprocess・gc の通知失敗テスト追加（AC-01）
+- [x] **5.4** fetch・reprocess・gc の通知失敗テスト追加（AC-01）
   - ファイル: `cmd/tlsrpt-digest/fetch_test.go`、`reprocess_test.go`、`gc_test.go`
   - 作業内容: 各サブコマンドでシステムエラー通知ヘルパーまたは `Flush` が失敗するケースを `SpyNotificationSink{LogError/FlushError: ...}` で構築し、キャプチャヘルパーで `slog.Warn` + `error` フィールドが出力されることを検証する。fetch・reprocess の `Flush` 失敗ケースでは終了コードが従来どおり `exitError` のままであることも確認する。
 
@@ -199,7 +199,7 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 - [x] Phase 2: notify_helpers.go 修正 + テスト
 - [x] Phase 3: boot.go 修正 + テスト
 - [x] Phase 4: summary.go 修正 + テスト更新・追加
-- [ ] Phase 5: fetch.go・reprocess.go・gc.go 修正 + テスト
+- [x] Phase 5: fetch.go・reprocess.go・gc.go 修正 + テスト
 - [ ] Phase 6: セキュリティテスト
 
 ---

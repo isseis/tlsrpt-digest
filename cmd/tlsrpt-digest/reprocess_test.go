@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -393,6 +394,20 @@ func TestReprocess_TLSRPTParseFailure_WithNotify(t *testing.T) {
 	// uid=2 succeeds → report saved.
 	assert.Len(t, st.Reports, 1)
 	assert.Equal(t, 1, spy.FlushCount)
+}
+
+func TestReprocess_FlushFailureLogsWarn(t *testing.T) {
+	buf := captureSlog(t)
+	st := storetestutil.NewFakeStore()
+	internalDate := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	addFakeEmail(st, 1, 100, internalDate, tlsrptRawEMLReprocess("Corp", "r1", 5))
+	spy := &SpyNotificationSink{FlushError: errors.New("flush fail")}
+
+	code, err := newReprocessRunner().Run(context.Background(), makeReprocessBoot(t, st, spy, true))
+	assert.Error(t, err)
+	assert.Equal(t, exitError, code)
+	assert.True(t, strings.Contains(buf.String(), "level=WARN"), "expected slog.Warn output")
+	assert.True(t, strings.Contains(buf.String(), "error="), "expected error field in log")
 }
 
 // TestReprocess_RealEML_RoundTrip verifies that a real TLSRPT .eml from testdata
