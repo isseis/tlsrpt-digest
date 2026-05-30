@@ -95,7 +95,7 @@ flowchart TD
         StaleM(["Stale manifest<br>(phases 1–3 + CurrUIDValidity mismatch)"])
     end
 
-    subgraph PendingReset["Pre-commit pending reset (phases 1–3)"]
+    subgraph PendingReset["Pre-commit pending reset"]
         P1["Phase 1<br>(manifest written)"]
         P2["Phase 2<br>(data staged)"]
         P3["Phase 3<br>(emails staged)"]

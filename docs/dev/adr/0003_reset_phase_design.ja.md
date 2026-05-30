@@ -95,7 +95,7 @@ flowchart TD
         StaleM(["残留マニフェスト<br>(フェーズ 1–3 + CurrUIDValidity 不一致)"])
     end
 
-    subgraph PendingReset["コミット前の保留リセット（フェーズ 1–3）"]
+    subgraph PendingReset["コミット前の保留リセット"]
         P1["フェーズ 1<br>(マニフェスト書き込み済み)"]
         P2["フェーズ 2<br>(データステージング完了)"]
         P3["フェーズ 3<br>(メールステージング完了)"]
