@@ -233,3 +233,4 @@ graph TB
 - [ ] データノードはシリンダー形状 `[(label)]` を使っている
 - [ ] classDef を定義して凡例に対応させている
 - [ ] 図の下または末尾に凡例（Legend）ブロックを置いている
+- [ ] ノード ID に Mermaid の予約済みキーワード（`call`、`end`、`subgraph`、`style`、`class`、`default` など）を使っていない（パースエラーを防ぐため）
