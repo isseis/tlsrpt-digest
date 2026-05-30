@@ -88,7 +88,7 @@ The transition from phase 4 to Normal (cleanup) is executed inside `Open(OpenRea
 
 ```mermaid
 flowchart TD
-    RR["Recovery Required<br>(recovery_required set / no manifest)"]
+    RR["Recovery Required<br>(recovery_required present / no manifest)"]
     P5["Phase 5<br>(abort in progress)"]
 
     subgraph PendingReset["Pre-commit pending reset (phases 1–3)"]
@@ -97,7 +97,11 @@ flowchart TD
         P3["Phase 3<br>(emails staged)"]
     end
 
-    P4["Phase 4<br>(committed / cleanup pending)"]
+    subgraph Phase4["Phase 4 (committed)"]
+        P4a(["Cleanup in progress<br>(staging/manifest present)"])
+        P4b(["Crash leftover<br>(staging/manifest present)"])
+    end
+
     StaleM["Stale manifest<br>(phases 1–3 + recovery_required present<br>CurrUIDValidity mismatch)"]
     Normal["Normal<br>(no manifest / no recovery_required)"]
 
@@ -105,17 +109,18 @@ flowchart TD
     RR -->|"recover --mode discard-old --yes"| P1
     P1 -->|"stageDataFile:<br>tlsrpt.json → .staging/"| P2
     P2 -->|"stageEmailsDir:<br>emails/ → .staging/"| P3
-    P3 -->|"commitReset complete"| P4
-    P4 -.->|"manifest deletion failed<br>new UIDVALIDITY change occurs"| StaleM
-    P4 -->|"ResetForRecovery removes<br>staging/manifest"| Normal
-    P4 -->|"after crash: Open runs<br>cleanupCompletedReset"| Normal
-    StaleM -->|"Open detects mismatch and<br>cleans up manifest"| RR
+    P3 -->|"commitReset complete"| P4a
+    P4a -->|"removes staging/manifest"| Normal
+    P4a -.->|"crash"| P4b
+    P4b -->|"next fetch/summary/gc's Open<br>runs cleanupCompletedReset"| Normal
+    P4b -.->|"next fetch detects<br>new UIDVALIDITY change"| StaleM
+    StaleM -->|"Open detects CurrUIDValidity mismatch<br>and cleans up manifest"| RR
     PendingReset -.->|"recover --abort-reset --yes"| P5
     P5 -->|"AbortReset complete:<br>.staging/ → restore to root"| RR
     Normal -.->|"fetch detects UIDVALIDITY change"| RR
 ```
 
-Legend: solid = normal transition; dashed = exceptional event (UIDVALIDITY change or cleanup failure) or manual abort.
+Legend: rectangle = disk state; stadium shape = transient execution state (same on-disk state); solid line = normal transition; dashed line = exceptional event (crash or UIDVALIDITY change) or manual abort.
 
 **Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent). If the process stops at phases 1–3, re-running `recover --mode discard-old --yes` resumes from the current phase automatically.
 
