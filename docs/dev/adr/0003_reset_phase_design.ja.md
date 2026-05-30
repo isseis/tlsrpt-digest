@@ -92,7 +92,7 @@ flowchart TD
 
     subgraph RecoveryReq["要復旧（recovery_required あり）"]
         RR(["マニフェストなし"])
-        StaleM(["残留マニフェスト<br>(フェーズ 1–3 + CurrUIDValidity 不一致)"])
+        StaleM(["残留マニフェスト<br>(CurrUIDValidity 不一致)"])
     end
 
     subgraph PendingReset["コミット前の保留リセット"]
