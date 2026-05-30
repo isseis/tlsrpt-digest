@@ -214,7 +214,9 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 		if errors.Is(err, storelock.ErrLockHeld) {
 			kind = notify.SystemErrorKindLockHeld
 		}
-		_ = notifySystemError(context.Background(), boot.Notifier, kind, cfg)
+		if notifyErr := notifySystemError(context.Background(), boot.Notifier, kind, cfg); notifyErr != nil {
+			slog.Warn("bootstrap: notify lock error", "error", notifyErr)
+		}
 		return nil, fmt.Errorf("acquire store writer lock: %w", err)
 	}
 
@@ -227,7 +229,9 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 	boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
 	if err != nil {
 		kind := classifyOpenError(err)
-		_ = notifySystemError(context.Background(), boot.Notifier, kind, cfg)
+		if notifyErr := notifySystemError(context.Background(), boot.Notifier, kind, cfg); notifyErr != nil {
+			slog.Warn("bootstrap: notify store open error", "error", notifyErr)
+		}
 		if errors.Is(err, store.ErrPendingReset) {
 			return nil, fmt.Errorf("store reset is incomplete; run recover --mode discard-old --yes to continue or recover --abort-reset --yes to roll back: %w", err)
 		}

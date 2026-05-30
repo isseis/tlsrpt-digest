@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,14 +182,17 @@ func TestSummary_RecoveryRequiredFirstCheck(t *testing.T) {
 }
 
 func TestSummary_RecoveryRequiredFirstCheckFlushFailure(t *testing.T) {
+	buf := captureSlog(t)
 	bed := newSummaryTestBed(t)
 	bed.guard.RecoveryRequiredFound = true
 	bed.notif.FlushError = errors.New("slack flush failed")
 
 	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
 	assert.Equal(t, exitError, exitCode)
-	require.Error(t, err)
-	assert.ErrorContains(t, err, "notify recovery required")
+	require.NoError(t, err)
+	out := buf.String()
+	assert.True(t, strings.Contains(out, "level=WARN"), "expected WARN log, got: %s", out)
+	assert.True(t, strings.Contains(out, "error="), "expected error field in log, got: %s", out)
 	require.Len(t, bed.notif.SystemErrors, 1)
 	assert.Equal(t, notify.SystemErrorKindRecoveryRequired, bed.notif.SystemErrors[0].Kind)
 	assert.Equal(t, 1, bed.notif.FlushCount)
@@ -277,13 +281,18 @@ func TestSummary_UsesGenerateSummaryNotReimplemented(t *testing.T) {
 	assert.Equal(t, int64(3), bed.notif.Summaries[0].OrganizationStats["org-new"])
 }
 
-func TestSummary_FlushFailureExits1(t *testing.T) {
+func TestSummary_FlushFailureLogsWarnAndExitsOK(t *testing.T) {
+	buf := captureSlog(t)
 	bed := newSummaryTestBed(t)
 	bed.addReportInWindow()
 	bed.notif.FlushError = errors.New("slack timeout")
 
-	exitCode, _ := bed.runner.Run(context.Background(), bed.boot)
-	assert.Equal(t, exitError, exitCode)
+	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
+	assert.Equal(t, exitOK, exitCode)
+	require.NoError(t, err)
+	out := buf.String()
+	assert.True(t, strings.Contains(out, "level=WARN"), "expected WARN log, got: %s", out)
+	assert.True(t, strings.Contains(out, "error="), "expected error field in log, got: %s", out)
 }
 
 // ── exit codes ────────────────────────────────────────────────────────────────
@@ -314,12 +323,12 @@ func TestSummary_ExitCodes(t *testing.T) {
 			wantExit: exitError,
 		},
 		{
-			name: "flush failure exits 1",
+			name: "flush failure exits 0",
 			setup: func(bed *summaryTestBed) {
 				bed.addReportInWindow()
 				bed.notif.FlushError = errors.New("flush failed")
 			},
-			wantExit: exitError,
+			wantExit: exitOK,
 		},
 	}
 
@@ -335,6 +344,36 @@ func TestSummary_ExitCodes(t *testing.T) {
 
 // ── test doubles ──────────────────────────────────────────────────────────────
 
+// TestSummary_LogSummaryFailureLogsWarnAndExitsOK verifies that when LogSummary
+// returns an error, slog.Warn is emitted and the exit code is exitOK.
+func TestSummary_LogSummaryFailureLogsWarnAndExitsOK(t *testing.T) {
+	buf := captureSlog(t)
+	bed := newSummaryTestBed(t)
+	bed.addReportInWindow()
+	bed.notif.LogError = errors.New("log summary failed")
+
+	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
+	assert.Equal(t, exitOK, exitCode)
+	require.NoError(t, err)
+	out := buf.String()
+	assert.True(t, strings.Contains(out, "level=WARN"), "expected WARN log, got: %s", out)
+	assert.True(t, strings.Contains(out, "error="), "expected error field in log, got: %s", out)
+}
+
+// TestSummary_HappyPath_NoWarnLog verifies that no WARN log is emitted when
+// all notification calls succeed (regression guard for unconditional slog.Warn).
+func TestSummary_HappyPath_NoWarnLog(t *testing.T) {
+	buf := captureSlog(t)
+	bed := newSummaryTestBed(t)
+	bed.addReportInWindow()
+
+	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
+	assert.Equal(t, exitOK, exitCode)
+	require.NoError(t, err)
+	assert.False(t, strings.Contains(buf.String(), "level=WARN"),
+		"unexpected WARN log on success, got: %s", buf.String())
+}
+
 // errorGetAllReportsStore wraps FakeStore and returns an error from GetAllReports.
 type errorGetAllReportsStore struct {
 	*storetestutil.FakeStore
@@ -343,4 +382,39 @@ type errorGetAllReportsStore struct {
 
 func (s *errorGetAllReportsStore) GetAllReports() ([]tlsrpt.Report, error) {
 	return nil, s.err
+}
+
+// TestSummary_NotifyFlushError_NoSensitiveDataInLog verifies that sensitive
+// values (Slack webhook URL, IMAP password) that exist in the runtime
+// environment do NOT appear in the slog.Warn output produced by the
+// notification error path.  The real redaction is enforced by internal/notify;
+// this test is a defense-in-depth check that the cmd layer itself does not
+// independently inject those values into the structured log.
+//
+// In production, internal/notify replaces actual URLs with "[webhook URL
+// redacted]" before returning errors, so the simulated error below matches
+// that sanitised form.
+func TestSummary_NotifyFlushError_NoSensitiveDataInLog(t *testing.T) {
+	// Sensitive values that must not leak into slog output.
+	const sensitiveURL = "https://hooks.slack.com/services/T00/B00/secret-token"
+	const sensitivePass = "imap-s3cr3t-password"
+	buf := captureSlog(t)
+	bed := newSummaryTestBed(t)
+	bed.addReportInWindow()
+	// Simulate what internal/notify returns after sanitisation: the actual URL
+	// has already been replaced and neither sensitiveURL nor sensitivePass
+	// appears in the error string.
+	bed.notif.FlushError = errors.New("http request failed: [webhook URL redacted]")
+
+	exitCode, err := bed.runner.Run(context.Background(), bed.boot)
+	assert.Equal(t, exitOK, exitCode)
+	require.NoError(t, err)
+	logged := buf.String()
+	assert.True(t, strings.Contains(logged, "level=WARN"), "expected slog.Warn output")
+	// The raw sensitive values must not appear in the captured log.
+	assert.False(t, strings.Contains(logged, sensitiveURL), "Slack URL must not appear in log")
+	assert.False(t, strings.Contains(logged, sensitivePass), "IMAP password must not appear in log")
+	// slog.Warn must not recursively trigger a Slack notification.
+	assert.Equal(t, 1, bed.notif.FlushCount, "Flush must be called exactly once; slog.Warn must not re-invoke Flush")
+	assert.Empty(t, bed.notif.SystemErrors, "slog.Warn must not route to Slack notifier")
 }

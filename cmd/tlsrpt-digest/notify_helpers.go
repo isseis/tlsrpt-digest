@@ -24,7 +24,7 @@ func logAlerts(ctx context.Context, notifier NotificationSink, report *tlsrpt.Re
 				End:   report.DateRange.EndDatetime,
 			},
 		}); err != nil {
-			slog.Error(component+": log alert", "error", err)
+			slog.Warn(component+": log alert", "error", err)
 		}
 	}
 }
@@ -41,6 +41,12 @@ func logWarn(ctx context.Context, notifier NotificationSink, kind notify.Warning
 		UIDValidity: uidValidity,
 		MessageID:   messageID,
 	}); err != nil {
-		slog.Error(component+": log warning", "error", err)
+		slog.Warn(component+": log warning", "error", err)
+	}
+}
+
+func logNotifyError(message string, err error) {
+	if err != nil {
+		slog.Warn(message, "error", err)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -447,4 +448,55 @@ func requireNotificationSinkImpl(t *testing.T, sink NotificationSink) *notificat
 	impl, ok := sink.(*notificationSink)
 	require.True(t, ok)
 	return impl
+}
+
+// TestBootstrap_LockFailure_NotifyFlushErrorLogsWarn verifies that when lock
+// acquisition fails and notifySystemError returns an error (because Flush
+// fails), slog.Warn is emitted with an error field. Bootstrap must still
+// return the original lock error.
+func TestBootstrap_LockFailure_NotifyFlushErrorLogsWarn(t *testing.T) {
+	buf := captureSlog(t)
+	flushErr := errors.New("slack flush failed")
+	spy := &SpyNotificationSink{FlushError: flushErr}
+
+	_, err := Bootstrap(subcommandFetch, "config.toml", "run-lock-warn", BootstrapOptions{
+		LoadConfig: func(string) (*config.Config, error) { return configForRoot(secureStoreRoot(t)), nil },
+		BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
+			return spy, nil
+		},
+		AcquireWriterLock: func(string) (LockHandle, error) {
+			return nil, storelock.ErrLockHeld
+		},
+	})
+
+	require.ErrorIs(t, err, storelock.ErrLockHeld, "Bootstrap must return the original lock error")
+	out := buf.String()
+	assert.True(t, strings.Contains(out, "level=WARN"), "expected WARN log, got: %s", out)
+	assert.True(t, strings.Contains(out, "error="), "expected error field in log, got: %s", out)
+}
+
+// TestBootstrap_StoreOpenFailure_NotifyFlushErrorLogsWarn verifies that when
+// store open fails and notifySystemError returns an error (because Flush
+// fails), slog.Warn is emitted with an error field. Bootstrap must still
+// return the original store error.
+func TestBootstrap_StoreOpenFailure_NotifyFlushErrorLogsWarn(t *testing.T) {
+	buf := captureSlog(t)
+	flushErr := errors.New("slack flush failed")
+	storeErr := errors.New("store open failed")
+	spy := &SpyNotificationSink{FlushError: flushErr}
+
+	_, err := Bootstrap(subcommandFetch, "config.toml", "run-open-warn", BootstrapOptions{
+		LoadConfig: func(string) (*config.Config, error) { return configForRoot(secureStoreRoot(t)), nil },
+		BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
+			return spy, nil
+		},
+		OpenStore: func(string, store.IMAPIdentity, store.OpenMode) (store.Store, error) {
+			return nil, storeErr
+		},
+	})
+
+	require.ErrorIs(t, err, storeErr, "Bootstrap must return the original store error")
+	out := buf.String()
+	assert.True(t, strings.Contains(out, "level=WARN"), "expected WARN log, got: %s", out)
+	assert.True(t, strings.Contains(out, "error="), "expected error field in log, got: %s", out)
 }

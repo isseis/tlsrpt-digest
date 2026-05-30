@@ -28,7 +28,7 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 	_, _, _, recoveryFound, err := boot.Store.LoadRecoveryRequired()
 	if err != nil {
 		slog.Error("reprocess: load recovery-required", "error", err)
-		_ = notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+		logNotifyError("reprocess: notify system error", notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
 		return exitError, fmt.Errorf("reprocess: load recovery-required: %w", err)
 	}
 	if recoveryFound {
@@ -42,7 +42,7 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 		loadFailures, allPerFile := collectLoadEmailFailures(loadErr)
 		if !allPerFile {
 			slog.Error("reprocess: load emails", "error", loadErr)
-			_ = notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+			logNotifyError("reprocess: notify system error", notifyReprocessSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
 			return exitError, fmt.Errorf("reprocess: load emails: %w", loadErr)
 		}
 		slog.Warn("reprocess: some emails could not be loaded", "error", loadErr)
@@ -73,7 +73,7 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 	// Step 6: Flush notifications only when --notify is set.
 	if notifyEnabled {
 		if err := boot.Notifier.Flush(ctx); err != nil {
-			slog.Error("reprocess: flush notifications", "error", err)
+			slog.Warn("reprocess: flush notifications", "error", err)
 			return exitError, fmt.Errorf("reprocess: flush: %w", err)
 		}
 	}
@@ -171,14 +171,17 @@ func collectLoadEmailFailuresInto(err error, failures *[]*store.ErrLoadEmailFail
 }
 
 // notifyReprocessSystemError logs a system error with component "reprocess" and flushes.
+// It returns any notification failure to the caller for logging.
 func notifyReprocessSystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, mailbox string) error {
 	if notifier == nil {
 		return nil
 	}
-	err := notifier.LogSystemError(ctx, notify.SystemError{
-		Kind:      kind,
-		Component: "reprocess",
-		Mailbox:   mailbox,
-	})
-	return errors.Join(err, notifier.Flush(ctx))
+	return errors.Join(
+		notifier.LogSystemError(ctx, notify.SystemError{
+			Kind:      kind,
+			Component: "reprocess",
+			Mailbox:   mailbox,
+		}),
+		notifier.Flush(ctx),
+	)
 }

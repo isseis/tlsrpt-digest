@@ -30,7 +30,7 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	_, _, _, recoveryFound, err := boot.Store.LoadRecoveryRequired()
 	if err != nil {
 		slog.Error("gc: load recovery-required", "error", err)
-		_ = notifyGCSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox)
+		logNotifyError("gc: notify system error", notifyGCSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
 		return exitError, fmt.Errorf("gc: load recovery-required: %w", err)
 	}
 	if recoveryFound {
@@ -42,7 +42,7 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	reportCutoff := gcReportCutoff(boot.Options, boot.Config, now)
 	reportDeleted, err := boot.Store.DeleteReportsBefore(reportCutoff)
 	if err != nil {
-		_ = notifyGCSystemError(ctx, boot.Notifier, gcNotifyKind(err), mailbox)
+		logNotifyError("gc: notify system error", notifyGCSystemError(ctx, boot.Notifier, gcNotifyKind(err), mailbox))
 		return exitError, fmt.Errorf("gc: delete reports: %w", err)
 	}
 
@@ -50,7 +50,7 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	emailCutoff := gcEmailCutoff(boot.Options, boot.Config, now)
 	emailDeleted, err := boot.Store.DeleteEmailsBefore(emailCutoff)
 	if err != nil {
-		_ = notifyGCSystemError(ctx, boot.Notifier, gcNotifyKind(err), mailbox)
+		logNotifyError("gc: notify system error", notifyGCSystemError(ctx, boot.Notifier, gcNotifyKind(err), mailbox))
 		return exitError, fmt.Errorf("gc: delete emails: %w", err)
 	}
 
@@ -84,14 +84,17 @@ func gcNotifyKind(err error) notify.SystemErrorKind {
 }
 
 // notifyGCSystemError logs a system error with component "gc" and flushes.
+// It returns any notification failure to the caller for logging.
 func notifyGCSystemError(ctx context.Context, notifier NotificationSink, kind notify.SystemErrorKind, mailbox string) error {
 	if notifier == nil {
 		return nil
 	}
-	err := notifier.LogSystemError(ctx, notify.SystemError{
-		Kind:      kind,
-		Component: "gc",
-		Mailbox:   mailbox,
-	})
-	return errors.Join(err, notifier.Flush(ctx))
+	return errors.Join(
+		notifier.LogSystemError(ctx, notify.SystemError{
+			Kind:      kind,
+			Component: "gc",
+			Mailbox:   mailbox,
+		}),
+		notifier.Flush(ctx),
+	)
 }
