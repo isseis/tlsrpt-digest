@@ -77,12 +77,12 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 
 ### Phase 2: ログヘルパーの修正（notify_helpers.go）
 
-- [ ] **2.1** `logAlerts`・`logWarn` のログレベル変更
+- [x] **2.1** `logAlerts`・`logWarn` のログレベル変更
   - ファイル: `cmd/tlsrpt-digest/notify_helpers.go`
   - 作業内容: 27行・44行の `slog.Error` を `slog.Warn` に変更する。メッセージ文字列・`"error"` フィールドは変更しない。
   - 完了基準: `make lint`／`make test` が通る。
 
-- [ ] **2.2** ログヘルパーのテスト追加（AC-01）
+- [x] **2.2** ログヘルパーのテスト追加（AC-01）
   - ファイル: `cmd/tlsrpt-digest/notify_helpers_test.go`（既存があれば追記、なければ新規 `//go:build test`）
   - 作業内容: `SpyNotificationSink{LogError: ...}` で `logAlerts`・`logWarn` を呼び、Phase 1 のキャプチャヘルパーで `slog.Warn`（`level=WARN`）かつ `error` フィールドを含むログが出力されることを検証する。
 
@@ -196,7 +196,7 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 ## 7. 実装チェックリスト
 
 - [x] Phase 1: slog キャプチャヘルパー追加
-- [ ] Phase 2: notify_helpers.go 修正 + テスト
+- [x] Phase 2: notify_helpers.go 修正 + テスト
 - [ ] Phase 3: boot.go 修正 + テスト
 - [ ] Phase 4: summary.go 修正 + テスト更新・追加
 - [ ] Phase 5: fetch.go・reprocess.go・gc.go 修正 + テスト
