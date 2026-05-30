@@ -16,7 +16,9 @@
 
 ### 1.1 背景
 
-`internal/notify` の Slack ハンドラ（`LogAlert`・`LogWarning`・`LogSystemError`・`LogSummary`・`Flush`）が返すエラーは、現状いずれも呼び出し元で `_ =` により破棄されている。webhook URL の誤設定やネットワーク障害など何らかの理由で Slack 通知が失敗した場合でも、オペレータにはその事実が一切伝わらない。
+`internal/notify` の Slack ハンドラは `Handle()` でレコードをバッファリングし、実際の HTTP 送信は `Flush()` で行う。そのため、`LogAlert`・`LogWarning`・`LogSystemError`・`LogSummary` は実装上 `nil` を返すことがほとんどであり、通知配信エラーは主に `Flush()` の戻り値として現れる。
+
+現状、`Flush()` を含む通知エラーの扱いは呼び出し箇所によって一貫していない。`boot.go` における `notifySystemError` の呼び出しや `fetch.go` の `notifyFetchSystemError` 呼び出しは `_ =` で戻り値を破棄しており、webhook URL の誤設定やネットワーク障害が起きてもオペレータに伝わらない。一方、`notify_helpers.go` の `logAlerts`・`logWarn` や `summary.go` の `Flush` エラーは `slog.Error` でログ出力されているが、通知失敗に `Error` レベルを使う根拠が明示されておらず、判断が統一されていない。
 
 ### 1.2 目的
 
@@ -51,7 +53,7 @@ Slack 通知（`LogAlert`・`LogWarning`・`LogSystemError`・`LogSummary`・`Fl
 
 **受け入れ条件（Acceptance Criteria）**:
 
-- `AC-01`: `NotificationSink` の各メソッド（`LogAlert`・`LogWarning`・`LogSystemError`・`LogSummary`・`Flush`）が非 nil エラーを返した場合、`slog.Warn` で警告ログを出力する。ログには少なくともエラー内容（`"error"` フィールド）を含む。これには `notify_helpers.go` の `logAlerts`・`logWarn` や、サブコマンド実装内の通知ヘルパー呼び出し（`notifyFetchSystemError` 等）の戻り値も含む
+- `AC-01`: `NotificationSink` の各メソッド（`LogAlert`・`LogWarning`・`LogSystemError`・`LogSummary`・`Flush`）が非 nil エラーを返した場合、`slog.Warn` で警告ログを出力する。ログには少なくともエラー内容（`"error"` フィールド）を含む。これには `notify_helpers.go` の `logAlerts`・`logWarn` や、サブコマンド実装内の通知ヘルパー呼び出し（`notifyFetchSystemError` 等）の戻り値も含む。なお、現行の `SlackHandler` 実装では `Handle()` が常に `nil` を返すため、バッファリングメソッド（`LogAlert` 等）が非 nil を返すケースは実際にはほぼなく、通知エラーは主に `Flush()` の戻り値として現れる。インタフェースレベルでの一貫したエラーチェックは将来の実装変更に備えるためのものである
 - `AC-02`: 通知失敗はプロセスの終了コードに影響しない（主処理が成功した場合は終了コード 0）。現状 `summary.go` では `LogSummary` のエラーを呼び出し元に返して終了コード非ゼロにしているが、`slog.Warn` で出力しつつ処理を継続するよう変更する
 - `AC-03`: `boot.go` 内の `notifySystemError` が返すエラー（Bootstrap 中に発生するシステムエラー通知の失敗）も `slog.Warn` で出力する。現状 `_ =` で破棄されている
 
