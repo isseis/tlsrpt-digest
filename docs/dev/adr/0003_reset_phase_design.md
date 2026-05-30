@@ -5,7 +5,7 @@
 | Number | ADR-0003 |
 | Status | Accepted |
 | Decision date | 2026-05-25 |
-| Last updated | 2026-05-29 |
+| Last updated | 2026-05-30 |
 | Related task | 0070_entrypoint |
 
 ---
@@ -211,6 +211,22 @@ To avoid this problem, `AbortReset` always updates the manifest to phase 5 (abor
 |---|---|
 | `ResetForRecovery` | Refused (`ErrResetAbortInProgress`) |
 | `AbortReset` | Resumes (`restoreFromStaging` is idempotent) → cleanup |
+
+### Decision to Remove Checkpoint Phases (Phases 2 and 3)
+
+> **Note**: The following is a decision record for a design change planned in task 0080. The other sections of this ADR describe the current implementation (phases 1–5); this ADR will be revised to reflect the new phase definitions when implementation is complete.
+
+Phases 2 (`resetPhaseDataStaged`) and 3 (`resetPhaseEmailsStaged`) were originally introduced as checkpoints for three purposes. Upon re-evaluation, we judge that none of these justifications is strong in the context of this project.
+
+| Original purpose | Re-evaluation |
+|---|---|
+| **Efficiency**: skip already-completed moves | UIDVALIDITY changes are rare exceptional events; `recover --mode discard-old --yes` is a manual operator action; crash-resumption is rarer still. Thus, shaving off a few `stat(2)`/`rename(2)` calls (sub-millisecond) has no meaningful optimization value. |
+| **Observability**: readable progress indicator | The idempotence logic in `stageDataFile`/`stageEmailsDir` already determines progress from file presence; progress is derivable from the on-disk file layout. Phase numbers 2 and 3 are a redundant cache of that information. |
+| **Extensibility**: preparation for additional staged files | Adding a staged file requires only one additional idempotent `stat`→`rename` function; adding a checkpoint phase is fundamentally unnecessary (idempotent re-execution of all operations always converges correctly). This anticipates future needs in violation of YAGNI. |
+
+**No impact on correctness**: `stageDataFile`, `stageEmailsDir`, and `commitReset` are all idempotent, and `rename(2)` is an atomic operation guaranteed by POSIX. Resumption always converges by idempotently re-executing all operations from the beginning (the phase 1 equivalent). Intermediate checkpoints are not required to guarantee AC-crash-safe.
+
+**Conclusion**: Simplify the phase set to `{1=manifest written, 4=committed, 5=aborting}`. Phase 4 (commit marker) and phase 5 (abort WAL entry) remain necessary for the reasons stated above (decision-making without reading the sentinel; avoiding ambiguity when a crash occurs during abort). Implementation will be carried out in task 0080, with backward compatibility for phase 2 and 3 manifests remaining in existing stores included as a requirement.
 
 ---
 
