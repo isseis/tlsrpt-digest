@@ -233,3 +233,7 @@ Review this checklist when creating diagrams:
 - [ ] Data nodes use the cylinder shape `[(label)]`
 - [ ] `classDef` entries are defined and match the legend
 - [ ] A Legend block is placed below the diagram or at the end of the section
+- [ ] Node IDs do not use Mermaid reserved keywords — the following words are reserved
+      in flowcharts and will cause a parse error if used as node IDs:
+      `call`, `end`, `style`, `linkStyle`, `classDef`, `class`, `click`, `direction`,
+      `subgraph`, `default`. Use descriptive alternatives (e.g., `invoke` instead of `call`).
