@@ -116,6 +116,8 @@ flowchart LR
     class stderr data
 ```
 
+サブグラフ間の矢印 `cmd → notify_pkg` はパッケージレベルの依存関係を表し、サブグラフ内のノードレベルの呼び出し矢印（`boot → helpers` など）とは粒度が異なる。`cmd` 内のすべてのノードが `notify_pkg` を呼ぶわけではなく、システムエラー通知ヘルパーおよび `Flush` の経路が `internal/notify` に到達することを示す。
+
 `slog.Warn` による通知エラーログは `cmd/tlsrpt-digest` 層が stderr へ出力する（上図の `slog.Warn` 矢印）。なお `internal/notify` は既存の DebugLogger（`boot.go:setupNotifyHandlers` で設定）を通じて Slack 送信失敗を別途 stderr に出力するが、それは既存の動作であり本タスクでは変更しない。
 
 **凡例**
@@ -211,7 +213,7 @@ type NotificationSink interface {
 |---|---|---|
 | `cmd/tlsrpt-digest/notify_helpers.go` | 修正 | ログヘルパー（`logAlerts`・`logWarn`）内の `slog.Error` を `slog.Warn` に変更 |
 | `cmd/tlsrpt-digest/boot.go` | 修正 | `notifySystemError` 呼び出し箇所の戻り値破棄（`_ =`）を廃止し、`slog.Warn` で出力する |
-| `cmd/tlsrpt-digest/fetch.go` | 修正 | （a）システムエラー通知ヘルパー（`notifyFetchSystemError`）の呼び出し箇所約 11 箇所で戻り値破棄を廃止し `slog.Warn` でログ出力；（b）`boot.Notifier.Flush(ctx)` の直接呼び出し箇所（ヘルパー経由ではない）の `slog.Error` を `slog.Warn` に変更 |
+| `cmd/tlsrpt-digest/fetch.go` | 修正 | （a）システムエラー通知ヘルパー（`notifyFetchSystemError`）の戻り値破棄（`_ =`）を全 11 箇所で廃止し `slog.Warn` でログ出力（該当行: 82, 87, 94, 101, 113, 178, 184, 192, 196, 233, 243）；（b）`boot.Notifier.Flush(ctx)` の直接呼び出し箇所（ヘルパー経由ではない）の `slog.Error` を `slog.Warn` に変更 |
 | `cmd/tlsrpt-digest/summary.go` | 修正 | `LogSummary` エラーを呼び出し元に返す代わりに `slog.Warn` でログ出力して継続；`Flush` エラーの `slog.Error` を `slog.Warn` に変更。`summary.go` は `LogWarning` を直接呼ばないため `logWarn` の変更対象には含まれない |
 | `cmd/tlsrpt-digest/reprocess.go` | 修正 | システムエラー通知ヘルパー呼び出しの戻り値破棄を廃止し `slog.Warn` でログ出力；`Flush` エラーの `slog.Error` を `slog.Warn` に変更 |
 | `cmd/tlsrpt-digest/gc.go` | 修正 | システムエラー通知ヘルパー呼び出しの戻り値破棄を廃止し `slog.Warn` でログ出力。なお `gc.go` にある `slog.Error` 呼び出し（ストア操作失敗など、通知とは無関係な主処理エラー）は本タスクの対象外であり変更しない |
@@ -266,6 +268,8 @@ type NotificationSink interface {
 - `internal/notify/retry.go` の `sanitizeRequestError()` は `*url.Error`（HTTP クライアントが URL を含んで返すエラー型）を検出して URL 部分を `"[redacted]"` に置き換えてからラップする。
 - **設計判断**: `cmd` 層でのサニタイズ追加は不要。`internal/notify` 内の既存保護で十分である。
 
+なお、`Flush()` の経路は Slack への HTTP 送信であり、IMAP パスワードが混入する経路は設計上存在しない。ただし防御的多層化（defense in depth）の観点から、`config.Secret` 型でラップされた IMAP パスワードが万一 `slog.Warn` 出力に現れないことも 7.1 のセキュリティテストで併せて検証する。
+
 `notification_security.md` §5 のテスト要件との対応を以下に示す。
 
 | §5 要件 | 本タスクでの扱い |
@@ -278,6 +282,8 @@ type NotificationSink interface {
 ---
 
 ## 6. 処理フロー詳細
+
+本章のシーケンス図は色分けノード（`classDef`）を用いないため、色凡例の代わりに各図の末尾に参加者の役割を示すキャプションを付す。
 
 ### 6.1 Bootstrap 時のシステムエラー通知失敗フロー（AC-03）
 
@@ -297,11 +303,14 @@ sequenceDiagram
     SH-->>NS: error
     NS-->>Boot: error
     Note over Boot: 変更前：戻り値を _ = で破棄
-    Note over Boot: 変更後：slog.Warn で出力し継続
+    Note over Boot: 変更後：slog.Warn で記録
     Boot->>Log: Warn(msg, "error", err)
+    Note over Boot: 主処理エラー（ロック取得失敗等）により非ゼロ終了
 ```
 
 *参加者の役割：Boot = 変更対象、NS = インタフェース（変更なし）、SH = Slack 実装（変更なし）、Log = プロセスログ出力先*
+
+このフローでは Bootstrap はロック取得失敗・ストアオープン失敗といった**主処理エラー**を契機にシステムエラー通知を試みる。本タスクの変更は、その通知が失敗した場合に戻り値を `slog.Warn` で記録する点のみである。Bootstrap 自体はこの後、元の主処理エラーによって非ゼロ終了する。これは AC-02 と矛盾しない。AC-02 の「通知失敗は終了コードに影響しない」とは、終了コードを決めるのが主処理の成否であって通知の成否ではない、という意味であり、ここでの非ゼロ終了は通知失敗ではなく主処理エラーに起因する。
 
 ### 6.2 通常処理時の通知失敗フロー（AC-01）
 
