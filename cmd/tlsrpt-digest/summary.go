@@ -43,7 +43,7 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 			return exitError, fmt.Errorf("summary: build notifier: %w", buildErr)
 		}
 		if err := logSummarySystemError(ctx, notifier, notify.SystemErrorKindRecoveryRequired, mailbox); err != nil {
-			return exitError, fmt.Errorf("summary: notify recovery required: %w", err)
+			slog.Warn("summary: notify recovery required", "error", err)
 		}
 		return exitError, nil
 	}
@@ -68,11 +68,10 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 	}
 
 	if err := notifier.LogSummary(ctx, summary); err != nil {
-		return exitError, fmt.Errorf("summary: log summary: %w", err)
+		slog.Warn("summary: log summary", "error", err)
 	}
 	if err := notifier.Flush(ctx); err != nil {
-		slog.Error("summary: flush notifications", "error", err)
-		return exitError, fmt.Errorf("summary: flush: %w", err)
+		slog.Warn("summary: flush notifications", "error", err)
 	}
 
 	return exitOK, nil

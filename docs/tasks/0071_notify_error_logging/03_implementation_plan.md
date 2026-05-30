@@ -99,15 +99,15 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 
 ### Phase 4: summary.go の修正（AC-01・AC-02）
 
-- [ ] **4.1** 通常サマリ送信パスの挙動変更
+- [x] **4.1** 通常サマリ送信パスの挙動変更
   - ファイル: `cmd/tlsrpt-digest/summary.go`
   - 作業内容: 71行 `LogSummary` エラーを `return exitError` する代わりに `slog.Warn` で出力して継続する。74-75行 `Flush` エラーの `slog.Error` + `return exitError` を `slog.Warn` + 継続（`exitOK`）に変更する（アーキテクチャ §4.2(a)・§6.3.1）。
 
-- [ ] **4.2** recovery-required 分岐の挙動変更
+- [x] **4.2** recovery-required 分岐の挙動変更
   - ファイル: `cmd/tlsrpt-digest/summary.go`
   - 作業内容: 45-46行の `logSummarySystemError` の戻り値を `return exitError, fmt.Errorf(...)` する代わりに、非 nil 時は `slog.Warn`（`"error"` フィールド付き）で出力し、`return exitError, nil`（recovery-required 由来）に変更する（アーキテクチャ §4.2(b)・§6.3.2）。
 
-- [ ] **4.3** summary.go の既存テスト更新と追加（AC-01・AC-02）
+- [x] **4.3** summary.go の既存テスト更新と追加（AC-01・AC-02）
   - ファイル: `cmd/tlsrpt-digest/summary_test.go`
   - 作業内容:
     - `TestSummary_FlushFailureExits1` を `exitOK` 期待に更新し、テスト名を挙動に合わせて改名する（例: `TestSummary_FlushFailureLogsWarnAndExitsOK`）。キャプチャヘルパーで `slog.Warn` 出力を検証する。
@@ -198,7 +198,7 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 - [x] Phase 1: slog キャプチャヘルパー追加
 - [x] Phase 2: notify_helpers.go 修正 + テスト
 - [x] Phase 3: boot.go 修正 + テスト
-- [ ] Phase 4: summary.go 修正 + テスト更新・追加
+- [x] Phase 4: summary.go 修正 + テスト更新・追加
 - [ ] Phase 5: fetch.go・reprocess.go・gc.go 修正 + テスト
 - [ ] Phase 6: セキュリティテスト
 
