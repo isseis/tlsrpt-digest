@@ -210,7 +210,7 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 - [x] `make lint` がエラーなく完了する
 - [x] `make test` が全テストで通過する
 - [x] `01_requirements.md` の全 AC（AC-01・AC-02・AC-03）にテストが存在する
-- [ ] `make deadcode` が未使用コードを報告しない
+- [x] `make deadcode` が未使用コードを報告しない（既存の警告のみ、本タスク起因なし）
 - [ ] 通知に無関係な主処理エラーの `slog.Error` が変更されていないことを差分レビューで確認する
 
 ---
