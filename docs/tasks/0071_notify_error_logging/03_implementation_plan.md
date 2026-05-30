@@ -88,12 +88,12 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 
 ### Phase 3: Bootstrap の修正（boot.go、AC-03）
 
-- [ ] **3.1** `notifySystemError` 戻り値のログ出力
+- [x] **3.1** `notifySystemError` 戻り値のログ出力
   - ファイル: `cmd/tlsrpt-digest/boot.go`
   - 作業内容: 217行・230行の `_ = notifySystemError(...)` を、戻り値を受け取り非 nil の場合に `slog.Warn`（`"error"` フィールド付き）で出力する形に変更する。後続の `return nil, fmt.Errorf(...)`（主処理エラーによる中断）は維持する。
   - 完了基準: Bootstrap の戻り値・終了挙動が変わらないこと。
 
-- [ ] **3.2** Bootstrap 通知失敗のテスト追加（AC-03）
+- [x] **3.2** Bootstrap 通知失敗のテスト追加（AC-03）
   - ファイル: `cmd/tlsrpt-digest/boot_test.go`
   - 作業内容: ロック取得失敗またはストアオープン失敗を誘発し、かつ `BuildNotifier` が `SpyNotificationSink{FlushError: ...}` を返すケースを追加する。Phase 1 のキャプチャヘルパーで `slog.Warn` + `error` フィールドが出力されること、Bootstrap が元の主処理エラーで非 nil を返すことを検証する（アーキテクチャ §6.1）。
 
@@ -197,7 +197,7 @@ fetch・reprocess・gc の既存テスト（`TestReprocess_FlushFailure_ExitErro
 
 - [x] Phase 1: slog キャプチャヘルパー追加
 - [x] Phase 2: notify_helpers.go 修正 + テスト
-- [ ] Phase 3: boot.go 修正 + テスト
+- [x] Phase 3: boot.go 修正 + テスト
 - [ ] Phase 4: summary.go 修正 + テスト更新・追加
 - [ ] Phase 5: fetch.go・reprocess.go・gc.go 修正 + テスト
 - [ ] Phase 6: セキュリティテスト
