@@ -90,6 +90,9 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 
 ```mermaid
 stateDiagram-v2
+    state "通常<br/>(マニフェストなし / recovery_required なし)" as Normal
+    [*] --> Normal
+
     state "要復旧（recovery_required あり）" as RecoveryReq {
         state "マニフェストなし" as RR
         state "残留マニフェスト<br/>(CurrUIDValidity 不一致)" as StaleM
@@ -103,18 +106,16 @@ stateDiagram-v2
         P4a --> P4b : ※クラッシュ
     }
 
-    state "通常<br/>(マニフェストなし / recovery_required なし)" as Normal
-
+    Normal --> RR : ※fetch が UIDVALIDITY 変化を検出
     RR --> Normal : recover --mode keep-old
     RR --> P1 : recover --mode discard-old --yes
     P1 --> P4a : advanceResetPhases
+    P1 --> P5 : ※クラッシュ後 recover --abort-reset --yes
+    P5 --> RR : AbortReset 完了
     P4a --> Normal : ステージング/マニフェスト削除
     P4b --> Normal : 次回 Open が cleanupCompletedReset を実行
     P4b --> StaleM : ※次回 fetch が新 UIDVALIDITY 変化を検出
     StaleM --> RR : 次回 Open が CurrUIDValidity 不一致を検出しクリーンアップ
-    P1 --> P5 : recover --abort-reset --yes
-    P5 --> RR : AbortReset 完了
-    Normal --> RR : ※fetch が UIDVALIDITY 変化を検出
 ```
 
 凡例：実線 = 正常系の遷移、※印 = 例外イベント（クラッシュ・UIDVALIDITY 変化）または手動中断
