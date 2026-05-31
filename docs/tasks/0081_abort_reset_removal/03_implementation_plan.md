@@ -272,17 +272,16 @@
 - [ ] `TestAbortReset_ResumesFromAbortingPhase` を削除する。
 - [ ] `TestAbortReset_CrashAfterRestoreBeforeManifestRemoval` を削除する。
 - [ ] `TestResetForRecovery_RefusesAbortingPhase` を削除する。（AC-12）
-- [ ] `TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` を削除する。（AC-10 の fail-closed テストへ置換）
+- [ ] `TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` を削除する。このテストはフェーズ 2・3 かつ `CurrUIDValidity` 不一致（150 vs 200）のマニフェストが `cleanupCompletedReset` でサイレントに除去されることを検証していたが、フェーズ 2・3 は fail-closed になるため `Open(OpenRecoverReset)` の時点で失敗する。削除後は fail-closed テスト（3-4 節）がフェーズ 2・3 の拒否を検証し、UID 不一致パスの収束は別途 `TestResetForRecovery_StaleUIDMismatchManifestReset` で補う（3-4 節参照）。
 - [ ] `TestOpen_CleansUpAfterCommitCrashWindow` を削除する（`resetPhase(3)` 植え込みが fail-closed になり破綻するため。C4 コミットクラッシュウィンドウのクリーンアップ検証は既存のフェーズ 1 版 `TestOpen_CleansUpAfterCommitCrashWindowManifestWritten` が担うため重複となる）。
 
 #### 3-3. `internal/store/recovery_test.go` の変更（更新）
 
-- [ ] `TestApplyRecovery_RefusesPendingReset`：植え込み値 `resetPhase(2)` を `resetPhaseManifestWritten` に変更する。
-- [ ] `TestApplyRecovery_RefusesPendingReset`：コメント「legacy phase-2」「including legacy values」を削除し、英語でフェーズ 1 の保留マニフェストを植え込む説明に更新する。
+- [ ] `TestApplyRecovery_RefusesPendingReset`：植え込み値 `resetPhase(2)` を `resetPhaseManifestWritten` に変更する。コメント（L144-145）を英語で次のように書き換える：`// Plant a phase-1 manifest to verify that ApplyRecovery refuses while a pre-commit reset is in progress.`（2 行の既存コメントを 1 行に置換し、`ErrPendingReset` アサーション自体は変更しない）。
 - [ ] `TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`：植え込み値 `resetPhase(2)` を `resetPhaseManifestWritten` に変更し、関数コメント・植え込み箇所コメントの「legacy phase-2」記述を英語で「partial pre-commit phase-1 staging state」へ書き換える。`assertResetConverged` のアサーションは維持し、`make test` で収束を再確認する。
 - [ ] `TestResetForRecovery_IdempotentAfterCrashBeforeCommit`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更し、「legacy phase-3 manifest」コメントを除去する。
 - [ ] `TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate`：コメント内の `writeResetManifest(phase=2)` と「not yet advanced to phase=2」を、フェーズ 1 マニフェスト書き込み後かつ data staging 後にクラッシュした説明へ英語で更新する。
-- [ ] `TestOpen_BlockedByPreCommitReset`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更する。
+- [ ] `TestOpen_BlockedByPreCommitReset`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更する。あわせて関数コメント（L1129）の「or an AbortReset is partially applied」を削除し、英語のまま「i.e. a pre-commit reset manifest is present」相当へ更新する。
 - [ ] `TestResetForRecovery_CommitCrashWindow_ZeroUID`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更し、コメント内の `phase=3`・`phase=emails_staged`・「legacy value」をフェーズ 1 のコミットクラッシュウィンドウ説明へ英語で更新する。
 - [ ] `TestResetPhasePersistedNumericValues`：`resetPhaseAborting` のアサーション行を削除し、フェーズ 1・4 のみ検証する。（AC-08）
 - [ ] `TestValidateManifestPhaseRange`：有効値を `{1, 4}` のみにし、拒否値を `{0, 2, 3, 5, 6, 99}` に更新する。（AC-09）
@@ -292,8 +291,11 @@
 - [ ] **`TestLegacyPhaseFailsClosed_ResetForRecovery`**（テーブル駆動）を追加する：フェーズ 2・3・5 のマニフェストが存在する状態で `ResetForRecovery` を呼び出すと `ErrResetManifestPhaseUnknown` が返り、かつマニフェストファイルとステージングディレクトリが削除されずに残ることを検証する。（AC-10、AC-11）
 - [ ] **`TestLegacyPhaseFailsClosed_OpenReadWrite`**（テーブル駆動）を追加する：フェーズ 2・3・5 のマニフェストが存在する状態で `Open(OpenReadWrite)` を呼び出すと `ErrResetManifestPhaseUnknown` が返り、かつマニフェストファイルとステージングディレクトリが削除されずに残ることを検証する。（AC-10、AC-11）
 - [ ] **`TestHasPendingReset_LegacyPhaseFailsClosed`**（テーブル駆動）を追加する：フェーズ 2・3・5 のマニフェストが存在する状態で `HasPendingReset` を呼び出すと `ErrResetManifestPhaseUnknown` が返り、かつマニフェストファイルとステージングディレクトリが削除されずに残ることを検証する。（AC-10、AC-11）
+- [ ] **`TestLegacyPhaseFailsClosed_ApplyRecovery`**（テーブル駆動）を追加する：フェーズ 2・3・5 のマニフェストが存在する状態で `ApplyRecovery` を呼び出すと、`HasPendingReset` の内部で `validateManifestPhase` が fail-closed し、`ErrResetManifestPhaseUnknown` を含むエラーが返ることを検証する（`errors.As` で `*ErrResetManifestPhaseUnknown` を確認）。`Open(OpenRecoverReset)` でストアを開いてから `ApplyRecovery` を呼び出す。（AC-10、AC-11：`ApplyRecovery → HasPendingReset` 経路の fail-closed）
 
-これら 3 つのテストは `recovery_test.go`（`package store` の内部テスト）に追加し、`resetPhase` 型に直接アクセスする。新規ヘルパーファイルは不要（既存の `writeResetManifest`・`resetManifestPath`・`resetStagingPath` を再利用できる）。
+- [ ] **`TestResetForRecovery_StaleUIDMismatchManifestReset`** を追加する：フェーズ 1（`resetPhaseManifestWritten`）かつ `CurrUIDValidity: 150`（現在の `recovery_required` の 200 と不一致）のマニフェストが存在する状態で `Open(OpenRecoverReset)` → `ResetForRecovery(200)` を呼び出すと、`cleanupCompletedReset` の UID 不一致検出により stale マニフェストとステージングが除去されて収束することを検証する（`assertResetConverged` のアサーションを維持）。`TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` が担っていた UID 不一致クリーンアップパスを、有効フェーズ 1 で再現する置換テスト。
+
+これら 5 つのテストは `recovery_test.go`（`package store` の内部テスト）に追加し、`resetPhase` 型に直接アクセスする。新規ヘルパーファイルは不要（既存の `writeResetManifest`・`resetManifestPath`・`resetStagingPath` を再利用できる）。
 
 #### 3-5. `internal/store/store_test.go` の変更
 
@@ -312,12 +314,12 @@
 #### 3-7. `cmd/tlsrpt-digest/recover_test.go` の変更（更新）
 
 - [ ] `TestRecover_YesAlone`：テストコメントから `--abort-reset` を削除し、`assert.Contains(t, stderr.String(), "--yes requires --mode or --abort-reset")` を `assert.Contains(t, stderr.String(), "--yes requires --mode")` かつ `assert.NotContains(t, stderr.String(), "--abort-reset")` に更新する。（AC-07）
-- [ ] `TestRecover_NoRecoveryRequired`：`{RecoverAbort: true, RecoverYes: true}` ケースを削除し、`st.AbortResetCallCount = 0` および `assert.Equal(t, 0, st.AbortResetCallCount)` の参照をすべて削除する。
+- [ ] `TestRecover_NoRecoveryRequired`：`[]cliOptions{...}` スライスリテラルから `{RecoverAbort: true, RecoverYes: true}` エントリ（L262 付近の 1 行）を削除する（残り 4 エントリはそのまま維持する）。あわせてループ本体の `st.AbortResetCallCount = 0`（全イテレーションに共通のリセット行）と `assert.Equal(t, 0, st.AbortResetCallCount)`（全イテレーションの共通アサーション行）を削除する。`AbortResetCallCount` フィールド自体が `FakeStore` から削除されるため、これらすべての参照を除去する必要がある。
 - [ ] `TestRecover_CommittedCleanupPending_StatusDisplay`：`{RecoverAbort: true, RecoverYes: true}` ケースを削除し、`AbortResetCallCount` 参照を削除する。
 - [ ] `TestRecover_StatusDisplayNoMode`：`assert.Equal(t, 0, st.AbortResetCallCount)` を削除する。
 - [ ] `TestRecover_PendingResetDisplaysOptions`：`assert.Contains(t, output, "abort-reset --yes")` を削除する。（AC-07）
-- [ ] `TestBootstrap_PendingResetShowsGuidance`（`recover_test.go:401`。`boot_test.go` の `TestBootstrap_PendingResetAdvice` とは別関数）：`assert.Contains(t, err.Error(), "recover --abort-reset --yes")`（L415）を削除する。あわせて関数ドキュメントコメントを英語で「guidance for the continue path」へ更新する。（AC-07）
-- [ ] `TestRecover_PendingResetShowsStatusForNonDestructiveModes`：`AbortResetCallCount` アサーションと `assert.Contains(t, output, "recover --abort-reset --yes")` を削除する。（AC-07）
+- [ ] `TestBootstrap_PendingResetShowsGuidance`（`recover_test.go:401`。`boot_test.go` の `TestBootstrap_PendingResetAdvice` とは別関数）：`assert.Contains(t, err.Error(), "recover --abort-reset --yes")`（L415）を削除し、代わりに `assert.NotContains(t, err.Error(), "abort-reset")` を追加する。あわせて関数ドキュメントコメントを英語で「guidance for the continue path」へ更新する（L399 の「guidance for both continue and abort paths」→「guidance for the continue path」）。（AC-07）
+- [ ] `TestRecover_PendingResetShowsStatusForNonDestructiveModes`：`AbortResetCallCount` アサーション（L460）と `assert.Contains(t, output, "recover --abort-reset --yes")`（L469）を削除し、代わりに `assert.NotContains(t, output, "abort-reset")` を追加して abort 参照の再出現を防ぐ回帰ガードとする。（AC-07）
 - [ ] `TestRecover_HasPendingResetFailure`：`assert.Equal(t, 0, st.AbortResetCallCount)` を削除する。
 
 #### 3-8. `cmd/tlsrpt-digest/main_test.go` の変更
@@ -374,6 +376,7 @@
 #### 4-3. `docs/translation_glossary.md` の変更
 
 - [ ] 「保留リセット / pending reset」の定義を更新する：現状「フェーズ 1〜3 および フェーズ 5」→「フェーズ 1 のみ」に更新し、`AbortReset` 廃止に整合させる。
+- [ ] 用語集全体を `rg -n -e "AbortReset" -e "abort-reset" -e "フェーズ 5" -e "フェーズ 2" -e "フェーズ 3" -e "ErrResetAbortInProgress" -e "ErrResetNotPending" -e "中断機能" docs/translation_glossary.md` で検索し、廃止済みの状態・エラー型・機能への言及を削除または「廃止済み」として更新する。
 
 #### 4-4. `docs/operations/legacy_reset_manifest_upgrade.ja.md` の新規作成
 
@@ -409,6 +412,7 @@
 - `internal/store/recovery_test.go` で `validateManifestPhase` の有効値 `{1, 4}` と拒否値 `{0, 2, 3, 5, 6, 99}` を直接検証する。（AC-09）
 - `ResetForRecovery`・`Open(OpenReadWrite)`・`HasPendingReset` の各入口で、レガシー値 2・3・5 が `ErrResetManifestPhaseUnknown` を返し、ステージングとマニフェストを保全することをテーブル駆動で検証する。（AC-10、AC-11）
 - 既存のクラッシュ再開テストは、レガシー値植え込みをフェーズ 1 植え込みへ変更し、非自明な部分ステージング状態の冪等収束を維持する。（AC-09、AC-13）
+- 削除される `TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` が持っていた `CurrUIDValidity` 不一致クリーンアップパスの検証は、`TestResetForRecovery_StaleUIDMismatchManifestReset` でフェーズ 1 を使って再現する。
 
 ### 4.2 CLI・通知テスト
 
@@ -447,10 +451,10 @@
 | AC-07e | 2-4（`systemErrorHint` 更新） | `internal/notify/format_test.go::TestFormatSystemError_ActionHint_UIDValidityChanged` と `::TestFormatSystemError_ActionHint_RecoveryRequired` が `abort-reset` 不在を検証する。 |
 | AC-08 | 1-1（`resetPhaseAborting` 削除） | `internal/store/recovery_test.go::TestResetPhasePersistedNumericValues`。`rg -n "resetPhaseAborting" internal cmd` の期待結果：一致なし。 |
 | AC-09 | 1-1（`validateManifestPhase` 変更） | `internal/store/recovery_test.go::TestValidateManifestPhaseRange` が有効値 `{1, 4}` と拒否値 `{0, 2, 3, 5, 6, 99}` を検証する。 |
-| AC-10 | 1-1（`validateManifestPhase` 変更） | `internal/store/recovery_test.go::TestLegacyPhaseFailsClosed_ResetForRecovery`、`::TestLegacyPhaseFailsClosed_OpenReadWrite`、`::TestHasPendingReset_LegacyPhaseFailsClosed` がフェーズ 2・3 の fail-closed と保全を検証する。 |
-| AC-11 | 1-1（`validateManifestPhase` 変更） | `internal/store/recovery_test.go::TestLegacyPhaseFailsClosed_ResetForRecovery`、`::TestLegacyPhaseFailsClosed_OpenReadWrite`、`::TestHasPendingReset_LegacyPhaseFailsClosed` がフェーズ 5 の fail-closed と保全を検証する。 |
+| AC-10 | 1-1（`validateManifestPhase` 変更） | `internal/store/recovery_test.go::TestLegacyPhaseFailsClosed_ResetForRecovery`、`::TestLegacyPhaseFailsClosed_OpenReadWrite`、`::TestHasPendingReset_LegacyPhaseFailsClosed`、`::TestLegacyPhaseFailsClosed_ApplyRecovery` がフェーズ 2・3 の fail-closed と保全を検証する。 |
+| AC-11 | 1-1（`validateManifestPhase` 変更） | `internal/store/recovery_test.go::TestLegacyPhaseFailsClosed_ResetForRecovery`、`::TestLegacyPhaseFailsClosed_OpenReadWrite`、`::TestHasPendingReset_LegacyPhaseFailsClosed`、`::TestLegacyPhaseFailsClosed_ApplyRecovery` がフェーズ 5 の fail-closed と保全を検証する。 |
 | AC-12 | 1-1（フェーズ 5 拒否チェック削除） | `rg -n "mfst\\.Phase == resetPhaseAborting" internal/store/recovery.go` と `rg -n "ErrResetAbortInProgress" internal/store/recovery.go` の期待結果：一致なし。AC-11 の fail-closed テストが代替挙動を検証する。 |
-| AC-13 | 1-1〜1-4（コメント整理） | `rg -n -e "legacy 2" -e "legacy 2-3" -e "legacy 2–3" -e "phase < resetPhaseCommitted" -e "reset or abort" -e "or AbortReset" internal/store/recovery.go internal/store/store.go internal/store/types.go` の期待結果：一致なし。`rg -n -e "phase=2" -e "phase=3" -e "phase=emails_staged" -e "legacy phase-2" -e "legacy phase-3" -e "legacy value" -e "2–3" -e "2・3" internal/store -g "*_test.go"` の期待結果：削除対象テストまたは新規 fail-closed テストの意図的な記述のみ。 |
+| AC-13 | 1-1〜1-4（コメント整理） | `rg -n -e "legacy 2" -e "legacy 2-3" -e "legacy 2–3" -e "phase < resetPhaseCommitted" -e "reset or abort" -e "or AbortReset" internal/store/recovery.go internal/store/store.go internal/store/types.go internal/store/recovery_test.go internal/store/store_test.go` の期待結果：一致なし。`rg -n -e "phase=2" -e "phase=3" -e "phase=emails_staged" -e "legacy phase-2" -e "legacy phase-3" -e "legacy value" -e "2–3" -e "2・3" internal/store -g "*_test.go"` の期待結果：削除対象テストまたは新規 fail-closed テストの意図的な記述のみ。 |
 | AC-14 | 4-1（ADR フェーズ表更新） | `rg -n -e "resetPhaseAborting" -e "フェーズ 5" -e "Phase 5" -e "{1, 4, 5}" docs/dev/adr/0003_reset_phase_design.ja.md docs/dev/adr/0003_reset_phase_design.md` の期待結果：廃止の経緯として明示した段落以外は一致なし。 |
 | AC-15 | 4-1（ADR 設計根拠節更新） | `rg -n -e "フェーズ 5（recovery_required リセットマーカー）を設ける理由" -e "reason for phase 5" -e "ErrResetAbortInProgress" -e "restoreFromStaging" docs/dev/adr/0003_reset_phase_design.ja.md docs/dev/adr/0003_reset_phase_design.md` の期待結果：一致なし。 |
 | AC-16 | 4-1（ADR 状態遷移図更新） | `rg -n -e "P5" -e "P1 --> P5" -e "P5 --> RR" -e "abort-reset" docs/dev/adr/0003_reset_phase_design.ja.md docs/dev/adr/0003_reset_phase_design.md` の期待結果：廃止の経緯として明示した記述以外は一致なし。 |
