@@ -31,7 +31,7 @@
 
 | ファイル | 変更種別 | 変更箇所 |
 |---|---|---|
-| `internal/store/recovery.go` | 実装変更 | （1）定数 `resetPhaseDataStaged=2`・`resetPhaseEmailsStaged=3` を削除する。（2）`advanceResetPhases` 内の中間チェックポイント書き込み（フェーズ 2・3 の `writeResetManifest` 呼び出し）を削除し、ステージング 2 操作とコミットを連続実行に変更する。（3）コミット前判定条件 `mfst.Phase <= resetPhaseEmailsStaged` を `mfst.Phase < resetPhaseCommitted` に変更する。（4）関数コメント（"Forward: 1 → 2 → 3 → 4"）・型定義コメントを新定義に整合させる。（5）公開 API を増やさず、テストからマニフェスト書き込みフェーズと `advanceResetPhases` 内の操作順序を観測できる package-private の差し替え点を追加する。 |
+| `internal/store/recovery.go` | 実装変更 | （1）定数 `resetPhaseDataStaged=2`・`resetPhaseEmailsStaged=3` を削除する。（2）`advanceResetPhases` 内の中間チェックポイント書き込み（フェーズ 2・3 の `writeResetManifest` 呼び出し）を削除し、ステージング 2 操作とコミットを連続実行に変更する。（3）コミット前判定条件 `mfst.Phase <= resetPhaseEmailsStaged` を `mfst.Phase < resetPhaseCommitted` に変更する。（4）フェーズ 2・3 を参照する陳腐化コメント計 7 箇所（Phase 1.1 に列挙）を新定義に整合させる。テスト観測用の production seam・公開 API は追加しない（アーキテクチャ §2.1・§3.1）。 |
 | `internal/store/recovery_test.go` | テスト変更・追加 | `rg -n -e resetPhaseDataStaged -e resetPhaseEmailsStaged internal/store` で検出される全参照を対象に、`resetPhaseDataStaged` / `resetPhaseEmailsStaged` をリテラル値 `resetPhase(2)` / `resetPhase(3)` に置き換える。対象テストは下表の 8 件。レガシー値の読み取り互換テスト（AC-05・AC-06）と、フェーズ書き込み列・操作順序の観測テスト（AC-01・AC-02）を新規追加する。 |
 | `internal/store/store_test.go` | テスト変更 | `rg -n "resetPhaseEmailsStaged" internal/store/store_test.go` で検出される 2 箇所を `resetPhase(3)` に置き換える。 |
 | `internal/store/store.go` | コメント変更 | `HasPendingReset` コメントの "phases 1–3 or 5" を新定義に整合した表現に更新する。 |
@@ -53,9 +53,9 @@
 
 #### 再利用できる既存資産
 
-- `os.MkdirAll(stagingPath, dirPerm)`・`stageDataFile`・`stageEmailsDir`・`commitReset` の本体処理は変更しない。AC-02 の順序検証のため、`advanceResetPhases` から呼ぶ関数を package-private 変数経由にするか、同等にテストから呼び出し順序を観測できる最小の差し替え点を置く。
-- `writeResetManifest` の本体処理は変更しない。AC-01 の書き込み列検証のため、呼び出し元から使う package-private 変数を追加し、テストでフェーズ列を記録できるようにする。`validateManifestPhase`・`readResetManifest` は変更しない。
-- `AbortReset` のロジックはフェーズ 2・3 を単一値比較の対象にしておらず、コミット前の範囲として扱う既存の構造が維持される。
+- `os.MkdirAll(stagingPath, dirPerm)`・`stageDataFile`・`stageEmailsDir`・`commitReset`・`writeResetManifest`・`validateManifestPhase`・`readResetManifest` の本体処理は変更しない。`advanceResetPhases` 内の中間 `writeResetManifest`（フェーズ 2・3）呼び出しの削除と、呼び出し元の判定条件のみを変更する。
+- AC-01・AC-02 はテスト観測用の seam を導入せず、ディスク上のファイル配置と最終状態で検証する（アーキテクチャ §5.2 の設計思想「進捗はファイル配置から導出可能」に沿う）。「フェーズ 2・3 を新規に書かない」ことは、(a) 中間 `writeResetManifest`（フェーズ 2・3）呼び出しを Task 1.2 で削除し、定数を Task 1.1 で削除する（定数削除後は当該呼び出しがコンパイル不能になるため `make build` の成功が呼び出し除去を保証し、Phase 1.3・2.5 の `rg` が定数の不在を確認する）、(b) マニフェストをフェーズ 1 のままにした各ファイル配置状態から `ResetForRecovery` が収束することを確認（Phase 2.3）、の 2 点で担保する。
+- `AbortReset` のロジックはフェーズ 2・3 を単一値比較の対象にしておらず、コミット前の範囲として扱う既存の構造が維持される。`AbortReset` がフェーズ 5（aborting）を書く挙動は、既存の `TestAbortReset_ResumesFromAbortingPhase`・`TestResetForRecovery_RefusesAbortingPhase`（フェーズ 5 マニフェストを構築して再開・拒否を検証）で担保され、seam なしで確認できる。
 
 ---
 
@@ -65,31 +65,29 @@
 
 - [ ] **1.1** フェーズ定数を `{1, 4, 5}` のみに整理する
   - ファイル: `internal/store/recovery.go`
-  - 作業内容: 定数 `resetPhaseDataStaged = 2` と `resetPhaseEmailsStaged = 3` の定義を削除する。以下 4 箇所のコメントを内容に従って更新する。
-    - `resetPhase` 型定義のコメント: "Forward: 1 → 2 → 3 → 4" → "Forward: 1 → 4" に更新する。
-    - `ResetForRecovery` の関数コメント: "Drives phases 1→2→3→4→cleanup" → "Drives phases 1→4→cleanup" に更新する。
-    - `ResetForRecovery` 内インラインコメント: "A pre-commit manifest (phases 1–3)" → "A pre-commit manifest (phase < resetPhaseCommitted, or legacy phases 2–3)" に更新する。
-    - `AbortReset` の関数コメント: "Valid for pre-commit phases (1–3)" → "Valid for pre-commit phases (phase < resetPhaseCommitted, or legacy phases 2–3)" に更新する。
-  - 完了基準: 定数定義とコメントが更新済みであること。`make build` は Phase 1.3 で production 参照を除去した後に実行する。
+  - 作業内容: 定数 `resetPhaseDataStaged = 2` と `resetPhaseEmailsStaged = 3` の定義を削除する。フェーズ 2・3 を参照する以下 7 箇所のコメントを内容に従って更新する（行番号は現状の `recovery.go`）。
+    - 38 行（`resetPhase` 型定義コメント）: "Forward: 1 (manifest_written, WAL) → 2 (data_staged) → 3 (emails_staged) → 4 (committed)." → "Forward: 1 (manifest_written, WAL) → 4 (committed)." に更新する。
+    - 486 行（`ResetForRecovery` 関数コメント）: "Drives phases 1→2→3→4→cleanup" → "Drives phases 1→4→cleanup" に更新する。
+    - 522 行（`ResetForRecovery` 内インラインコメント）: "A pre-commit manifest (phases 1–3)" → "A pre-commit manifest (phase < resetPhaseCommitted, i.e. phase 1 or legacy 2–3)" に更新する。
+    - 596–597 行（`advanceResetPhases` 関数コメント）: "writing a checkpoint manifest after each idempotent file operation." と "See ADR-0003 §3–4 for the WAL/checkpoint pattern and idempotence invariants." を、中間チェックポイントを書かず一括実行する新挙動に合わせて書き換える。
+    - 661 行（`AbortReset` 関数コメント）: "Valid for pre-commit phases (1–3)" → "Valid for pre-commit phases (phase < resetPhaseCommitted, i.e. phase 1 or legacy 2–3)" に更新する。
+    - 691–693 行（`AbortReset` 内インラインコメント）: "the commit already happened even if the manifest is still at phase 3." → "...even if the manifest is still pre-commit (phase 1, or legacy 2–3)." に更新する。
+    - 755 行（`HasPendingReset` 実装コメント）: "Returns true only for active-phase resets (phases 1–3 or 5)." → "Returns true for any non-committed manifest: pre-commit (phase 1, or legacy 2–3) and aborting (phase 5)." に更新する。
+  - 完了基準: 定数定義が削除され、上記 7 箇所のコメントが更新済みであること。`make build` は Phase 1.3 で production 参照を除去した後に実行する。
 
 - [ ] **1.2** `advanceResetPhases` から中間チェックポイント書き込みを削除する
   - ファイル: `internal/store/recovery.go`
-  - 作業内容: `advanceResetPhases` 内で、`stageDataFile` 後の `writeResetManifest(phase=2)` 呼び出しと `stageEmailsDir` 後の `writeResetManifest(phase=3)` 呼び出しを削除する。フェーズ 1（コミット前）から、ステージング領域確保 → `stageDataFile` → `stageEmailsDir` → `commitReset` を順に実行するフローにする（アーキテクチャ §2.2）。関数コメントを更新する。
-  - 完了基準: 関数内に `writeResetManifest` の呼び出しがなく（`commitReset` 内の書き込みは除く）、Phase 1.2a の差し替え点経由で `commitReset` が呼ばれること。
-
-- [ ] **1.2a** フェーズ書き込み列と操作順序をテストから観測できるようにする
-  - ファイル: `internal/store/recovery.go`
-  - 作業内容: `writeResetManifest`、ステージング領域確保、`stageDataFile`、`stageEmailsDir`、`commitReset` の本体は維持し、呼び出し側だけを unexported の hook 構造体または package-private 関数変数経由にする。これはフェーズ 2・3 が「書かれない」ことと操作順序をファイル最終状態だけでは証明できないための最小限の production seam とする。公開 API・永続フォーマットは変えず、production code から再代入しない。差し替えるテストでは `t.Parallel` を使わず、`t.Cleanup` で必ず元に戻す。
-  - 完了基準: 公開 API・永続フォーマット・本体処理を増やさず、Phase 2.3a のテストでフェーズ書き込み列と `advanceResetPhases` の操作順序を記録できること。
+  - 作業内容: `advanceResetPhases` 内で、`stageDataFile` 後の `writeResetManifest(phase=2)` 呼び出しと `stageEmailsDir` 後の `writeResetManifest(phase=3)` 呼び出しを削除する。フェーズ 1（コミット前）から、ステージング領域確保 → `stageDataFile` → `stageEmailsDir` → `commitReset` を順に実行するフローにする（アーキテクチャ §2.2）。コメント（596–597 行）は Phase 1.1 で更新する。
+  - 完了基準: `advanceResetPhases` 関数内に `writeResetManifest` の直接呼び出しがなく（フェーズ確定は `commitReset` 内の 1 回のみ）、フェーズ 1 から `commitReset` まで一括実行されること。
 
 - [ ] **1.3** コミット前判定条件を範囲式に変更する
   - ファイル: `internal/store/recovery.go`
   - 作業内容: `ResetForRecovery` 内の残存マニフェスト検出条件 `mfst.Phase <= resetPhaseEmailsStaged` を `mfst.Phase < resetPhaseCommitted` に変更する（アーキテクチャ §3.2・§6.2）。
   - 完了基準: `rg -n -e resetPhaseEmailsStaged -e resetPhaseDataStaged internal/store/recovery.go internal/store/store.go` が該当なしになり、`make build` でコンパイルエラーが出ないこと（テスト参照は Phase 2.1・2.2 で解消する）。
 
-- [ ] **1.4** `store.go` のコメントを更新する
+- [ ] **1.4** `store.go` のインターフェースコメントを更新する
   - ファイル: `internal/store/store.go`
-  - 作業内容: `HasPendingReset` のコメント "phases 1–3 or 5" を、フェーズ 2・3 を能動的な書き込み対象として記述せず、レガシー値として読み取り互換で扱われる旨が読み取れる表現に更新する（例: "pre-commit phases (1, or legacy 2–3) and aborting phase (5)"）。
+  - 作業内容: `Store.HasPendingReset` のインターフェースコメント（99 行）"reports whether an active reset is in progress (phases 1–3 or 5)" を更新する。フェーズ 2・3 を能動的な書き込み対象として記述せず、レガシー値として読み取り互換で扱われる旨が読み取れる表現にする（例: "an active reset is in progress (pre-commit phase 1 or legacy 2–3, or aborting phase 5)"）。これは `recovery.go:755` の実装コメント（Phase 1.1 で対応）とは別の重複コメントである。
   - 完了基準: 更新後のコメントが新フェーズ定義（コミット前は `phase < resetPhaseCommitted`、レガシー値はコミット前として読み取り互換）を正確に反映しており、フェーズ 2・3 を能動的な書き込み対象として記述していないこと。
 
 ### Phase 2: テストの更新と新規追加
@@ -109,30 +107,33 @@
   - 作業内容: `TestResetForRecovery_CrashAfterBothFilesStaged` を新規追加する。`rootDir` にレポートと emails を植え、`stagingPath` に `tlsrpt.json` と `emails/` を移動済みにし、マニフェストを `resetPhaseManifestWritten`（フェーズ 1）で書いた状態から `ResetForRecovery(200)` を呼び出す。空ストア（`tlsrpt.json` と `emails/` が存在しないこと）・新 UIDVALIDITY・`recovery_required` 解消（`HasPendingReset` が `false` を返すこと）・マニフェスト削除・ステージング領域削除へ収束することを確認する。クラッシュ地点の定義はアーキテクチャ §5.2 を参照する。
   - 完了基準: テストが `make test` で通ること。
 
-- [ ] **2.3a** フェーズ書き込み列と操作順序を検証する（AC-01・AC-02）
+- [ ] **2.3a** 新規リセットの一括遷移を行動で検証する（AC-01・AC-02）
   - ファイル: `internal/store/recovery_test.go`
-  - 作業内容: `TestResetForRecovery_WritesOnlyManifestAndCommittedPhases` を追加し、Phase 1.2a の差し替え点で `writeResetManifest` が受け取る `Phase` を記録する。新規リセット実行時の書き込み列が `[resetPhaseManifestWritten, resetPhaseCommitted]` だけで、`resetPhase(2)`・`resetPhase(3)` が現れないことをアサートする。併せて `TestAdvanceResetPhases_RunsStagesBeforeCommit` を追加し、差し替え点でステージング領域確保 → `stageDataFile` → `stageEmailsDir` → `commitReset` の呼び出し順序を記録して完全一致をアサートする。
-  - 完了基準: 2 つのテストが `make test` で通り、AC-01 はフェーズ列、AC-02 は呼び出し順序で検証されること。
+  - 作業内容: 既存の `TestResetForRecovery_ClearsDataAndSentinel` を強化し、(1) リセット後にストアが空であること（`GetAllReports` が空）、(2) `rootDir` 直下に `tlsrpt.json`・`emails/` が存在しないことのアサートを追加する。両ファイルが root から消えていることは、コミット前に両方がステージングへ退避され（AC-02 の「ステージング 2 操作 → コミット」順序の行動的証跡）、フェーズ 1 から committed・クリーンアップへ収束したこと（AC-01 の 1→4 遷移）を示す。
+  - 補足: 「フェーズ 2・3 を新規に書かない」ことの直接観測はテスト用 seam を導入せず、(a) 中間 `writeResetManifest` 呼び出しと定数の削除を `rg` で確認（Phase 1.3・2.5）、(b) マニフェストをフェーズ 1 に固定したまま両ファイルを退避済みにした状態から収束する Phase 2.3 のテスト、で担保する（§1.3 の方針）。
+  - 完了基準: 強化したテストが `make test` で通り、リセット後にストアが空で、root にステージング対象ファイルが残らないことを確認すること。
 
 - [ ] **2.3b** C4 クラッシュウィンドウとステージング領域境界を検証する（AC-02・AC-03）
   - ファイル: `internal/store/recovery_test.go`
-  - 作業内容: 新設計の C4（センチネル確定済み・マニフェストは `resetPhaseManifestWritten` のまま）を明示する `TestOpen_CleansUpAfterCommitCrashWindowManifestWritten` と `TestResetForRecovery_CommitCrashWindowManifestWritten_ZeroUID` を追加する。それぞれ `OpenReadWrite` 経由のクリーンアップと `ResetForRecovery(0)` 経由のクリーンアップが、空ストア・新 UIDVALIDITY・`recovery_required` 解消・マニフェスト削除・ステージング領域削除へ収束することを確認する。既存の phase 3 版はレガシー値の読み取り互換テストとして維持する。
-  - 作業内容: `TestResetForRecovery_Phase1MissingStagingDirConverges` を追加し、フェーズ 1 マニフェストがあるがステージング領域が存在しない状態から `ResetForRecovery` を実行しても、ステージング領域確保が先に行われ、空ストア・新 UIDVALIDITY・`recovery_required` 解消・マニフェスト削除・ステージング領域削除へ収束することを確認する。
+  - 作業内容: 以下 3 つのテストを追加する。いずれも空ストア・新 UIDVALIDITY・`recovery_required` 解消・マニフェスト削除・ステージング領域削除への収束をアサートする。
+    1. `TestOpen_CleansUpAfterCommitCrashWindowManifestWritten`: 新設計の C4（センチネル確定済み・マニフェストは `resetPhaseManifestWritten` のまま）を `OpenReadWrite` 経由でクリーンアップする。
+    2. `TestResetForRecovery_CommitCrashWindowManifestWritten_ZeroUID`: 同じ C4 状態を `ResetForRecovery(0)` 経由でクリーンアップする。
+    3. `TestResetForRecovery_Phase1MissingStagingDirConverges`: フェーズ 1 マニフェストはあるがステージング領域が存在しない状態から `ResetForRecovery` を実行し、ステージング領域が再作成されて収束する（AC-02 の境界値）。
+  - 補足: 既存の phase 3 版（`TestOpen_CleansUpAfterCommitCrashWindow`・`TestResetForRecovery_CommitCrashWindow_ZeroUID`）は Phase 2.1 で `resetPhase(3)` に置換し、レガシー値の読み取り互換テストとして維持する。
   - 完了基準: 3 つのテストが `make test` で通ること。
 
-- [ ] **2.3c** フェーズ 4・5 の永続数値をリテラルで検証する（AC-04）
+- [ ] **2.3c** フェーズ 4・5 の永続数値と aborting マーカーを検証する（AC-04）
   - ファイル: `internal/store/recovery_test.go`
-  - 作業内容: `TestResetPhasePersistedNumericValues` を追加し、`resetPhaseCommitted == resetPhase(4)` と `resetPhaseAborting == resetPhase(5)` をリテラル値でアサートする。
-  - 作業内容: `TestAbortReset_WritesAbortingPhase` を追加し、Phase 1.2a の書き込み差し替え点で `AbortReset` が `resetPhaseAborting`（永続値 5）を書いてから中断復元へ進むことを確認する。
-  - 完了基準: 2 つのテストが `make test` で通り、フェーズ 4・5 の再採番と `AbortReset` の phase 5 書き込み漏れがテストで検出されること。
+  - 作業内容: `TestResetPhasePersistedNumericValues` を追加し、`resetPhaseCommitted == resetPhase(4)` と `resetPhaseAborting == resetPhase(5)` をリテラル値でアサートする（再採番を検出する）。`AbortReset` がフェーズ 5 を書いてから中断復元へ進む挙動は、既存の `TestAbortReset_ResumesFromAbortingPhase`（フェーズ 5 マニフェストから復元を再開）と `TestResetForRecovery_RefusesAbortingPhase`（フェーズ 5 で `ResetForRecovery` が `ErrResetAbortInProgress` を返す）が seam なしで担保するため、新規の seam テストは追加しない。
+  - 完了基準: `TestResetPhasePersistedNumericValues` が `make test` で通り、フェーズ 4・5 の再採番がテストで検出されること。
 
 - [ ] **2.4** レガシー値の読み取り互換テストを追加する（AC-05・AC-06）
   - ファイル: `internal/store/recovery_test.go`
   - 作業内容:
-    - AC-05: `validateManifestPhase` のテーブル駆動テストを追加する。受理値は `1, 2, 3, 4, 5`、拒否値は境界値 `0, 6` と既存の代表値 `99` とし、レガシー値 2・3 が拒否されないことと値域境界を同時に確認する。
+    - AC-05: `validateManifestPhase` のテーブル駆動テスト `TestValidateManifestPhaseRange` を追加する。受理値は `1, 2, 3, 4, 5`、拒否値は境界値 `0, 6` と既存の代表値 `99` とし、レガシー値 2・3 が拒否されないことと値域境界を同時に確認する。
     - AC-05: Phase 2.1 で `resetPhase(2)` に置き換える `TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate` を強化する。フェーズ 2 のレガシーマニフェスト（ステート: `tlsrpt.json` がステージングに移動済み・`emails/` は rootDir に残存）から `ResetForRecovery` を実行し、空ストア・新 UIDVALIDITY・`recovery_required` 解消・マニフェスト削除・ステージング領域削除をアサートする。
     - AC-05: Phase 2.1 で `resetPhase(3)` に置き換える `TestResetForRecovery_IdempotentAfterCrashBeforeCommit` を強化する。フェーズ 3 のレガシーマニフェスト、退避済み `tlsrpt.json`、退避済み `emails/`、旧 `recovery_required` を用意して `ResetForRecovery` を呼び出し、空ストア・新 UIDVALIDITY・`recovery_required` 解消・マニフェスト削除・ステージング領域削除をアサートする。
-    - AC-06: フェーズ 2・3 のレガシーマニフェスト（`CurrUIDValidity` が現在の `recovery_required` の値と不一致）を持つストアで `ResetForRecovery` を呼び出したとき、残存マニフェストと判定されて（a）旧マニフェストが削除されること、（b）最終的に空ストア・新 UIDVALIDITY・`recovery_required` 解消へ収束することを確認するテーブル駆動テストを追加する（旧マニフェストの削除は最終状態でマニフェストが存在しないことで確認する）。
+    - AC-06: テーブル駆動テスト `TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` を追加する。フェーズ 2・3 のレガシーマニフェスト（`CurrUIDValidity` が現在の `recovery_required` の値と不一致）を持つストアで `ResetForRecovery` を呼び出したとき、残存マニフェストと判定されて（a）旧マニフェストが削除されること、（b）最終的に空ストア・新 UIDVALIDITY・`recovery_required` 解消へ収束することを確認する（旧マニフェストの削除は最終状態でマニフェストが存在しないことで確認する）。
   - 完了基準: 追加したテストが `make test` で通ること。
 
 - [ ] **2.5** `make fmt && make lint && make test` を通す
@@ -161,10 +162,10 @@
 
 | AC | 実装箇所 | 検証タスク | 検証方法 |
 |---|---|---|---|
-| AC-01 | `internal/store/recovery.go::initResetManifest`、`advanceResetPhases`、`commitReset` | `internal/store/recovery_test.go::TestResetForRecovery_WritesOnlyManifestAndCommittedPhases`（Phase 2.3a） | package-private の書き込み差し替え点で `writeResetManifest` の `Phase` 列を記録し、`[1, 4]` の完全一致と `2`・`3` が一度も書かれないことをアサートする。 |
-| AC-02 | `internal/store/recovery.go::advanceResetPhases`、ステージング領域確保、`stageDataFile`、`stageEmailsDir`、`commitReset` | `internal/store/recovery_test.go::TestAdvanceResetPhases_RunsStagesBeforeCommit`（Phase 2.3a）、`TestResetForRecovery_Phase1MissingStagingDirConverges`（Phase 2.3b） | 差し替え点で呼び出し列を記録し、ステージング領域確保 → `stageDataFile` → `stageEmailsDir` → `commitReset` の完全一致をアサートする。ステージング領域が欠けていても再作成され収束することを確認する。 |
-| AC-03 | `internal/store/recovery.go::ResetForRecovery`、`advanceResetPhases`、`cleanupCompletedReset` | Primary: `TestResetForRecovery_CrashAtPhaseManifestWritten`、`TestResetForRecovery_CrashAfterBothFilesStaged`、`TestOpen_CleansUpAfterCommitCrashWindowManifestWritten`、`TestResetForRecovery_CommitCrashWindowManifestWritten_ZeroUID`。Compatibility regression: `TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate`、`TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`、`TestResetForRecovery_IdempotentAfterCrashBeforeCommit` | Primary tests confirm the new C1・C3・C4 file-placement model. Compatibility tests confirm legacy phase 2/3 manifests still converge. All convergence tests assert empty store, new UIDVALIDITY, `recovery_required` cleared, manifest removed, and staging removed where applicable. |
-| AC-04 | `internal/store/recovery.go` の `resetPhaseCommitted`・`resetPhaseAborting`・`commitReset`・`AbortReset` | `internal/store/recovery_test.go::TestResetPhasePersistedNumericValues`（Phase 2.3c）、`TestAbortReset_WritesAbortingPhase`（Phase 2.3c）、`TestAbortReset_AfterCommit`、`TestAbortReset_NoPendingReset`、`TestAbortReset_CrashDuringCommitRefusesAbort`、`internal/store/store_test.go::TestOpen_PendingReset_FailsClosedForReadWrite` | `resetPhaseCommitted == resetPhase(4)`、`resetPhaseAborting == resetPhase(5)` をリテラルでアサートし、`AbortReset` が phase 5 を書くことと phase 4/5 の既存挙動が通ることを確認する。 |
+| AC-01 | `internal/store/recovery.go::advanceResetPhases`、`commitReset` | `TestResetForRecovery_ClearsDataAndSentinel`（強化, Phase 2.3a）、`TestResetForRecovery_CrashAfterBothFilesStaged`（新規, Phase 2.3） | 新規リセットが空ストア・committed・クリーンアップへ収束（1→4 遷移）すること、マニフェストをフェーズ 1 に固定したまま両ファイル退避済みの状態からも収束することを確認する。「フェーズ 2・3 を新規に書かない」ことは Task 1.2 の中間書き込み削除＋`make build`、および Phase 1.3・2.5 の `rg`（定数の不在）で構造的に担保する（seam は導入しない）。 |
+| AC-02 | `internal/store/recovery.go::advanceResetPhases`、ステージング領域確保、`stageDataFile`、`stageEmailsDir`、`commitReset` | `TestResetForRecovery_ClearsDataAndSentinel`（強化, Phase 2.3a）、`TestResetForRecovery_Phase1MissingStagingDirConverges`（新規, Phase 2.3b）、`TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate`（既存）、`TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`（強化, Phase 2.4） | 両ステージング操作がコミット前に完了する（リセット後に root から両ファイルが消える）こと、ステージング領域欠落時も再作成され収束すること、対象ファイル不在時にステージング操作が no-op で収束すること（absent `tlsrpt.json`・absent `emails/`）を確認する。 |
+| AC-03 | `internal/store/recovery.go::ResetForRecovery`、`advanceResetPhases`、`cleanupCompletedReset` | Primary（新設計のファイル配置モデル）: `TestResetForRecovery_CrashAtPhaseManifestWritten`（既存）、`TestResetForRecovery_CrashAfterBothFilesStaged`（新規, Phase 2.3）、`TestOpen_CleansUpAfterCommitCrashWindowManifestWritten`（新規, Phase 2.3b）、`TestResetForRecovery_CommitCrashWindowManifestWritten_ZeroUID`（新規, Phase 2.3b）。Compatibility（レガシー値の収束）: `TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate`（既存）、`TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`（強化, Phase 2.4）、`TestResetForRecovery_IdempotentAfterCrashBeforeCommit`（強化, Phase 2.4） | 各ファイル配置状態からの再実行が空ストア・新 UIDVALIDITY・`recovery_required` 解消・マニフェスト削除・（該当時）ステージング削除へ収束することをアサートする。 |
+| AC-04 | `internal/store/recovery.go` の `resetPhaseCommitted`・`resetPhaseAborting`・`commitReset`・`AbortReset` | `TestResetPhasePersistedNumericValues`（新規, Phase 2.3c）、`TestAbortReset_ResumesFromAbortingPhase`（既存）、`TestResetForRecovery_RefusesAbortingPhase`（既存）、`TestAbortReset_AfterCommit`（既存）、`internal/store/store_test.go::TestOpen_PendingReset_FailsClosedForReadWrite`（Phase 2.2 で定数をリテラル置換） | `resetPhaseCommitted == resetPhase(4)`・`resetPhaseAborting == resetPhase(5)` をリテラルでアサート（再採番検出）。`AbortReset` が phase 5 を書いて honor する挙動と phase 4 の committed 挙動が既存テストで通ることを確認する。 |
 | AC-05 | `internal/store/recovery.go::validateManifestPhase`、`ResetForRecovery`、`advanceResetPhases` | `internal/store/recovery_test.go::TestValidateManifestPhaseRange`、`TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`（strengthened）、`TestResetForRecovery_IdempotentAfterCrashBeforeCommit`（strengthened） | `1..5` が受理され `0`・`6`・`99` が拒否されること、レガシー値 2・3 のマニフェストがコミット前として収束することを確認する。 |
 | AC-06 | `internal/store/recovery.go::ResetForRecovery` の残存マニフェスト検出条件 | `internal/store/recovery_test.go::TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` | phase 2/3 と `CurrUIDValidity` 不一致のテーブル駆動テストで、旧マニフェスト削除、新規リセット開始、最終収束を確認する。 |
 | AC-07 | `docs/dev/adr/0003_reset_phase_design.ja.md`、`docs/dev/adr/0003_reset_phase_design.md` | Phase 3.1・3.3 | `rg -n -e "フェーズ ?2" -e "フェーズ ?3" -e "phase ?2" -e "phase ?3" -e data_staged -e emails_staged -e resetPhaseDataStaged -e resetPhaseEmailsStaged -e チェックポイント -e checkpoint -e "1〜3" -e "1–3" -e "1-3" docs/dev/adr/0003_reset_phase_design.ja.md docs/dev/adr/0003_reset_phase_design.md` の結果を記録し、能動的なフェーズ 2・3 書き込み説明が残っていないことを確認する。 |
@@ -181,7 +182,7 @@
 | M2 | テスト整合・全テスト通過 | Phase 2 |
 | M3 | ドキュメント改訂 | Phase 3 |
 
-Phase 1 と Phase 2 は密接に依存するため、1.1→1.2→1.2a→1.3→2.1→2.2→2.3→2.3a→2.3b→2.3c→2.4→2.5 の順で連続して完結させる。Phase 3 はコードの動作確認が完了した後に 3.1→3.2→3.3 の順で実施する。
+Phase 1 と Phase 2 は密接に依存するため、1.1→1.2→1.3→1.4→2.1→2.2→2.3→2.3a→2.3b→2.3c→2.4→2.5 の順で連続して完結させる。Phase 3 はコードの動作確認が完了した後に 3.1→3.2→3.3 の順で実施する。
 
 ---
 
@@ -189,12 +190,12 @@ Phase 1 と Phase 2 は密接に依存するため、1.1→1.2→1.2a→1.3→2.
 
 ### 単体テスト
 
-- **フェーズ書き込み列**（AC-01）: `TestResetForRecovery_WritesOnlyManifestAndCommittedPhases`（Phase 2.3a）が、新規リセットのマニフェスト書き込み列を `[1, 4]` として直接確認し、レガシー値 2・3 が新規に書かれないことを検証する。
-- **操作順序**（AC-02）: `TestAdvanceResetPhases_RunsStagesBeforeCommit`（Phase 2.3a）が、`advanceResetPhases` の呼び出し列「ステージング領域確保 → `stageDataFile` → `stageEmailsDir` → `commitReset`」を直接確認する。`TestResetForRecovery_Phase1MissingStagingDirConverges`（Phase 2.3b）がステージング領域欠落時の境界値を確認する。
+- **一括遷移（フェーズ 2・3 を書かない）**（AC-01）: `TestResetForRecovery_ClearsDataAndSentinel`（強化, Phase 2.3a）が新規リセットの 1→4 収束を行動で確認する。マニフェストをフェーズ 1 に固定したまま両ファイル退避済みの `TestResetForRecovery_CrashAfterBothFilesStaged`（Phase 2.3）が、中間チェックポイントなしで収束することを示す。「2・3 を書かない」ことの構造的担保は Phase 1.3・2.5 の `rg`（定数・中間書き込み呼び出しの不在）で行う（テスト用 seam は導入しない）。
+- **ステージング順序・冪等**（AC-02）: `TestResetForRecovery_ClearsDataAndSentinel`（強化）がリセット後に root から両ファイルが消えること（=コミット前に両方退避済み）を確認する。`TestResetForRecovery_Phase1MissingStagingDirConverges`（Phase 2.3b）がステージング領域欠落時の境界値を、`TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate`（既存）・`...CrashAfterStageEmailsBeforeManifestUpdate`（強化）が対象ファイル不在時の no-op 冪等を確認する。
 - **クラッシュ収束**（AC-03）: ファイル配置で表現される C1・C2・C3・C4 状態からの再実行 → 空ストア収束。Phase 2.1 で更新する既存テスト、Phase 2.3 の C3 テスト、Phase 2.3b の新設計 C4 テストが担う。
 - **レガシー値の読み取り互換**（AC-05・AC-06）: Phase 2.1 で更新する既存テストを強化し、Phase 2.4 で境界値と残存マニフェストのテーブル駆動テストを追加する。フェーズ 2・3 のリテラルマニフェストを JSON で直接組み立てるか `resetPhase(2)` / `resetPhase(3)` で構築する。
-- **フェーズ 4・5 不変**（AC-04）: リテラル数値アサーション、`AbortReset` の phase 5 書き込み観測、既存テストで担保する。Phase 2.2 で更新した `store_test.go` を含む。
-- **hook 差し替え点の race 確認**: `go test -race ./internal/store` を Phase 2.5 で実行し、package-private hook の復元漏れや並列実行リスクがないことを確認する。
+- **フェーズ 4・5 不変**（AC-04）: `TestResetPhasePersistedNumericValues` のリテラル数値アサーション（4・5 の再採番検出）と、既存の aborting フェーズテスト（`TestAbortReset_ResumesFromAbortingPhase`・`TestResetForRecovery_RefusesAbortingPhase`）・committed テスト（`TestAbortReset_AfterCommit`）・Phase 2.2 で更新する `store_test.go` で担保する。
+- **race 確認**: `go test -race ./internal/store` を Phase 2.5 で実行し、テスト追加によるデータ競合がないことを確認する。
 
 ### 統合テスト
 
@@ -222,8 +223,8 @@ Phase 1 と Phase 2 は密接に依存するため、1.1→1.2→1.2a→1.3→2.
 | `AbortReset` 内のコミット前判定に `resetPhaseEmailsStaged` への暗黙的な依存がある場合 | `AbortReset` が誤動作する | Phase 1.3 までに production 参照をすべて解消し、`make build` でコンパイルエラーがないことを確認してから Phase 2 へ進む |
 | `cleanupCompletedReset` のシナリオ表（§5）が廃止定数を参照している場合 | ADR 改訂漏れ | Phase 3.1 で §5 のシナリオ表も明示的に確認する |
 | 既存の 8 つの定数参照テストが、定数削除後に想定と異なる挙動を検証しているケース | テストが false positive になる | Phase 2.1 の置き換えと同時に、Go ソース内コメントは英語で更新し、legacy phase manifest convergence または pending reset handling for legacy values としてテスト意図を明示する |
-| package-private の関数変数差し替え点が mutable global になり、並列テストや production code からの再代入で不安定化する場合 | 回復処理のテストが順序依存になる | 差し替え点は unexported に閉じ、production code では再代入しない。差し替えるテストでは `t.Parallel` を使わず、`t.Cleanup` で必ず元に戻す |
-| ADR 日英同期または hook 差し替え点の実装調整に想定以上の時間がかかる場合 | Phase 3 または Phase 2.3a〜2.3c が遅延する | コード変更とテスト通過を先に完了させ、ADR 翻訳は日本語版の節構造確定後にまとめて実行する。hook 実装が過大になる場合は、公開 API を増やさない範囲で unexported hook 構造体へ切り替える |
+| `TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate` はテスト名が「StageEmails」だがマニフェストはフェーズ 2（data_staged）で構築される | 実装者が誤って `resetPhase(3)` に「修正」する | Phase 2.1 で `resetPhase(2)` に置換する際、名称はクラッシュ地点・フェーズ値は直前チェックポイントを指す点をコメントで明示する |
+| ADR 日英同期に想定以上の時間がかかる場合 | Phase 3 が遅延する | コード変更とテスト通過を先に完了させ、ADR 翻訳は日本語版の節構造確定後にまとめて実行する |
 
 ---
 
@@ -243,8 +244,8 @@ Phase 1 と Phase 2 は密接に依存するため、1.1→1.2→1.2a→1.3→2.
 ## 8. 完了基準
 
 - `resetPhaseDataStaged` / `resetPhaseEmailsStaged` の定数がコードに残っていないこと
-- `TestResetForRecovery_WritesOnlyManifestAndCommittedPhases` が、新規リセットでフェーズ 2・3 が書かれないことを確認していること
-- `TestAdvanceResetPhases_RunsStagesBeforeCommit` が、`advanceResetPhases` の操作順序を確認していること
+- 新規リセットでフェーズ 2・3 が書かれないことが、定数・中間 `writeResetManifest` 呼び出しの不在（`rg`）と、フェーズ 1 固定で両ファイル退避済みの状態からの収束テスト（`TestResetForRecovery_CrashAfterBothFilesStaged`）で担保されていること
+- `TestResetForRecovery_ClearsDataAndSentinel`（強化）が、リセット後にストアが空で root にステージング対象ファイルが残らないことを確認していること
 - `TestResetForRecovery_Phase1MissingStagingDirConverges` が、ステージング領域欠落時にも収束することを確認していること
 - コミット前判定が `mfst.Phase < resetPhaseCommitted` の範囲式で表現されていること
 - 全 AC（AC-01〜AC-09）に対応するテスト、確認コマンド、または検証結果の記録が「受け入れ条件トレーサビリティ」に紐づいていること
