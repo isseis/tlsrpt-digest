@@ -4,10 +4,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | `draft` |
+| ステータス | `approved` |
 | 作成日 | 2026-05-31 |
-| レビュー日 | - |
-| レビュアー | - |
+| レビュー日 | 2026-05-31 |
+| レビュアー | isseis |
 | コメント | - |
 
 ---
@@ -102,6 +102,19 @@
   - 作業内容: `TestOpen_PendingReset_FailsClosedForReadWrite` および `TestOpen_PendingReset_OpenRecoverResetSucceeds` 内の `resetPhaseEmailsStaged` を `resetPhase(3)` に置き換える。
   - 完了基準: `make test` で 2 件のテストが通ること。
 
+### PR-1 作成ポイント: core phase simplification in store
+
+**対象ステップ**: 1.1 / 1.2 / 1.3 / 1.4 / 2.1 / 2.2
+
+**推奨タイトル**: `refactor(store): simplify ResetForRecovery to phase set {1,4,5}`
+
+**レビュー観点**: 定数削除とコミット前判定の範囲式への変更 / `advanceResetPhases` の中間書き込み削除 / 既存テストの定数リテラル置換とコンパイル通過 / `validateManifestPhase` の値域が変わっていないこと
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+
 - [ ] **2.3** 新実装の C3 クラッシュシナリオテストを追加する（AC-03）
   - ファイル: `internal/store/recovery_test.go`
   - 作業内容: `TestResetForRecovery_CrashAfterBothFilesStaged` を新規追加する。`rootDir` にレポートと emails を植え、`stagingPath` に `tlsrpt.json` と `emails/` を移動済みにし、マニフェストを `resetPhaseManifestWritten`（フェーズ 1）で書いた状態から `ResetForRecovery(200)` を呼び出す。空ストア（`tlsrpt.json` と `emails/` が存在しないこと）・新 UIDVALIDITY・`recovery_required` 解消（`HasPendingReset` が `false` を返すこと）・マニフェスト削除・ステージング領域削除へ収束することを確認する。クラッシュ地点の定義はアーキテクチャ §5.2 を参照する。
@@ -139,6 +152,19 @@
 - [ ] **2.5** `make fmt && make lint && make test` を通す
   - 完了基準: `rg -n -e resetPhaseDataStaged -e resetPhaseEmailsStaged internal/store` が該当なしになり、`make fmt`・`make lint`・`make test`・`go test -race ./internal/store` がいずれもエラーなく完了すること。
 
+### PR-2 作成ポイント: crash-safety and legacy-compat tests
+
+**対象ステップ**: 2.3 / 2.3a / 2.3b / 2.3c / 2.4 / 2.5
+
+**推奨タイトル**: `test(store): add crash-safety and legacy-compat tests for phase set {1,4,5}`
+
+**レビュー観点**: フェーズ 1 固定マニフェストから C3 クラッシュが収束すること / 新設計 C4 クラッシュウィンドウの収束確認 / レガシー値 2・3 マニフェストがコミット前として収束すること / `go test -race` が通ること
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+
 ### Phase 3: ADR-0003 の改訂（AC-07・AC-08・AC-09）
 
 - [ ] **3.1** ADR-0003 日本語版を新フェーズ定義に整合させる
@@ -155,6 +181,19 @@
   - ファイル: `docs/tasks/0080_reset_phase_simplify/03_implementation_plan.md`
   - 作業内容: Phase 3.1 と 3.2 の確認コマンド、残存ヒットの理由、日英見出し比較の結果を「受け入れ条件トレーサビリティ」セクションへ追記する。
   - 完了基準: AC-07・AC-08・AC-09 が「目視確認」だけでなく、実行した確認コマンドと確認観点に紐づいていること。
+
+### PR-3 作成ポイント: ADR-0003 update for phase simplification
+
+**対象ステップ**: 3.1 / 3.2 / 3.3
+
+**推奨タイトル**: `docs(adr): update reset phase design for simplified phase set {1,4,5}`
+
+**レビュー観点**: フェーズ 2・3 の能動的書き込み説明が ADR から削除されていること / レガシー値の読み取り互換方針（コミット前として解釈）が明記されていること / 日英両版の見出し構造が対応していること
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ---
 
@@ -183,6 +222,14 @@
 | M3 | ドキュメント改訂 | Phase 3 |
 
 Phase 1 と Phase 2 は密接に依存するため、1.1→1.2→1.3→1.4→2.1→2.2→2.3→2.3a→2.3b→2.3c→2.4→2.5 の順で連続して完結させる。Phase 3 はコードの動作確認が完了した後に 3.1→3.2→3.3 の順で実施する。
+
+### PR 構成
+
+| PR | 対象ステップ | 主な変更内容 |
+|---|---|---|
+| PR-1 | 1.1 / 1.2 / 1.3 / 1.4 / 2.1 / 2.2 | `recovery.go` の定数削除・中間書き込み削除・範囲式変更・コメント更新、既存テストの定数リテラル置換 |
+| PR-2 | 2.3 / 2.3a / 2.3b / 2.3c / 2.4 / 2.5 | 新設計の C3/C4 クラッシュシナリオテスト・一括遷移検証・レガシー値読み取り互換テストの追加 |
+| PR-3 | 3.1 / 3.2 / 3.3 | ADR-0003 の日英両版をフェーズ定義 `{1, 4, 5}` に整合させる |
 
 ---
 
@@ -230,12 +277,9 @@ Phase 1 と Phase 2 は密接に依存するため、1.1→1.2→1.3→1.4→2.1
 
 ## 7. 実装チェックリスト
 
-- [ ] Phase 1: `recovery.go` のコア実装変更
-- [ ] Phase 2: テストの更新・追加・全件通過
-- [ ] Phase 3: ADR-0003 改訂（日英両版）
-- [ ] `make fmt` 実行済み
-- [ ] `make lint` がエラーなく完了する
-- [ ] `make test` が全テストで通過する
+- [ ] PR-1 マージ済み（対象ステップ: 1.1 / 1.2 / 1.3 / 1.4 / 2.1 / 2.2）
+- [ ] PR-2 マージ済み（対象ステップ: 2.3 / 2.3a / 2.3b / 2.3c / 2.4 / 2.5）
+- [ ] PR-3 マージ済み（対象ステップ: 3.1 / 3.2 / 3.3）
 - [ ] `make deadcode` が本タスク起因の未使用コードを報告しない
 - [ ] `cmd/tlsrpt-digest/recover_test.go` のテストが引き続き通ること（ファサード変更なし・回帰確認）
 
