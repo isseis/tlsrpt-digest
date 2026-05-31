@@ -322,10 +322,10 @@ func TestResetForRecovery_CrashAtPhaseManifestWritten(t *testing.T) {
 	assert.Empty(t, reports, "store must be empty after ResetForRecovery")
 }
 
-// TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate simulates a crash
-// in the window between stageEmailsDir (rename completed) and writeResetManifest(phase=3).
-// The manifest is still at phase=2 but emails/ is already in staging.
-// Re-running must skip the rename (emails/ absent in root) and converge cleanly.
+// TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate verifies convergence
+// from a legacy phase-2 manifest (data_staged; written by old code) with both tlsrpt.json
+// and emails/ already in staging.  The current code never writes phase 2; this test confirms
+// that the range-based pre-commit check treats it as a valid pre-commit state and converges.
 func TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate(t *testing.T) {
 	rootDir := t.TempDir()
 
