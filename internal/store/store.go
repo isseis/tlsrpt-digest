@@ -96,7 +96,7 @@ type Store interface {
 	// The caller must hold the process-level store writer lock until this method returns.
 	AbortReset() error
 
-	// HasPendingReset reports whether an active reset is in progress (phases 1–3 or 5).
+	// HasPendingReset reports whether an active reset is in progress (pre-commit phase 1 or legacy 2–3, or aborting phase 5).
 	// A committed manifest (phase=committed) is leftover cleanup bookkeeping rather than
 	// an active reset, so it returns false for that phase.
 	// Returns (true, nil) when an active-phase reset manifest is present.

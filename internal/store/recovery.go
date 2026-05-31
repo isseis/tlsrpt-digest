@@ -35,18 +35,16 @@ func resetStagingPath(rootDir string) string {
 }
 
 // resetPhase records how far a discard-old reset has progressed.
-// Forward: 1 (manifest_written, WAL) → 2 (data_staged) → 3 (emails_staged) → 4 (committed).
+// Forward: 1 (manifest_written, WAL) → 4 (committed).
 // Backward: → 5 (aborting, WAL entry for AbortReset).
+// Legacy values 2 and 3 (data_staged, emails_staged) were written by older versions;
+// they are never written by the current code but are accepted as pre-commit.
 // See docs/dev/adr/0003_reset_phase_design.md for rationale.
 type resetPhase int
 
 const (
 	// resetPhaseManifestWritten: manifest written, staging dir created; no files moved yet.
 	resetPhaseManifestWritten resetPhase = 1
-	// resetPhaseDataStaged: tlsrpt.json moved to staging (or was absent).
-	resetPhaseDataStaged resetPhase = 2
-	// resetPhaseEmailsStaged: emails/ moved to staging (or was absent).
-	resetPhaseEmailsStaged resetPhase = 3
 	// resetPhaseCommitted: sentinel committed (recovery_required cleared).
 	resetPhaseCommitted resetPhase = 4
 	// resetPhaseAborting: AbortReset has been started; restore from staging is in progress
@@ -483,7 +481,8 @@ func (s *fileStore) ApplyRecovery(newUIDValidity uint32) error {
 }
 
 // ResetForRecovery implements Store.ResetForRecovery.
-// Drives phases 1→2→3→4→cleanup, resuming from the current manifest phase on re-run.
+// Drives phases 1→4→cleanup, resuming from the current manifest phase on re-run.
+// Legacy pre-commit values 2 and 3 are treated as phase 1 (all staging ops re-run idempotently).
 // Phase=5 (aborting) is refused with ErrResetAbortInProgress.
 // See docs/dev/adr/0003_reset_phase_design.md §3–4 for crash-safety rationale.
 func (s *fileStore) ResetForRecovery(currUIDValidity uint32) error {
@@ -519,13 +518,13 @@ func (s *fileStore) ResetForRecovery(currUIDValidity uint32) error {
 		if mfst.Phase == resetPhaseCommitted {
 			return s.resumeOrCleanupCommitted(currUIDValidity, stagingPath, manifestPath)
 		}
-		// A pre-commit manifest (phases 1–3) whose CurrUIDValidity doesn't match the
-		// caller's currUIDValidity is a stale residue from a previous reset attempt
-		// (e.g. cleanupCompletedReset deleted staging but failed to remove the manifest).
-		// Remove it and start fresh so the new UIDVALIDITY is committed correctly.
+		// A pre-commit manifest (phase < resetPhaseCommitted, i.e. phase 1 or legacy 2–3) whose
+		// CurrUIDValidity doesn't match the caller's currUIDValidity is a stale residue from a
+		// previous reset attempt (e.g. cleanupCompletedReset deleted staging but failed to remove
+		// the manifest).  Remove it and start fresh so the new UIDVALIDITY is committed correctly.
 		// currUIDValidity==0 is the special cleanup path used by handleNoRecoveryRequired
 		// (no recovery_required in sentinel); skip the stale check in that case.
-		if mfst.Phase <= resetPhaseEmailsStaged && currUIDValidity != 0 && mfst.CurrUIDValidity != currUIDValidity {
+		if mfst.Phase < resetPhaseCommitted && currUIDValidity != 0 && mfst.CurrUIDValidity != currUIDValidity {
 			if err := removeStaleCommittedManifest(stagingPath, manifestPath); err != nil {
 				return err
 			}
@@ -572,7 +571,7 @@ func (s *fileStore) resumeOrCleanupCommitted(currUIDValidity uint32, stagingPath
 // to committed, then removes the staging directory (best-effort) and manifest (best-effort via error return).
 func (s *fileStore) executeResetFromManifest(mfst resetManifest, stagingPath, manifestPath string) error {
 	currUIDValidity := mfst.CurrUIDValidity
-	if err := s.advanceResetPhases(mfst.Phase, currUIDValidity, stagingPath, manifestPath); err != nil {
+	if err := s.advanceResetPhases(currUIDValidity, stagingPath, manifestPath); err != nil {
 		return err
 	}
 	// Staging dir cleanup is best-effort: a stale staging dir is harmless to normal
@@ -592,45 +591,24 @@ func (s *fileStore) executeResetFromManifest(mfst resetManifest, stagingPath, ma
 	return nil
 }
 
-// advanceResetPhases drives phase progression from phase to committed,
-// writing a checkpoint manifest after each idempotent file operation.
-// See ADR-0003 §3–4 for the WAL/checkpoint pattern and idempotence invariants.
-func (s *fileStore) advanceResetPhases(phase resetPhase, currUIDValidity uint32, stagingPath, manifestPath string) error {
-	if phase <= resetPhaseManifestWritten {
-		// MkdirAll is defensive: staging dir should already exist from the initial write,
-		// but guard against edge cases (e.g. partial RemoveAll from a previous run).
-		if err := os.MkdirAll(stagingPath, dirPerm); err != nil {
-			return fmt.Errorf("advanceResetPhases: ensure staging dir: %w", err)
-		}
-		if err := stageDataFile(s.rootDir, stagingPath); err != nil {
-			return fmt.Errorf("advanceResetPhases: stage data file: %w", err)
-		}
-		if err := writeResetManifest(manifestPath, resetManifest{
-			Version: resetManifestVersion, CurrUIDValidity: currUIDValidity,
-			Phase: resetPhaseDataStaged,
-		}); err != nil {
-			return fmt.Errorf("advanceResetPhases: advance to data_staged: %w", err)
-		}
-		phase = resetPhaseDataStaged
+// advanceResetPhases drives any pre-commit manifest to committed in a single pass.
+// All staging operations are idempotent (absent files are no-ops), so re-running
+// from any intermediate file-layout state converges to the same result.
+// No intermediate checkpoint manifests are written; commitReset writes phase=4 once.
+func (s *fileStore) advanceResetPhases(currUIDValidity uint32, stagingPath, manifestPath string) error {
+	// MkdirAll is defensive: staging dir should already exist from the initial write,
+	// but guard against edge cases (e.g. partial RemoveAll from a previous run).
+	if err := os.MkdirAll(stagingPath, dirPerm); err != nil {
+		return fmt.Errorf("advanceResetPhases: ensure staging dir: %w", err)
 	}
-
-	if phase <= resetPhaseDataStaged {
-		if err := stageEmailsDir(s.rootDir, stagingPath); err != nil {
-			return fmt.Errorf("advanceResetPhases: stage emails dir: %w", err)
-		}
-		if err := writeResetManifest(manifestPath, resetManifest{
-			Version: resetManifestVersion, CurrUIDValidity: currUIDValidity,
-			Phase: resetPhaseEmailsStaged,
-		}); err != nil {
-			return fmt.Errorf("advanceResetPhases: advance to emails_staged: %w", err)
-		}
-		phase = resetPhaseEmailsStaged
+	if err := stageDataFile(s.rootDir, stagingPath); err != nil {
+		return fmt.Errorf("advanceResetPhases: stage data file: %w", err)
 	}
-
-	if phase <= resetPhaseEmailsStaged {
-		if err := s.commitReset(manifestPath, currUIDValidity); err != nil {
-			return fmt.Errorf("advanceResetPhases: commit: %w", err)
-		}
+	if err := stageEmailsDir(s.rootDir, stagingPath); err != nil {
+		return fmt.Errorf("advanceResetPhases: stage emails dir: %w", err)
+	}
+	if err := s.commitReset(manifestPath, currUIDValidity); err != nil {
+		return fmt.Errorf("advanceResetPhases: commit: %w", err)
 	}
 	return nil
 }
@@ -658,7 +636,8 @@ func (s *fileStore) commitReset(manifestPath string, currUIDValidity uint32) err
 }
 
 // AbortReset implements Store.AbortReset.
-// Valid for pre-commit phases (1–3) and the aborting phase (5); phase=4 returns ErrResetNotPending.
+// Valid for pre-commit phases (phase < resetPhaseCommitted, i.e. phase 1 or legacy 2–3) and
+// the aborting phase (5); phase=4 returns ErrResetNotPending.
 // Advances the manifest to phase=aborting before restoring any file (WAL entry).
 // See docs/dev/adr/0003_reset_phase_design.md §4 for rationale.
 func (s *fileStore) AbortReset() error {
@@ -690,7 +669,7 @@ func (s *fileStore) AbortReset() error {
 	if mfst.Phase != resetPhaseAborting {
 		// recovery_required is the commit barrier: commitReset saves the sentinel
 		// before advancing to phase=4, so a missing recovery_required means the
-		// commit already happened even if the manifest is still at phase 3.
+		// commit already happened even if the manifest is still pre-commit (phase 1, or legacy 2–3).
 		_, sentinelCurr, _, found, err := s.LoadRecoveryRequired()
 		if err != nil {
 			return fmt.Errorf("AbortReset: check recovery-required: %w", err)
@@ -752,7 +731,7 @@ func (s *fileStore) AbortReset() error {
 }
 
 // HasPendingReset implements Store.HasPendingReset.
-// Returns true only for active-phase resets (phases 1–3 or 5).
+// Returns true for any non-committed manifest: pre-commit (phase 1, or legacy 2–3) and aborting (phase 5).
 // Phase=committed is leftover cleanup bookkeeping (sentinel already committed),
 // not an active reset, so it returns false.
 // Returns an error for unknown versions or out-of-range phases (fail closed).

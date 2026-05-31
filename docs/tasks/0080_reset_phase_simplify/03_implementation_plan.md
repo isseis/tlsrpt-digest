@@ -63,7 +63,7 @@
 
 ### Phase 1: `internal/store/recovery.go` の実装変更（AC-01・AC-02・AC-04）
 
-- [ ] **1.1** フェーズ定数を `{1, 4, 5}` のみに整理する
+- [x] **1.1** フェーズ定数を `{1, 4, 5}` のみに整理する
   - ファイル: `internal/store/recovery.go`
   - 作業内容: 定数 `resetPhaseDataStaged = 2` と `resetPhaseEmailsStaged = 3` の定義を削除する。フェーズ 2・3 を参照する以下 7 箇所のコメントを内容に従って更新する（行番号は現状の `recovery.go`）。
     - 38 行（`resetPhase` 型定義コメント）: "Forward: 1 (manifest_written, WAL) → 2 (data_staged) → 3 (emails_staged) → 4 (committed)." → "Forward: 1 (manifest_written, WAL) → 4 (committed)." に更新する。
@@ -75,7 +75,7 @@
     - 755 行（`HasPendingReset` 実装コメント）: "Returns true only for active-phase resets (phases 1–3 or 5)." → "Returns true for any non-committed manifest: pre-commit (phase 1, or legacy 2–3) and aborting (phase 5)." に更新する。
   - 完了基準: 定数定義が削除され、上記 7 箇所のコメントが更新済みであること。`make build` は Phase 1.3 で production 参照を除去した後に実行する。
 
-- [ ] **1.2** `advanceResetPhases` を無条件の一括実行に書き換える
+- [x] **1.2** `advanceResetPhases` を無条件の一括実行に書き換える
   - ファイル: `internal/store/recovery.go`
   - 作業内容: `advanceResetPhases` 内の **3 つの `if phase <= X` ブロック全体を削除し**、`os.MkdirAll`・`stageDataFile`・`stageEmailsDir`・`commitReset` を引数なしで無条件に順番に呼び出す形へ置き換える（アーキテクチャ §2.2 のフローチャート参照）。具体的には次の変換を行う。
     - 削除: `if phase <= resetPhaseManifestWritten { … }` ブロック全体（`MkdirAll`・`stageDataFile`・`writeResetManifest(phase=2)` を含む）
@@ -86,24 +86,24 @@
     - `phase` 引数はブロック削除後に不要になるため、関数シグネチャからも削除し、呼び出し元 `executeResetFromManifest` の呼び出し箇所も合わせて変更する（アーキテクチャ §3.3）。コメント（596–597 行）は Phase 1.1 で更新する。
   - 完了基準: `advanceResetPhases` 関数内に `writeResetManifest` の直接呼び出しがなく（フェーズ確定は `commitReset` 内の 1 回のみ）、`if phase <= X` の条件分岐が存在しないこと。`make build` は Phase 1.3 後（テスト参照除く）に確認する。
 
-- [ ] **1.3** コミット前判定条件を範囲式に変更する
+- [x] **1.3** コミット前判定条件を範囲式に変更する
   - ファイル: `internal/store/recovery.go`
   - 作業内容: `ResetForRecovery` 内の残存マニフェスト検出条件 `mfst.Phase <= resetPhaseEmailsStaged` を `mfst.Phase < resetPhaseCommitted` に変更する（アーキテクチャ §3.2・§6.2）。
   - 完了基準: **ステップ 1.1〜1.3 はテストファイル（`recovery_test.go`・`store_test.go`）がまだ削除済み定数を参照するため、単体では `make test` を通せない。`make build`（プロダクションバイナリのみ）は通るが、`make test` は 2.1・2.2 完了まで保留する。** ステップ 2.2 完了後に `rg -n -e resetPhaseEmailsStaged -e resetPhaseDataStaged internal/store` が該当なしになり、`make test` でエラーがないことを確認する。ステップ 1.1〜1.3 は 2.1・2.2 と合わせて PR-1 の一体的なコンパイル単位を形成する。
 
-- [ ] **1.4** `store.go` のインターフェースコメントを更新する
+- [x] **1.4** `store.go` のインターフェースコメントを更新する
   - ファイル: `internal/store/store.go`
   - 作業内容: `Store.HasPendingReset` のインターフェースコメント（99 行）"reports whether an active reset is in progress (phases 1–3 or 5)" を更新する。フェーズ 2・3 を能動的な書き込み対象として記述せず、レガシー値として読み取り互換で扱われる旨が読み取れる表現にする（例: "an active reset is in progress (pre-commit phase 1 or legacy 2–3, or aborting phase 5)"）。これは `recovery.go:755` の実装コメント（Phase 1.1 で対応）とは別の重複コメントである。
   - 完了基準: 更新後のコメントが新フェーズ定義（コミット前は `phase < resetPhaseCommitted`、レガシー値はコミット前として読み取り互換）を正確に反映しており、フェーズ 2・3 を能動的な書き込み対象として記述していないこと。
 
 ### Phase 2: テストの更新と新規追加
 
-- [ ] **2.1** `recovery_test.go` の廃止定数参照を置き換える（AC-01・AC-02・AC-03・AC-04 の回帰）
+- [x] **2.1** `recovery_test.go` の廃止定数参照を置き換える（AC-01・AC-02・AC-03・AC-04 の回帰）
   - ファイル: `internal/store/recovery_test.go`
   - 作業内容: 1.3 の表に示した 8 つのテストで `resetPhaseDataStaged` → `resetPhase(2)` に、`resetPhaseEmailsStaged` → `resetPhase(3)` に置き換える。Go ソース内のコメントは英語で更新し、legacy phase manifest からの収束、または legacy values でも pending reset として扱う検証であることを説明する。
   - 完了基準: `rg -n -e resetPhaseDataStaged -e resetPhaseEmailsStaged internal/store/recovery_test.go` が該当なしになり、各テストが `make test` で通ること。
 
-- [ ] **2.2** `store_test.go` の廃止定数参照を置き換える（AC-04 の回帰）
+- [x] **2.2** `store_test.go` の廃止定数参照を置き換える（AC-04 の回帰）
   - ファイル: `internal/store/store_test.go`
   - 作業内容: `TestOpen_PendingReset_FailsClosedForReadWrite` および `TestOpen_PendingReset_OpenRecoverResetSucceeds` 内の `resetPhaseEmailsStaged` を `resetPhase(3)` に置き換える。
   - 完了基準: `make test` で 2 件のテストが通ること。
@@ -116,8 +116,8 @@
 
 **レビュー観点**: `advanceResetPhases` が `if phase <= X` 条件分岐を持たず、`MkdirAll`→`stageDataFile`→`stageEmailsDir`→`commitReset` を無条件に呼ぶこと（レガシー値 2・3 でも全操作が実行されること） / 定数削除とコミット前判定の範囲式への変更 / 既存テストの定数リテラル置換が意味を維持していること / `validateManifestPhase` の値域が `[1,5]` のまま変わっていないこと
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 

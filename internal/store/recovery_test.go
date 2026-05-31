@@ -140,11 +140,12 @@ func TestApplyRecovery_RefusesPendingReset(t *testing.T) {
 	require.NoError(t, sRW.SaveUIDValidity(100))
 	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
 
-	// Plant a pre-commit manifest (phase=data_staged) to simulate an in-flight reset.
+	// Plant a legacy phase-2 manifest to verify that ApplyRecovery refuses when any
+	// pre-commit manifest is present (including legacy values no longer written by the current code).
 	stagingPath := resetStagingPath(rootDir)
 	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
-		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhaseDataStaged,
+		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhase(2),
 	}))
 
 	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
@@ -247,11 +248,12 @@ func TestResetForRecovery_IdempotentAfterCrashBeforeCommit(t *testing.T) {
 	require.NoError(t, s1.SaveUIDValidity(100))
 	require.NoError(t, s1.SaveRecoveryRequired(100, 200, time.Now()))
 
-	// Simulate crash after staging: plant manifest at phase=emails_staged and staging dir but skip commit.
+	// Plant a legacy phase-3 manifest (emails_staged) to verify idempotent convergence from
+	// a pre-commit value no longer written by the current code.
 	stagingPath := resetStagingPath(rootDir)
 	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
-		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhaseEmailsStaged,
+		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhase(3),
 	}))
 
 	// Re-open with OpenRecoverReset (manifest present, so OpenReadWrite would fail).
@@ -320,10 +322,10 @@ func TestResetForRecovery_CrashAtPhaseManifestWritten(t *testing.T) {
 	assert.Empty(t, reports, "store must be empty after ResetForRecovery")
 }
 
-// TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate simulates a crash
-// in the window between stageEmailsDir (rename completed) and writeResetManifest(phase=3).
-// The manifest is still at phase=2 but emails/ is already in staging.
-// Re-running must skip the rename (emails/ absent in root) and converge cleanly.
+// TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate verifies convergence
+// from a legacy phase-2 manifest (data_staged; written by old code) with both tlsrpt.json
+// and emails/ already in staging.  The current code never writes phase 2; this test confirms
+// that the range-based pre-commit check treats it as a valid pre-commit state and converges.
 func TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate(t *testing.T) {
 	rootDir := t.TempDir()
 
@@ -337,8 +339,8 @@ func TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate(t *testing.T
 	}))
 	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
 
-	// Simulate crash: both tlsrpt.json and emails/ already in staging, manifest still
-	// at phase=2 (emails rename completed but manifest not yet advanced to phase=3).
+	// Simulate a legacy phase-2 manifest (data_staged; written by older code before emails/ rename).
+	// Both files are already in staging; ResetForRecovery must converge from this legacy pre-commit value.
 	stagingPath := resetStagingPath(rootDir)
 	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
 	require.NoError(t, os.Rename(dataFilePath(rootDir), filepath.Join(stagingPath, "tlsrpt.json")))
@@ -346,7 +348,7 @@ func TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate(t *testing.T
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
 		Version:         resetManifestVersion,
 		CurrUIDValidity: 200,
-		Phase:           resetPhaseDataStaged, // not yet advanced to 3
+		Phase:           resetPhase(2), // legacy value: tlsrpt.json staged, emails/ staged, no commit yet
 	}))
 
 	s2, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
@@ -446,7 +448,7 @@ func TestAbortReset_CrashDuringCommitRefusesAbort(t *testing.T) {
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
 		Version:         resetManifestVersion,
 		CurrUIDValidity: 200,
-		Phase:           resetPhaseEmailsStaged, // commit saved sentinel but manifest still phase=3
+		Phase:           resetPhase(3), // legacy value: commit saved sentinel but manifest is still pre-commit
 	}))
 
 	// Commit the sentinel by hand (bypassing commitReset to keep manifest at phase=3).
@@ -612,13 +614,14 @@ func TestAbortReset_RestoresOldData(t *testing.T) {
 	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
 	require.NoError(t, err)
 
-	// Simulate pre-commit pending reset: move data file to staging and write manifest at phase=data_staged.
+	// Simulate a legacy phase-2 manifest with data file in staging; AbortReset must
+	// treat this legacy pre-commit value the same as phase 1 and restore correctly.
 	stagingPath := resetStagingPath(rootDir)
 	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
 	dataPath := dataFilePath(rootDir)
 	require.NoError(t, os.Rename(dataPath, filepath.Join(stagingPath, "tlsrpt.json")))
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
-		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhaseDataStaged,
+		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhase(2),
 	}))
 
 	require.NoError(t, s.AbortReset())
@@ -969,7 +972,7 @@ func TestOpen_CleansUpAfterCommitCrashWindow(t *testing.T) {
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
 		Version:         resetManifestVersion,
 		CurrUIDValidity: 200,
-		Phase:           resetPhaseEmailsStaged, // crash before advancing to committed
+		Phase:           resetPhase(3), // legacy value: sentinel confirmed committed but manifest still pre-commit
 	}))
 
 	// OpenReadWrite detects committed state from sentinel and cleans up.
@@ -1007,7 +1010,7 @@ func TestOpen_BlockedByPreCommitReset(t *testing.T) {
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
 		Version:         resetManifestVersion,
 		CurrUIDValidity: 200,
-		Phase:           resetPhaseEmailsStaged,
+		Phase:           resetPhase(3), // legacy value: OpenReadWrite must still block on any pre-commit manifest
 	}))
 
 	_, err = Open(rootDir, makeTestIdentity(), OpenReadWrite)
@@ -1171,7 +1174,7 @@ func TestResetForRecovery_CommitCrashWindow_ZeroUID(t *testing.T) {
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
 		Version:         resetManifestVersion,
 		CurrUIDValidity: 200,
-		Phase:           resetPhaseEmailsStaged,
+		Phase:           resetPhase(3), // legacy value: C4 crash window with pre-commit manifest (currUIDValidity==0 path)
 	}))
 
 	// handleNoRecoveryRequired calls ResetForRecovery(0) because LoadRecoveryRequired
