@@ -16,7 +16,7 @@
 
 ### 1.1 目的
 
-`resetPhase` のフェーズ 2（`resetPhaseDataStaged`）・フェーズ 3（`resetPhaseEmailsStaged`）を廃止し、`advanceResetPhases` をコミット前から一括実行へ簡略化する。設計の詳細は [02_architecture.ja.md](02_architecture.ja.md) を参照。
+`resetPhase` のフェーズ 2（`resetPhaseDataStaged`）・フェーズ 3（`resetPhaseEmailsStaged`）を廃止し、`advanceResetPhases` をコミット前から一括実行へ簡略化する。設計の詳細は [02_architecture.md](02_architecture.md) を参照。
 
 ### 1.2 実装原則
 
