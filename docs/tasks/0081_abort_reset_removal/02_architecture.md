@@ -57,7 +57,7 @@ flowchart TD
         BNormal["通常"]
         BRR -->|"discard-old --yes"| BP1
         BP1 -->|"一括実行"| BP4
-        BLegacy -->|"コミット前として解釈"| BP4
+        BLegacy -->|"advanceResetPhases が<br>コミット前と判定して前進"| BP4
         BP4 -->|"クリーンアップ"| BNormal
         BP1 -.->|"abort-reset --yes"| BP5
         BP5 -.->|"AbortReset 完了"| BRR
@@ -198,6 +198,11 @@ stateDiagram-v2
     end note
 ```
 
+**凡例（遷移の意味）**
+
+- `A → B` は通常の操作または後処理による遷移を表す。
+- `※` で始まる遷移ラベルは、クラッシュまたは UIDVALIDITY 変化という例外イベントを表す。
+
 **凡例（状態の意味）**
 
 - **通常**: マニフェストが存在せず `recovery_required` もない定常状態。
@@ -240,16 +245,18 @@ flowchart LR
 
 アップグレード後に旧バージョンが書いたフェーズ 2・3・5 のマニフェストを読み込んだ場合の流れを示す。`ResetForRecovery` と `Open(OpenReadWrite)`（`cleanupCompletedReset` 経由）のいずれの入口でも、ステージング・マニフェストを保全したまま拒否する（AC-10・AC-11）。
 
+この図では、実線矢印 `A->>B` は同期呼び出し、破線矢印 `A-->>B` は戻り値の返却を表す。リセットマニフェストは永続データであり、`fileStore` がファイルを読み込んで検証する対象として扱う。
+
 ```mermaid
 sequenceDiagram
     participant C as 呼び出し元（recover / Open）
     participant S as fileStore
-    participant M as リセットマニフェスト
+    participant F as リセットマニフェストファイル
 
     C->>S: ResetForRecovery / cleanupCompletedReset
-    S->>M: readResetManifest
-    M-->>S: phase=2・3・5（レガシー値）
-    S->>S: validateManifestPhase
+    S->>F: readResetManifest
+    F-->>S: phase=2・3・5（レガシー値）
+    S->>S: validateManifestPhase(phase)
     Note right of S: 1・4 以外のため拒否<br>ステージング・マニフェストは削除しない
     S-->>C: ErrResetManifestPhaseUnknown（fail-closed）
 ```
@@ -293,8 +300,13 @@ const (
 | `validateManifestPhase` の有効値域 | `{1, 4}` の **2 値の集合**で判定する（範囲 `[1,5]` を廃止） | レガシー値 2・3・5 を一律に未知値として拒否する（fail-closed）。上限 `<= 5` の範囲判定では 2・3・5 を受理してしまうため、有効 2 値の明示判定へ変更する（AC-09）。 |
 | `ResetForRecovery` のフェーズ 5 拒否チェック | **削除** | フェーズ 5 は `validateManifestPhase` の段階で拒否されるため、`mfst.Phase == resetPhaseAborting` の単値比較は到達不能になり不要（AC-12）。 |
 | `restoreFromStaging` 関数 | **削除** | `AbortReset` からのみ呼ばれる関数であり、廃止後は未使用になる（AC-04、`make deadcode` で検証）。 |
-| `HasPendingReset` の判定 | `mfst.Phase != resetPhaseCommitted` を維持 | 有効フェーズが `{1, 4}` に縮小されることで、この式は実質「フェーズ 1 のみが保留リセット」を意味するようになる。式自体は不変だが、フェーズ 5 を保留として扱う特殊な意味づけが消える（[01_requirements.md](01_requirements.md) §4 保守性）。 |
 | フェーズ 2・3 への言及（コメント・ロジック） | **削除** | `legacy 2–3`・`phase < resetPhaseCommitted` の「2・3 を含む」旨の記述を削除する。有効フェーズが `{1, 4}` のみとなり、コミット前はフェーズ 1 だけになるため、コメント・判定とも単純化する（AC-13）。 |
+
+### 3.2b コードは不変だが意味が簡約される項目
+
+| 対象 | 決定 | 根拠 |
+|---|---|---|
+| `HasPendingReset` の判定 | `mfst.Phase != resetPhaseCommitted` を維持 | 有効フェーズ集合 `{1, 4}` への縮小により、この式は実質「フェーズ 1 のみが保留リセット」を意味する。コード変更は不要だが、フェーズ 5 を保留として扱う従来の意味づけは消える（[01_requirements.md](01_requirements.md) §4 保守性）。 |
 
 ### 3.3 CLI（`cmd/tlsrpt-digest`）からの中断機能削除
 
@@ -316,7 +328,7 @@ const (
 | `boot.go` の `ErrPendingReset` ラッパー | `"...discard-old --yes to continue or recover --abort-reset --yes to roll back"` | `"recover --abort-reset --yes to roll back"` を削除する | AC-07b |
 | `recover.go` の保留リセット検出メッセージ | `"  Roll back reset: ...--abort-reset --yes"` | 「Roll back reset」行を削除する | AC-07c |
 | `main.go` の `errYesRequiresModeOrAbort` | `"--yes requires --mode or --abort-reset"` | `"--yes requires --mode"` に更新する。変数名が文言と矛盾するため `errYesRequiresMode` へリネームする（AC-07d は文言のみを規定するが、識別子の整合のため合わせて変更する） | AC-07d |
-| `internal/notify/format.go` の `systemErrorHint` | `"Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)"` | `"(or --abort-reset --yes)"` を削除する（§3.6 参照） | （スコープ追加・要承認） |
+| `internal/notify/format.go` の `systemErrorHint` | `"Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)"` | `"(or --abort-reset --yes)"` を削除する。これは AC-07e として、system error 通知の operator 向け案内でも abort 参照を除去する要件に対応する | AC-07e |
 
 ### 3.5 エラー型の削除
 
@@ -329,11 +341,11 @@ const (
 
 `ErrResetManifestPhaseUnknown`・`ErrResetManifestVersionMismatch`・`ErrPendingReset`・`ErrRecoveryRequiredMissing`・`ErrRecoveryUIDValidityMismatch` は維持する（意味・発生条件は不変、ただし `ErrResetManifestPhaseUnknown` の発生範囲はフェーズ 2・3・5 を含むよう拡大する）。
 
-### 3.6 要件スコープ外で発見した追加箇所（要レビュー承認）
+### 3.6 `systemErrorHint` への AC-07e 適用
 
-設計調査の過程で、[01_requirements.md](01_requirements.md) §2 スコープおよび AC-07 に列挙されていない abort 参照を `internal/notify/format.go` の `systemErrorHint` に発見した。これは UIDVALIDITY 変化・要復旧の system error 通知に付与される operator 向けアクション案内であり、中断機能の廃止後は誤った案内（存在しない `--abort-reset` フラグ）を operator に提示することになる。
+設計調査では、`internal/notify/format.go` の `systemErrorHint` に `recover --abort-reset --yes` を案内する operator 向け文字列が残っていることを確認した。これは `formatSystemError()` から呼ばれ、UIDVALIDITY 変化・要復旧の system error 通知本文に含まれる実際の案内経路である。したがって、要件 [01_requirements.md](01_requirements.md) で追加した AC-07e に従い、この通知経路からも abort への言及を削除する。
 
-F-001（中断機能の廃止）および AC-07（abort 文言の削除）の趣旨に照らし、本設計ではこの箇所も削除対象に含める（§3.4 表の最終行）。要件で明示列挙されていない箇所のため、レビューでの承認を前提とする（§下記「設計上の前提・確認事項」参照）。
+そのため本設計では、`internal/notify/format.go` の文言更新を AC-07e に基づく必須変更として扱い、system error 通知でも廃止済みフラグを案内しない状態に揃える。
 
 ### 3.7 コンポーネント責務
 
@@ -346,16 +358,16 @@ F-001（中断機能の廃止）および AC-07（abort 文言の削除）の趣
 | `cmd/tlsrpt-digest/main.go` | `--abort-reset` フラグ・`RecoverAbort` オプション・`errAbortResetRequiresYes`・`errAbortAndModeExclusive` を削除。`recoverStoreOpenMode` の abort 分岐と `runCLI` の関連分岐を削除。`errYesRequiresModeOrAbort` 文言を更新。 | 変更 |
 | `cmd/tlsrpt-digest/recover.go` | `runAbortReset` を削除。`printInfo` の abort 案内・`executeMode` の abort 分岐を削除。 | 変更 |
 | `cmd/tlsrpt-digest/boot.go` | `ErrPendingReset` ラッパーメッセージから abort 案内を削除。 | 変更 |
-| `internal/notify/format.go` | `systemErrorHint` のアクション案内から `(or --abort-reset --yes)` を削除（§3.6、要承認）。 | 変更 |
-| `internal/store/testutil/mocks.go` | `FakeStore` から `AbortReset` メソッド・`AbortResetErr`・`AbortResetCallCount` フィールド、および abort 用の `PendingReset` 関連記述を削除（`Store` から `AbortReset` が消えるため）。 | 変更 |
+| `internal/notify/format.go` | `systemErrorHint` の operator 向けアクション案内から `(or --abort-reset --yes)` を削除し、system error 通知でも AC-07 を満たす。通知先やペイロード構造は変更しない。 | 変更 |
+| `internal/store/testutil/mocks.go` | テスト支援コードとして `FakeStore` 構造体とそのメソッド群を更新する。具体的には `AbortReset()` メソッド、`AbortResetErr` フィールド、`AbortResetCallCount` フィールド、および abort 用の `PendingReset` 関連記述を削除し、`Store` インターフェース変更に追従させる。 | 変更 |
 | `internal/store/recovery_test.go` | `TestAbortReset_*` 全件、`TestResetForRecovery_RefusesAbortingPhase`、フェーズ 2・3 レガシー再開テスト群を削除。レガシー値 2・3・5 の fail-closed テストを追加。`TestValidateManifestPhaseRange`・`TestResetPhasePersistedNumericValues` を新定義へ更新。 | 変更 |
 | `cmd/tlsrpt-digest/recover_test.go` | `TestRecover_AbortReset*` を削除。`TestRecover_YesAlone` のメッセージアサーションを更新。 | 変更 |
 | `internal/store/store_test.go` | フェーズ 3 のレガシーマニフェストを植えてコミット前ブロック挙動を検証している箇所（`TestOpen_PendingReset_*`、現状 `resetPhase(3)`）を、植え込み値をフェーズ 1 に変更してコミット前挙動の検証を維持する。フェーズ 3 が fail-closed になる検証は §3.7 のフェーズ 2・3 fail-closed テスト（AC-10）で担うため、本ファイルのレガシー前提を整理する。 | 変更 |
 | `cmd/tlsrpt-digest/main_test.go` | `recoverStoreOpenMode` を検証する `TestRunCLI_RecoverResetOpenMode` の「abort reset confirmed」ケース（`-abort-reset -yes`）を削除する。abort 関連のフラグ検証テストがあれば整合する。`--abort-reset` フラグ削除後に `recover --abort-reset --yes` が `flag.Parse` でエラーになることの検証を追加（AC-03）。 | 変更 |
 | `cmd/tlsrpt-digest/boot_test.go` | `ErrPendingReset` ラッパーが `"recover --abort-reset --yes"` を含むことを検証するアサーション（`TestBootstrap_*`）を、abort 文言なしへ更新する（AC-07b）。 | 変更 |
 | `docs/dev/adr/0003_reset_phase_design.ja.md` / `.md` | 新フェーズ定義 `{1, 4}` への全面整合。具体的には：フェーズ一覧表のフェーズ 2・3・5 行削除（AC-14）、「フェーズ 5（recovery_required リセットマーカー）を設ける理由」節の削除/「廃止の経緯」化（AC-15）、状態遷移図の P5 ノード・P1→P5・P5→RR 削除（AC-16）、不変条件表のフェーズ 5 行削除（AC-17）、ユーザー操作表の `recover --abort-reset --yes` 列削除/更新（AC-18）。加えて、要件で個別列挙されていない次の波及箇所も整合する：§1 要件表の AC-abort 行、§2 ステージングディレクトリ説明文中の `AbortReset` 言及、§7「将来の変更・拡張方針」の「`AbortReset` の中断ロジックが複雑になる場合」サブ節および「フェーズを追加する場合」手順の `{1,4,5}`・`AbortReset` 言及、§8 の `AbortReset` 言及、§9 関連ファイル表の `AbortReset`・`ErrResetNotPending`・`ErrResetAbortInProgress` 言及。英語版は `/mktrans` で反映（AC-19）。 | 変更 |
-| `docs/dev/developer_guide/process_locking.ja.md` / `.md` | `AbortReset`・`--abort-reset`・`resetPhase 1–5` への言及を削除し、フェーズ集合 `{1, 4}` に整合。`.md` は `/mktrans` で反映。 | 変更 |
-| 運用手順ドキュメント（`docs/` 配下、既存更新または新規作成） | フェーズ 2・3 残存ストア（AC-21）・フェーズ 5 残存ストア（AC-22）のアップグレード前手順を記載。 | 新規追加または変更 |
+| `docs/dev/developer_guide/process_locking.ja.md` / `.md` | `AbortReset`・`--abort-reset`・`resetPhase 1–5` への言及を削除し、フェーズ集合 `{1, 4}` に整合する。具体的には、対象サブコマンド一覧の `recover` 説明から `--abort-reset` を削除し、契約節とチェックリスト節の `recover --mode discard-old --yes / recover --abort-reset --yes` を `recover --mode discard-old --yes` のみに更新する。`.md` は `/mktrans` で反映。 | 変更 |
+| `docs/operations/legacy_reset_manifest_upgrade.ja.md` | 新規運用手順書として、フェーズ 2・3 残存ストアでは旧バージョンで `recover --mode discard-old --yes` を完了してからアップグレードする手順、フェーズ 5 残存ストアでは旧バージョンで `AbortReset` を完了してからアップグレードする手順を記載する。英語版は `/mktrans` で反映する。 | 新規追加 |
 
 ---
 
@@ -377,7 +389,7 @@ F-001（中断機能の廃止）および AC-07（abort 文言の削除）の趣
 
 ## 5. セキュリティ考慮事項
 
-本タスクは通知の送信・通知先の取り扱いを変更しないため、[通知セキュリティガイドライン](../../dev/developer_guide/notification_security.md)の観点では新たな考慮事項はない。`internal/notify/format.go` の変更（§3.6）は静的なアクション案内文字列の編集のみで、webhook URL・送信先・ペイロード構造には影響しない。
+本タスクは通知の送信経路・通知先・Notifier の型制約を変更しないが、`internal/notify/format.go` の `systemErrorHint` に含まれる operator 向け案内文字列は更新対象である。これは静的なアクション案内から廃止済みフラグを削除するだけであり、webhook URL・送信先・通知ペイロード構造・redaction 方針には影響しない。そのため、[通知セキュリティガイドライン](../../dev/developer_guide/notification_security.md)の「通知経路には公開情報だけを流す」という原則に反する変更は生じない。
 
 一方、本タスクは複数プロセスが同一の永続データ（センチネル・マニフェスト・ステージング）を読み書きする経路と、クラッシュ耐性に関わるため、[プロセス間ロック設計ガイドライン](../../dev/developer_guide/process_locking.md)に従い以下を不変条件として維持する。
 
@@ -486,8 +498,8 @@ sequenceDiagram
 | インターフェース削除 | AC-01・AC-02 | `Store` インターフェース・`fileStore` から `AbortReset` が消えていること（コンパイル時保証＋フェイクストア整合）。 |
 | フェーズ定数削除 | AC-08 | `resetPhaseAborting` が定義されていないこと。`TestResetPhasePersistedNumericValues` から該当アサーションを削除。 |
 | 有効値域 | AC-09 | `TestValidateManifestPhaseRange` を更新し、`{1, 4}` のみ有効・0・2・3・5・6 以上は `ErrResetManifestPhaseUnknown` を確認。 |
-| フェーズ 2・3 の fail-closed | AC-10 | フェーズ 2・3 マニフェスト存在下で `ResetForRecovery`・`Open(OpenReadWrite)` が `ErrResetManifestPhaseUnknown` を返し、ステージング・マニフェストを削除しないこと（新規追加）。 |
-| フェーズ 5 の fail-closed | AC-11 | フェーズ 5 マニフェスト存在下で同上（新規追加）。`TestResetForRecovery_RefusesAbortingPhase` は削除し、fail-closed テストへ置換。 |
+| フェーズ 2・3 の fail-closed | AC-10 | フェーズ 2・3 マニフェスト存在下で `ResetForRecovery`・`Open(OpenReadWrite)` が `ErrResetManifestPhaseUnknown` を返し、ステージング・マニフェストを削除しないことを検証するテーブル駆動テストを `recovery_test.go` に追加する。 |
+| フェーズ 5 の fail-closed | AC-11 | フェーズ 5 マニフェスト存在下で `ResetForRecovery`・`Open(OpenReadWrite)` が `ErrResetManifestPhaseUnknown` を返し、ステージング・マニフェストを削除しないことを検証するテストを `recovery_test.go` に追加する。`TestResetForRecovery_RefusesAbortingPhase` は削除し、この fail-closed テストへ置換する。 |
 | フェーズ 5 単値比較の消失 | AC-12 | `ResetForRecovery` の経路に `resetPhaseAborting` 比較が存在しないこと（コードレビュー＋上記 fail-closed テスト）。 |
 | エラー型削除 | AC-05・AC-06 | `ErrResetAbortInProgress`・`ErrResetNotPending` が参照されないこと（コンパイル＋`deadcode`）。 |
 | restoreFromStaging 削除 | AC-04 | `make deadcode` で新たな未使用関数が検出されないこと。 |
@@ -498,10 +510,12 @@ sequenceDiagram
 
 | 観点 | 対応 AC | テスト箇所 | 概要 |
 |---|---|---|---|
-| フラグ削除 | AC-03 | `main_test.go` | `recover --abort-reset --yes` が `flag.Parse` でエラー（`flag provided but not defined: -abort-reset`）になること（新規追加）。`TestRunCLI_RecoverResetOpenMode` の abort ケースを削除する。 |
+| フラグ削除 | AC-03 | `main_test.go` | `recover --abort-reset --yes` が `flag.Parse` でエラー（`flag provided but not defined: -abort-reset`）になることを検証する。`TestRunCLI_RecoverResetOpenMode` の abort ケースを削除する。 |
 | 文言更新 | AC-07d | `recover_test.go` | `TestRecover_YesAlone` のエラーメッセージが `--yes requires --mode`（`or --abort-reset` を含まない）であること。 |
 | boot ラッパー文言 | AC-07b | `boot_test.go` | `ErrPendingReset` ラッパーが `"recover --abort-reset --yes"` を含まないこと。 |
 | recover 案内削除 | AC-07c | `recover_test.go` | `recover.go` 保留リセット案内に「Roll back reset」等の abort 言及がないこと。 |
+| notify 案内削除 | AC-07e | `internal/notify/format_test.go` | `systemErrorHint` を含む system error 通知整形結果が `--abort-reset` を含まないことを検証し、operator 向け案内の通知経路で AC-07e が満たされることを確認する。 |
+| operator 案内の横断確認 | AC-07・AC-07e | リポジトリ横断検索 | `--abort-reset`、`Roll back reset`、`to continue or abort` を検索し、実装対象の operator 向け案内から不要な abort 参照が残っていないことを確認する。特に `errors.go`、`boot.go`、`recover.go`、`main.go`、`internal/notify/format.go`、`process_locking.ja.md` / `.md` を対象にする。 |
 | フェイクストア整合 | AC-01 | `internal/store/testutil/mocks.go` | `FakeStore` から `AbortReset` 関連が削除され、ビルドが通ること。 |
 
 ### 7.3 ドキュメント整合（F-003・F-004）
@@ -514,9 +528,9 @@ sequenceDiagram
 | ADR 不変条件表 | AC-17 | フェーズ 5 行が削除されていること。 |
 | ADR ユーザー操作表 | AC-18 | `recover --abort-reset --yes` 列が削除/更新されていること。 |
 | ADR 英語版反映 | AC-19 | `/mktrans` で日本語版から反映（直接編集しない）。 |
-| process_locking 整合 | AC-20 | `AbortReset`・`--abort-reset`・`1–5` 言及が削除/更新され `{1, 4}` に整合。 |
-| 運用手順（フェーズ 2・3） | AC-21 | アップグレード前手順がドキュメントに記載。 |
-| 運用手順（フェーズ 5） | AC-22 | アップグレード前手順がドキュメントに記載。 |
+| process_locking 整合 | AC-20 | `docs/dev/developer_guide/process_locking.ja.md` / `.md` の対象サブコマンド一覧、契約節、実装・レビュー時チェックリストから `--abort-reset` と `AbortReset` を除去し、`recover --mode discard-old --yes` のみが `OpenRecoverReset` を使う記述へ更新されていること。 |
+| 運用手順（フェーズ 2・3） | AC-21 | `docs/operations/legacy_reset_manifest_upgrade.ja.md` に、旧バージョンで `recover --mode discard-old --yes` を完了してからアップグレードする手順が記載されていること。 |
+| 運用手順（フェーズ 5） | AC-22 | `docs/operations/legacy_reset_manifest_upgrade.ja.md` に、旧バージョンで `AbortReset` を完了してからアップグレードする手順が記載されていること。 |
 
 セキュリティ観点のテスト: 本タスクの主なセキュリティ関心事は §5.2 のアップグレード時 fail-closed であり、専用テストは設けず AC-10・AC-11（fail-closed でステージング・マニフェストを保全）が代表的な検証となる。
 
@@ -532,9 +546,9 @@ sequenceDiagram
 
 ### フェーズ 2：CLI・通知層の削除と文言更新（`cmd/tlsrpt-digest`・`internal/notify`）
 
-1. `--abort-reset` フラグ・検証・`recoverStoreOpenMode` の abort 分岐を削除する。
+1. `--abort-reset` フラグ・検証・`recoverStoreOpenMode` の abort 分岐を削除し、`internal/notify/format.go` を含む operator 向け案内の全経路から abort 文言を除去する。
 2. `recover.go`・`boot.go` の abort 案内文を削除し、`errYesRequiresModeOrAbort` を更新する。
-3. `internal/notify/format.go` の `systemErrorHint` から abort 案内を削除する（§3.6、レビュー承認後）。
+3. `internal/notify/format.go` の `systemErrorHint` から abort 案内を削除し、通知経路でも AC-07 を満たすことをテストで確認する。
 
 ### フェーズ 3：テスト整合（`internal/store`・`cmd/tlsrpt-digest`）
 
@@ -545,7 +559,7 @@ sequenceDiagram
 ### フェーズ 4：ドキュメント改訂（ADR-0003・開発者ガイド・運用手順）
 
 1. ADR-0003 日本語版を新フェーズ定義 `{1, 4}` へ改訂する（フェーズ表・設計根拠・状態遷移図・不変条件表・ユーザー操作表）。
-2. `process_locking.ja.md` を整合し、運用手順ドキュメントにアップグレード前手順を追記する。
+2. `process_locking.ja.md` の対象サブコマンド一覧・契約節・チェックリストから `--abort-reset` と `AbortReset` を除去し、`docs/operations/legacy_reset_manifest_upgrade.ja.md` にアップグレード前手順を追加する。
 3. `/mktrans` で英語版（ADR・process_locking）へ反映する。
 
 ---
@@ -560,6 +574,6 @@ sequenceDiagram
 
 ## 設計上の前提・確認事項
 
-1. **`internal/notify/format.go` のスコープ追加（§3.6）**: 要件 §2 スコープ・AC-07 に列挙されていない abort 参照を発見したため削除対象に含めた。F-001 の趣旨（中断機能の完全廃止）に整合するが、要件外のため明示的な承認を求める。承認されない場合、operator は存在しない `--abort-reset` フラグを案内されることになる。
-2. **運用手順ドキュメントの配置**: AC-21・AC-22 が要求するアップグレード前手順について、既存運用ドキュメントの更新か新規作成かは [01_requirements.md](01_requirements.md) §2 が「既存更新または新規作成」としているため、実装計画段階で配置先を確定する。
-3. **フェイクストアの所在**: 要件 §2「影響を受けるコンポーネント」は fake store を `recovery_test.go`／`recover_test.go` と並記しているが、実体は `internal/store/testutil/mocks.go` にある。本設計では §3.7 のとおり `mocks.go` を変更対象として明記した。
+1. **`internal/notify/format.go` への AC-07 適用**: `systemErrorHint` は実際の operator 向け案内経路であるため、abort 文言削除の対象に含める。これにより、system error 通知でも廃止済みフラグを案内しないことを保証する。
+2. **運用手順ドキュメントの配置**: AC-21・AC-22 を満たすため、`docs/operations/legacy_reset_manifest_upgrade.ja.md` を新規作成し、フェーズ 2・3・5 の残存ストアに対するアップグレード前手順を集約する。英語版は `/mktrans` で反映する。
+3. **テストフェイクの所在**: fake store の実体は `internal/store/testutil/mocks.go` に集約されているため、インターフェース変更の追従先はこのファイルとして扱う。
