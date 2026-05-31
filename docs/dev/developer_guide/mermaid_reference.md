@@ -236,7 +236,7 @@ Use when representing **states that the system persistently occupies on disk or 
 | Color-coding of composite state groups | Not needed | Needed per group |
 | Edge types | A single type suffices | Multiple types needed (e.g., solid for normal transitions, dashed for exceptions/crashes) |
 
-**ADR-0003 reference example**: The State Transition Diagram in [`docs/dev/adr/0003_reset_phase_design.md`](../adr/0003_reset_phase_design.md) is a true state machine representing persistent store states such as `Normal`, `Recovery Required`, and `Pending Reset`. While `stateDiagram-v2` would be semantically appropriate, it uses `flowchart` because color-coding of composite state groups (`classDef` cannot be applied to composite states) and dashed edges for crash transitions are required. Choose `flowchart` when you need to color-code composite state groups or require multiple edge styles.
+**ADR-0003 reference example**: The state diagram in [`docs/dev/adr/0003_reset_phase_design.md`](../adr/0003_reset_phase_design.md) is a true state machine representing persistent store states such as `Normal`, `Recovery Required`, and `Phase 4`, and uses `stateDiagram-v2`. Crash transitions are expressed with a `※` prefix instead of dashed lines. Choose `flowchart` when you need to color-code composite state groups or require multiple edge styles (e.g., solid and dashed lines).
 
 ### Basic Syntax
 
