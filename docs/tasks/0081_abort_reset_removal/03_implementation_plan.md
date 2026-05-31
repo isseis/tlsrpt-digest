@@ -52,7 +52,7 @@
 
 - **削除対象**：`ErrResetNotPending`、`ErrResetAbortInProgress`
 - **変更対象**：
-  - `ErrPendingReset` 値：`"store: pending reset detected; use OpenRecoverReset to continue or abort"` → `"or abort"` を除去する。
+  - `ErrPendingReset` 値：`"store: pending reset detected; use OpenRecoverReset to continue or abort"` から `" or abort"` を除去し、結果を `"store: pending reset detected; use OpenRecoverReset to continue"`（末尾の余分な空白なし）にする。
   - `ErrPendingReset` ドキュメントコメント：「resume or abort the reset」→「resume the reset」に更新する。
 
 #### `internal/store/types.go`
@@ -73,7 +73,7 @@
 - **変更対象**：
   - `errYesRequiresModeOrAbort` → `errYesRequiresMode` へリネームし、値を `"--yes requires --mode"` に更新する。
   - `runCLI` の `errors.Is(err, errYesRequiresModeOrAbort)` を `errYesRequiresMode` に更新する。
-  - `BootstrapOptions.StoreOpenModeOverride` コメントの「discard-old/abort-reset」を「discard-old」に更新する。
+  - `recoverStoreOpenMode` 関数のドキュメントコメント（L177-178、`// (discard-old --yes, abort-reset --yes) and OpenReadWrite for all others.`）から `abort-reset --yes` を削除し、`// (discard-old --yes) and OpenReadWrite for all others.` に更新する。（`StoreOpenModeOverride` コメントは `boot.go` のみに存在し `main.go` には無い。`main.go` 側で更新すべきコメントはこの `recoverStoreOpenMode` のもの）
 
 #### `cmd/tlsrpt-digest/recover.go`
 
@@ -86,7 +86,7 @@
 #### `cmd/tlsrpt-digest/boot.go`
 
 - 行 236（`store.ErrPendingReset` ラッパー）：「`or recover --abort-reset --yes to roll back`」を削除し、「`run recover --mode discard-old --yes to continue`」のみにする。
-- 行 87 コメント（`BootstrapOptions.StoreOpenModeOverride`）：「discard-old/abort-reset」 → 「discard-old」に更新する。（`boot.go` と `main.go` に同じコメントが存在するため両方更新）
+- L87 コメント（`BootstrapOptions.StoreOpenModeOverride`）：`OpenRecoverReset for discard-old/abort-reset.` の `/abort-reset` を削除し `OpenRecoverReset for discard-old.` に更新する。（このコメントは `boot.go` のみに存在する。`main.go` の `recoverStoreOpenMode` コメントは別物として §`main.go` の変更対象で扱う）
 
 #### `internal/notify/format.go`
 
@@ -114,11 +114,14 @@
 | `TestAbortReset_CrashAfterRestoreBeforeManifestRemoval` | `AbortReset` 廃止 |
 | `TestResetForRecovery_RefusesAbortingPhase` | フェーズ 5 拒否チェック削除 |
 | `TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` | フェーズ 2・3 フォールバック削除 |
+| `TestOpen_CleansUpAfterCommitCrashWindow` | フェーズ 3（`resetPhase(3)`）を植え込む C4 コミットクラッシュウィンドウ検証。同等のフェーズ 1 版 `TestOpen_CleansUpAfterCommitCrashWindowManifestWritten` が既存のため重複として削除 |
+
+> **注記**：[01_requirements.md](01_requirements.md) §6 が削除対象として挙げる `TestResetForRecovery_ResumesLegacyPhase3Manifest` および `TestResetForRecovery_LegacyPhase2Manifest*` は、現行コードベースに該当する関数が存在しない（命名が要件作成時の想定と異なる）。実際にレガシー値 2・3 を植え込んでいる関数は本計画が列挙する `TestApplyRecovery_RefusesPendingReset`・`TestResetForRecovery_IdempotentAfterCrashBeforeCommit`・`TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`・`TestOpen_BlockedByPreCommitReset`・`TestResetForRecovery_CommitCrashWindow_ZeroUID`・`TestOpen_CleansUpAfterCommitCrashWindow` の各関数、および `TestAbortReset_*`（全件削除）内の植え込みであり、本計画ではこれらを正として扱う。
 
 #### `internal/store/recovery_test.go`（更新対象テスト）
 
 - `TestApplyRecovery_RefusesPendingReset`：植え込み値を `resetPhase(2)` → `resetPhaseManifestWritten` に変更する（フェーズ 2 は fail-closed になるため）。
-- `TestResetForRecovery_IdempotentAfterCrashBeforeCommit`：植え込み値を `resetPhase(3)` → `resetPhaseManifestWritten` に変更し、コメントから「legacy phase-3 manifest」を除去する。
+- `TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`：植え込み値を `resetPhase(2)` → `resetPhaseManifestWritten` に変更し、関数コメントと植え込み箇所コメントの「legacy phase-2」記述を「コミット前（フェーズ 1）の部分ステージング状態」に書き換える。本テストは「tlsrpt.json がステージング済み・emails/ が root に残る部分ステージング状態」からの冪等な収束を検証するもので、植え込みをフェーズ 1 に変えても `advanceResetPhases` の再実行により収束する（`assertResetConverged` のアサーションは維持する）。変更後に `make test` で収束を再確認する。
 - `TestOpen_BlockedByPreCommitReset`：植え込み値を `resetPhase(3)` → `resetPhaseManifestWritten` に変更する。
 - `TestResetForRecovery_CommitCrashWindow_ZeroUID`：植え込み値を `resetPhase(3)` → `resetPhaseManifestWritten` に変更する（C4 クラッシュウィンドウの検証はフェーズ 1 でも成立する）。
 - `TestResetPhasePersistedNumericValues`：`assert.Equal(t, resetPhase(5), resetPhaseAborting)` を削除し、フェーズ 1・4 のアサーションのみ残す。
@@ -155,7 +158,7 @@
 
 #### `cmd/tlsrpt-digest/boot_test.go`（更新対象テスト）
 
-- `ErrPendingReset` ラッパーが `"recover --abort-reset --yes"` を含むことを検証しているアサーション（`assert.Contains(t, err.Error(), "recover --abort-reset --yes")`、L396 付近）を削除する。
+- `TestBootstrap_PendingResetAdvice`（`boot_test.go:383`、`recover_test.go` の `TestBootstrap_PendingResetShowsGuidance` とは別関数）：`ErrPendingReset` ラッパーが `"recover --abort-reset --yes"` を含むことを検証しているアサーション（`assert.Contains(t, err.Error(), "recover --abort-reset --yes")`、L396）を削除する。
 
 #### `internal/notify/format_test.go`（更新対象テスト）
 
@@ -219,7 +222,7 @@
 - [ ] `validateFlags` の `--yes` 単独チェック条件を `opts.RecoverYes && !opts.RecoverAbort && opts.RecoverMode == ""` から `opts.RecoverYes && opts.RecoverMode == ""` に簡略化する。（AC-07d）
 - [ ] `recoverStoreOpenMode` の `opts.RecoverAbort && opts.RecoverYes` 分岐を削除する。（AC-03）
 - [ ] `runCLI` の `errors.Is(err, errAbortResetRequiresYes)` チェックを削除し、`errYesRequiresMode` の `exitError` 返却を `errors.Is(err, errYesRequiresMode)` に更新する。（AC-07d）
-- [ ] `BootstrapOptions.StoreOpenModeOverride` コメントの「discard-old/abort-reset」を「discard-old」に更新する。
+- [ ] `recoverStoreOpenMode` 関数のドキュメントコメント（L177-178）から `abort-reset --yes` を削除し、`// (discard-old --yes) and OpenReadWrite for all others.` に更新する。
 
 #### 2-2. `cmd/tlsrpt-digest/recover.go` の変更
 
@@ -231,7 +234,8 @@
 
 #### 2-3. `cmd/tlsrpt-digest/boot.go` の変更
 
-- [ ] `Bootstrap` 内の `ErrPendingReset` ラッパーメッセージから「`or recover --abort-reset --yes to roll back`」を削除し、`"run recover --mode discard-old --yes to continue"` のみにする。（AC-07b）
+- [ ] `Bootstrap` 内の `ErrPendingReset` ラッパーメッセージ（L236）から「`or recover --abort-reset --yes to roll back`」を削除し、`"run recover --mode discard-old --yes to continue"` のみにする。（AC-07b）
+- [ ] `BootstrapOptions.StoreOpenModeOverride` のドキュメントコメント（L87）の `OpenRecoverReset for discard-old/abort-reset.` から `/abort-reset` を削除し `OpenRecoverReset for discard-old.` に更新する。
 
 #### 2-4. `internal/notify/format.go` の変更
 
@@ -267,10 +271,12 @@
 - [ ] `TestAbortReset_CrashAfterRestoreBeforeManifestRemoval` を削除する。
 - [ ] `TestResetForRecovery_RefusesAbortingPhase` を削除する。（AC-12）
 - [ ] `TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` を削除する。（AC-10 の fail-closed テストへ置換）
+- [ ] `TestOpen_CleansUpAfterCommitCrashWindow` を削除する（`resetPhase(3)` 植え込みが fail-closed になり破綻するため。C4 コミットクラッシュウィンドウのクリーンアップ検証は既存のフェーズ 1 版 `TestOpen_CleansUpAfterCommitCrashWindowManifestWritten` が担うため重複となる）。
 
 #### 3-3. `internal/store/recovery_test.go` の変更（更新）
 
 - [ ] `TestApplyRecovery_RefusesPendingReset`：植え込み値 `resetPhase(2)` を `resetPhaseManifestWritten` に変更する。
+- [ ] `TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`：植え込み値 `resetPhase(2)` を `resetPhaseManifestWritten` に変更し、関数コメント・植え込み箇所コメントの「legacy phase-2」記述を「コミット前（フェーズ 1）の部分ステージング状態」へ書き換える。`assertResetConverged` のアサーションは維持し、`make test` で収束を再確認する。
 - [ ] `TestResetForRecovery_IdempotentAfterCrashBeforeCommit`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更し、「legacy phase-3 manifest」コメントを除去する。
 - [ ] `TestOpen_BlockedByPreCommitReset`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更する。
 - [ ] `TestResetForRecovery_CommitCrashWindow_ZeroUID`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更する。
@@ -303,7 +309,7 @@
 - [ ] `TestRecover_CommittedCleanupPending_StatusDisplay`：`{RecoverAbort: true, RecoverYes: true}` ケースを削除し、`AbortResetCallCount` 参照を削除する。
 - [ ] `TestRecover_StatusDisplayNoMode`：`assert.Equal(t, 0, st.AbortResetCallCount)` を削除する。
 - [ ] `TestRecover_PendingResetDisplaysOptions`：`assert.Contains(t, output, "abort-reset --yes")` を削除する。（AC-07c）
-- [ ] `TestBootstrap_PendingResetShowsGuidance`（`recover_test.go` 内）：`assert.Contains(t, err.Error(), "recover --abort-reset --yes")` を削除する。（AC-07b）
+- [ ] `TestBootstrap_PendingResetShowsGuidance`（`recover_test.go:401`。`boot_test.go` の `TestBootstrap_PendingResetAdvice` とは別関数）：`assert.Contains(t, err.Error(), "recover --abort-reset --yes")`（L415）を削除する。あわせて関数ドキュメントコメントの「guidance for both continue and abort paths」を「guidance for the continue path」相当へ更新する。（AC-07b）
 - [ ] `TestRecover_PendingResetShowsStatusForNonDestructiveModes`：`AbortResetCallCount` アサーションと `assert.Contains(t, output, "recover --abort-reset --yes")` を削除する。（AC-07c）
 - [ ] `TestRecover_HasPendingResetFailure`：`assert.Equal(t, 0, st.AbortResetCallCount)` を削除する。
 
@@ -314,7 +320,7 @@
 
 #### 3-9. `cmd/tlsrpt-digest/boot_test.go` の変更
 
-- [ ] `ErrPendingReset` ラッパーが `"recover --abort-reset --yes"` を含まないことを検証する：既存の `assert.Contains(t, err.Error(), "recover --abort-reset --yes")` を `assert.NotContains(t, err.Error(), "abort-reset")` に更新する。（AC-07b）
+- [ ] `TestBootstrap_PendingResetAdvice`（`boot_test.go:383`。`recover_test.go` の `TestBootstrap_PendingResetShowsGuidance` と混同しないこと）：`ErrPendingReset` ラッパーが `"recover --abort-reset --yes"` を含まないことを検証する。既存の `assert.Contains(t, err.Error(), "recover --abort-reset --yes")`（L396）を `assert.NotContains(t, err.Error(), "abort-reset")` に更新する。（AC-07b）
 
 #### 3-10. `internal/notify/format_test.go` の変更
 
@@ -345,9 +351,11 @@
 
 #### 4-2. `docs/dev/developer_guide/process_locking.ja.md` の変更
 
-- [ ] 対象サブコマンド一覧から `recover --abort-reset --yes` の記述を削除する。（AC-20）
-- [ ] 契約節・チェックリスト節から `recover --abort-reset --yes` および `AbortReset` を除去し、`recover --mode discard-old --yes` のみが `OpenRecoverReset` を使うよう整合させる。（AC-20）
-- [ ] `resetPhase 1–5` への言及を `{1, 4}` に更新する。（AC-20）
+- [ ] 対象サブコマンド一覧（L65）から `--abort-reset` を削除する。（AC-20）
+- [ ] 契約節（L71・L73）・チェックリスト節（L298・L300）から `recover --abort-reset --yes` および `ResetForRecovery / AbortReset` のペア記述を除去し、`recover --mode discard-old --yes` / `ResetForRecovery` のみが `OpenRecoverReset` を使うよう整合させる。（AC-20）
+- [ ] 状態機械の説明（L43）の `（`ResetForRecovery` / `AbortReset`）` から `AbortReset` を削除する。（AC-20）
+- [ ] `AbortReset の restore 処理` を説明する箇条書き（L182）を削除する（`restoreFromStaging` 廃止に伴い該当処理が存在しなくなるため）。（AC-20）
+- [ ] リセットマニフェスト定義（L48）の `resetPhase`（1〜5） を `resetPhase`（1・4） に更新する。（AC-20）
 
 #### 4-3. `docs/translation_glossary.md` の変更
 
@@ -421,3 +429,29 @@
 検索対象ファイル：`internal/store/errors.go`、`cmd/tlsrpt-digest/boot.go`、`cmd/tlsrpt-digest/recover.go`、`cmd/tlsrpt-digest/main.go`、`internal/notify/format.go`。
 
 ドキュメントファイル（`docs/dev/developer_guide/process_locking.ja.md`、`docs/dev/adr/0003_reset_phase_design.ja.md`）はフェーズ 4 で対応するため、ここでは除外する。
+
+加えて、フェーズ 2 完了後に `cmd/tlsrpt-digest/main.go` の `recoverStoreOpenMode` コメント（L178）にも `abort-reset --yes` が残らないことを確認する（このコメントの除去はフェーズ 2-1 で実施済みのはずであり、本チェックリストは取りこぼし検出を目的とする）。
+
+---
+
+## 6. リスク管理
+
+| リスク | 影響 | 緩和策 |
+|---|---|---|
+| レガシー値（2・3）を植え込む既存テストの見落とし | `validateManifestPhase` を `{1, 4}` に絞った後、植え込み値が fail-closed となり `make test` が破綻する | §1.3・フェーズ 3 で全 `resetPhase(2)`/`resetPhase(3)` 植え込み箇所を関数単位で洗い出し済み（`TestAbortReset_*` は全削除、その他は植え込み値変更または削除）。実装時に `grep -rn "resetPhase(2)\|resetPhase(3)" internal/store/*_test.go` を再実行し、計画外の植え込みが残っていないことを確認する。 |
+| 削除に伴うコンパイルエラーの取りこぼし | ビルド不能 | フェーズ順序（ストア層 → CLI・通知層 → テスト整合）を守り、各フェーズ末で `go build` / `make test` を実行する。`make deadcode` で未使用関数の取りこぼしも検出する。 |
+| operator 向け文言からの abort 参照の取りこぼし | 廃止済みフラグを案内してしまう | §5 の横断 grep チェックリストで `--abort-reset` 等を検索し、コメントを含めて残存がないことを確認する。 |
+| `/mktrans` 反映漏れによる日英不整合 | ドキュメントの不整合 | フェーズ 4-5 で対象 3 ファイルの `/mktrans` 反映を明示タスク化済み。日本語版を先に確定してから反映する。 |
+
+## 7. 成功条件
+
+- `make test`・`make lint`・`make deadcode`・`make fmt` がすべてエラーなく完了する。
+- §4 受け入れ条件対応表の全 AC（AC-01〜AC-22、欠番除く）が、対応する実装タスクとテスト／検証方法に紐づき、検証済みである。
+- §5 の横断 grep チェックリストで、実装対象ファイルの operator 向け案内・コメントに意図しない abort 参照が残っていない。
+- ADR-0003・`process_locking`・運用手順書の日本語版と英語版（`/mktrans` 反映）がフェーズ定義 `{1, 4}` に整合している。
+
+## 8. 次のステップ
+
+- 本計画のレビュー・承認（ステータスを `approved` に更新）後、`/runplan` でフェーズ 1〜4 を順に実装する。
+- 実装中は各チェックボックスをリアルタイムで更新する（完了 `[x]`、部分完了 `[-]`）。
+- 実装完了後、PR を作成しレビューに回す。
