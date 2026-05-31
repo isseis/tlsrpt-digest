@@ -368,6 +368,7 @@ const (
 | `docs/dev/adr/0003_reset_phase_design.ja.md` / `.md` | 新フェーズ定義 `{1, 4}` への全面整合。具体的には：フェーズ一覧表のフェーズ 2・3・5 行削除（AC-14）、「フェーズ 5（recovery_required リセットマーカー）を設ける理由」節の削除/「廃止の経緯」化（AC-15）、状態遷移図の P5 ノード・P1→P5・P5→RR 削除（AC-16）、不変条件表のフェーズ 5 行削除（AC-17）、ユーザー操作表の `recover --abort-reset --yes` 列削除/更新（AC-18）。加えて、要件で個別列挙されていない次の波及箇所も整合する：§1 要件表の AC-abort 行、§2 ステージングディレクトリ説明文中の `AbortReset` 言及、§7「将来の変更・拡張方針」の「`AbortReset` の中断ロジックが複雑になる場合」サブ節および「フェーズを追加する場合」手順の `{1,4,5}`・`AbortReset` 言及、§8 の `AbortReset` 言及、§9 関連ファイル表の `AbortReset`・`ErrResetNotPending`・`ErrResetAbortInProgress` 言及。英語版は `/mktrans` で反映（AC-19）。 | 変更 |
 | `docs/dev/developer_guide/process_locking.ja.md` / `.md` | `AbortReset`・`--abort-reset`・`resetPhase 1–5` への言及を削除し、フェーズ集合 `{1, 4}` に整合する。具体的には、対象サブコマンド一覧の `recover` 説明から `--abort-reset` を削除し、契約節とチェックリスト節の `recover --mode discard-old --yes / recover --abort-reset --yes` を `recover --mode discard-old --yes` のみに更新する。`.md` は `/mktrans` で反映。 | 変更 |
 | `docs/operations/legacy_reset_manifest_upgrade.ja.md` | 新規運用手順書として、フェーズ 2・3 残存ストアでは旧バージョンで `recover --mode discard-old --yes` を完了してからアップグレードする手順、フェーズ 5 残存ストアでは旧バージョンで `AbortReset` を完了してからアップグレードする手順を記載する。英語版は `/mktrans` で反映する。 | 新規追加 |
+| `docs/translation_glossary.md` | 「保留リセット / pending reset」の定義（現状：フェーズ 1〜3 および フェーズ 5）を、廃止後の正しいフェーズ集合（フェーズ 1 のみ）および `AbortReset` 廃止に整合するよう更新する。`/mktrans` がこの用語集を参照するため、更新しないと翻訳時に廃止済みのフェーズ定義が再導入されるリスクがある。 | 変更 |
 
 ---
 
