@@ -75,15 +75,21 @@
     - 755 行（`HasPendingReset` 実装コメント）: "Returns true only for active-phase resets (phases 1–3 or 5)." → "Returns true for any non-committed manifest: pre-commit (phase 1, or legacy 2–3) and aborting (phase 5)." に更新する。
   - 完了基準: 定数定義が削除され、上記 7 箇所のコメントが更新済みであること。`make build` は Phase 1.3 で production 参照を除去した後に実行する。
 
-- [ ] **1.2** `advanceResetPhases` から中間チェックポイント書き込みを削除する
+- [ ] **1.2** `advanceResetPhases` を無条件の一括実行に書き換える
   - ファイル: `internal/store/recovery.go`
-  - 作業内容: `advanceResetPhases` 内で、`stageDataFile` 後の `writeResetManifest(phase=2)` 呼び出しと `stageEmailsDir` 後の `writeResetManifest(phase=3)` 呼び出しを削除する。フェーズ 1（コミット前）から、ステージング領域確保 → `stageDataFile` → `stageEmailsDir` → `commitReset` を順に実行するフローにする（アーキテクチャ §2.2）。コメント（596–597 行）は Phase 1.1 で更新する。
-  - 完了基準: `advanceResetPhases` 関数内に `writeResetManifest` の直接呼び出しがなく（フェーズ確定は `commitReset` 内の 1 回のみ）、フェーズ 1 から `commitReset` まで一括実行されること。
+  - 作業内容: `advanceResetPhases` 内の **3 つの `if phase <= X` ブロック全体を削除し**、`os.MkdirAll`・`stageDataFile`・`stageEmailsDir`・`commitReset` を引数なしで無条件に順番に呼び出す形へ置き換える（アーキテクチャ §2.2 のフローチャート参照）。具体的には次の変換を行う。
+    - 削除: `if phase <= resetPhaseManifestWritten { … }` ブロック全体（`MkdirAll`・`stageDataFile`・`writeResetManifest(phase=2)` を含む）
+    - 削除: `if phase <= resetPhaseDataStaged { … }` ブロック全体（`stageEmailsDir`・`writeResetManifest(phase=3)` を含む）
+    - 削除: `if phase <= resetPhaseEmailsStaged { … }` ブロック全体（`commitReset` を含む）
+    - 追加: ガードなしで `MkdirAll` → `stageDataFile` → `stageEmailsDir` → `commitReset` を無条件に呼び出す単一のシーケンス
+    - これにより、フェーズ 1 のマニフェストから呼ばれた場合も、レガシー値 2・3 のマニフェストから呼ばれた場合も、常に全操作（ステージング + コミット）を冪等に再実行する。
+    - `phase` 引数はブロック削除後に不要になるため、関数シグネチャからも削除し、呼び出し元 `executeResetFromManifest` の呼び出し箇所も合わせて変更する（アーキテクチャ §3.3）。コメント（596–597 行）は Phase 1.1 で更新する。
+  - 完了基準: `advanceResetPhases` 関数内に `writeResetManifest` の直接呼び出しがなく（フェーズ確定は `commitReset` 内の 1 回のみ）、`if phase <= X` の条件分岐が存在しないこと。`make build` は Phase 1.3 後（テスト参照除く）に確認する。
 
 - [ ] **1.3** コミット前判定条件を範囲式に変更する
   - ファイル: `internal/store/recovery.go`
   - 作業内容: `ResetForRecovery` 内の残存マニフェスト検出条件 `mfst.Phase <= resetPhaseEmailsStaged` を `mfst.Phase < resetPhaseCommitted` に変更する（アーキテクチャ §3.2・§6.2）。
-  - 完了基準: `rg -n -e resetPhaseEmailsStaged -e resetPhaseDataStaged internal/store/recovery.go internal/store/store.go` が該当なしになり、`make build` でコンパイルエラーが出ないこと（テスト参照は Phase 2.1・2.2 で解消する）。
+  - 完了基準: **ステップ 1.1〜1.3 はテストファイル（`recovery_test.go`・`store_test.go`）がまだ削除済み定数を参照するため、単体では `make test` を通せない。`make build`（プロダクションバイナリのみ）は通るが、`make test` は 2.1・2.2 完了まで保留する。** ステップ 2.2 完了後に `rg -n -e resetPhaseEmailsStaged -e resetPhaseDataStaged internal/store` が該当なしになり、`make test` でエラーがないことを確認する。ステップ 1.1〜1.3 は 2.1・2.2 と合わせて PR-1 の一体的なコンパイル単位を形成する。
 
 - [ ] **1.4** `store.go` のインターフェースコメントを更新する
   - ファイル: `internal/store/store.go`
@@ -106,9 +112,9 @@
 
 **対象ステップ**: 1.1 / 1.2 / 1.3 / 1.4 / 2.1 / 2.2
 
-**推奨タイトル**: `refactor(store): simplify ResetForRecovery to phase set {1,4,5}`
+**推奨タイトル**: `chore(store): simplify ResetForRecovery to phase set {1,4,5}`
 
-**レビュー観点**: 定数削除とコミット前判定の範囲式への変更 / `advanceResetPhases` の中間書き込み削除 / 既存テストの定数リテラル置換とコンパイル通過 / `validateManifestPhase` の値域が変わっていないこと
+**レビュー観点**: `advanceResetPhases` が `if phase <= X` 条件分岐を持たず、`MkdirAll`→`stageDataFile`→`stageEmailsDir`→`commitReset` を無条件に呼ぶこと（レガシー値 2・3 でも全操作が実行されること） / 定数削除とコミット前判定の範囲式への変更 / 既存テストの定数リテラル置換が意味を維持していること / `validateManifestPhase` の値域が `[1,5]` のまま変わっていないこと
 
 - [ ] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
@@ -201,7 +207,7 @@
 
 | AC | 実装箇所 | 検証タスク | 検証方法 |
 |---|---|---|---|
-| AC-01 | `internal/store/recovery.go::advanceResetPhases`、`commitReset` | `TestResetForRecovery_ClearsDataAndSentinel`（強化, Phase 2.3a）、`TestResetForRecovery_CrashAfterBothFilesStaged`（新規, Phase 2.3） | 新規リセットが空ストア・committed・クリーンアップへ収束（1→4 遷移）すること、マニフェストをフェーズ 1 に固定したまま両ファイル退避済みの状態からも収束することを確認する。「フェーズ 2・3 を新規に書かない」ことは Task 1.2 の中間書き込み削除＋`make build`、および Phase 1.3・2.5 の `rg`（定数の不在）で構造的に担保する（seam は導入しない）。 |
+| AC-01 | `internal/store/recovery.go::advanceResetPhases`、`commitReset` | `TestResetForRecovery_ClearsDataAndSentinel`（強化, Phase 2.3a）、`TestResetForRecovery_CrashAfterBothFilesStaged`（新規, Phase 2.3） | 新規リセットが空ストア・committed・クリーンアップへ収束（1→4 遷移）すること、マニフェストをフェーズ 1 に固定したまま両ファイル退避済みの状態からも収束することを確認する。「フェーズ 2・3 を新規に書かない」ことは Task 1.2 の cascade 削除＋`make build`（PR-1 で担保済み）および Phase 2.5 の `rg`（PR-2 で最終確認。定数は PR-1 時点で既に不在なため PR-2 でも必ず通る）で構造的に担保する（seam は導入しない）。 |
 | AC-02 | `internal/store/recovery.go::advanceResetPhases`、ステージング領域確保、`stageDataFile`、`stageEmailsDir`、`commitReset` | `TestResetForRecovery_ClearsDataAndSentinel`（強化, Phase 2.3a）、`TestResetForRecovery_Phase1MissingStagingDirConverges`（新規, Phase 2.3b）、`TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate`（既存）、`TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`（強化, Phase 2.4） | 両ステージング操作がコミット前に完了する（リセット後に root から両ファイルが消える）こと、ステージング領域欠落時も再作成され収束すること、対象ファイル不在時にステージング操作が no-op で収束すること（absent `tlsrpt.json`・absent `emails/`）を確認する。 |
 | AC-03 | `internal/store/recovery.go::ResetForRecovery`、`advanceResetPhases`、`cleanupCompletedReset` | Primary（新設計のファイル配置モデル）: `TestResetForRecovery_CrashAtPhaseManifestWritten`（既存）、`TestResetForRecovery_CrashAfterBothFilesStaged`（新規, Phase 2.3）、`TestOpen_CleansUpAfterCommitCrashWindowManifestWritten`（新規, Phase 2.3b）、`TestResetForRecovery_CommitCrashWindowManifestWritten_ZeroUID`（新規, Phase 2.3b）。Compatibility（レガシー値の収束）: `TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate`（既存）、`TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`（強化, Phase 2.4）、`TestResetForRecovery_IdempotentAfterCrashBeforeCommit`（強化, Phase 2.4） | 各ファイル配置状態からの再実行が空ストア・新 UIDVALIDITY・`recovery_required` 解消・マニフェスト削除・（該当時）ステージング削除へ収束することをアサートする。 |
 | AC-04 | `internal/store/recovery.go` の `resetPhaseCommitted`・`resetPhaseAborting`・`commitReset`・`AbortReset` | `TestResetPhasePersistedNumericValues`（新規, Phase 2.3c）、`TestAbortReset_ResumesFromAbortingPhase`（既存）、`TestResetForRecovery_RefusesAbortingPhase`（既存）、`TestAbortReset_AfterCommit`（既存）、`internal/store/store_test.go::TestOpen_PendingReset_FailsClosedForReadWrite`（Phase 2.2 で定数をリテラル置換） | `resetPhaseCommitted == resetPhase(4)`・`resetPhaseAborting == resetPhase(5)` をリテラルでアサート（再採番検出）。`AbortReset` が phase 5 を書いて honor する挙動と phase 4 の committed 挙動が既存テストで通ることを確認する。 |
@@ -237,7 +243,7 @@ Phase 1 と Phase 2 は密接に依存するため、1.1→1.2→1.3→1.4→2.1
 
 ### 単体テスト
 
-- **一括遷移（フェーズ 2・3 を書かない）**（AC-01）: `TestResetForRecovery_ClearsDataAndSentinel`（強化, Phase 2.3a）が新規リセットの 1→4 収束を行動で確認する。マニフェストをフェーズ 1 に固定したまま両ファイル退避済みの `TestResetForRecovery_CrashAfterBothFilesStaged`（Phase 2.3）が、中間チェックポイントなしで収束することを示す。「2・3 を書かない」ことの構造的担保は Phase 1.3・2.5 の `rg`（定数・中間書き込み呼び出しの不在）で行う（テスト用 seam は導入しない）。
+- **一括遷移（フェーズ 2・3 を書かない）**（AC-01）: `TestResetForRecovery_ClearsDataAndSentinel`（強化, Phase 2.3a）が新規リセットの 1→4 収束を行動で確認する。マニフェストをフェーズ 1 に固定したまま両ファイル退避済みの `TestResetForRecovery_CrashAfterBothFilesStaged`（Phase 2.3）が、中間チェックポイントなしで収束することを示す。「2・3 を書かない」ことの構造的担保は Task 1.2 の cascade 削除＋`make build`（PR-1 で確立）と Phase 2.5 の `rg`（PR-2 で最終確認。PR-1 時点で定数は既に不在のため必ず通る）で行う（テスト用 seam は導入しない）。
 - **ステージング順序・冪等**（AC-02）: `TestResetForRecovery_ClearsDataAndSentinel`（強化）がリセット後に root から両ファイルが消えること（=コミット前に両方退避済み）を確認する。`TestResetForRecovery_Phase1MissingStagingDirConverges`（Phase 2.3b）がステージング領域欠落時の境界値を、`TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate`（既存）・`...CrashAfterStageEmailsBeforeManifestUpdate`（強化）が対象ファイル不在時の no-op 冪等を確認する。
 - **クラッシュ収束**（AC-03）: ファイル配置で表現される C1・C2・C3・C4 状態からの再実行 → 空ストア収束。Phase 2.1 で更新する既存テスト、Phase 2.3 の C3 テスト、Phase 2.3b の新設計 C4 テストが担う。
 - **レガシー値の読み取り互換**（AC-05・AC-06）: Phase 2.1 で更新する既存テストを強化し、Phase 2.4 で境界値と残存マニフェストのテーブル駆動テストを追加する。フェーズ 2・3 のリテラルマニフェストを JSON で直接組み立てるか `resetPhase(2)` / `resetPhase(3)` で構築する。
