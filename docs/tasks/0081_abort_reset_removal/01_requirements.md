@@ -1,4 +1,4 @@
-# 要件定義書：AbortReset とフェーズ 5 の廃止
+# 要件定義書：AbortReset・フェーズ 5 の廃止およびフェーズ 2・3 フォールバックの削除
 
 ## ドキュメントステータス
 
@@ -16,7 +16,7 @@
 
 ### 1.1 背景
 
-ADR-0003 は `ResetForRecovery`（`recover --mode discard-old --yes`）の進捗を `resetPhase`（整数 1–5）としてリセットマニフェストに記録する。task 0080 でフェーズ 2・3 を廃止してフェーズ集合を `{1, 4, 5}` に縮小したが、フェーズ 5 は引き続き `AbortReset`（`recover --abort-reset --yes`）の WAL エントリとして残存している。
+ADR-0003 は `ResetForRecovery`（`recover --mode discard-old --yes`）の進捗を `resetPhase`（整数 1–5）としてリセットマニフェストに記録する。task 0080 でフェーズ 2・3 を廃止（書き込み停止）してフェーズ集合を `{1, 4, 5}` に縮小したが、フェーズ 5 は引き続き `AbortReset`（`recover --abort-reset --yes`）の WAL エントリとして残存している。また task 0080 では、旧バージョンが書いたフェーズ 2・3 のマニフェストをフェーズ 1 相当として読み取る後方互換コードを残していた。
 
 task 0081 の設計調査（2026-05-31）で以下の事実が確認された。
 
@@ -58,7 +58,7 @@ task 0081 の設計調査（2026-05-31）で以下の事実が確認された。
 
 ### 1.2 目的
 
-1. **主目的**：`AbortReset` 機能を廃止し、フェーズ 1 からは `recover --mode discard-old --yes` による前進のみを許容する。フェーズ集合を `{1, 4}` に縮小し、状態空間と制御フローをさらに単純化する。
+1. **主目的**：`AbortReset` 機能を廃止し、フェーズ 1 からは `recover --mode discard-old --yes` による前進のみを許容する。フェーズ 2・3 の後方互換フォールバックも削除し、有効フェーズを `{1, 4}` のみに確定する。状態空間と制御フローをさらに単純化する。
 2. **副次的目的**：ADR-0003 を新フェーズ定義に整合させ、フェーズ 5 の設計根拠・状態遷移図・不変条件表を更新する。
 
 ---
@@ -73,17 +73,18 @@ task 0081 の設計調査（2026-05-31）で以下の事実が確認された。
 - `ErrResetNotPending` エラー型の削除（`AbortReset` 専用であり、廃止後は未使用になる）
 - `restoreFromStaging` 関数の削除
 - `ResetForRecovery` 内のフェーズ 5 拒否チェックの削除
-- `validateManifestPhase` の有効値域を `[1, 4]` に縮小
+- `validateManifestPhase` の有効値域を `{1, 4}` の 2 値に限定（値 2・3・5 以上はすべて `ErrResetManifestPhaseUnknown`）
 - フェーズ 5 レガシー値を fail-closed で扱う（案 A、上記 §1.1 調査結果 5）
+- フェーズ 2・3 後方互換フォールバックの削除：`validateManifestPhase` での受理、`ResetForRecovery` の「`phase < resetPhaseCommitted`」判定コメント、`HasPendingReset` のコメント、`advanceResetPhases` のコメントにある「legacy 2–3」への言及
 - `recover --abort-reset` CLI フラグおよび関連処理の削除：`--abort-reset` フラグ定義・`RecoverAbort` オプション・`runAbortReset`・検証ロジック（`errAbortResetRequiresYes`、`errAbortAndModeExclusive`）・`recoverStoreOpenMode` の abort 分岐（`cmd/tlsrpt-digest/recover.go`、`cmd/tlsrpt-digest/main.go`）
 - abort 廃止に伴う CLI メッセージ・案内文の更新：保留リセット検出時の「Roll back reset」案内（`recover.go`）、`ErrPendingReset` のエラーメッセージ（`boot.go`）、`errYesRequiresModeOrAbort` の文言（`--yes requires --mode`）
-- 既存テストの削除・更新（`TestAbortReset_*` 全件、フェイクストアの abort 関連フィールド）
-- ADR-0003 の改訂（フェーズ 5 の設計根拠節削除、状態遷移図・不変条件表の更新）
+- 既存テストの削除・更新（`TestAbortReset_*` 全件、フェイクストアの abort 関連フィールド、レガシー値 2・3 を前提とするテスト群）
+- ADR-0003 の改訂（フェーズ 5・フェーズ 2・3 の設計根拠節削除、状態遷移図・不変条件表の更新）
 
 ### 対象外（Out of Scope）
 
 - フェーズ 1・4 の役割変更
-- `ResetForRecovery` の処理フロー変更（フェーズ 5 拒否チェック以外）
+- `ResetForRecovery` の処理フロー変更（フェーズ 5 拒否チェックおよびレガシー値フォールバック削除以外）
 - `cleanupCompletedReset` のセンチネルベース判定ロジックの変更
 - ストレージ技術の移行
 
@@ -110,17 +111,18 @@ task 0081 の設計調査（2026-05-31）で以下の事実が確認された。
 - `AC-06`：`ErrResetNotPending` エラー型が削除されている（`AbortReset` 専用であり廃止後は未使用となるため）。
 - `AC-07`：CLI の案内文・エラーメッセージから abort への言及が削除されている。具体的には、(a) 保留リセット検出時に「Roll back reset」を案内しない、(b) `ErrPendingReset` 由来のメッセージが `recover --abort-reset --yes to roll back` を含まない、(c) `--yes` 単独指定時のエラーが `--yes requires --mode`（`or --abort-reset` を含まない）になる。
 
-### `F-002`：フェーズ 5 定数の廃止とレガシー値の扱い
+### `F-002`：フェーズ 5 定数の廃止・レガシー値の扱い、フェーズ 2・3 フォールバックの削除
 
-`resetPhaseAborting`（値 5）を廃止し、新規に書き込むフェーズを `{1, 4}` のみとする。旧バージョンが書いたフェーズ 5 マニフェストは fail-closed（案 A）で扱う。
+`resetPhaseAborting`（値 5）を廃止し、フェーズ 2・3 の後方互換フォールバックも削除する。有効フェーズを `{1, 4}` の 2 値のみとする。旧バージョンが書いたフェーズ 2・3・5 のマニフェストはすべて fail-closed で扱う。
 
 **受け入れ条件**：
 
 - `AC-08`：`resetPhaseAborting` 定数が `recovery.go` に存在しない。
-- `AC-09`：`validateManifestPhase` は値 5 を未知値として `ErrResetManifestPhaseUnknown` を返す（有効値域 `[1, 4]`）。
-- `AC-10`：値 0 および値 5 以上（5・6・99 など）を `validateManifestPhase` に渡すと `ErrResetManifestPhaseUnknown` が返る。値 1・2・3・4 は引き続き受理される（レガシー値 2・3 の互換性は task 0080 で確立済み）。
+- `AC-09`：`validateManifestPhase` は値 `{1, 4}` のみを有効とし、それ以外（0・2・3・5・6・99 など）はすべて `ErrResetManifestPhaseUnknown` を返す。
+- `AC-10`：値 2・3 のマニフェストが存在する状態で `ResetForRecovery` または `Open(OpenReadWrite)` を呼び出すと、`ErrResetManifestPhaseUnknown` を返して fail-closed する（ステージングやマニフェストを削除しない）。
 - `AC-11`：フェーズ 5 のマニフェストが存在する状態で `ResetForRecovery` または `Open(OpenReadWrite)` を呼び出すと、`ErrResetManifestPhaseUnknown` を返して fail-closed する（ステージングやマニフェストを削除しない）。
 - `AC-12`：`ResetForRecovery` 内にフェーズ 5 への単値比較（`mfst.Phase == resetPhaseAborting`）が存在しない。
+- `AC-13`：`recovery.go` のコメントおよびロジックからフェーズ 2・3 への言及（`legacy 2–3`・`legacy 2·3`・`phase < resetPhaseCommitted` の「2・3 を含む」旨の記述）が削除されている。
 
 ### `F-003`：ADR-0003 の改訂
 
@@ -128,12 +130,12 @@ ADR-0003 を新フェーズ定義 `{1, 4}` に整合させる。
 
 **受け入れ条件**：
 
-- `AC-13`：ADR-0003（日本語版・英語版）のフェーズ一覧表からフェーズ 5 の行が削除されている。
-- `AC-14`：「フェーズ 5（recovery_required リセットマーカー）を設ける理由」節が削除または「廃止の経緯」として更新されている。
-- `AC-15`：状態遷移図から P5 ノードおよびその遷移（P1→P5、P5→RR）が削除されている。
-- `AC-16`：不変条件表の「フェーズ 5 が書かれている ⟹ `AbortReset` のみが続行できる」行が削除されている。
-- `AC-17`：ユーザー操作時の挙動表から `recover --abort-reset --yes` 列が削除されている（または「廃止済み」として更新されている）。
-- `AC-18`：英語版は `/mktrans` で日本語版から反映する（CLAUDE.md 翻訳規約に従う）。
+- `AC-14`：ADR-0003（日本語版・英語版）のフェーズ一覧表からフェーズ 2・3・5 の行が削除されている。
+- `AC-15`：「フェーズ 5（recovery_required リセットマーカー）を設ける理由」節が削除または「廃止の経緯」として更新されている。
+- `AC-16`：状態遷移図から P5 ノードおよびその遷移（P1→P5、P5→RR）が削除されている。
+- `AC-17`：不変条件表の「フェーズ 5 が書かれている ⟹ `AbortReset` のみが続行できる」行が削除されている。
+- `AC-18`：ユーザー操作時の挙動表から `recover --abort-reset --yes` 列が削除されている（または「廃止済み」として更新されている）。
+- `AC-19`：英語版は `/mktrans` で日本語版から反映する（CLAUDE.md 翻訳規約に従う）。
 
 ---
 
@@ -141,12 +143,12 @@ ADR-0003 を新フェーズ定義 `{1, 4}` に整合させる。
 
 ### 保守性
 
-- 新規書き込みのフェーズ集合を `{1, 4}` に縮小することで、`HasPendingReset` の判定（`mfst.Phase != resetPhaseCommitted`）が「フェーズ 1 のみ」を意味するようになり、フェーズ 5（aborting）を保留リセットとして扱う特殊扱いが不要になる。
-- `AbortReset` 廃止により、テストコードが約 250 行削減される。
+- 有効フェーズを `{1, 4}` の 2 値に限定することで、`HasPendingReset` の判定（`mfst.Phase != resetPhaseCommitted`）が「フェーズ 1 のみ」を意味するようになり、フェーズ 5（aborting）の特殊扱いが不要になる。また `ResetForRecovery` の分岐も `phase == resetPhaseManifestWritten` に単純化できる。
+- `AbortReset` 廃止とレガシー値フォールバック削除により、テストコードが約 350 行削減される。
 
 ### 後方互換性
 
-- フェーズ 5 レガシー値は fail-closed で扱い、自動収束させない（§1.1 調査結果 5 の案 A）。フェーズ 5 マニフェストが残存するストアへのアップグレードは、旧バージョンで `AbortReset` を完了してからアップグレードするよう運用ドキュメントに記載する。
+- フェーズ 2・3・5 のレガシー値はすべて fail-closed で扱い、自動収束させない。フェーズ 2・3 のマニフェストが残存するストアは移行期間終了とみなし、アップグレード前に旧バージョンで `recover --mode discard-old --yes` を完了するよう運用ドキュメントに記載する。フェーズ 5 については旧バージョンで `AbortReset` を完了してからアップグレードするよう記載する。
 
 ### パフォーマンス
 
@@ -157,8 +159,7 @@ ADR-0003 を新フェーズ定義 `{1, 4}` に整合させる。
 ## 5. 制約
 
 - 使用言語は Go とする（Go 1.26 以上）。
-- フェーズ 4 の数値・意味・役割は変更しない（再採番しない）。
-- レガシー値 2・3 の読み取り互換は task 0080 で確立済みであり、本タスクでは変更しない。
+- フェーズ 1・4 の数値・意味・役割は変更しない（再採番しない）。
 
 ---
 
@@ -168,16 +169,22 @@ ADR-0003 を新フェーズ定義 `{1, 4}` に整合させる。
 
 - `TestAbortReset_*` 全件（`internal/store/recovery_test.go`）
 - `TestResetForRecovery_RefusesAbortingPhase`（フェーズ 5 拒否テスト）
+- フェーズ 2・3 のレガシーマニフェストを前提とするテスト群：
+  - `TestResetForRecovery_ResumesLegacyPhase3Manifest`（フェーズ 3 からの再開テスト）
+  - `TestResetForRecovery_LegacyPhase2Manifest*`（フェーズ 2 マニフェストテスト群）
+  - その他 `resetPhase(2)` / `resetPhase(3)` を植え込むテストケース（フェーズ 5 追加後の fail-closed テストとして書き換え対象外のもの）
 
 ### 更新するテスト
 
-- `TestValidateManifestPhaseRange`（task 0080 で追加）：値 5 が拒否値に移動する。
+- `TestValidateManifestPhaseRange`（task 0080 で追加）：有効値を `{1, 4}` のみとし、値 2・3・5 はすべて拒否値に変更する。
 - `TestResetPhasePersistedNumericValues`（task 0080 で追加）：`resetPhaseAborting` の数値アサーションを削除する。
 - `TestRecover_YesAlone`：エラーメッセージのアサーションを `--yes requires --mode`（`or --abort-reset` を含まない）に更新する。
+- `TestApplyRecovery_*` のうちフェーズ 2 マニフェストを植え込んでいるもの：フェーズ 2 が fail-closed になることを確認するか、植え込みをフェーズ 1 に変更する。
 
 ### 新規追加するテスト
 
-- フェーズ 5 マニフェストが存在する状態で `ResetForRecovery` および `Open(OpenReadWrite)` を呼び出すと fail-closed することを検証する（AC-11）。
+- フェーズ 2・3 のマニフェストが存在する状態で `ResetForRecovery` および `Open(OpenReadWrite)` を呼び出すと fail-closed することを検証する（AC-10）。
+- フェーズ 5 のマニフェストが存在する状態で `ResetForRecovery` および `Open(OpenReadWrite)` を呼び出すと fail-closed することを検証する（AC-11）。
 
 ### 統合テスト
 
