@@ -265,7 +265,7 @@ When `manifest.CurrUIDValidity ≠ recovery_required.CurrUIDValidity`, the manif
 
 | Invariant | Where it is guaranteed |
 |---|---|
-| While phase 1 (or legacy values 2·3) is written, `Open(OpenReadWrite)` returns ErrPendingReset | `cleanupCompletedReset` checks recovery_required |
+| While phase 1 (or legacy values 2·3) is written **and `recovery_required` is present and `CurrUIDValidity` matches**, `Open(OpenReadWrite)` returns ErrPendingReset (commit-window crash: phase 1 with `recovery_required` absent → `cleanupCompletedReset` cleans up and Open succeeds instead) | `cleanupCompletedReset` checks recovery_required |
 | Phase 4 or `recovery_required == nil` => recovery_required is reset | `commitReset` writes phase 4 after saving the sentinel |
 | Phase 5 is written => only `AbortReset` can continue | `ResetForRecovery` refuses phase 5 |
 | **Manifest absent ⟹ staging contents are leftover residue (safe to remove)** | WAL design: phase 1 is written before any file is moved to staging; if the manifest is absent, no file was moved (or it is residue from a completed cleanup) |

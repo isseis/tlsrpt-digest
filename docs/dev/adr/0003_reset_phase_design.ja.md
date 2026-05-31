@@ -277,7 +277,7 @@ stateDiagram-v2
 
 | 不変条件 | 担保箇所 |
 |---|---|
-| フェーズ 1（またはレガシー値 2・3）が書かれている間は `Open(OpenReadWrite)` が ErrPendingReset を返す | `cleanupCompletedReset` が `recovery_required` を確認 |
+| フェーズ 1（またはレガシー値 2・3）が書かれており、かつ **`recovery_required` があり `CurrUIDValidity` が一致する**場合、`Open(OpenReadWrite)` は ErrPendingReset を返す（コミットウィンドウクラッシュ：フェーズ 1 かつ `recovery_required` なし → `cleanupCompletedReset` がクリーンアップし Open 成功） | `cleanupCompletedReset` が `recovery_required` を確認 |
 | フェーズ 4 または `recovery_required == nil` ⟹ recovery_required はリセット済み | `commitReset` がセンチネル保存後にフェーズ 4 を書く |
 | フェーズ 5 が書かれている ⟹ `AbortReset` のみが続行できる | `ResetForRecovery` がフェーズ 5 を拒否 |
 | **マニフェストなし ⟹ ステージングの内容は残留物（安全に削除可能）** | WAL 設計：フェーズ 1 はファイル移動より前に書かれるため、マニフェストがなければファイルは動いていない（または完了済みのクリーンアップ残滓） |
