@@ -121,18 +121,18 @@
 - [x] PR がマージされた
 - [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
-- [ ] **2.3** 新実装の C3 クラッシュシナリオテストを追加する（AC-03）
+- [x] **2.3** 新実装の C3 クラッシュシナリオテストを追加する（AC-03）
   - ファイル: `internal/store/recovery_test.go`
   - 作業内容: `TestResetForRecovery_CrashAfterBothFilesStaged` を新規追加する。`rootDir` にレポートと emails を植え、`stagingPath` に `tlsrpt.json` と `emails/` を移動済みにし、マニフェストを `resetPhaseManifestWritten`（フェーズ 1）で書いた状態から `ResetForRecovery(200)` を呼び出す。空ストア（`tlsrpt.json` と `emails/` が存在しないこと）・新 UIDVALIDITY・`recovery_required` 解消（`HasPendingReset` が `false` を返すこと）・マニフェスト削除・ステージング領域削除へ収束することを確認する。クラッシュ地点の定義はアーキテクチャ §5.2 を参照する。
   - 完了基準: テストが `make test` で通ること。
 
-- [ ] **2.3a** 新規リセットの一括遷移を行動で検証する（AC-01・AC-02）
+- [x] **2.3a** 新規リセットの一括遷移を行動で検証する（AC-01・AC-02）
   - ファイル: `internal/store/recovery_test.go`
   - 作業内容: 既存の `TestResetForRecovery_ClearsDataAndSentinel` を強化し、(1) リセット後にストアが空であること（`GetAllReports` が空）、(2) `rootDir` 直下に `tlsrpt.json`・`emails/` が存在しないことのアサートを追加する。両ファイルが root から消えていることは、コミット前に両方がステージングへ退避され（AC-02 の「ステージング 2 操作 → コミット」順序の行動的証跡）、フェーズ 1 から committed・クリーンアップへ収束したこと（AC-01 の 1→4 遷移）を示す。
   - 補足: 「フェーズ 2・3 を新規に書かない」ことの直接観測はテスト用 seam を導入せず、(a) 中間 `writeResetManifest` 呼び出しと定数の削除を `rg` で確認（Phase 1.3・2.5）、(b) マニフェストをフェーズ 1 に固定したまま両ファイルを退避済みにした状態から収束する Phase 2.3 のテスト、で担保する（§1.3 の方針）。
   - 完了基準: 強化したテストが `make test` で通り、リセット後にストアが空で、root にステージング対象ファイルが残らないことを確認すること。
 
-- [ ] **2.3b** C4 クラッシュウィンドウとステージング領域境界を検証する（AC-02・AC-03）
+- [x] **2.3b** C4 クラッシュウィンドウとステージング領域境界を検証する（AC-02・AC-03）
   - ファイル: `internal/store/recovery_test.go`
   - 作業内容: 以下 3 つのテストを追加する。いずれも空ストア・新 UIDVALIDITY・`recovery_required` 解消・マニフェスト削除・ステージング領域削除への収束をアサートする。
     1. `TestOpen_CleansUpAfterCommitCrashWindowManifestWritten`: 新設計の C4（センチネル確定済み・マニフェストは `resetPhaseManifestWritten` のまま）を `OpenReadWrite` 経由でクリーンアップする。
@@ -141,12 +141,12 @@
   - 補足: 既存の phase 3 版（`TestOpen_CleansUpAfterCommitCrashWindow`・`TestResetForRecovery_CommitCrashWindow_ZeroUID`）は Phase 2.1 で `resetPhase(3)` に置換し、レガシー値の読み取り互換テストとして維持する。
   - 完了基準: 3 つのテストが `make test` で通ること。
 
-- [ ] **2.3c** フェーズ 4・5 の永続数値と aborting マーカーを検証する（AC-04）
+- [x] **2.3c** フェーズ 4・5 の永続数値と aborting マーカーを検証する（AC-04）
   - ファイル: `internal/store/recovery_test.go`
   - 作業内容: `TestResetPhasePersistedNumericValues` を追加し、`resetPhaseCommitted == resetPhase(4)` と `resetPhaseAborting == resetPhase(5)` をリテラル値でアサートする（再採番を検出する）。`AbortReset` がフェーズ 5 を書いてから中断復元へ進む挙動は、既存の `TestAbortReset_ResumesFromAbortingPhase`（フェーズ 5 マニフェストから復元を再開）と `TestResetForRecovery_RefusesAbortingPhase`（フェーズ 5 で `ResetForRecovery` が `ErrResetAbortInProgress` を返す）が seam なしで担保するため、新規の seam テストは追加しない。
   - 完了基準: `TestResetPhasePersistedNumericValues` が `make test` で通り、フェーズ 4・5 の再採番がテストで検出されること。
 
-- [ ] **2.4** レガシー値の読み取り互換テストを追加する（AC-05・AC-06）
+- [x] **2.4** レガシー値の読み取り互換テストを追加する（AC-05・AC-06）
   - ファイル: `internal/store/recovery_test.go`
   - 作業内容:
     - AC-05: `validateManifestPhase` のテーブル駆動テスト `TestValidateManifestPhaseRange` を追加する。受理値は `1, 2, 3, 4, 5`、拒否値は境界値 `0, 6` と既存の代表値 `99` とし、レガシー値 2・3 が拒否されないことと値域境界を同時に確認する。
@@ -155,7 +155,7 @@
     - AC-06: テーブル駆動テスト `TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` を追加する。フェーズ 2・3 のレガシーマニフェスト（`CurrUIDValidity` が現在の `recovery_required` の値と不一致）を持つストアで `ResetForRecovery` を呼び出したとき、残存マニフェストと判定されて（a）旧マニフェストが削除されること、（b）最終的に空ストア・新 UIDVALIDITY・`recovery_required` 解消へ収束することを確認する（旧マニフェストの削除は最終状態でマニフェストが存在しないことで確認する）。
   - 完了基準: 追加したテストが `make test` で通ること。
 
-- [ ] **2.5** `make fmt && make lint && make test` を通す
+- [x] **2.5** `make fmt && make lint && make test` を通す
   - 完了基準: `rg -n -e resetPhaseDataStaged -e resetPhaseEmailsStaged internal/store` が該当なしになり、`make fmt`・`make lint`・`make test`・`go test -race -tags test ./internal/store` がいずれもエラーなく完了すること。
 
 ### PR-2 作成ポイント: crash-safety and legacy-compat tests

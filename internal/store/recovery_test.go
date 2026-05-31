@@ -4,6 +4,7 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -187,6 +188,49 @@ func openRecoverResetStore(t *testing.T) (Store, string) {
 	return s, rootDir
 }
 
+func assertResetConverged(t *testing.T, s Store, rootDir string) {
+	t.Helper()
+
+	v, found, err := s.LoadUIDValidity()
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, uint32(200), v)
+
+	_, _, _, recFound, err := s.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.False(t, recFound)
+
+	pending, err := s.HasPendingReset()
+	require.NoError(t, err)
+	assert.False(t, pending)
+
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.ErrorIs(t, err, os.ErrNotExist, "manifest must be removed")
+	_, err = os.Stat(resetStagingPath(rootDir))
+	assert.ErrorIs(t, err, os.ErrNotExist, "staging dir must be removed")
+
+	_, err = os.Stat(dataFilePath(rootDir))
+	assert.ErrorIs(t, err, os.ErrNotExist, "root data file must be absent")
+	_, err = os.Stat(emailsPath(rootDir))
+	assert.ErrorIs(t, err, os.ErrNotExist, "root emails dir must be absent")
+
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	reports, err := sRW.GetAllReports()
+	require.NoError(t, err)
+	assert.Empty(t, reports, "store must be empty after ResetForRecovery")
+}
+
+func commitSentinelForResetTest(t *testing.T, rootDir string, uidValidity uint32) {
+	t.Helper()
+
+	sentinel, _, err := loadSentinel(rootDir)
+	require.NoError(t, err)
+	sentinel.UIDValidity = &uidValidity
+	sentinel.RecoveryRequired = nil
+	require.NoError(t, saveSentinel(rootDir, sentinel))
+}
+
 // TestResetForRecovery_NoRecoveryRequired returns ErrRecoveryRequiredMissing
 // when the sentinel has no recovery-required entry.
 func TestResetForRecovery_NoRecoveryRequired(t *testing.T) {
@@ -216,26 +260,16 @@ func TestResetForRecovery_ClearsDataAndSentinel(t *testing.T) {
 
 	// Plant some data.
 	require.NoError(t, s.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(s, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, s.SaveEmail(1, 100, time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), makeTestEML("")))
 	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
 
 	require.NoError(t, s.ResetForRecovery(200))
-
-	// uid_validity updated.
-	v, found, err := s.LoadUIDValidity()
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, uint32(200), v)
-
-	// recovery_required cleared.
-	_, _, _, recFound, err := s.LoadRecoveryRequired()
-	require.NoError(t, err)
-	assert.False(t, recFound)
-
-	// Staging dir and manifest removed.
-	_, err = os.Stat(resetManifestPath(rootDir))
-	assert.True(t, os.IsNotExist(err), "manifest should be removed after successful reset")
-	_, err = os.Stat(resetStagingPath(rootDir))
-	assert.True(t, os.IsNotExist(err), "staging dir should be removed after successful reset")
+	assertResetConverged(t, s, rootDir)
 }
 
 // TestResetForRecovery_IdempotentAfterCrashBeforeCommit simulates a crash after staging
@@ -246,12 +280,20 @@ func TestResetForRecovery_IdempotentAfterCrashBeforeCommit(t *testing.T) {
 	s1, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
 	require.NoError(t, err)
 	require.NoError(t, s1.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(s1, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, s1.SaveEmail(1, 100, time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), makeTestEML("")))
 	require.NoError(t, s1.SaveRecoveryRequired(100, 200, time.Now()))
 
 	// Plant a legacy phase-3 manifest (emails_staged) to verify idempotent convergence from
 	// a pre-commit value no longer written by the current code.
 	stagingPath := resetStagingPath(rootDir)
 	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, os.Rename(dataFilePath(rootDir), filepath.Join(stagingPath, "tlsrpt.json")))
+	require.NoError(t, os.Rename(emailsPath(rootDir), filepath.Join(stagingPath, "emails")))
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
 		Version: resetManifestVersion, CurrUIDValidity: 200, Phase: resetPhase(3),
 	}))
@@ -262,15 +304,39 @@ func TestResetForRecovery_IdempotentAfterCrashBeforeCommit(t *testing.T) {
 
 	// ResetForRecovery should resume and complete from the staged state.
 	require.NoError(t, s2.ResetForRecovery(200))
+	assertResetConverged(t, s2, rootDir)
+}
 
-	v, found, err := s2.LoadUIDValidity()
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, uint32(200), v)
+// TestResetForRecovery_CrashAfterBothFilesStaged simulates the new C3 crash
+// layout: the manifest is still at phase 1 while both root files are already in staging.
+func TestResetForRecovery_CrashAfterBothFilesStaged(t *testing.T) {
+	rootDir := t.TempDir()
 
-	_, _, _, recFound, err := s2.LoadRecoveryRequired()
+	s, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
 	require.NoError(t, err)
-	assert.False(t, recFound)
+	require.NoError(t, s.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(s, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, s.SaveEmail(1, 100, time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), makeTestEML("")))
+	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
+
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, os.Rename(dataFilePath(rootDir), filepath.Join(stagingPath, "tlsrpt.json")))
+	require.NoError(t, os.Rename(emailsPath(rootDir), filepath.Join(stagingPath, "emails")))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseManifestWritten,
+	}))
+
+	s2, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s2.ResetForRecovery(200))
+	assertResetConverged(t, s2, rootDir)
 }
 
 // TestResetForRecovery_CrashAtPhaseManifestWritten simulates a crash that occurs
@@ -323,8 +389,8 @@ func TestResetForRecovery_CrashAtPhaseManifestWritten(t *testing.T) {
 }
 
 // TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate verifies convergence
-// from a legacy phase-2 manifest (data_staged; written by old code) with both tlsrpt.json
-// and emails/ already in staging.  The current code never writes phase 2; this test confirms
+// from a legacy phase-2 manifest (data_staged; written by old code) with tlsrpt.json
+// in staging and emails/ still in root. The current code never writes phase 2; this test confirms
 // that the range-based pre-commit check treats it as a valid pre-commit state and converges.
 func TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate(t *testing.T) {
 	rootDir := t.TempDir()
@@ -337,38 +403,25 @@ func TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate(t *testing.T
 		UID:         1,
 		UIDValidity: 100,
 	}))
+	require.NoError(t, s.SaveEmail(1, 100, time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), makeTestEML("")))
 	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
 
 	// Simulate a legacy phase-2 manifest (data_staged; written by older code before emails/ rename).
-	// Both files are already in staging; ResetForRecovery must converge from this legacy pre-commit value.
+	// tlsrpt.json is already in staging while emails/ remains in root; ResetForRecovery must
+	// converge from this legacy pre-commit value by re-running the full idempotent sequence.
 	stagingPath := resetStagingPath(rootDir)
 	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
 	require.NoError(t, os.Rename(dataFilePath(rootDir), filepath.Join(stagingPath, "tlsrpt.json")))
-	require.NoError(t, os.Rename(emailsPath(rootDir), filepath.Join(stagingPath, "emails")))
 	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
 		Version:         resetManifestVersion,
 		CurrUIDValidity: 200,
-		Phase:           resetPhase(2), // legacy value: tlsrpt.json staged, emails/ staged, no commit yet
+		Phase:           resetPhase(2), // legacy value: tlsrpt.json staged, emails/ not checkpointed yet
 	}))
 
 	s2, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
 	require.NoError(t, err)
 	require.NoError(t, s2.ResetForRecovery(200))
-
-	v, found, err := s2.LoadUIDValidity()
-	require.NoError(t, err)
-	assert.True(t, found)
-	assert.Equal(t, uint32(200), v)
-
-	_, _, _, recFound, err := s2.LoadRecoveryRequired()
-	require.NoError(t, err)
-	assert.False(t, recFound)
-
-	s3, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
-	require.NoError(t, err)
-	reports, err := s3.GetAllReports()
-	require.NoError(t, err)
-	assert.Empty(t, reports)
+	assertResetConverged(t, s2, rootDir)
 }
 
 // TestResetForRecovery_UnknownPhaseFailsClosed verifies that a manifest with an
@@ -525,6 +578,34 @@ func TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate(t *testing.T) 
 	reports, err := s3.GetAllReports()
 	require.NoError(t, err)
 	assert.Empty(t, reports, "old data must be discarded (was in staging, removed by cleanup)")
+}
+
+// TestResetForRecovery_Phase1MissingStagingDirConverges verifies that a phase-1
+// manifest can recover even when the staging directory is missing.
+func TestResetForRecovery_Phase1MissingStagingDirConverges(t *testing.T) {
+	rootDir := t.TempDir()
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, s.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(s, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, s.SaveEmail(1, 100, time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), makeTestEML("")))
+	require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseManifestWritten,
+	}))
+	require.NoFileExists(t, resetStagingPath(rootDir))
+
+	s2, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s2.ResetForRecovery(200))
+	assertResetConverged(t, s2, rootDir)
 }
 
 // TestAbortReset_PhaseManifestWritten verifies AbortReset succeeds when the manifest
@@ -995,6 +1076,54 @@ func TestOpen_CleansUpAfterCommitCrashWindow(t *testing.T) {
 	assert.Empty(t, reports)
 }
 
+// TestOpen_CleansUpAfterCommitCrashWindowManifestWritten simulates the new C4
+// crash window: commitReset saved the sentinel while the manifest remained at phase 1.
+func TestOpen_CleansUpAfterCommitCrashWindowManifestWritten(t *testing.T) {
+	rootDir := t.TempDir()
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(sRW, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, sRW.SaveEmail(1, 100, time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), makeTestEML("")))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, os.Rename(dataFilePath(rootDir), filepath.Join(stagingPath, "tlsrpt.json")))
+	require.NoError(t, os.Rename(emailsPath(rootDir), filepath.Join(stagingPath, "emails")))
+	commitSentinelForResetTest(t, rootDir, 200)
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseManifestWritten,
+	}))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+
+	_, err = os.Stat(resetManifestPath(rootDir))
+	assert.ErrorIs(t, err, os.ErrNotExist, "manifest must be removed")
+	_, err = os.Stat(stagingPath)
+	assert.ErrorIs(t, err, os.ErrNotExist, "staging dir must be removed")
+
+	v, found, err := s.LoadUIDValidity()
+	require.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, uint32(200), v)
+
+	_, _, _, recFound, err := s.LoadRecoveryRequired()
+	require.NoError(t, err)
+	assert.False(t, recFound)
+
+	reports, err := s.GetAllReports()
+	require.NoError(t, err)
+	assert.Empty(t, reports)
+}
+
 // TestOpen_BlockedByPreCommitReset verifies that OpenReadWrite still returns
 // ErrPendingReset when recovery_required is set (i.e. the reset is genuinely
 // in-progress or an AbortReset is partially applied).
@@ -1118,6 +1247,59 @@ func TestOpen_CleansUpOrphanStagingDir(t *testing.T) {
 	assert.Equal(t, uint32(100), v)
 }
 
+func TestResetPhasePersistedNumericValues(t *testing.T) {
+	assert.Equal(t, resetPhase(4), resetPhaseCommitted)
+	assert.Equal(t, resetPhase(5), resetPhaseAborting)
+}
+
+func TestValidateManifestPhaseRange(t *testing.T) {
+	for _, phase := range []resetPhase{1, 2, 3, 4, 5} {
+		t.Run(fmt.Sprintf("accepts_%d", phase), func(t *testing.T) {
+			assert.NoError(t, validateManifestPhase(phase))
+		})
+	}
+	for _, phase := range []resetPhase{0, 6, 99} {
+		t.Run(fmt.Sprintf("rejects_%d", phase), func(t *testing.T) {
+			var phaseErr *ErrResetManifestPhaseUnknown
+			require.ErrorAs(t, validateManifestPhase(phase), &phaseErr)
+			assert.Equal(t, int(phase), phaseErr.Got)
+		})
+	}
+}
+
+func TestResetForRecovery_LegacyPreCommitStaleManifestRestarts(t *testing.T) {
+	for _, phase := range []resetPhase{2, 3} {
+		t.Run(fmt.Sprintf("phase_%d", phase), func(t *testing.T) {
+			rootDir := t.TempDir()
+
+			s, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+			require.NoError(t, err)
+			require.NoError(t, s.SaveUIDValidity(100))
+			require.NoError(t, SaveReport(s, ReportInput{
+				Report:      makeFullReport("report-1", time.Now()),
+				UID:         1,
+				UIDValidity: 100,
+			}))
+			require.NoError(t, s.SaveEmail(1, 100, time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), makeTestEML("")))
+			require.NoError(t, s.SaveRecoveryRequired(100, 200, time.Now()))
+
+			stagingPath := resetStagingPath(rootDir)
+			require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+			require.NoError(t, os.WriteFile(filepath.Join(stagingPath, "tlsrpt.json"), []byte("stale"), filePerm))
+			require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+				Version:         resetManifestVersion,
+				CurrUIDValidity: 150,
+				Phase:           phase,
+			}))
+
+			s2, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+			require.NoError(t, err)
+			require.NoError(t, s2.ResetForRecovery(200))
+			assertResetConverged(t, s2, rootDir)
+		})
+	}
+}
+
 func TestHasPendingReset_NoManifest(t *testing.T) {
 	s, _ := openRecoverResetStore(t)
 	found, err := s.HasPendingReset()
@@ -1206,4 +1388,37 @@ func TestResetForRecovery_CommitCrashWindow_ZeroUID(t *testing.T) {
 	reports, err := s2.GetAllReports()
 	require.NoError(t, err)
 	assert.Empty(t, reports, "store must be empty after cleanup (old data was in staging)")
+}
+
+// TestResetForRecovery_CommitCrashWindowManifestWritten_ZeroUID covers the new
+// C4 window where commitReset saved the sentinel but the manifest was still phase 1.
+func TestResetForRecovery_CommitCrashWindowManifestWritten_ZeroUID(t *testing.T) {
+	rootDir := t.TempDir()
+
+	sRW, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+	require.NoError(t, sRW.SaveUIDValidity(100))
+	require.NoError(t, SaveReport(sRW, ReportInput{
+		Report:      makeFullReport("report-1", time.Now()),
+		UID:         1,
+		UIDValidity: 100,
+	}))
+	require.NoError(t, sRW.SaveEmail(1, 100, time.Date(2026, 5, 31, 0, 0, 0, 0, time.UTC), makeTestEML("")))
+	require.NoError(t, sRW.SaveRecoveryRequired(100, 200, time.Now()))
+
+	stagingPath := resetStagingPath(rootDir)
+	require.NoError(t, os.MkdirAll(stagingPath, dirPerm))
+	require.NoError(t, os.Rename(dataFilePath(rootDir), filepath.Join(stagingPath, "tlsrpt.json")))
+	require.NoError(t, os.Rename(emailsPath(rootDir), filepath.Join(stagingPath, "emails")))
+	commitSentinelForResetTest(t, rootDir, 200)
+	require.NoError(t, writeResetManifest(resetManifestPath(rootDir), resetManifest{
+		Version:         resetManifestVersion,
+		CurrUIDValidity: 200,
+		Phase:           resetPhaseManifestWritten,
+	}))
+
+	s, err := Open(rootDir, makeTestIdentity(), OpenRecoverReset)
+	require.NoError(t, err)
+	require.NoError(t, s.ResetForRecovery(0))
+	assertResetConverged(t, s, rootDir)
 }
