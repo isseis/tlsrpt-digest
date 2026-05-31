@@ -156,7 +156,7 @@
   - 完了基準: 追加したテストが `make test` で通ること。
 
 - [ ] **2.5** `make fmt && make lint && make test` を通す
-  - 完了基準: `rg -n -e resetPhaseDataStaged -e resetPhaseEmailsStaged internal/store` が該当なしになり、`make fmt`・`make lint`・`make test`・`go test -race ./internal/store` がいずれもエラーなく完了すること。
+  - 完了基準: `rg -n -e resetPhaseDataStaged -e resetPhaseEmailsStaged internal/store` が該当なしになり、`make fmt`・`make lint`・`make test`・`go test -race -tags test ./internal/store` がいずれもエラーなく完了すること。
 
 ### PR-2 作成ポイント: crash-safety and legacy-compat tests
 
@@ -248,7 +248,7 @@ Phase 1 と Phase 2 は密接に依存するため、1.1→1.2→1.3→1.4→2.1
 - **クラッシュ収束**（AC-03）: ファイル配置で表現される C1・C2・C3・C4 状態からの再実行 → 空ストア収束。Phase 2.1 で更新する既存テスト、Phase 2.3 の C3 テスト、Phase 2.3b の新設計 C4 テストが担う。
 - **レガシー値の読み取り互換**（AC-05・AC-06）: Phase 2.1 で更新する既存テストを強化し、Phase 2.4 で境界値と残存マニフェストのテーブル駆動テストを追加する。フェーズ 2・3 のリテラルマニフェストを JSON で直接組み立てるか `resetPhase(2)` / `resetPhase(3)` で構築する。
 - **フェーズ 4・5 不変**（AC-04）: `TestResetPhasePersistedNumericValues` のリテラル数値アサーション（4・5 の再採番検出）と、既存の aborting フェーズテスト（`TestAbortReset_ResumesFromAbortingPhase`・`TestResetForRecovery_RefusesAbortingPhase`）・committed テスト（`TestAbortReset_AfterCommit`）・Phase 2.2 で更新する `store_test.go` で担保する。
-- **race 確認**: `go test -race ./internal/store` を Phase 2.5 で実行し、テスト追加によるデータ競合がないことを確認する。
+- **race 確認**: `go test -race -tags test ./internal/store` を Phase 2.5 で実行し、テスト追加によるデータ競合がないことを確認する。
 
 ### 統合テスト
 
