@@ -232,11 +232,11 @@ Use when representing **states that the system persistently occupies on disk or 
 
 | Criterion | Choose `stateDiagram-v2` | Choose `flowchart` |
 |---|---|---|
-| Subject | Persistent states (e.g., store open mode, reset phase) | Processing steps or conditional branches (e.g., decisions inside a function) |
-| Color-coding of state groups | Not needed | Needed per group |
+| Subject | Persistent states (e.g., store open mode, reset phase) | Processing steps or conditional branching (e.g., decisions inside a function) |
+| Color-coding of composite state groups | Not needed | Needed per group |
 | Edge types | A single type suffices | Multiple types needed (e.g., solid for normal transitions, dashed for exceptions/crashes) |
 
-**ADR-0003 reference example**: The State Transition Diagram in [`docs/dev/adr/0003_reset_phase_design.md`](../adr/0003_reset_phase_design.md) is a true state machine representing persistent store states such as `Normal`, `Recovery Required`, and `Pending Reset`. While `stateDiagram-v2` would be semantically appropriate, it uses `flowchart` because color-coded state groups and dashed edges for crash transitions are required. Choose `flowchart` when `classDef` color-coding or multiple edge styles are needed.
+**ADR-0003 reference example**: The State Transition Diagram in [`docs/dev/adr/0003_reset_phase_design.md`](../adr/0003_reset_phase_design.md) is a true state machine representing persistent store states such as `Normal`, `Recovery Required`, and `Pending Reset`. While `stateDiagram-v2` would be semantically appropriate, it uses `flowchart` because color-coding of composite state groups (`classDef` cannot be applied to composite states) and dashed edges for crash transitions are required. Choose `flowchart` when you need to color-code composite state groups or require multiple edge styles.
 
 ### Basic Syntax
 
@@ -262,7 +262,7 @@ Arrow A → B represents "transition from A to B triggered by an event or operat
 
 ### Nested States (Composite States)
 
-Composite states with multiple sub-states are expressed using `state "Label" { ... }`.
+Composite states with multiple sub-states are expressed using `state id { ... }`. The ID itself becomes the display label. If a label containing spaces is needed, declare it separately with `state "Display Label" as id` and use `id` in transitions.
 
 ```mermaid
 stateDiagram-v2
@@ -302,7 +302,7 @@ stateDiagram-v2
 
 ### Usage Notes
 
-- `stateDiagram-v2` does not support `classDef` color-coding. Choose `flowchart` if you need to distinguish states by color.
+- `stateDiagram-v2` does support `classDef` color-coding, but it cannot be applied to composite states or the initial/terminal state (`[*]`). Choose `flowchart` if you need to color-code composite state groups.
 - Edge labels follow the `:` separator (e.g., `A --> B : event name`).
 - State labels containing special characters (parentheses, colons, etc.) must be wrapped in double quotes (e.g., `state "Phase 1 (WAL)" as P1`).
 
