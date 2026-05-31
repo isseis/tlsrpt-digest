@@ -1,4 +1,4 @@
-# ADR-0003: ResetForRecovery のフェーズ設計とコミット後クリーンアップの扱い
+# ADR-0003: ResetForRecovery のフェーズ設計とリセット完了後クリーンアップの扱い
 
 | 項目 | 内容 |
 |---|---|
@@ -31,7 +31,7 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 
 `ResetForRecovery` は複数のファイル操作を伴うため、途中でクラッシュした場合でも安全に再開または取り消しができる必要がある。
 
-本文書では `ResetForRecovery` による一連の操作を**リセット**と呼ぶ。リセット開始後、コミット完了（センチネルへの `recovery_required` クリア書き込み完了）までの中間状態を**保留リセット**と呼ぶ。コード上では `ErrPendingReset`・`HasPendingReset()` として参照される。なお `HasPendingReset()` はフェーズ 4（committed）のマニフェストに対しては false を返す（コミット後クリーンアップ残滓であり、保留リセットではない）。
+本文書では `ResetForRecovery` による一連の操作を**リセット**と呼ぶ。リセット開始後、コミット完了（センチネルへの `recovery_required` クリア書き込み完了）までの中間状態を**保留リセット**と呼ぶ。コード上では `ErrPendingReset`・`HasPendingReset()` として参照される。なお `HasPendingReset()` はフェーズ 4（committed）のマニフェストに対しては false を返す（リセット完了後クリーンアップ残滓であり、保留リセットではない）。
 
 ### 要件（02_architecture.md より）
 
@@ -65,7 +65,7 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 | 定数名 | 値 | 記録タイミング | 意味・役割 |
 |---|---|---|---|
 | `resetPhaseManifestWritten` | 1 | ステージング開始前（先書き） | **WAL エントリ**。この時点からマニフェストが存在するため `Open(OpenReadWrite)` は `ErrPendingReset` を返す。`AbortReset` によるロールバックが可能になる。 |
-| `resetPhaseCommitted` | 4 | センチネル保存直後（コミットマーカー） | センチネルへの書き込み（recovery_required クリア・新 UIDVALIDITY 設定）が完了したことを記録する。この後はマニフェストとステージングディレクトリのみが残存するため、クリーンアップ失敗は通常データパスに影響しない。 |
+| `resetPhaseCommitted` | 4 | センチネル保存直後（recovery_required リセットマーカー） | センチネルへの書き込み（recovery_required クリア・新 UIDVALIDITY 設定）が完了したことを記録する。この後はマニフェストとステージングディレクトリのみが残存するため、クリーンアップ失敗は通常データパスに影響しない。 |
 | `resetPhaseAborting` | 5 | `restoreFromStaging` 実行前（中断 WAL エントリ） | **中断操作の WAL エントリ**。`AbortReset` がファイルを元の場所に戻す前にこのフェーズを書く。以降のクラッシュでマニフェストが残存しても、`ResetForRecovery` はこのフェーズを見て操作を拒否し、`AbortReset` の再実行を促す。 |
 
 > **後方互換（レガシー値）**：旧バージョンのコードはフェーズ 2（`tlsrpt.json` ステージング完了後）・フェーズ 3（`emails/` ステージング完了後）のマニフェストを書いていた。新バージョンはこれらを新規に書かないが、読み取り時は値域検証（`validateManifestPhase`、§4 参照）で拒否せず、コミット前判定（`phase < resetPhaseCommitted`、すなわち範囲 `[1, 4)`）で自然にコミット前として扱い、冪等な再実行で正しく収束させる。
@@ -80,7 +80,7 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 | フェーズ 1 — 初期状態（マニフェスト書き込み直後） | `tlsrpt.json`・`emails/` | 空ディレクトリ（作成済み） |
 | フェーズ 1 — `stageDataFile` 完了後（C2 クラッシュ地点） | `emails/` のみ | `tlsrpt.json` |
 | フェーズ 1 — `stageEmailsDir` 完了後（C3 クラッシュ地点） | なし | `tlsrpt.json`・`emails/` |
-| フェーズ 4（コミット済み / クリーンアップ前） | なし | `tlsrpt.json`・`emails/`（旧） |
+| フェーズ 4（recovery_required リセット済み / クリーンアップ前） | なし | `tlsrpt.json`・`emails/` |
 
 > **クラッシュ時のファイル配置について**：現行コードは中間チェックポイントフェーズを書かないため、`stageDataFile`（C2）や `stageEmailsDir`（C3）の完了後にクラッシュしても、マニフェストはフェーズ 1 のまま上表の C2・C3 行に示すファイル配置になる。旧コードはこれらの時点でレガシー値 2・3 を書いていたため、同じファイル配置を異なるマニフェストフェーズで表していた。`advanceResetPhases` は `stageDataFile`・`stageEmailsDir` が冪等（対象ファイル不在は no-op）なため、いずれの配置からも正しく収束する。
 
@@ -93,18 +93,17 @@ stateDiagram-v2
     state "要復旧（recovery_required あり）" as RecoveryReq {
         state "マニフェストなし" as RR
         state "残留マニフェスト<br/>(CurrUIDValidity 不一致)" as StaleM
+        state "フェーズ 1<br/>(コミット前の保留リセット)" as P1
+        state "フェーズ 5（中断処理中）" as P5
     }
 
-    state "フェーズ 1<br/>(コミット前の保留リセット)" as P1
-
-    state "フェーズ 4（コミット済み）" as Phase4 {
+    state "フェーズ 4（recovery_required リセット済み）" as Phase4 {
         state "クリーンアップ実行中<br/>(ステージング/マニフェスト あり)" as P4a
         state "クラッシュ残留<br/>(ステージング/マニフェスト あり)" as P4b
         P4a --> P4b : ※クラッシュ
     }
 
     state "通常<br/>(マニフェストなし / recovery_required なし)" as Normal
-    state "フェーズ 5（中断処理中）" as P5
 
     RR --> Normal : recover --mode keep-old
     RR --> P1 : recover --mode discard-old --yes
@@ -140,7 +139,7 @@ stateDiagram-v2
 | マニフェストなし・`recovery_required` あり | `ApplyRecovery` を実行し、旧データを保持したまま UIDVALIDITY を更新して `recovery_required` を解除する | 実行予定を表示するだけで、破壊的変更を行わず exit 1 | fresh start として `ResetForRecovery` を開始する | 保留リセットがないため `ErrResetNotPending` |
 | フェーズ 1（またはレガシー値 2・3）（コミット前の保留リセット、CurrUIDValidity 一致） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。継続または中断の選択肢を表示する。 | 保留リセットの存在と、継続または中断の選択肢を表示する。破壊的変更なし。 | コミット前からの一括実行（`advanceResetPhases`）で `ResetForRecovery` を再開し、空ストア + current UIDVALIDITY + `recovery_required` 解消へ収束する | `AbortReset` を実行し、旧データ保持 + `recovery_required` 残存へ戻す |
 | フェーズ 1（またはレガシー値 2・3）（残留マニフェスト、CurrUIDValidity 不一致） | `cleanupCompletedReset` がマニフェストを削除して Open 成功。`ApplyRecovery` を実行する | 同左（Open 成功・表示のみ） | `cleanupCompletedReset` がマニフェストを削除して Open 成功。`ResetForRecovery` を fresh start で開始する | `AbortReset` が不一致を検出してマニフェストを削除し `ErrResetNotPending` を返す |
-| フェーズ 4 または `recovery_required` なし（コミット済み） | 通常 open 時に残留マニフェスト/ステージングをクリーンアップする。その後は recovery-required 不在として復旧不要扱い。 | 同左 | クリーンアップして終了する。実質的に冪等。 | コミット後のため `ErrResetNotPending` |
+| フェーズ 4 または `recovery_required` なし（recovery_required リセット済み） | 通常 open 時に残留マニフェスト/ステージングをクリーンアップする。その後は recovery-required 不在として復旧不要扱い。 | 同左 | クリーンアップして終了する。実質的に冪等。 | コミット後のため `ErrResetNotPending` |
 | フェーズ 5（中断処理中） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。中断処理の完了を促す。 | 保留リセットの存在と、中断処理の完了が必要であることを表示する。破壊的変更なし。 | `ErrResetAbortInProgress` を返し、先に `AbortReset` の完了を要求する | `AbortReset` を再開し、`restoreFromStaging` を冪等に実行してマニフェストを削除する |
 | 不明フェーズ・バージョン不一致・マニフェスト破損 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 |
 
@@ -174,7 +173,7 @@ stateDiagram-v2
 | `AbortReset` のロールバック可否 | `sentinel.recovery_required != nil` | 「コミット後の中断」を防ぐ |
 | `Open(OpenReadWrite)` のクリーンアップ可否 | `sentinel.recovery_required == nil` | 「コミット後のクリーンアップ失敗」を検出してデータパスをブロックしない |
 
-### フェーズ 4（コミットマーカー）を設ける理由
+### フェーズ 4（recovery_required リセットマーカー）を設ける理由
 
 `recovery_required == nil` だけでコミット完了を判定できるにもかかわらずフェーズ 4 を設けるのは、**`executeResetFromManifest`（`recover --mode discard-old --yes` の再実行パス）でコミット前とコミット後の意味を一意に保つ**ためである。
 
@@ -185,7 +184,7 @@ stateDiagram-v2
 | フェーズ | 意味 | `executeResetFromManifest` の動作 |
 |---|---|---|
 | コミット前（1、またはレガシー値 2・3） | コミット前（ステージング + コミット残り） | `advanceResetPhases` を呼ぶ |
-| 4 | コミット済み（クリーンアップ待ち） | `cleanupCompletedReset` に直行 |
+| 4 | recovery_required リセット済み（クリーンアップ待ち） | `cleanupCompletedReset` に直行 |
 
 一方、`Open(OpenReadWrite)` 内の `cleanupCompletedReset` はセンチネルで判断する（フェーズ 1 のままクラッシュした「コミットウィンドウクラッシュ」も拾う必要があるため）。フェーズ 4 とセンチネルはそれぞれ異なる呼び出しパスで使い分けられる。
 
@@ -214,7 +213,7 @@ stateDiagram-v2
 
 **正しさへの影響なし**：`stageDataFile`・`stageEmailsDir`・`commitReset` はいずれも冪等であり、`rename(2)` は POSIX が保証する原子操作であるため、再開は常にフェーズ 1 相当から全操作を冪等に再実行して収束する。中間チェックポイントは AC-crash-safe の担保に不要である。
 
-**結論**：フェーズを `{1=manifest written, 4=committed, 5=aborting}` に簡略化する。フェーズ 4（コミットマーカー）と フェーズ 5（中断 WAL エントリ）は前述の理由（センチネルを読まない判断・中断クラッシュの曖昧性回避）により引き続き必要である。この変更は task 0080 で実施済みであり、既存ストアに残るフェーズ 2・3 のマニフェストはコミット前判定（`phase < resetPhaseCommitted`）に自然に含まれて後方互換で処理される。
+**結論**：フェーズを `{1=manifest written, 4=committed, 5=aborting}` に簡略化する。フェーズ 4（recovery_required リセットマーカー）と フェーズ 5（中断 WAL エントリ）は前述の理由（センチネルを読まない判断・中断クラッシュの曖昧性回避）により引き続き必要である。この変更は task 0080 で実施済みであり、既存ストアに残るフェーズ 2・3 のマニフェストはコミット前判定（`phase < resetPhaseCommitted`）に自然に含まれて後方互換で処理される。
 
 ---
 
@@ -239,7 +238,7 @@ stateDiagram-v2
    ├─ 不在 → ErrPendingReset（非正規状態・fail-closed）
    ├─ recovery_required あり かつ manifest.CurrUIDValidity == recovery_required.CurrUIDValidity → ErrPendingReset（操作進行中）
    ├─ recovery_required あり かつ manifest.CurrUIDValidity ≠ recovery_required.CurrUIDValidity → 残留マニフェスト → クリーンアップして正常終了（※後述②）
-   └─ recovery_required なし → コミット済み → クリーンアップ実行
+   └─ recovery_required なし → recovery_required リセット済み → クリーンアップ実行
        ├─ os.RemoveAll(staging) ── ベストエフォート
        └─ os.Remove(manifest)   ── ベストエフォート（失敗すると警告ログを出力し次回 Open 時に再試行）
 ```
@@ -267,7 +266,7 @@ stateDiagram-v2
 | 操作進行中（コミット前・CurrUIDValidity 一致） | あり（1、またはレガシー値 2・3） | あり（CurrUIDValidity 一致） | ErrPendingReset |
 | 中断処理中 | あり（5） | あり | ErrPendingReset |
 | 残留マニフェスト（CurrUIDValidity 不一致） | あり（1、またはレガシー値 2・3） | あり（CurrUIDValidity 不一致） | マニフェスト/ステージングをクリーンアップして通常 Open（※②） |
-| コミット後クリーンアップ失敗 | あり（4） | なし | クリーンアップして通常 Open |
+| リセット完了後クリーンアップ失敗 | あり（4） | なし | クリーンアップして通常 Open |
 | コミットウィンドウクラッシュ（コミット前マニフェスト + センチネル確定） | あり（1、またはレガシー値 2・3） | なし | クリーンアップして通常 Open |
 | 残留ステージング（マニフェスト削除後にステージング削除が失敗） | なし | なし | ステージングをベストエフォートで削除して通常 Open（※①） |
 
@@ -278,7 +277,7 @@ stateDiagram-v2
 | 不変条件 | 担保箇所 |
 |---|---|
 | フェーズ 1（またはレガシー値 2・3）が書かれている間は `Open(OpenReadWrite)` が ErrPendingReset を返す | `cleanupCompletedReset` が `recovery_required` を確認 |
-| フェーズ 4 または `recovery_required == nil` ⟹ センチネルはコミット済み | `commitReset` がセンチネル保存後にフェーズ 4 を書く |
+| フェーズ 4 または `recovery_required == nil` ⟹ recovery_required はリセット済み | `commitReset` がセンチネル保存後にフェーズ 4 を書く |
 | フェーズ 5 が書かれている ⟹ `AbortReset` のみが続行できる | `ResetForRecovery` がフェーズ 5 を拒否 |
 | **マニフェストなし ⟹ ステージングの内容は残留物（安全に削除可能）** | WAL 設計：フェーズ 1 はファイル移動より前に書かれるため、マニフェストがなければファイルは動いていない（または完了済みのクリーンアップ残滓） |
 
