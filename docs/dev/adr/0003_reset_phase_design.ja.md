@@ -91,30 +91,30 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 ```mermaid
 stateDiagram-v2
     state "要復旧（recovery_required あり）" as RecoveryReq {
-        RR : マニフェストなし
-        StaleM : 残留マニフェスト\n(CurrUIDValidity 不一致)
+        state "マニフェストなし" as RR
+        state "残留マニフェスト<br/>(CurrUIDValidity 不一致)" as StaleM
     }
 
-    P1 : フェーズ 1\n(コミット前の保留リセット)
+    state "フェーズ 1<br/>(コミット前の保留リセット)" as P1
 
     state "フェーズ 4（コミット済み）" as Phase4 {
-        P4a : クリーンアップ実行中\n(ステージング/マニフェスト あり)
-        P4b : クラッシュ残留\n(ステージング/マニフェスト あり)
+        state "クリーンアップ実行中<br/>(ステージング/マニフェスト あり)" as P4a
+        state "クラッシュ残留<br/>(ステージング/マニフェスト あり)" as P4b
         P4a --> P4b : ※クラッシュ
     }
 
-    Normal : 通常\n(マニフェストなし / recovery_required なし)
-    P5 : フェーズ 5（中断処理中）
+    state "通常<br/>(マニフェストなし / recovery_required なし)" as Normal
+    state "フェーズ 5（中断処理中）" as P5
 
     RR --> Normal : recover --mode keep-old
     RR --> P1 : recover --mode discard-old --yes
-    P1 --> P4a : advanceResetPhases:\nstageDataFile + stageEmailsDir + commitReset
+    P1 --> P4a : advanceResetPhases
     P4a --> Normal : ステージング/マニフェスト削除
-    P4b --> Normal : 次回 Open が\ncleanupCompletedReset を実行
-    P4b --> StaleM : ※次回 fetch が\n新 UIDVALIDITY 変化を検出
-    StaleM --> RR : 次回 Open が CurrUIDValidity\n不一致を検出しクリーンアップ
+    P4b --> Normal : 次回 Open が cleanupCompletedReset を実行
+    P4b --> StaleM : ※次回 fetch が新 UIDVALIDITY 変化を検出
+    StaleM --> RR : 次回 Open が CurrUIDValidity 不一致を検出しクリーンアップ
     P1 --> P5 : recover --abort-reset --yes
-    P5 --> RR : AbortReset 完了:\n.staging/ → ルートに復元
+    P5 --> RR : AbortReset 完了
     Normal --> RR : ※fetch が UIDVALIDITY 変化を検出
 ```
 
