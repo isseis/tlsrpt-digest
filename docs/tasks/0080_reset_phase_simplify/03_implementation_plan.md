@@ -178,12 +178,12 @@
   - 作業内容: アーキテクチャ §7.3 の対象範囲に従って ADR を改訂する。計画書には設計詳細を再掲せず、各節の更新作業だけを実施する。後方互換の正規化方針では「レガシー値 2・3 をコミット前として解釈する」ことを明記する（AC-08）。
   - 完了基準: `rg -n -e "フェーズ ?2" -e "フェーズ ?3" -e "phase ?2" -e "phase ?3" -e data_staged -e emails_staged -e resetPhaseDataStaged -e resetPhaseEmailsStaged -e チェックポイント -e checkpoint -e "1〜3" -e "1–3" -e "1-3" docs/dev/adr/0003_reset_phase_design.ja.md docs/dev/adr/0003_reset_phase_design.md` を実行し、能動的なフェーズ 2・3 書き込み説明が残っていないことを確認する。レガシー値の読み取り互換説明として残るヒットは、確認結果に理由を添えて残す。
 
-- [ ] **3.2** 英語版 ADR を `/mktrans` で反映する
+- [x] **3.2** 英語版 ADR を `/mktrans` で反映する
   - ファイル: `docs/dev/adr/0003_reset_phase_design.md`
   - 作業内容: `/mktrans` コマンドを使い、日本語版の変更内容を英語版に反映する。CLAUDE.md の翻訳規約に従い、日本語版を原本として英語版に適用する。
   - 完了基準: 日英 ADR の見出し一覧を比較する（例: `rg -n "^#{1,4} " docs/dev/adr/0003_reset_phase_design.ja.md docs/dev/adr/0003_reset_phase_design.md`）。見出し構造が対応し、英語版にも AC-08 のレガシー値説明が反映されていることを確認する。
 
-- [ ] **3.3** ADR 改訂の検証結果を記録する（AC-07・AC-08・AC-09）
+- [x] **3.3** ADR 改訂の検証結果を記録する（AC-07・AC-08・AC-09）
   - ファイル: `docs/tasks/0080_reset_phase_simplify/03_implementation_plan.md`
   - 作業内容: Phase 3.1 と 3.2 の確認コマンド、残存ヒットの理由、日英見出し比較の結果を「受け入れ条件トレーサビリティ」セクションへ追記する。
   - 完了基準: AC-07・AC-08・AC-09 が「目視確認」だけでなく、実行した確認コマンドと確認観点に紐づいていること。
@@ -213,9 +213,9 @@
 | AC-04 | `internal/store/recovery.go` の `resetPhaseCommitted`・`resetPhaseAborting`・`commitReset`・`AbortReset` | `TestResetPhasePersistedNumericValues`（新規, Phase 2.3c）、`TestAbortReset_ResumesFromAbortingPhase`（既存）、`TestResetForRecovery_RefusesAbortingPhase`（既存）、`TestAbortReset_AfterCommit`（既存）、`internal/store/store_test.go::TestOpen_PendingReset_FailsClosedForReadWrite`（Phase 2.2 で定数をリテラル置換） | `resetPhaseCommitted == resetPhase(4)`・`resetPhaseAborting == resetPhase(5)` をリテラルでアサート（再採番検出）。`AbortReset` が phase 5 を書いて honor する挙動と phase 4 の committed 挙動が既存テストで通ることを確認する。 |
 | AC-05 | `internal/store/recovery.go::validateManifestPhase`、`ResetForRecovery`、`advanceResetPhases` | `internal/store/recovery_test.go::TestValidateManifestPhaseRange`、`TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`（strengthened）、`TestResetForRecovery_IdempotentAfterCrashBeforeCommit`（strengthened） | `1..5` が受理され `0`・`6`・`99` が拒否されること、レガシー値 2・3 のマニフェストがコミット前として収束することを確認する。 |
 | AC-06 | `internal/store/recovery.go::ResetForRecovery` の残存マニフェスト検出条件 | `internal/store/recovery_test.go::TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` | phase 2/3 と `CurrUIDValidity` 不一致のテーブル駆動テストで、旧マニフェスト削除、新規リセット開始、最終収束を確認する。 |
-| AC-07 | `docs/dev/adr/0003_reset_phase_design.ja.md`、`docs/dev/adr/0003_reset_phase_design.md` | Phase 3.1・3.3 | `rg -n -e "フェーズ ?2" -e "フェーズ ?3" -e "phase ?2" -e "phase ?3" -e data_staged -e emails_staged -e resetPhaseDataStaged -e resetPhaseEmailsStaged -e チェックポイント -e checkpoint -e "1〜3" -e "1–3" -e "1-3" docs/dev/adr/0003_reset_phase_design.ja.md docs/dev/adr/0003_reset_phase_design.md` の結果を記録し、能動的なフェーズ 2・3 書き込み説明が残っていないことを確認する。 |
-| AC-08 | `docs/dev/adr/0003_reset_phase_design.ja.md`、`docs/dev/adr/0003_reset_phase_design.md` | Phase 3.1・3.2・3.3 | `rg -n -e レガシー値 -e legacy -e コミット前 -e pre-commit docs/dev/adr/0003_reset_phase_design.ja.md docs/dev/adr/0003_reset_phase_design.md` で日英両方に読み取り互換方針があることを確認する。 |
-| AC-09 | `docs/dev/adr/0003_reset_phase_design.md` | Phase 3.2・3.3 | `/mktrans` 実行後、`rg -n "^#{1,4} " docs/dev/adr/0003_reset_phase_design.ja.md docs/dev/adr/0003_reset_phase_design.md` で見出し構造を比較し、差分が翻訳上の表記差に限られることを確認する。 |
+| AC-07 | `docs/dev/adr/0003_reset_phase_design.ja.md`、`docs/dev/adr/0003_reset_phase_design.md` | Phase 3.1・3.3 | **確認済み（Phase 3.1・3.2 完了後）**。`rg -n -e "フェーズ ?2" -e "フェーズ ?3" ...` の残存ヒットはすべて廃止経緯（§4「廃止の経緯」「廃止の判断」）・後方互換ブロッククォート・旧不変条件ブロッククォートの文脈に限られ、能動的なフェーズ 2・3 書き込み説明は残存しない。英語版も同様。 |
+| AC-08 | `docs/dev/adr/0003_reset_phase_design.ja.md`、`docs/dev/adr/0003_reset_phase_design.md` | Phase 3.1・3.2・3.3 | **確認済み（Phase 3.1・3.2 完了後）**。`rg -n -e レガシー値 -e legacy -e コミット前 ...` のヒット多数（日本語版 §3 後方互換ブロッククォート 2 箇所・§6・§7；英語版 §3 Backward compatibility ブロッククォート 2 箇所・§6）。双方に「レガシー値 2・3 をコミット前（`phase < resetPhaseCommitted`, `[1, 4)`）として扱い、冪等再実行で収束させる」方針が明記されている。 |
+| AC-09 | `docs/dev/adr/0003_reset_phase_design.md` | Phase 3.2・3.3 | **確認済み（Phase 3.2 完了後）**。`rg -n "^#{1,4} "` で日英の見出し構造を比較。§1〜§9 のすべての章・節の対応を確認。差分は翻訳上の表記差（日: フェーズ→英: Phase など）のみ。 |
 
 ---
 

@@ -5,8 +5,8 @@
 | Number | ADR-0003 |
 | Status | Accepted |
 | Decision date | 2026-05-25 |
-| Last updated | 2026-05-30 |
-| Related task | 0070_entrypoint |
+| Last updated | 2026-05-31 |
+| Related task | 0070_entrypoint, 0080_reset_phase_simplify |
 
 ---
 
@@ -50,7 +50,7 @@ In this document, the series of operations performed by `ResetForRecovery` is ca
 
 | File/Directory | Recorded content | Role |
 |---|---|---|
-| Manifest (`.tlsrpt-digest-reset-manifest.json`) | `resetPhase` (integer 1–5) | Progress ledger for the reset operation. Used to decide where to resume or stop after a crash. |
+| Manifest (`.tlsrpt-digest-reset-manifest.json`) | `resetPhase` (integer. New write values are {1, 4, 5}) | Progress ledger for the reset operation. Used to decide where to resume or stop after a crash. Legacy values 2 and 3 written by older versions are treated as pre-commit when read (see §3 backward compatibility). |
 | Sentinel (`.tlsrpt-digest-meta.json`) | `UIDValidity`, `recovery_required` | Committed-state ledger. `recovery_required == nil` is the authoritative signal that the commit is complete. |
 | Staging directory (`.tlsrpt-digest-staging/`) | `tlsrpt.json`, `emails/` (old data during reset) | Temporary holding location for old data before commit. Before commit, `AbortReset` can restore files from staging to their original location. After commit, the data is discarded as old data. |
 
@@ -60,15 +60,15 @@ The **staging directory** (`.tlsrpt-digest-staging/`) is the dedicated directory
 
 ## 3. Phase List and Roles
 
-> **Design pattern note**: Phase 1 uses the "write-ahead (WAL: Write-Ahead Log)" pattern, and phases 2 and 3 use the "write-after (checkpoint)" pattern. Write-ahead records the operation before it starts to guarantee resumption after a crash; write-after records after the operation completes to enable idempotent re-execution. Details are explained in §4.
+> **Design pattern note**: Phase 1 uses the "write-ahead (WAL: Write-Ahead Log)" pattern. Write-ahead records the operation before it starts to guarantee resumption after a crash. The "write-after (checkpoint)" pattern that existed as phases 2 and 3 has been removed. Because the staging operations (`stageDataFile` and `stageEmailsDir`) are each idempotent, all operations can be re-executed from phase 1 without intermediate checkpoints and will converge correctly. See §4 for details on the removal.
 
 | Constant name | Value | Recording timing | Meaning and role |
 |---|---|---|---|
 | `resetPhaseManifestWritten` | 1 | Before staging starts (write-ahead) | **WAL entry**. From this point, the manifest exists, so `Open(OpenReadWrite)` returns `ErrPendingReset`. Rollback with `AbortReset` becomes possible. |
-| `resetPhaseDataStaged` | 2 | After staging of `tlsrpt.json` is complete (checkpoint) | Records that renaming the data file is complete. When resuming after a crash from this phase, `stageDataFile` is idempotent (absence of the file is a no-op) |
-| `resetPhaseEmailsStaged` | 3 | After staging of `emails/` is complete (checkpoint) | Records that renaming the email directory is complete. Likewise idempotent. |
 | `resetPhaseCommitted` | 4 | Immediately after saving the sentinel (commit marker) | Records that the write to the sentinel (clearing recovery_required and setting the new UIDVALIDITY) is complete. After this, only the manifest and staging directory remain, so cleanup failure does not affect the normal data path |
 | `resetPhaseAborting` | 5 | Before executing `restoreFromStaging` (abort WAL entry) | **WAL entry for the abort operation**. `AbortReset` writes this phase before moving files back to their original locations. Even if the manifest remains after a later crash, `ResetForRecovery` sees this phase, refuses the operation, and prompts re-execution of `AbortReset` |
+
+> **Backward compatibility (legacy values)**: Older code wrote manifests at phase 2 (after staging of `tlsrpt.json` completes) and phase 3 (after staging of `emails/` completes). New code does not write these values, but when reading them, the range validation (`validateManifestPhase`, see §4) does not reject them; the pre-commit check (`phase < resetPhaseCommitted`, i.e., range `[1, 4)`) naturally treats them as pre-commit, and they converge correctly via idempotent re-execution.
 
 ### Phase-by-Phase File Layout
 
@@ -78,9 +78,9 @@ The table below shows the primary files present in the store directory (`{root_d
 |---|---|---|
 | Normal / Recovery required | `tlsrpt.json`, `emails/` | none |
 | Phase 1 (manifest written) | `tlsrpt.json`, `emails/` | empty directory (created) |
-| Phase 2 (data staged) | `emails/` only | `tlsrpt.json` |
-| Phase 3 (emails staged) | none | `tlsrpt.json`, `emails/` (old) |
 | Phase 4 (committed / cleanup pending) | none | `tlsrpt.json`, `emails/` (old) |
+
+> **Backward compatibility (legacy file layout)**: If a manifest with legacy value 2 (data staging complete) written by an older version remains, the store has only `emails/` and staging has `tlsrpt.json`. For legacy value 3 (emails staging complete), the store has nothing and staging has both files. From either file layout, `advanceResetPhases` (`stageDataFile` and `stageEmailsDir` are idempotent) converges correctly.
 
 The transition from phase 4 to Normal (cleanup) is executed inside `Open(OpenReadWrite)`. Staging deletion and re-initialization of `tlsrpt.json` and `emails/` complete within the same Open call, after which the state returns to Normal.
 
@@ -97,8 +97,7 @@ flowchart TD
 
     subgraph PendingReset["Pre-commit pending reset"]
         P1["Phase 1<br>(manifest written)"]
-        P2["Phase 2<br>(data staged)"]
-        P3["Phase 3<br>(emails staged)"]
+        Legacy[("Legacy values 2·3<br>(manifests written by old code)")]
     end
 
     subgraph Phase4["Phase 4 (committed)"]
@@ -110,9 +109,8 @@ flowchart TD
 
     RR -->|"recover --mode keep-old"| Normal
     RR -->|"recover --mode discard-old --yes"| P1
-    P1 -->|"stageDataFile:<br>tlsrpt.json → .staging/"| P2
-    P2 -->|"stageEmailsDir:<br>emails/ → .staging/"| P3
-    P3 -->|"commitReset complete"| P4a
+    P1 -->|"advanceResetPhases: stageDataFile<br>stageEmailsDir + commitReset"| P4a
+    Legacy -->|"advanceResetPhases<br>(treated as pre-commit)"| P4a
     P4a -->|"removes staging/manifest"| Normal
     P4a -.->|"crash"| P4b
     P4b -->|"next fetch/summary/gc's Open<br>runs cleanupCompletedReset"| Normal
@@ -123,16 +121,16 @@ flowchart TD
     Normal -.->|"fetch detects UIDVALIDITY change"| RR
 ```
 
-Legend: rectangle = disk state; stadium shape = substate within subgraph; solid line = normal transition; dashed line = exceptional event (crash or UIDVALIDITY change) or manual abort.
+Legend: rectangle = disk state; stadium shape = substate within subgraph; cylinder = backward-compatible legacy values; solid line = normal transition; dashed line = exceptional event (crash or UIDVALIDITY change) or manual abort.
 
-**Crash recovery**: After a crash at any phase, the operation can resume from the same phase (each staging operation is idempotent). If the process stops at phases 1–3, re-running `recover --mode discard-old --yes` resumes from the current phase automatically.
+**Crash recovery**: After a crash at any phase, the operation can resume from the same pre-commit state (each staging operation is idempotent). If the process stops at phase 1 (or legacy values 2·3), re-running `recover --mode discard-old --yes` automatically resumes from pre-commit and converges.
 
 **Commit-window crash** (the window between sentinel save completing and the phase 4 update completing)
 
-`commitReset` saves the sentinel before advancing the manifest to phase 4. A crash between those two writes leaves the manifest at phase 3.
+`commitReset` saves the sentinel before advancing the manifest to phase 4. A crash between those two writes leaves the manifest before commit (phase 1).
 
 - **Normal convergence**: `cleanupCompletedReset` uses `recovery_required` in the sentinel (not the phase number) to determine commit status, so cleanup runs the same as for phase 4 and the state converges to Normal (see §4). Data integrity is preserved.
-- **When the manifest persists**: If `cleanupCompletedReset` succeeds in removing staging but fails to remove the manifest (best-effort), the manifest remains on disk at phase 3. What happens next depends on subsequent events:
+- **When the manifest persists**: If `cleanupCompletedReset` succeeds in removing staging but fails to remove the manifest (best-effort), the manifest remains before commit (phase 1) on disk. What happens next depends on subsequent events:
   - If a new UIDVALIDITY change occurs: `Open(OpenReadWrite)` → `cleanupCompletedReset` detects the `CurrUIDValidity` mismatch and cleans up the manifest/staging (Open succeeds). Both `recover --mode keep-old` and `recover --mode discard-old --yes` then work normally. `recover --abort-reset --yes` causes `AbortReset` to detect the mismatch and return `ErrResetNotPending`.
   - If no new UIDVALIDITY change occurs: the next time `fetch` or `gc` runs, `Open(OpenReadWrite)` → `cleanupCompletedReset` retries the removal.
 
@@ -143,8 +141,8 @@ Since `fetch` and `gc` are expected to run periodically, storage capacity estima
 | State | `recover --mode keep-old` | `recover --mode discard-old` (without `--yes`) | `recover --mode discard-old --yes` | `recover --abort-reset --yes` |
 |---|---|---|---|---|
 | No manifest and `recovery_required` present | Executes `ApplyRecovery`, updates UIDVALIDITY while preserving old data, and clears `recovery_required` | Only displays the planned operation, performs no destructive changes, and exits 1 | Starts `ResetForRecovery` as a fresh start | Returns `ErrResetNotPending` because there is no pending reset |
-| Phases 1-3 (pre-commit pending reset, CurrUIDValidity match) | Cannot execute because `Open(OpenReadWrite)` returns `ErrPendingReset`. Displays the options to continue or abort | Displays the presence of the pending reset and the options to continue or abort. No destructive changes | Resumes `ResetForRecovery` from the corresponding phase and converges to empty store + current UIDVALIDITY + `recovery_required` resolved | Executes `AbortReset` and returns to old data preserved + `recovery_required` remains |
-| Phases 1-3 (stale manifest, CurrUIDValidity mismatch) | `cleanupCompletedReset` removes the manifest and Open succeeds. Executes `ApplyRecovery` | Same as left (Open succeeds; display only) | `cleanupCompletedReset` removes the manifest and Open succeeds. Starts `ResetForRecovery` as a fresh start | `AbortReset` detects the mismatch, removes the manifest, and returns `ErrResetNotPending` |
+| Phase 1 (or legacy values 2·3) (pre-commit pending reset, CurrUIDValidity match) | Cannot execute because `Open(OpenReadWrite)` returns `ErrPendingReset`. Displays the options to continue or abort | Displays the presence of the pending reset and the options to continue or abort. No destructive changes | Resumes `ResetForRecovery` from pre-commit and converges to empty store + current UIDVALIDITY + `recovery_required` resolved | Executes `AbortReset` and returns to old data preserved + `recovery_required` remains |
+| Phase 1 (or legacy values 2·3) (stale manifest, CurrUIDValidity mismatch) | `cleanupCompletedReset` removes the manifest and Open succeeds. Executes `ApplyRecovery` | Same as left (Open succeeds; display only) | `cleanupCompletedReset` removes the manifest and Open succeeds. Starts `ResetForRecovery` as a fresh start | `AbortReset` detects the mismatch, removes the manifest, and returns `ErrResetNotPending` |
 | Phase 4 or no `recovery_required` (committed) | Cleans up leftover manifest/staging during normal open. After that, treated as no recovery required | Same as left | Cleans up and exits. Effectively idempotent | Returns `ErrResetNotPending` because this is after commit |
 | Phase 5 (abort interrupted) | Cannot execute because `Open(OpenReadWrite)` returns `ErrPendingReset`. Prompts completion of abort | Displays the presence of the pending reset and that abort must be completed. No destructive changes | Returns `ErrResetAbortInProgress` and requires completion of `AbortReset` first | Resumes `AbortReset`, idempotently executes `restoreFromStaging`, and removes the manifest |
 | Unknown phase, version mismatch, or manifest corruption | Fail closed. Manual confirmation is required | Fail closed. Manual confirmation is required | Fail closed. Manual confirmation is required | Fail closed. Manual confirmation is required |
@@ -162,18 +160,9 @@ Writing the manifest also serves as an "operation in progress" flag for `Open(Op
 
 If a crash occurs before writing the flag, the manifest does not exist, so the next execution treats the operation as a "fresh start" and resumes normally after checking recovery_required in the sentinel.
 
-### Reason for Writing Phases 2 and 3 (Checkpoints) After Rename
+### Background for Removing Phases 2 and 3 (Checkpoints)
 
-Because `rename(2)` is an atomic operation guaranteed by POSIX, files are moved only when the operation succeeds. By writing checkpoints after rename, the following inferences hold when resuming after a crash:
-
-| Checkpoint for phase N | Inference | Action on resume |
-|---|---|---|
-| Present | Rename is definitely complete | Skip |
-| Absent | May already be complete, or may not have run | Re-run the idempotent operation (if file absent, no-op) |
-
-Conversely, if the checkpoint were written before rename, a crash could create a state where the checkpoint was written but the rename was not complete, creating the risk that resume processing would incorrectly judge the operation as complete. This design chose the post-operation checkpoint pattern.
-
-> **Note**: This design guarantees AC-crash-safe, but it assumes the invariant that "phase N has been written = the operation for phase N is complete." The idempotence of each staging function (`stageDataFile` and `stageEmailsDir`) is required to maintain this invariant.
+Phases 2 (`resetPhaseDataStaged`) and 3 (`resetPhaseEmailsStaged`) existed as checkpoints — written after each `rename(2)` call — in earlier versions of the design. The current `advanceResetPhases` executes `stageDataFile`, `stageEmailsDir`, and `commitReset` sequentially from the pre-commit phase without any intermediate manifest updates. Because each operation is idempotent (file absent is a no-op), re-execution after a crash always re-tries all operations and converges correctly. These were removed in task 0080 (see §4 "Decision to Remove Checkpoint Phases (Phases 2 and 3)" for details).
 
 ### Reason the Sentinel Is the True Basis for Commit
 
@@ -188,22 +177,22 @@ The following decisions use this property.
 
 ### Reason for Providing Phase 4 (Commit Marker)
 
-Although `recovery_required == nil` alone is sufficient to determine that the commit is complete, phase 4 exists in order to **keep the meaning of phase 3 unambiguous in `advanceResetPhases` (the re-execution path of `recover --mode discard-old --yes`)**.
+Although `recovery_required == nil` alone is sufficient to determine that the commit is complete, phase 4 exists in order to **keep the meaning of the pre-commit range unambiguous in `executeResetFromManifest` (the re-execution path of `recover --mode discard-old --yes`)**.
 
-Without phase 4, a crash immediately after commit leaves the manifest at phase 3. If `recover --mode discard-old --yes` is re-run in this state, `advanceResetPhases` interprets phase 3 as "pre-commit" and calls `commitReset` again. `commitReset` is idempotent with respect to rewriting the sentinel, so this does not cause corruption, but phase 3 ends up carrying two meanings: "pre-commit (emails staged)" and "crash window after commit," making the control flow ambiguous.
+Without phase 4, a crash immediately after commit leaves the manifest before commit (phase 1). If `recover --mode discard-old --yes` is re-run in this state, `executeResetFromManifest` interprets it as "pre-commit" and calls `advanceResetPhases`. `advanceResetPhases` idempotently re-executes all operations so this does not cause corruption, but phase 1 ends up carrying two meanings: "pre-commit (WAL entry)" and "crash window after commit," making the control flow ambiguous.
 
-By providing phase 4, `advanceResetPhases` can make its decision without reading the sentinel.
+By providing phase 4, `executeResetFromManifest` can make its decision without reading the sentinel.
 
-| Phase | Meaning | `advanceResetPhases` behavior |
+| Phase | Meaning | `executeResetFromManifest` behavior |
 |---|---|---|
-| 3 | Pre-commit (emails staged) | Calls `commitReset` |
+| Pre-commit (1, or legacy values 2·3) | Pre-commit (staging + commit remaining) | Calls `advanceResetPhases` |
 | 4 | Committed (cleanup pending) | Proceeds directly to `cleanupCompletedReset` |
 
-On the other hand, `cleanupCompletedReset` inside `Open(OpenReadWrite)` uses the sentinel for its decision (because it also needs to catch a "commit-window crash" where the manifest remains at phase 3). Phase 4 and the sentinel are used separately depending on the calling path.
+On the other hand, `cleanupCompletedReset` inside `Open(OpenReadWrite)` uses the sentinel for its decision (because it also needs to catch a "commit-window crash" where the manifest remains before commit). Phase 4 and the sentinel are used separately depending on the calling path.
 
 ### Reason for Providing Phase 5 (Abort WAL Entry)
 
-The operation in which `AbortReset` moves files back to their original locations (`restoreFromStaging`) can crash partway through. After such a crash, the state can be "the manifest remains at phase 3, and files have already been restored to root." If `ResetForRecovery` is executed in this state, it is treated as phase 3, and commit proceeds with empty staging ("new UIDVALIDITY + recovery_required cleared + old data remains in root"), producing an inconsistent state.
+The operation in which `AbortReset` moves files back to their original locations (`restoreFromStaging`) can crash partway through. After such a crash, the state can be "the manifest remains before commit (phase 1, or legacy values 2·3), and files have already been restored to root." If `ResetForRecovery` is executed in this state, it is treated as pre-commit, and commit proceeds with empty staging ("new UIDVALIDITY + recovery_required cleared + old data remains in root"), producing an inconsistent state.
 
 To avoid this problem, `AbortReset` always updates the manifest to phase 5 (aborting) before moving any files. If `ResetForRecovery` sees phase 5, it returns `ErrResetAbortInProgress` and requires completion of `AbortReset`.
 
@@ -214,8 +203,6 @@ To avoid this problem, `AbortReset` always updates the manifest to phase 5 (abor
 
 ### Decision to Remove Checkpoint Phases (Phases 2 and 3)
 
-> **Note**: The following is a decision record for a design change planned in task 0080. The other sections of this ADR describe the current implementation (phases 1–5); this ADR will be revised to reflect the new phase definitions when implementation is complete.
-
 Phases 2 (`resetPhaseDataStaged`) and 3 (`resetPhaseEmailsStaged`) were originally introduced as checkpoints for three purposes. Upon re-evaluation, we judge that none of these justifications is strong in the context of this project.
 
 | Original purpose | Re-evaluation |
@@ -224,9 +211,9 @@ Phases 2 (`resetPhaseDataStaged`) and 3 (`resetPhaseEmailsStaged`) were original
 | **Observability**: readable progress indicator | The idempotence logic in `stageDataFile`/`stageEmailsDir` already determines progress from file presence; progress is derivable from the on-disk file layout. Phase numbers 2 and 3 are a redundant cache of that information. |
 | **Extensibility**: preparation for additional staged files | Adding a staged file requires only one additional idempotent `stat`→`rename` function; adding a checkpoint phase is fundamentally unnecessary (idempotent re-execution of all operations always converges correctly). This anticipates future needs in violation of YAGNI. |
 
-**No impact on correctness**: `stageDataFile`, `stageEmailsDir`, and `commitReset` are all idempotent, and `rename(2)` is an atomic operation guaranteed by POSIX. Resumption always converges by idempotently re-executing all operations from the beginning (the phase 1 equivalent). Intermediate checkpoints are not required to guarantee AC-crash-safe.
+**No impact on correctness**: `stageDataFile`, `stageEmailsDir`, and `commitReset` are all idempotent, and `rename(2)` is an atomic operation guaranteed by POSIX. Resumption always converges by idempotently re-executing all operations from the beginning (from phase 1 equivalent). Intermediate checkpoints are not required to guarantee AC-crash-safe.
 
-**Conclusion**: Simplify the phase set to `{1=manifest written, 4=committed, 5=aborting}`. Phase 4 (commit marker) and phase 5 (abort WAL entry) remain necessary for the reasons stated above (decision-making without reading the sentinel; avoiding ambiguity when a crash occurs during abort). Implementation will be carried out in task 0080, with backward compatibility for phase 2 and 3 manifests remaining in existing stores included as a requirement.
+**Conclusion**: Simplify the phase set to `{1=manifest written, 4=committed, 5=aborting}`. Phase 4 (commit marker) and phase 5 (abort WAL entry) remain necessary for the reasons stated above (decision-making without reading the sentinel; avoiding ambiguity when a crash occurs during abort). This change was implemented in task 0080, and phase 2·3 manifests remaining in existing stores are naturally included in the pre-commit check (`phase < resetPhaseCommitted`) and handled with backward compatibility.
 
 ---
 
@@ -236,7 +223,7 @@ Phases 2 (`resetPhaseDataStaged`) and 3 (`resetPhaseEmailsStaged`) were original
 
 | Alternative | Policy | Problem |
 |---|---|---|
-| A. Decide only from the phase value | Clean up only when the phase is 4 | Cannot handle a commit-window crash (phase 3 + sentinel committed) |
+| A. Decide only from the phase value | Clean up only when the phase is 4 | Cannot handle a commit-window crash (pre-commit manifest + sentinel committed) |
 | B. Decide from the sentinel value (accepted) | Clean up if `recovery_required == nil` | Can uniformly handle the commit window without depending on the phase value |
 
 ### Cleanup Logic (`cleanupCompletedReset`)
@@ -268,11 +255,11 @@ When `manifest.CurrUIDValidity ≠ recovery_required.CurrUIDValidity`, the manif
 
 | Scenario | Manifest presence | sentinel.recovery_required | Result |
 |---|---|---|---|
-| Operation in progress (pre-commit, CurrUIDValidity match) | present (1-3) | present (CurrUIDValidity match) | ErrPendingReset |
+| Operation in progress (pre-commit, CurrUIDValidity match) | present (1, or legacy values 2·3) | present (CurrUIDValidity match) | ErrPendingReset |
 | Abort interrupted | present (5) | present | ErrPendingReset |
-| Stale manifest (CurrUIDValidity mismatch) | present (1-3) | present (CurrUIDValidity mismatch) | Clean up manifest/staging and open normally (※②) |
+| Stale manifest (CurrUIDValidity mismatch) | present (1, or legacy values 2·3) | present (CurrUIDValidity mismatch) | Clean up manifest/staging and open normally (※②) |
 | Post-commit cleanup failure | present (4) | absent | Clean up and open normally |
-| Commit-window crash (phase 3 + sentinel committed) | present (3) | absent | Clean up and open normally |
+| Commit-window crash (pre-commit manifest + sentinel committed) | present (1, or legacy values 2·3) | absent | Clean up and open normally |
 | Orphaned staging (staging deletion failed after manifest deletion) | absent | absent | Remove staging on a best-effort basis and open normally (※①) |
 
 ---
@@ -281,12 +268,12 @@ When `manifest.CurrUIDValidity ≠ recovery_required.CurrUIDValidity`, the manif
 
 | Invariant | Where it is guaranteed |
 |---|---|
-| While phase 1 is written, `Open(OpenReadWrite)` returns ErrPendingReset | `cleanupCompletedReset` checks recovery_required |
-| Phase 2 is written => `tlsrpt.json` exists in staging | `stageDataFile` is idempotent; phase 2 is written after rename |
-| Phase 3 is written => `emails/` exists in staging | `stageEmailsDir` is idempotent; phase 3 is written after rename |
+| While phase 1 (or legacy values 2·3) is written, `Open(OpenReadWrite)` returns ErrPendingReset | `cleanupCompletedReset` checks recovery_required |
 | Phase 4 or `recovery_required == nil` => the sentinel is committed | `commitReset` writes phase 4 after saving the sentinel |
 | Phase 5 is written => only `AbortReset` can continue | `ResetForRecovery` refuses phase 5 |
 | **Manifest absent ⟹ staging contents are leftover residue (safe to remove)** | WAL design: phase 1 is written before any file is moved to staging; if the manifest is absent, no file was moved (or it is residue from a completed cleanup) |
+
+> **Legacy invariants (reference to legacy values 2·3)**: Older versions maintained the invariants "phase 2 written ⟹ `tlsrpt.json` exists in staging" and "phase 3 written ⟹ `emails/` exists in staging." These checkpoint writes have been removed, but when legacy value 2·3 manifests remain in an existing store, they are naturally treated as pre-commit by the pre-commit check (`phase < resetPhaseCommitted`, range `[1, 4)`) and converge correctly via idempotent re-execution of `advanceResetPhases`.
 
 ---
 
@@ -294,15 +281,18 @@ When `manifest.CurrUIDValidity ≠ recovery_required.CurrUIDValidity`, the manif
 
 ### When Adding a Phase
 
+The current write phases are limited to three values: `{1=manifest written, 4=committed, 5=aborting}`. When adding a new phase in the future (e.g., a sub-phase for the abort process), follow these steps:
+
 1. Define a new `resetPhase` constant (value = current maximum value + 1)
 2. Update the upper bound in `validateManifestPhase`
 3. Add processing for the new phase to `advanceResetPhases` and `AbortReset`
 4. Because `cleanupCompletedReset` uses the sentinel for commit decisions, it is not affected even if the number of phases increases
 
+**Note**: It is a design policy not to introduce intermediate checkpoint phases to record the completion of staging operations (`stageDataFile`, `stageEmailsDir`, etc.) (see "Decision to Remove Checkpoint Phases (Phases 2 and 3)"). Even if the number of staging targets increases in the future, it is sufficient to add idempotent `stageXxx` functions; no intermediate checkpoints are needed.
+
 ### When There Are More Files Subject to Staging
 
-- Following `stageDataFile` and `stageEmailsDir`, add a corresponding `stageXxx` function and preserve idempotence
-- Add a new checkpoint phase (following the preceding "When Adding a Phase")
+- Following `stageDataFile` and `stageEmailsDir`, add a corresponding `stageXxx` function and preserve idempotence. The added `stageXxx` function should be implemented as idempotent (file absent is a no-op) and simply added to `advanceResetPhases`. Adding a checkpoint phase is unnecessary (see YAGNI principle).
 - **Also update `cleanupCompletedReset` for orphaned staging deletion**: the current implementation uses `RemoveAll` on the entire `resetStagingPath` directory, so new sub-paths added inside the directory are automatically covered. If staging is extended to files outside the staging directory, add corresponding deletion logic to `cleanupCompletedReset`.
 
 ### When the Commit Operation Becomes Multiple Steps
