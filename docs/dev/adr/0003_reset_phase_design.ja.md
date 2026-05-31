@@ -107,10 +107,10 @@ stateDiagram-v2
     }
 
     Normal --> RR : ※fetch が UIDVALIDITY 変化を検出
-    RR --> Normal : recover --mode keep-old
-    RR --> P1 : recover --mode discard-old --yes
-    P1 --> P4a : advanceResetPhases
-    P1 --> P5 : ※クラッシュ後 recover --abort-reset --yes
+    RR --> Normal : recover keep-old
+    RR --> P1 : recover discard-old
+    P1 --> P4a : 正常ケース<br>or<br>※クラッシュ後<br>recover discard-old
+    P1 --> P5 : ※クラッシュ後<br>recover abort-reset
     P5 --> RR : AbortReset 完了
     P4a --> Normal : ステージング/マニフェスト削除
     P4b --> Normal : 次回 Open が cleanupCompletedReset を実行
