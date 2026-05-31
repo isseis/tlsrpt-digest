@@ -33,6 +33,7 @@ Work in the following order.
 - Reference the architecture document instead of duplicating design details.
 - Include specific file paths to modify where they can be identified confidently.
 - Keep tasks actionable, observable, and small enough to complete and verify.
+- When describing change sites, prefer pattern-based descriptions (e.g., "all `_ = notifyXxx(...)` call sites") over exact line numbers. Line numbers become stale on the first unrelated edit; grep patterns remain valid. Use line numbers only when the specific location is essential context that the pattern alone cannot convey.
 
 7. Apply test helper planning rules from `docs/dev/developer_guide/test_organization.md`.
 - If new cross-package helpers or mocks are needed, plan them under `testutil/` with the correct file naming and package naming rules.
@@ -58,6 +59,7 @@ Work in the following order.
 - [ ] `03_implementation_plan.md` is written in Japanese and its status is `draft`.
 - [ ] All required sections from the requirements process guide are present.
 - [ ] Every acceptance criterion in `01_requirements.md` is addressed by at least one implementation task.
+- [ ] For each acceptance criterion that covers an existing code pattern, the plan addresses ALL instances of that pattern in the codebase. Verify by searching the codebase for the pattern before assessing completeness.
 - [ ] The plan includes an explicit acceptance criteria verification section.
 - [ ] Every acceptance criterion has at least one concrete test task.
 - [ ] Test tasks cover non-trivial logic, error paths, and boundary values where applicable.

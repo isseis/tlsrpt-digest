@@ -23,6 +23,7 @@ Work in the following order.
 - Check the relevant packages under `cmd/` and `internal/`.
 - Identify existing components that should be reused.
 - Do not design new logic that duplicates responsibilities already handled elsewhere in the repository.
+- For any diagram edge that depicts the *current* behavior of existing components (i.e., relationships that already exist in code today, not new relationships this feature is introducing), verify that it accurately reflects actual code behavior. Edges that show newly planned relationships introduced by this feature do not need to match existing code, but should be clearly distinguishable from current-behavior edges (e.g., by using the `enhanced` class or an explanatory label).
 
 7. Create `02_architecture.md` in the same task directory.
 - Write in Japanese.
@@ -52,6 +53,7 @@ Work in the following order.
 - [ ] `02_architecture.md` is written in Japanese and its status is `draft`.
 - [ ] All required sections from the requirements process guide are present.
 - [ ] All functional requirements and acceptance criteria in `01_requirements.md` are reflected in the design.
+- [ ] For each acceptance criterion that applies to an existing code pattern (e.g., "log slog.Warn when X fails"), the design accounts for ALL instances of that pattern in the codebase, not only the most prominent ones. Verify by searching the codebase for the pattern.
 - [ ] Mermaid diagrams follow the documented conventions consistently.
 - [ ] Data nodes use cylinder shape `[("label")]`.
 - [ ] Labels with special characters are double-quoted.
