@@ -5,8 +5,8 @@
 | 番号 | ADR-0003 |
 | ステータス | 採択 |
 | 決定日 | 2026-05-25 |
-| 最終更新日 | 2026-05-30 |
-| 関連タスク | 0070_entrypoint |
+| 最終更新日 | 2026-05-31 |
+| 関連タスク | 0070_entrypoint, 0080_reset_phase_simplify |
 
 ---
 
@@ -50,7 +50,7 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 
 | ファイル/ディレクトリ | 記録内容 | 役割 |
 |---|---|---|
-| マニフェスト (`.tlsrpt-digest-reset-manifest.json`) | `resetPhase`（整数 1–5） | リセット操作の進捗台帳。クラッシュ後の再開・中断判断に使う。 |
+| マニフェスト (`.tlsrpt-digest-reset-manifest.json`) | `resetPhase`（整数。新規書き込み値は {1, 4, 5}） | リセット操作の進捗台帳。クラッシュ後の再開・中断判断に使う。旧バージョンが書いたレガシー値 2・3 は読み取り時にコミット前として扱われる（§3 後方互換参照）。 |
 | センチネル (`.tlsrpt-digest-meta.json`) | `UIDValidity`・`recovery_required` | 確定状態の台帳。`recovery_required == nil` がコミット完了の真の根拠。 |
 | ステージングディレクトリ (`.tlsrpt-digest-staging/`) | `tlsrpt.json`・`emails/`（リセット中の旧データ） | コミット前の旧データ一時保管場所。コミット前は `AbortReset` で元の場所に復元できる。コミット後はクリーンアップで削除される。 |
 
@@ -60,15 +60,15 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 
 ## 3. フェーズ一覧と役割
 
-> **設計パターン注記**：フェーズ 1 は「先書き（WAL: Write-Ahead Log）」、フェーズ 2・3 は「後書き（チェックポイント）」パターンを用いる。先書きは操作開始前に記録してクラッシュ後の再開を保証し、後書きは操作完了後に記録して冪等な再実行を可能にする。詳細は §4 で説明する。
+> **設計パターン注記**：フェーズ 1 は「先書き（WAL: Write-Ahead Log）」パターンを用いる。先書きは操作開始前に記録してクラッシュ後の再開を保証する。かつてフェーズ 2・3 として存在した「後書き（チェックポイント）」パターンは廃止された。ステージング操作（`stageDataFile`・`stageEmailsDir`）はそれぞれ冪等であるため、中間チェックポイントなしにフェーズ 1 から全操作を再実行して正しく収束できる。廃止の詳細は §4 を参照。
 
 | 定数名 | 値 | 記録タイミング | 意味・役割 |
 |---|---|---|---|
 | `resetPhaseManifestWritten` | 1 | ステージング開始前（先書き） | **WAL エントリ**。この時点からマニフェストが存在するため `Open(OpenReadWrite)` は `ErrPendingReset` を返す。`AbortReset` によるロールバックが可能になる。 |
-| `resetPhaseDataStaged` | 2 | `tlsrpt.json` のステージング完了後（チェックポイント） | データファイルのリネームが完了したことを記録する。クラッシュ後の再開でこのフェーズから再実行しても `stageDataFile` は冪等（ファイル不在は no-op）。 |
-| `resetPhaseEmailsStaged` | 3 | `emails/` のステージング完了後（チェックポイント） | メールディレクトリのリネームが完了したことを記録する。同様に冪等。 |
 | `resetPhaseCommitted` | 4 | センチネル保存直後（コミットマーカー） | センチネルへの書き込み（recovery_required クリア・新 UIDVALIDITY 設定）が完了したことを記録する。この後はマニフェストとステージングディレクトリのみが残存するため、クリーンアップ失敗は通常データパスに影響しない。 |
 | `resetPhaseAborting` | 5 | `restoreFromStaging` 実行前（中断 WAL エントリ） | **中断操作の WAL エントリ**。`AbortReset` がファイルを元の場所に戻す前にこのフェーズを書く。以降のクラッシュでマニフェストが残存しても、`ResetForRecovery` はこのフェーズを見て操作を拒否し、`AbortReset` の再実行を促す。 |
+
+> **後方互換（レガシー値）**：旧バージョンのコードはフェーズ 2（`tlsrpt.json` ステージング完了後）・フェーズ 3（`emails/` ステージング完了後）のマニフェストを書いていた。新バージョンはこれらを新規に書かないが、読み取り時は値域検証（`validateManifestPhase`、§4 参照）で拒否せず、コミット前判定（`phase < resetPhaseCommitted`、すなわち範囲 `[1, 4)`）で自然にコミット前として扱い、冪等な再実行で正しく収束させる。
 
 ### フェーズ別ファイル配置
 
@@ -78,9 +78,9 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 |---|---|---|
 | 通常 / 要復旧 | `tlsrpt.json`・`emails/` | なし |
 | フェーズ 1（マニフェスト書き込み済み） | `tlsrpt.json`・`emails/` | 空ディレクトリ（作成済み） |
-| フェーズ 2（データステージング完了） | `emails/` のみ | `tlsrpt.json` |
-| フェーズ 3（メールステージング完了） | なし | `tlsrpt.json`・`emails/`（旧） |
 | フェーズ 4（コミット済み / クリーンアップ前） | なし | `tlsrpt.json`・`emails/`（旧） |
+
+> **後方互換（レガシー値のファイル配置）**：旧バージョンが書いたレガシー値 2（データステージング完了）のマニフェストが残存する場合、ストアには `emails/` のみ・ステージングには `tlsrpt.json` がある。レガシー値 3（メールステージング完了）の場合はストアに何もなし・ステージングに両ファイルがある。いずれのファイル配置からも `advanceResetPhases`（`stageDataFile`・`stageEmailsDir` は冪等）で正しく収束する。
 
 フェーズ 4 → 通常への遷移（クリーンアップ）は `Open(OpenReadWrite)` 内で実行される。ステージング削除と `tlsrpt.json`・`emails/` の再初期化が同一の Open 呼び出しで完了し、以後は通常状態に戻る。
 
@@ -97,8 +97,7 @@ flowchart TD
 
     subgraph PendingReset["コミット前の保留リセット"]
         P1["フェーズ 1<br>(マニフェスト書き込み済み)"]
-        P2["フェーズ 2<br>(データステージング完了)"]
-        P3["フェーズ 3<br>(メールステージング完了)"]
+        Legacy[("レガシー値 2・3<br>(旧コードが書いたマニフェスト)")]
     end
 
     subgraph Phase4["フェーズ 4（コミット済み）"]
@@ -110,9 +109,8 @@ flowchart TD
 
     RR -->|"recover --mode keep-old"| Normal
     RR -->|"recover --mode discard-old --yes"| P1
-    P1 -->|"stageDataFile:<br>tlsrpt.json → .staging/"| P2
-    P2 -->|"stageEmailsDir:<br>emails/ → .staging/"| P3
-    P3 -->|"commitReset 完了"| P4a
+    P1 -->|"advanceResetPhases:<br>stageDataFile + stageEmailsDir + commitReset"| P4a
+    Legacy -->|"advanceResetPhases<br>（コミット前として処理）"| P4a
     P4a -->|"ステージング/マニフェスト を削除"| Normal
     P4a -.->|"クラッシュ"| P4b
     P4b -->|"次回 fetch/summary/gc の<br>Open が cleanupCompletedReset を実行"| Normal
@@ -123,16 +121,16 @@ flowchart TD
     Normal -.->|"fetch が UIDVALIDITY 変化を検出"| RR
 ```
 
-凡例：矩形 = ディスク状態、スタジアム形状 = サブグラフ内の亜状態、実線 = 正常系の遷移、破線 = 例外イベント（クラッシュ・UIDVALIDITY 変化）または手動中断
+凡例：矩形 = ディスク状態、スタジアム形状 = サブグラフ内の亜状態、シリンダ = 後方互換のレガシー値、実線 = 正常系の遷移、破線 = 例外イベント（クラッシュ・UIDVALIDITY 変化）または手動中断
 
-**クラッシュリカバリ**：各フェーズでのクラッシュ後は同じフェーズから再開可能（各ステージング操作は冪等）。フェーズ 1–3 でプロセスが停止した場合は、`recover --mode discard-old --yes` を再実行すると現在のフェーズから自動的に再開される。
+**クラッシュリカバリ**：各フェーズでのクラッシュ後は同じコミット前状態から再開可能（各ステージング操作は冪等）。フェーズ 1（またはレガシー値 2・3）でプロセスが停止した場合は、`recover --mode discard-old --yes` を再実行するとコミット前から一括実行で自動的に収束する。
 
 **コミットウィンドウクラッシュ**（センチネル保存完了からフェーズ 4 への更新完了までの間）
 
-`commitReset` はセンチネルを保存してからマニフェストをフェーズ 4 に進める。その間でクラッシュするとマニフェストはフェーズ 3 のまま残る。
+`commitReset` はセンチネルを保存してからマニフェストをフェーズ 4 に進める。その間でクラッシュするとマニフェストはコミット前（フェーズ 1）のまま残る。
 
 - **通常の収束**：`cleanupCompletedReset` はフェーズ番号ではなくセンチネルの `recovery_required` で判断するため、フェーズ 4 と同じくクリーンアップが実行されて通常状態に収束する（§4 参照）。データ整合性は保たれる。
-- **マニフェスト残存時**：`cleanupCompletedReset` がステージングの削除に成功してもマニフェストの削除に失敗した場合（ベストエフォート）、マニフェストはフェーズ 3 のままディスクに残る。その後の挙動はつぎの 2 通りに分かれる。
+- **マニフェスト残存時**：`cleanupCompletedReset` がステージングの削除に成功してもマニフェストの削除に失敗した場合（ベストエフォート）、マニフェストはコミット前（フェーズ 1）のままディスクに残る。その後の挙動はつぎの 2 通りに分かれる。
   - 新たな UIDVALIDITY 変化が発生した場合：`Open(OpenReadWrite)` → `cleanupCompletedReset` が `CurrUIDValidity` の不一致を検出してマニフェスト/ステージングをクリーンアップする（Open は成功）。`recover --mode keep-old` や `recover --mode discard-old --yes` はどちらも正常に動作する。`recover --abort-reset --yes` は `AbortReset` が不一致を検出して `ErrResetNotPending` を返す。
   - 新たな UIDVALIDITY 変化が発生しない場合：次に `fetch` または `gc` が実行されたときに `Open(OpenReadWrite)` → `cleanupCompletedReset` で再試行される。
 
@@ -143,8 +141,8 @@ flowchart TD
 | 状態 | `recover --mode keep-old` | `recover --mode discard-old`（`--yes` なし） | `recover --mode discard-old --yes` | `recover --abort-reset --yes` |
 |---|---|---|---|---|
 | マニフェストなし・`recovery_required` あり | `ApplyRecovery` を実行し、旧データを保持したまま UIDVALIDITY を更新して `recovery_required` を解除する | 実行予定を表示するだけで、破壊的変更を行わず exit 1 | fresh start として `ResetForRecovery` を開始する | 保留リセットがないため `ErrResetNotPending` |
-| フェーズ 1〜3（コミット前の保留リセット、CurrUIDValidity 一致） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。継続または中断の選択肢を表示する。 | 保留リセットの存在と、継続または中断の選択肢を表示する。破壊的変更なし。 | 該当フェーズから `ResetForRecovery` を再開し、空ストア + current UIDVALIDITY + `recovery_required` 解消へ収束する | `AbortReset` を実行し、旧データ保持 + `recovery_required` 残存へ戻す |
-| フェーズ 1〜3（残留マニフェスト、CurrUIDValidity 不一致） | `cleanupCompletedReset` がマニフェストを削除して Open 成功。`ApplyRecovery` を実行する | 同左（Open 成功・表示のみ） | `cleanupCompletedReset` がマニフェストを削除して Open 成功。`ResetForRecovery` を fresh start で開始する | `AbortReset` が不一致を検出してマニフェストを削除し `ErrResetNotPending` を返す |
+| フェーズ 1（またはレガシー値 2・3）（コミット前の保留リセット、CurrUIDValidity 一致） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。継続または中断の選択肢を表示する。 | 保留リセットの存在と、継続または中断の選択肢を表示する。破壊的変更なし。 | コミット前からの一括実行（`advanceResetPhases`）で `ResetForRecovery` を再開し、空ストア + current UIDVALIDITY + `recovery_required` 解消へ収束する | `AbortReset` を実行し、旧データ保持 + `recovery_required` 残存へ戻す |
+| フェーズ 1（またはレガシー値 2・3）（残留マニフェスト、CurrUIDValidity 不一致） | `cleanupCompletedReset` がマニフェストを削除して Open 成功。`ApplyRecovery` を実行する | 同左（Open 成功・表示のみ） | `cleanupCompletedReset` がマニフェストを削除して Open 成功。`ResetForRecovery` を fresh start で開始する | `AbortReset` が不一致を検出してマニフェストを削除し `ErrResetNotPending` を返す |
 | フェーズ 4 または `recovery_required` なし（コミット済み） | 通常 open 時に残留マニフェスト/ステージングをクリーンアップする。その後は recovery-required 不在として復旧不要扱い。 | 同左 | クリーンアップして終了する。実質的に冪等。 | コミット後のため `ErrResetNotPending` |
 | フェーズ 5（中断処理中） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。中断処理の完了を促す。 | 保留リセットの存在と、中断処理の完了が必要であることを表示する。破壊的変更なし。 | `ErrResetAbortInProgress` を返し、先に `AbortReset` の完了を要求する | `AbortReset` を再開し、`restoreFromStaging` を冪等に実行してマニフェストを削除する |
 | 不明フェーズ・バージョン不一致・マニフェスト破損 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 | fail-closed。手動確認が必要 |
@@ -162,18 +160,11 @@ flowchart TD
 
 フラグを書く前にクラッシュした場合はマニフェストが存在しないため、次回実行は "fresh start" として扱われ、センチネルの recovery_required を確認して正常に再開する。
 
-### フェーズ 2・3（チェックポイント）をリネーム後に書く理由
+### フェーズ 2・3（チェックポイント）廃止の経緯
 
-`rename(2)` システムコールは POSIX の保証する原子操作であるため、成功した場合のみファイルが移動している。チェックポイントをリネームの後に書くことで、クラッシュ後の再開時に以下の推論が成立する。
+かつてフェーズ 2（`tlsrpt.json` ステージング完了後のチェックポイント）とフェーズ 3（`emails/` ステージング完了後のチェックポイント）が存在し、`rename(2)` の後にチェックポイントを書くことでクラッシュ後の再開時に既完了ステップをスキップしていた。これらは task 0080 で廃止された（詳細は §4「チェックポイントフェーズ（フェーズ 2・3）廃止の判断」を参照）。
 
-| フェーズ N のチェックポイント | 推論 | 再開時の動作 |
-|---|---|---|
-| あり | リネームは確実に完了している | スキップ |
-| なし | 完了済みか未実行か不明 | 冪等な操作を再実行（ファイル不在なら no-op） |
-
-逆にリネームの前に書いた場合、クラッシュするとチェックポイントは書かれたがリネームは未完了という状態になり、再開時に「完了済み」と誤判断するリスクがある。本設計では操作後チェックポイントパターンを選んだ。
-
-> **注意**: この設計は AC-crash-safe を担保するが、「フェーズ N の書き込みが完了した = フェーズ N の操作は完了した」という不変条件を前提にしている。各ステージング関数（`stageDataFile`・`stageEmailsDir`）の冪等性はこの不変条件を維持するために必須である。
+現行の `advanceResetPhases` はコミット前フェーズから `stageDataFile`・`stageEmailsDir`・`commitReset` を中間マニフェスト更新なしに順次実行する。各操作は冪等（ファイル不在は no-op）であるため、クラッシュ後の再実行は常にすべての操作を再試行して正しく収束する。
 
 ### センチネルがコミットの真の根拠である理由
 
@@ -188,22 +179,22 @@ flowchart TD
 
 ### フェーズ 4（コミットマーカー）を設ける理由
 
-`recovery_required == nil` だけでコミット完了を判定できるにもかかわらずフェーズ 4 を設けるのは、**`advanceResetPhases`（`recover --mode discard-old --yes` の再実行パス）でフェーズ 3 の意味を一意に保つ**ためである。
+`recovery_required == nil` だけでコミット完了を判定できるにもかかわらずフェーズ 4 を設けるのは、**`executeResetFromManifest`（`recover --mode discard-old --yes` の再実行パス）でコミット前とコミット後の意味を一意に保つ**ためである。
 
-フェーズ 4 がない場合、コミット直後にクラッシュするとマニフェストはフェーズ 3 のまま残る。この状態で `recover --mode discard-old --yes` を再実行すると、`advanceResetPhases` はフェーズ 3 を「コミット前」と判断して `commitReset` を再度呼び出す。`commitReset` はセンチネルの再書き込みが冪等なので壊れはしないが、フェーズ 3 が「コミット前」と「コミット後のクラッシュウィンドウ」という 2 つの意味を持つことになり、制御フローが曖昧になる。
+フェーズ 4 がない場合、コミット直後にクラッシュするとマニフェストはコミット前（フェーズ 1）のまま残る。この状態で `recover --mode discard-old --yes` を再実行すると、`executeResetFromManifest` はフェーズ 1 を「コミット前」と判断して `advanceResetPhases` を呼び出す。`advanceResetPhases` はすべての操作を冪等に再実行するため実質的には壊れないが、フェーズ 1 が「コミット前」と「コミット後のクラッシュウィンドウ」という 2 つの意味を持つことになり、制御フローが曖昧になる。
 
-フェーズ 4 を設けることで `advanceResetPhases` はセンチネルを読まずに判断できる。
+フェーズ 4 を設けることで `executeResetFromManifest` はセンチネルを読まずに判断できる。
 
-| フェーズ | 意味 | `advanceResetPhases` の動作 |
+| フェーズ | 意味 | `executeResetFromManifest` の動作 |
 |---|---|---|
-| 3 | コミット前（メールステージング完了） | `commitReset` を呼ぶ |
+| コミット前（1、またはレガシー値 2・3） | コミット前（ステージング + コミット残り） | `advanceResetPhases` を呼ぶ |
 | 4 | コミット済み（クリーンアップ待ち） | `cleanupCompletedReset` に直行 |
 
-一方、`Open(OpenReadWrite)` 内の `cleanupCompletedReset` はセンチネルで判断する（フェーズ 3 のままクラッシュした「コミットウィンドウクラッシュ」も拾う必要があるため）。フェーズ 4 とセンチネルはそれぞれ異なる呼び出しパスで使い分けられる。
+一方、`Open(OpenReadWrite)` 内の `cleanupCompletedReset` はセンチネルで判断する（フェーズ 1 のままクラッシュした「コミットウィンドウクラッシュ」も拾う必要があるため）。フェーズ 4 とセンチネルはそれぞれ異なる呼び出しパスで使い分けられる。
 
 ### フェーズ 5（中断 WAL エントリ）を設ける理由
 
-`AbortReset` がファイルを元の場所に戻す（`restoreFromStaging`）操作は途中でクラッシュしうる。クラッシュ後の状態は「マニフェストはフェーズ 3 のまま、ファイルは root に復元済み」になる可能性がある。この状態で `ResetForRecovery` を実行するとフェーズ 3 として扱われ、空のステージングへのコミットが行われてしまう（「新 UIDVALIDITY + recovery_required クリア + 旧データが root に残存」という矛盾状態）。
+`AbortReset` がファイルを元の場所に戻す（`restoreFromStaging`）操作は途中でクラッシュしうる。クラッシュ後の状態は「マニフェストはコミット前（フェーズ 1、またはレガシー値 2・3）のまま、ファイルは root に復元済み」になる可能性がある。この状態で `ResetForRecovery` を実行するとコミット前として扱われ、空のステージングへのコミットが行われてしまう（「新 UIDVALIDITY + recovery_required クリア + 旧データが root に残存」という矛盾状態）。
 
 この問題を回避するため、`AbortReset` はファイルを動かす前に必ずフェーズ 5（aborting）に更新する。`ResetForRecovery` はフェーズ 5 を見た場合に `ErrResetAbortInProgress` を返し、`AbortReset` の完了を要求する。
 
@@ -214,7 +205,7 @@ flowchart TD
 
 ### チェックポイントフェーズ（フェーズ 2・3）廃止の判断
 
-> **注記**: 以下は task 0080 で実施予定の設計変更の判断記録である。本 ADR の他の節は現行実装（フェーズ 1–5）を記述しており、実装完了時に本 ADR を新フェーズ定義へ改訂する。
+> **注記**: 以下は task 0080 で実施した設計変更の判断記録である。この変更は本 ADR にすでに反映されており、現行実装はフェーズ定義 `{1=manifest written, 4=committed, 5=aborting}` に基づいている。
 
 当初、フェーズ 2（`resetPhaseDataStaged`）・フェーズ 3（`resetPhaseEmailsStaged`）のチェックポイントは次の 3 つの目的で設けた。再評価の結果、本プロジェクトの文脈ではいずれの正当化も弱いと判断する。
 
@@ -226,7 +217,7 @@ flowchart TD
 
 **正しさへの影響なし**：`stageDataFile`・`stageEmailsDir`・`commitReset` はいずれも冪等であり、`rename(2)` は POSIX が保証する原子操作であるため、再開は常にフェーズ 1 相当から全操作を冪等に再実行して収束する。中間チェックポイントは AC-crash-safe の担保に不要である。
 
-**結論**：フェーズを `{1=manifest written, 4=committed, 5=aborting}` に簡略化する。フェーズ 4（コミットマーカー）と フェーズ 5（中断 WAL エントリ）は前述の理由（センチネルを読まない判断・中断クラッシュの曖昧性回避）により引き続き必要である。実装は task 0080 で行い、既存ストアに残るフェーズ 2・3 のマニフェストとの後方互換性を要件に含める。
+**結論**：フェーズを `{1=manifest written, 4=committed, 5=aborting}` に簡略化する。フェーズ 4（コミットマーカー）と フェーズ 5（中断 WAL エントリ）は前述の理由（センチネルを読まない判断・中断クラッシュの曖昧性回避）により引き続き必要である。この変更は task 0080 で実施済みであり、既存ストアに残るフェーズ 2・3 のマニフェストはコミット前判定（`phase < resetPhaseCommitted`）に自然に含まれて後方互換で処理される。
 
 ---
 
@@ -236,7 +227,7 @@ flowchart TD
 
 | 選択肢 | 方針 | 課題 |
 |---|---|---|
-| A. フェーズ値のみで判断 | フェーズ 4 のみクリーンアップ | コミットウィンドウクラッシュ（フェーズ 3 + センチネル確定）に対応できない |
+| A. フェーズ値のみで判断 | フェーズ 4 のみクリーンアップ | コミットウィンドウクラッシュ（コミット前マニフェスト + センチネル確定）に対応できない |
 | B. センチネル値で判断（採択） | `recovery_required == nil` ならクリーンアップ | フェーズ値に依存せずコミットウィンドウも含めて統一対応できる |
 
 ### クリーンアップロジック（`cleanupCompletedReset`）
@@ -276,11 +267,11 @@ flowchart TD
 
 | シナリオ | マニフェスト有無 | sentinel.recovery_required | 結果 |
 |---|---|---|---|
-| 操作進行中（コミット前・CurrUIDValidity 一致） | あり（1〜3） | あり（CurrUIDValidity 一致） | ErrPendingReset |
+| 操作進行中（コミット前・CurrUIDValidity 一致） | あり（1、またはレガシー値 2・3） | あり（CurrUIDValidity 一致） | ErrPendingReset |
 | 中断処理中 | あり（5） | あり | ErrPendingReset |
-| 残留マニフェスト（CurrUIDValidity 不一致） | あり（1〜3） | あり（CurrUIDValidity 不一致） | マニフェスト/ステージングをクリーンアップして通常 Open（※②） |
+| 残留マニフェスト（CurrUIDValidity 不一致） | あり（1、またはレガシー値 2・3） | あり（CurrUIDValidity 不一致） | マニフェスト/ステージングをクリーンアップして通常 Open（※②） |
 | コミット後クリーンアップ失敗 | あり（4） | なし | クリーンアップして通常 Open |
-| コミットウィンドウクラッシュ（フェーズ 3 + センチネル確定） | あり（3） | なし | クリーンアップして通常 Open |
+| コミットウィンドウクラッシュ（コミット前マニフェスト + センチネル確定） | あり（1、またはレガシー値 2・3） | なし | クリーンアップして通常 Open |
 | 残留ステージング（マニフェスト削除後にステージング削除が失敗） | なし | なし | ステージングをベストエフォートで削除して通常 Open（※①） |
 
 ---
@@ -289,12 +280,12 @@ flowchart TD
 
 | 不変条件 | 担保箇所 |
 |---|---|
-| フェーズ 1 が書かれている間は `Open(OpenReadWrite)` が ErrPendingReset を返す | `cleanupCompletedReset` が recovery_required を確認 |
-| フェーズ 2 が書かれている ⟹ `tlsrpt.json` はステージングに存在する | `stageDataFile` が冪等・フェーズ 2 はリネーム後に書く |
-| フェーズ 3 が書かれている ⟹ `emails/` はステージングに存在する | `stageEmailsDir` が冪等・フェーズ 3 はリネーム後に書く |
+| フェーズ 1（またはレガシー値 2・3）が書かれている間は `Open(OpenReadWrite)` が ErrPendingReset を返す | `cleanupCompletedReset` が `recovery_required` を確認 |
 | フェーズ 4 または `recovery_required == nil` ⟹ センチネルはコミット済み | `commitReset` がセンチネル保存後にフェーズ 4 を書く |
 | フェーズ 5 が書かれている ⟹ `AbortReset` のみが続行できる | `ResetForRecovery` がフェーズ 5 を拒否 |
 | **マニフェストなし ⟹ ステージングの内容は残留物（安全に削除可能）** | WAL 設計：フェーズ 1 はファイル移動より前に書かれるため、マニフェストがなければファイルは動いていない（または完了済みのクリーンアップ残滓） |
+
+> **旧不変条件（レガシー値 2・3 への言及）**：旧バージョンは「フェーズ 2 が書かれている ⟹ `tlsrpt.json` はステージングに存在する」「フェーズ 3 が書かれている ⟹ `emails/` はステージングに存在する」を不変条件として維持していた。これらのチェックポイント書き込みは廃止されたが、既存ストアにレガシー値 2・3 のマニフェストが残存している場合は、コミット前判定（`phase < resetPhaseCommitted`、`[1, 4)`）で自然にコミット前として扱われ、`advanceResetPhases` の冪等な再実行で正しく収束する。
 
 ---
 
@@ -302,15 +293,18 @@ flowchart TD
 
 ### フェーズを追加する場合
 
+現行の書き込みフェーズは `{1=manifest written, 4=committed, 5=aborting}` の 3 値に絞られている。将来フェーズを追加する場合（例: 中断処理のサブフェーズ）は次の手順に従う。
+
 1. 新しい `resetPhase` 定数を定義する（値は既存の最大値 + 1）
 2. `validateManifestPhase` の上限を更新する
 3. `advanceResetPhases`・`AbortReset` に新フェーズの処理を追加する
 4. `cleanupCompletedReset` がコミット判断にセンチネルを使っているため、フェーズ数が増えても影響を受けない
 
+**注意**：ステージング操作（`stageDataFile`・`stageEmailsDir` など）の完了を記録する中間チェックポイントフェーズは設けない設計方針である（「チェックポイントフェーズ廃止の判断」参照）。将来ステージング対象が増えた場合も冪等な `stageXxx` 関数を追加するだけでよく、中間チェックポイントは不要である。
+
 ### ステージングの対象ファイルが増える場合
 
-- `stageDataFile`・`stageEmailsDir` に倣い、対応する `stageXxx` 関数を追加して冪等性を保つ
-- 新しいチェックポイントフェーズを追加する（上記「フェーズを追加する場合」に準じる）
+- `stageDataFile`・`stageEmailsDir` に倣い、対応する `stageXxx` 関数を追加して冪等性を保つ。追加する `stageXxx` 関数は冪等（対象ファイル不在は no-op）に実装し、`advanceResetPhases` に追加するだけでよい。チェックポイントフェーズの追加は不要である（YAGNI 原則参照）。
 - **`cleanupCompletedReset` の残留ステージング削除も合わせて更新する**：現在の実装は
   `resetStagingPath` ディレクトリ全体を `RemoveAll` するため、ディレクトリ内に新たな
   サブパスを追加しても自動的に対象に含まれる。ステージングをディレクトリ以外のファイルに

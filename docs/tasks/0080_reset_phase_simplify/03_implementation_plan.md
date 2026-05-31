@@ -173,7 +173,7 @@
 
 ### Phase 3: ADR-0003 の改訂（AC-07・AC-08・AC-09）
 
-- [ ] **3.1** ADR-0003 日本語版を新フェーズ定義に整合させる
+- [x] **3.1** ADR-0003 日本語版を新フェーズ定義に整合させる
   - ファイル: `docs/dev/adr/0003_reset_phase_design.ja.md`
   - 作業内容: アーキテクチャ §7.3 の対象範囲に従って ADR を改訂する。計画書には設計詳細を再掲せず、各節の更新作業だけを実施する。後方互換の正規化方針では「レガシー値 2・3 をコミット前として解釈する」ことを明記する（AC-08）。
   - 完了基準: `rg -n -e "フェーズ ?2" -e "フェーズ ?3" -e "phase ?2" -e "phase ?3" -e data_staged -e emails_staged -e resetPhaseDataStaged -e resetPhaseEmailsStaged -e チェックポイント -e checkpoint -e "1〜3" -e "1–3" -e "1-3" docs/dev/adr/0003_reset_phase_design.ja.md docs/dev/adr/0003_reset_phase_design.md` を実行し、能動的なフェーズ 2・3 書き込み説明が残っていないことを確認する。レガシー値の読み取り互換説明として残るヒットは、確認結果に理由を添えて残す。
