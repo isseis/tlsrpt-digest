@@ -99,7 +99,6 @@ flowchart TD
 
     subgraph PendingReset["コミット前の保留リセット"]
         P1["フェーズ 1<br>(マニフェスト書き込み済み)"]
-        Legacy[("レガシー値 2・3<br>(旧コードが書いたマニフェスト)")]
     end
 
     subgraph Phase4["フェーズ 4（コミット済み）"]
@@ -112,7 +111,6 @@ flowchart TD
     RR -->|"recover --mode keep-old"| Normal
     RR -->|"recover --mode discard-old --yes"| P1
     P1 -->|"advanceResetPhases:<br>stageDataFile + stageEmailsDir + commitReset"| P4a
-    Legacy -->|"advanceResetPhases<br>（コミット前として処理）"| P4a
     P4a -->|"ステージング/マニフェスト を削除"| Normal
     P4a -.->|"クラッシュ"| P4b
     P4b -->|"次回 fetch/summary/gc の<br>Open が cleanupCompletedReset を実行"| Normal
@@ -123,7 +121,7 @@ flowchart TD
     Normal -.->|"fetch が UIDVALIDITY 変化を検出"| RR
 ```
 
-凡例：矩形 = ディスク状態、スタジアム形状 = サブグラフ内の亜状態、シリンダ = 後方互換のレガシー値、実線 = 正常系の遷移、破線 = 例外イベント（クラッシュ・UIDVALIDITY 変化）または手動中断
+凡例：矩形 = ディスク状態、スタジアム形状 = サブグラフ内の亜状態、実線 = 正常系の遷移、破線 = 例外イベント（クラッシュ・UIDVALIDITY 変化）または手動中断
 
 **クラッシュリカバリ**：各フェーズでのクラッシュ後は同じコミット前状態から再開可能（各ステージング操作は冪等）。フェーズ 1（またはレガシー値 2・3）でプロセスが停止した場合は、`recover --mode discard-old --yes` を再実行するとコミット前から一括実行で自動的に収束する。
 
