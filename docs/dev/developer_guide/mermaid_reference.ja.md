@@ -236,7 +236,7 @@ graph TB
 | 複合状態グループの色分け | 不要 | グループごとに色分けしたい |
 | エッジの種類 | 単一種類で足りる | 実線（正常遷移）と破線（例外・クラッシュ）など複数種類が必要 |
 
-**ADR-0003 の参照例**: [`docs/dev/adr/0003_reset_phase_design.ja.md`](../adr/0003_reset_phase_design.ja.md) の State Transition Diagram は `Normal`・`Recovery Required`・`Pending Reset` などストアの持続的な状態を表す真の状態機械であり、意味論的には `stateDiagram-v2` が適切だが、複合状態グループの色分け（`classDef` は複合状態には適用不可）と破線によるクラッシュ遷移の表現が必要なため `flowchart` を採用している。複合状態グループを色分けしたい場合や複数種類のエッジが必要な場合は `flowchart` を選ぶ。
+**ADR-0003 の参照例**: [`docs/dev/adr/0003_reset_phase_design.ja.md`](../adr/0003_reset_phase_design.ja.md) の State Transition Diagram は `Normal`・`Recovery Required`・`Phase 4` などストアの持続的な状態を表す真の状態機械であり、`stateDiagram-v2` を採用している。クラッシュ遷移は破線の代わりに `※` プレフィックスで表現している。複合状態グループの色分けが必要な場合や複数種類のエッジ（実線と破線など）が必要な場合は `flowchart` を選ぶ。
 
 ### 基本構文
 
