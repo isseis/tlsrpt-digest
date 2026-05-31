@@ -89,37 +89,36 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 ### 状態遷移図
 
 ```mermaid
-flowchart TD
-    P5["フェーズ 5<br>(中断処理中)"]
+stateDiagram-v2
+    state "要復旧（recovery_required あり）" as RecoveryReq {
+        RR : マニフェストなし
+        StaleM : 残留マニフェスト\n(CurrUIDValidity 不一致)
+    }
 
-    subgraph RecoveryReq["要復旧（recovery_required あり）"]
-        RR(["マニフェストなし"])
-        StaleM(["残留マニフェスト<br>(CurrUIDValidity 不一致)"])
-    end
+    P1 : フェーズ 1\n(コミット前の保留リセット)
 
-    P1["フェーズ 1<br>(コミット前の保留リセット)"]
+    state "フェーズ 4（コミット済み）" as Phase4 {
+        P4a : クリーンアップ実行中\n(ステージング/マニフェスト あり)
+        P4b : クラッシュ残留\n(ステージング/マニフェスト あり)
+        P4a --> P4b : ※クラッシュ
+    }
 
-    subgraph Phase4["フェーズ 4（コミット済み）"]
-        P4a(["クリーンアップ実行中<br>(ステージング/マニフェスト あり)"])
-        P4b(["クラッシュ残留<br>(ステージング/マニフェスト あり)"])
-    end
+    Normal : 通常\n(マニフェストなし / recovery_required なし)
+    P5 : フェーズ 5（中断処理中）
 
-    Normal["通常<br>(マニフェストなし / recovery_required なし)"]
-
-    RR -->|"recover --mode keep-old"| Normal
-    RR -->|"recover --mode discard-old --yes"| P1
-    P1 -->|"advanceResetPhases:<br>stageDataFile + stageEmailsDir + commitReset"| P4a
-    P4a -->|"ステージング/マニフェスト を削除"| Normal
-    P4a -.->|"クラッシュ"| P4b
-    P4b -->|"次回 fetch/summary/gc の<br>Open が cleanupCompletedReset を実行"| Normal
-    P4b -.->|"次回 fetch が<br>新たな UIDVALIDITY 変化を検出"| StaleM
-    StaleM -->|"次回 fetch/gc の Open が CurrUIDValidity 不一致を検出し<br>マニフェストをクリーンアップ"| RR
-    P1 -.->|"recover --abort-reset --yes"| P5
-    P5 -->|"AbortReset 完了:<br>.staging/ → ルートに復元"| RR
-    Normal -.->|"fetch が UIDVALIDITY 変化を検出"| RR
+    RR --> Normal : recover --mode keep-old
+    RR --> P1 : recover --mode discard-old --yes
+    P1 --> P4a : advanceResetPhases:\nstageDataFile + stageEmailsDir + commitReset
+    P4a --> Normal : ステージング/マニフェスト削除
+    P4b --> Normal : 次回 Open が\ncleanupCompletedReset を実行
+    P4b --> StaleM : ※次回 fetch が\n新 UIDVALIDITY 変化を検出
+    StaleM --> RR : 次回 Open が CurrUIDValidity\n不一致を検出しクリーンアップ
+    P1 --> P5 : recover --abort-reset --yes
+    P5 --> RR : AbortReset 完了:\n.staging/ → ルートに復元
+    Normal --> RR : ※fetch が UIDVALIDITY 変化を検出
 ```
 
-凡例：矩形 = ディスク状態、スタジアム形状 = サブグラフ内の亜状態、実線 = 正常系の遷移、破線 = 例外イベント（クラッシュ・UIDVALIDITY 変化）または手動中断
+凡例：実線 = 正常系の遷移、※印 = 例外イベント（クラッシュ・UIDVALIDITY 変化）または手動中断
 
 **クラッシュリカバリ**：各フェーズでのクラッシュ後は同じコミット前状態から再開可能（各ステージング操作は冪等）。フェーズ 1（またはレガシー値 2・3）でプロセスが停止した場合は、`recover --mode discard-old --yes` を再実行するとコミット前から一括実行で自動的に収束する。
 
