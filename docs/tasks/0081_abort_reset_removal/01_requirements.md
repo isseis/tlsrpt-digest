@@ -77,9 +77,11 @@ task 0081 の設計調査（2026-05-31）で以下の事実が確認された。
 - フェーズ 5 レガシー値を fail-closed で扱う（案 A、上記 §1.1 調査結果 5）
 - フェーズ 2・3 後方互換フォールバックの削除：`validateManifestPhase` での受理、`ResetForRecovery` の「`phase < resetPhaseCommitted`」判定コメント、`HasPendingReset` のコメント、`advanceResetPhases` のコメントにある「legacy 2–3」への言及
 - `recover --abort-reset` CLI フラグおよび関連処理の削除：`--abort-reset` フラグ定義・`RecoverAbort` オプション・`runAbortReset`・検証ロジック（`errAbortResetRequiresYes`、`errAbortAndModeExclusive`）・`recoverStoreOpenMode` の abort 分岐（`cmd/tlsrpt-digest/recover.go`、`cmd/tlsrpt-digest/main.go`）
-- abort 廃止に伴う CLI メッセージ・案内文の更新：保留リセット検出時の「Roll back reset」案内（`recover.go`）、`ErrPendingReset` のエラーメッセージ（`boot.go`）、`errYesRequiresModeOrAbort` の文言（`--yes requires --mode`）
+- abort 廃止に伴うエラー文言・案内文の更新：`store.ErrPendingReset` 本体の `"to continue or abort"` 文言（`internal/store/errors.go`）、`boot.go` のラッパーメッセージ、`recover.go` の「Roll back reset」案内、`errYesRequiresModeOrAbort` の文言
 - 既存テストの削除・更新（`TestAbortReset_*` 全件、フェイクストアの abort 関連フィールド、レガシー値 2・3 を前提とするテスト群）
 - ADR-0003 の改訂（フェーズ 5・フェーズ 2・3 の設計根拠節削除、状態遷移図・不変条件表の更新）
+- `docs/dev/developer_guide/process_locking.ja.md` / `.md` の更新：`AbortReset`・`--abort-reset`・`resetPhase 1–5` への参照を削除し、廃止後の正しいフェーズ集合 `{1, 4}` に整合させる
+- アップグレード運用手順の追記：フェーズ 2・3 またはフェーズ 5 のマニフェストが残存するストアをアップグレードする場合に必要な事前作業を記載する（`docs/` 配下の既存運用ドキュメントを更新、または新規作成）
 
 ### 対象外（Out of Scope）
 
@@ -90,7 +92,7 @@ task 0081 の設計調査（2026-05-31）で以下の事実が確認された。
 
 ### 影響を受けるコンポーネント
 
-- **直接変更**：`internal/store/recovery.go`、`internal/store/store.go`（インターフェース）、`internal/store/errors.go`（エラー型）、`cmd/tlsrpt-digest/recover.go`、`cmd/tlsrpt-digest/main.go`（フラグ定義・検証ロジック）、`cmd/tlsrpt-digest/boot.go`（`ErrPendingReset` メッセージ）
+- **直接変更**：`internal/store/recovery.go`、`internal/store/store.go`（インターフェース）、`internal/store/errors.go`（エラー型・エラー文言）、`cmd/tlsrpt-digest/recover.go`、`cmd/tlsrpt-digest/main.go`（フラグ定義・検証ロジック）、`cmd/tlsrpt-digest/boot.go`（`ErrPendingReset` メッセージ）、`docs/dev/developer_guide/process_locking.ja.md` / `.md`
 - **間接的影響**：`internal/store/recovery_test.go`、`cmd/tlsrpt-digest/recover_test.go`（フェイクストア）、`docs/dev/adr/0003_reset_phase_design.ja.md` / `.md`
 
 ---
@@ -109,7 +111,7 @@ task 0081 の設計調査（2026-05-31）で以下の事実が確認された。
 - `AC-04`：`restoreFromStaging` 関数が削除され、削除後に `make deadcode` で新たな未使用関数が検出されない。
 - `AC-05`：`ErrResetAbortInProgress` エラー型が削除されている。
 - `AC-06`：`ErrResetNotPending` エラー型が削除されている（`AbortReset` 専用であり廃止後は未使用となるため）。
-- `AC-07`：CLI の案内文・エラーメッセージから abort への言及が削除されている。具体的には、(a) 保留リセット検出時に「Roll back reset」を案内しない、(b) `ErrPendingReset` 由来のメッセージが `recover --abort-reset --yes to roll back` を含まない、(c) `--yes` 単独指定時のエラーが `--yes requires --mode`（`or --abort-reset` を含まない）になる。
+- `AC-07`：エラー文言・案内文から abort への言及が削除されている。具体的には、(a) `store.ErrPendingReset`（`errors.go`）の文言が `"to continue or abort"` を含まない、(b) `boot.go` のラッパーメッセージが `"recover --abort-reset --yes to roll back"` を含まない、(c) `recover.go` の保留リセット検出メッセージに「Roll back reset」を含まない、(d) `--yes` 単独指定時のエラーが `"--yes requires --mode"`（`"or --abort-reset"` を含まない）になる。
 
 ### `F-002`：フェーズ 5 定数の廃止・レガシー値の扱い、フェーズ 2・3 フォールバックの削除
 
@@ -136,6 +138,16 @@ ADR-0003 を新フェーズ定義 `{1, 4}` に整合させる。
 - `AC-17`：不変条件表の「フェーズ 5 が書かれている ⟹ `AbortReset` のみが続行できる」行が削除されている。
 - `AC-18`：ユーザー操作時の挙動表から `recover --abort-reset --yes` 列が削除されている（または「廃止済み」として更新されている）。
 - `AC-19`：英語版は `/mktrans` で日本語版から反映する（CLAUDE.md 翻訳規約に従う）。
+
+### `F-004`：開発者ガイド・運用手順の更新
+
+`process_locking.ja.md` / `.md` および運用手順ドキュメントを新フェーズ定義に整合させる。
+
+**受け入れ条件**：
+
+- `AC-20`：`docs/dev/developer_guide/process_locking.ja.md` / `.md` から `AbortReset`・`--abort-reset`・`resetPhase 1–5` への言及が削除または更新されており、廃止後のフェーズ集合 `{1, 4}` に整合している。
+- `AC-21`：フェーズ 2・3 のマニフェストが残存するストアのアップグレード手順（旧バージョンで `recover --mode discard-old --yes` を完了してからアップグレードする旨）が `docs/` 配下のドキュメントに記載されている。
+- `AC-22`：フェーズ 5 のマニフェストが残存するストアのアップグレード手順（旧バージョンで `AbortReset` を完了してからアップグレードする旨）が `docs/` 配下のドキュメントに記載されている。
 
 ---
 
