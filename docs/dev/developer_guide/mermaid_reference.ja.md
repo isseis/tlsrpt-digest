@@ -233,10 +233,10 @@ graph TB
 | 判断軸 | `stateDiagram-v2` を選ぶ | `flowchart` を選ぶ |
 |---|---|---|
 | 表現対象 | 持続的な状態（例: ストアの open モード、リセットフェーズ） | 処理ステップや条件分岐（例: 関数内の判定） |
-| 状態グループの色分け | 不要 | グループごとに色分けしたい |
+| 複合状態グループの色分け | 不要 | グループごとに色分けしたい |
 | エッジの種類 | 単一種類で足りる | 実線（正常遷移）と破線（例外・クラッシュ）など複数種類が必要 |
 
-**ADR-0003 の参照例**: [`docs/dev/adr/0003_reset_phase_design.ja.md`](../adr/0003_reset_phase_design.ja.md) の State Transition Diagram は `Normal`・`Recovery Required`・`Pending Reset` などストアの持続的な状態を表す真の状態機械であり、意味論的には `stateDiagram-v2` が適切だが、状態グループの色分けと破線によるクラッシュ遷移の表現が必要なため `flowchart` を採用している。`classDef` による色分けやエッジの使い分けが必要な場合は `flowchart` を選ぶ。
+**ADR-0003 の参照例**: [`docs/dev/adr/0003_reset_phase_design.ja.md`](../adr/0003_reset_phase_design.ja.md) の State Transition Diagram は `Normal`・`Recovery Required`・`Pending Reset` などストアの持続的な状態を表す真の状態機械であり、意味論的には `stateDiagram-v2` が適切だが、複合状態グループの色分け（`classDef` は複合状態には適用不可）と破線によるクラッシュ遷移の表現が必要なため `flowchart` を採用している。複合状態グループを色分けしたい場合や複数種類のエッジが必要な場合は `flowchart` を選ぶ。
 
 ### 基本構文
 
@@ -261,7 +261,7 @@ stateDiagram-v2
 
 ### ネスト状態（複合状態）
 
-内部に複数のサブ状態を持つ複合状態は `state "ラベル" { ... }` で表現する。
+内部に複数のサブ状態を持つ複合状態は `state ID { ... }` で表現する。ID がそのまま表示ラベルになる。スペースを含むラベルが必要な場合は `state "表示ラベル" as ID` で別途宣言し、遷移では ID を使う。
 
 ```mermaid
 stateDiagram-v2
@@ -299,7 +299,7 @@ stateDiagram-v2
 
 ### 使用上の注意
 
-- `stateDiagram-v2` は `classDef` による色分けをサポートしない。状態を色で区別したい場合は `flowchart` を選ぶ。
+- `stateDiagram-v2` でも `classDef` による色分けは可能だが、複合状態（composite state）および初期・終了状態（`[*]`）には適用できない。複合状態グループを色分けしたい場合は `flowchart` を選ぶ。
 - エッジラベルは `:` の後に続けて書く（例: `A --> B : イベント名`）。
 - 状態ラベルに特殊文字（括弧・コロン等）を含む場合はダブルクォートで囲む（例: `state "Phase 1 (WAL)" as P1`）。
 
