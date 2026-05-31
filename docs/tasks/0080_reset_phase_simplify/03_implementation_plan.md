@@ -117,7 +117,7 @@
 **レビュー観点**: `advanceResetPhases` が `if phase <= X` 条件分岐を持たず、`MkdirAll`→`stageDataFile`→`stageEmailsDir`→`commitReset` を無条件に呼ぶこと（レガシー値 2・3 でも全操作が実行されること） / 定数削除とコミット前判定の範囲式への変更 / 既存テストの定数リテラル置換が意味を維持していること / `validateManifestPhase` の値域が `[1,5]` のまま変わっていないこと
 
 - [x] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
