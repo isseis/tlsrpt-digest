@@ -77,10 +77,12 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 | フェーズ | ストアディレクトリ | ステージング (`.tlsrpt-digest-staging/`) |
 |---|---|---|
 | 通常 / 要復旧 | `tlsrpt.json`・`emails/` | なし |
-| フェーズ 1（マニフェスト書き込み済み） | `tlsrpt.json`・`emails/` | 空ディレクトリ（作成済み） |
+| フェーズ 1 — 初期状態（マニフェスト書き込み直後） | `tlsrpt.json`・`emails/` | 空ディレクトリ（作成済み） |
+| フェーズ 1 — `stageDataFile` 完了後（C2 クラッシュ地点） | `emails/` のみ | `tlsrpt.json` |
+| フェーズ 1 — `stageEmailsDir` 完了後（C3 クラッシュ地点） | なし | `tlsrpt.json`・`emails/` |
 | フェーズ 4（コミット済み / クリーンアップ前） | なし | `tlsrpt.json`・`emails/`（旧） |
 
-> **後方互換（レガシー値のファイル配置）**：旧バージョンが書いたレガシー値 2（データステージング完了）のマニフェストが残存する場合、ストアには `emails/` のみ・ステージングには `tlsrpt.json` がある。レガシー値 3（メールステージング完了）の場合はストアに何もなし・ステージングに両ファイルがある。いずれのファイル配置からも `advanceResetPhases`（`stageDataFile`・`stageEmailsDir` は冪等）で正しく収束する。
+> **クラッシュ時のファイル配置について**：現行コードは中間チェックポイントフェーズを書かないため、`stageDataFile`（C2）や `stageEmailsDir`（C3）の完了後にクラッシュしても、マニフェストはフェーズ 1 のまま上表の C2・C3 行に示すファイル配置になる。旧コードはこれらの時点でレガシー値 2・3 を書いていたため、同じファイル配置を異なるマニフェストフェーズで表していた。`advanceResetPhases` は `stageDataFile`・`stageEmailsDir` が冪等（対象ファイル不在は no-op）なため、いずれの配置からも正しく収束する。
 
 フェーズ 4 → 通常への遷移（クリーンアップ）は `Open(OpenReadWrite)` 内で実行される。ステージング削除と `tlsrpt.json`・`emails/` の再初期化が同一の Open 呼び出しで完了し、以後は通常状態に戻る。
 

@@ -77,10 +77,12 @@ The table below shows the primary files present in the store directory (`{root_d
 | Phase | Store directory | Staging (`.tlsrpt-digest-staging/`) |
 |---|---|---|
 | Normal / Recovery required | `tlsrpt.json`, `emails/` | none |
-| Phase 1 (manifest written) | `tlsrpt.json`, `emails/` | empty directory (created) |
+| Phase 1 — initial (manifest just written) | `tlsrpt.json`, `emails/` | empty directory (created) |
+| Phase 1 — after `stageDataFile` (C2 crash point) | `emails/` only | `tlsrpt.json` |
+| Phase 1 — after `stageEmailsDir` (C3 crash point) | none | `tlsrpt.json`, `emails/` |
 | Phase 4 (committed / cleanup pending) | none | `tlsrpt.json`, `emails/` (old) |
 
-> **Backward compatibility (legacy file layout)**: If a manifest with legacy value 2 (data staging complete) written by an older version remains, the store has only `emails/` and staging has `tlsrpt.json`. For legacy value 3 (emails staging complete), the store has nothing and staging has both files. From either file layout, `advanceResetPhases` (`stageDataFile` and `stageEmailsDir` are idempotent) converges correctly.
+> **Note on crash layouts**: Because the current code no longer writes intermediate checkpoint phases, a crash after `stageDataFile` (C2) or after `stageEmailsDir` (C3) still leaves a phase-1 manifest with partial staging — see the C2 and C3 rows above. Older code wrote legacy values 2 and 3 at those points, producing the same on-disk file layouts under a different manifest phase. `advanceResetPhases` converges correctly from any of these layouts because `stageDataFile` and `stageEmailsDir` are idempotent (absent files are no-ops).
 
 The transition from phase 4 to Normal (cleanup) is executed inside `Open(OpenReadWrite)`. Staging deletion and re-initialization of `tlsrpt.json` and `emails/` complete within the same Open call, after which the state returns to Normal.
 
@@ -211,7 +213,7 @@ Phases 2 (`resetPhaseDataStaged`) and 3 (`resetPhaseEmailsStaged`) were original
 | **Observability**: readable progress indicator | The idempotence logic in `stageDataFile`/`stageEmailsDir` already determines progress from file presence; progress is derivable from the on-disk file layout. Phase numbers 2 and 3 are a redundant cache of that information. |
 | **Extensibility**: preparation for additional staged files | Adding a staged file requires only one additional idempotent `stat`→`rename` function; adding a checkpoint phase is fundamentally unnecessary (idempotent re-execution of all operations always converges correctly). This anticipates future needs in violation of YAGNI. |
 
-**No impact on correctness**: `stageDataFile`, `stageEmailsDir`, and `commitReset` are all idempotent, and `rename(2)` is an atomic operation guaranteed by POSIX. Resumption always converges by idempotently re-executing all operations from the beginning (from phase 1 equivalent). Intermediate checkpoints are not required to guarantee AC-crash-safe.
+**No impact on correctness**: `stageDataFile`, `stageEmailsDir`, and `commitReset` are all idempotent, and `rename(2)` is an atomic operation guaranteed by POSIX. Resumption always converges by idempotently re-executing all operations from the beginning (the phase 1 equivalent). Intermediate checkpoints are not required to guarantee AC-crash-safe.
 
 **Conclusion**: Simplify the phase set to `{1=manifest written, 4=committed, 5=aborting}`. Phase 4 (commit marker) and phase 5 (abort WAL entry) remain necessary for the reasons stated above (decision-making without reading the sentinel; avoiding ambiguity when a crash occurs during abort). This change was implemented in task 0080, and phase 2·3 manifests remaining in existing stores are naturally included in the pre-commit check (`phase < resetPhaseCommitted`) and handled with backward compatibility.
 
@@ -273,7 +275,7 @@ When `manifest.CurrUIDValidity ≠ recovery_required.CurrUIDValidity`, the manif
 | Phase 5 is written => only `AbortReset` can continue | `ResetForRecovery` refuses phase 5 |
 | **Manifest absent ⟹ staging contents are leftover residue (safe to remove)** | WAL design: phase 1 is written before any file is moved to staging; if the manifest is absent, no file was moved (or it is residue from a completed cleanup) |
 
-> **Legacy invariants (reference to legacy values 2·3)**: Older versions maintained the invariants "phase 2 written ⟹ `tlsrpt.json` exists in staging" and "phase 3 written ⟹ `emails/` exists in staging." These checkpoint writes have been removed, but when legacy value 2·3 manifests remain in an existing store, they are naturally treated as pre-commit by the pre-commit check (`phase < resetPhaseCommitted`, range `[1, 4)`) and converge correctly via idempotent re-execution of `advanceResetPhases`.
+> **Legacy invariants (reference to legacy phase 2/3 values)**: Older versions maintained the invariants "phase 2 written ⟹ `tlsrpt.json` exists in staging" and "phase 3 written ⟹ `emails/` exists in staging." These checkpoint writes have been removed, but when legacy phase 2 or 3 manifests remain in an existing store, they are naturally treated as pre-commit by the pre-commit check (`phase < resetPhaseCommitted`, range `[1, 4)`) and converge correctly via idempotent re-execution of `advanceResetPhases`.
 
 ---
 
