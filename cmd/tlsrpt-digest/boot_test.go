@@ -393,7 +393,7 @@ func TestBootstrap_PendingResetAdvice(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "recover --mode discard-old --yes")
-	assert.Contains(t, err.Error(), "recover --abort-reset --yes")
+	assert.NotContains(t, err.Error(), "abort-reset")
 	require.Len(t, spy.SystemErrors, 1)
 	assert.Equal(t, notify.SystemErrorKindResetIncomplete, spy.SystemErrors[0].Kind)
 	assert.Equal(t, 1, spy.FlushCount)

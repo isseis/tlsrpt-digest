@@ -21,8 +21,8 @@ const (
 	// Does not create any files; returns empty state if files don't exist.
 	OpenReadOnly
 	// OpenRecoverReset opens the store in read-write mode and allows
-	// ResetForRecovery and AbortReset even when a pending reset manifest exists.
-	// Only recover subcommand (discard-old --yes / --abort-reset --yes) may use this mode.
+	// ResetForRecovery even when a pending reset manifest exists.
+	// Only recover subcommand (discard-old --yes) may use this mode.
 	// The caller must hold the process-level store writer lock for the whole operation.
 	OpenRecoverReset
 )

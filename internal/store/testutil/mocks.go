@@ -50,7 +50,7 @@ type FakeStore struct {
 	Recovery *FakeRecovery
 	// Emails maps (UID, UIDValidity) to the stored email entry.
 	Emails map[EmailKey]*FakeEmailEntry
-	// PendingReset simulates a pending reset state for AbortReset testing.
+	// PendingReset simulates a pending reset state.
 	PendingReset bool
 	// AcquireSummaryConsistencyGuardErr, if non-nil, is returned by AcquireSummaryConsistencyGuard.
 	AcquireSummaryConsistencyGuardErr error
@@ -65,7 +65,6 @@ type FakeStore struct {
 	LoadEmailsErr           error
 	ApplyRecoveryErr        error
 	ResetForRecoveryErr     error
-	AbortResetErr           error
 
 	// Call-count fields for ordering/invocation assertions.
 	SaveEmailMetasCallCount      int
@@ -75,7 +74,6 @@ type FakeStore struct {
 	DeleteEmailsBeforeCallCount  int
 	ApplyRecoveryCallCount       int
 	ResetForRecoveryCallCount    int
-	AbortResetCallCount          int
 
 	// Cutoff capture fields for asserting the argument passed to delete operations.
 	DeleteReportsCutoff time.Time
@@ -322,20 +320,6 @@ func (f *FakeStore) HasPendingReset() (bool, error) {
 		return false, f.HasPendingResetErr
 	}
 	return f.PendingReset, nil
-}
-
-// AbortReset implements store.Store.
-// Returns ErrResetNotPending if there is no pending reset.
-func (f *FakeStore) AbortReset() error {
-	f.AbortResetCallCount++
-	if f.AbortResetErr != nil {
-		return f.AbortResetErr
-	}
-	if !f.PendingReset {
-		return store.ErrResetNotPending
-	}
-	f.PendingReset = false
-	return nil
 }
 
 // AcquireSummaryConsistencyGuard implements store.Store.

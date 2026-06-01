@@ -84,7 +84,7 @@ type BootstrapOptions struct {
 	SummaryGuardOpened     func(store.SummaryConsistencyGuard)
 	// StoreOpenModeOverride, when non-nil, overrides the default mode derived
 	// from the subcommand name. Used by recover to select OpenReadWrite for
-	// non-destructive modes and OpenRecoverReset for discard-old/abort-reset.
+	// non-destructive modes and OpenRecoverReset for discard-old.
 	StoreOpenModeOverride *store.OpenMode
 }
 
@@ -233,7 +233,7 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 			slog.Warn("bootstrap: notify store open error", "error", notifyErr)
 		}
 		if errors.Is(err, store.ErrPendingReset) {
-			return nil, fmt.Errorf("store reset is incomplete; run recover --mode discard-old --yes to continue or recover --abort-reset --yes to roll back: %w", err)
+			return nil, fmt.Errorf("store reset is incomplete; run recover --mode discard-old --yes to continue: %w", err)
 		}
 		return nil, fmt.Errorf("open store: %w", err)
 	}

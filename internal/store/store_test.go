@@ -372,9 +372,9 @@ func TestOpen_PendingReset_FailsClosedForReadWrite(t *testing.T) {
 	// Set recovery_required so the sentinel shows the reset is pre-commit.
 	require.NoError(t, s.SaveRecoveryRequired(41, 42, time.Now()))
 
-	// Plant a legacy phase-3 manifest to verify that OpenReadWrite blocks on any pre-commit value.
+	// Plant a phase-1 manifest to verify that OpenReadWrite blocks on a pre-commit pending reset.
 	require.NoError(t, writeResetManifest(filepath.Join(rootDir, manifestFilename), resetManifest{
-		Version: resetManifestVersion, CurrUIDValidity: 42, Phase: resetPhase(3),
+		Version: resetManifestVersion, CurrUIDValidity: 42, Phase: resetPhaseManifestWritten,
 	}))
 
 	_, err = Open(rootDir, identity, OpenReadWrite)
@@ -390,9 +390,9 @@ func TestOpen_PendingReset_OpenRecoverResetSucceeds(t *testing.T) {
 	_, err := Open(rootDir, identity, OpenReadWrite)
 	require.NoError(t, err)
 
-	// Plant a legacy phase-3 manifest to verify that OpenRecoverReset succeeds on any pre-commit value.
+	// Plant a phase-1 manifest to verify that OpenRecoverReset succeeds with a pending reset.
 	require.NoError(t, writeResetManifest(filepath.Join(rootDir, manifestFilename), resetManifest{
-		Version: resetManifestVersion, CurrUIDValidity: 42, Phase: resetPhase(3),
+		Version: resetManifestVersion, CurrUIDValidity: 42, Phase: resetPhaseManifestWritten,
 	}))
 
 	s, err := Open(rootDir, identity, OpenRecoverReset)

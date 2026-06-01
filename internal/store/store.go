@@ -89,17 +89,10 @@ type Store interface {
 	// The caller must hold the process-level store writer lock until this method returns.
 	ResetForRecovery(currUIDValidity uint32) error
 
-	// AbortReset cancels a pending (pre-commit) reset and restores old data.
-	// Returns ErrResetNotPending if there is no pending reset or if the commit
-	// has already been applied. After abort, recovery-required remains in the sentinel.
-	// Only valid on stores opened with OpenRecoverReset.
-	// The caller must hold the process-level store writer lock until this method returns.
-	AbortReset() error
-
-	// HasPendingReset reports whether an active reset is in progress (pre-commit phase 1 or legacy 2–3, or aborting phase 5).
+	// HasPendingReset reports whether a reset is in progress (pre-commit phase 1).
 	// A committed manifest (phase=committed) is leftover cleanup bookkeeping rather than
 	// an active reset, so it returns false for that phase.
-	// Returns (true, nil) when an active-phase reset manifest is present.
+	// Returns (true, nil) when a pre-commit reset manifest is present.
 	// Returns (false, nil) when no manifest is found or the manifest is committed.
 	HasPendingReset() (bool, error)
 
