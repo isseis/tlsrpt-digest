@@ -50,6 +50,19 @@ Work in order.
      `make fmt && make test && make lint`.
    - Fix errors before continuing, except test failures caused by the
      phase group's incomplete state.
+   - When removing multiple scattered code sites (for example, several test
+     functions), delete them one at a time with the exact text read from the
+     file. Do not script bulk deletion with heuristics such as brace-counting;
+     nested literals can over-consume adjacent code. After each removal, check
+     IDE diagnostics for unintended breakage.
+   - For any newly authored or substantially rewritten artifact in this group
+     (runbook, command example, table, prose, translation, design-doc section),
+     confirm it is correct before committing. Do not rely only on
+     absence-search of removed terms. Run any documented command and check its
+     exit code and output; cite the source implementation that prose describes;
+     diff a translation against its source. For design documents, keep the body
+     focused on the current system and confine removed-design rationale to a
+     bounded history note instead of interleaving it.
    - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note).
      Commit the phase group using the `git-commit` skill guidelines.
 
@@ -119,6 +132,7 @@ Phase-group review checklist (use verbatim as evaluation criteria in the subagen
 - [ ] No tests duplicate existing coverage without good reason.
 - [ ] No tests are so trivial that they add no verification value.
 - [ ] No logic is reimplemented when an existing function in the codebase can be used.
+- [ ] Newly authored artifacts (runbooks, command examples, tables, prose, translations) are verified against ground truth, not only by absence-search.
 - [ ] All source comments and identifiers are in English.
 - [ ] No planning document references (e.g. `AC-01`, `F-001`) remain in source comments or string literals.
 - [ ] `make fmt` produces no diff.
