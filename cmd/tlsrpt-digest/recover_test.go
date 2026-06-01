@@ -108,6 +108,7 @@ func TestRecover_DiscardOldYesCallsResetForRecovery(t *testing.T) {
 	assert.Equal(t, exitOK, code)
 	assert.Equal(t, 1, st.ResetForRecoveryCallCount)
 	assert.Nil(t, st.Recovery, "recovery-required should be cleared after reset")
+	assert.False(t, st.PendingReset, "pending reset flag should be cleared after reset")
 	output := out.String()
 	assert.Contains(t, output, "200") // current UIDVALIDITY
 	assert.Contains(t, output, "discard-old --yes")
@@ -174,77 +175,14 @@ func TestRecover_DiscardOldDryRun(t *testing.T) {
 	assert.Contains(t, output, "No changes made")
 }
 
-// TestRecover_AbortResetYesCallsAbortReset verifies that --abort-reset --yes calls
-// AbortReset, clears the pending reset, and preserves recovery-required.
-func TestRecover_AbortResetYesCallsAbortReset(t *testing.T) {
-	st := makeRecoveryStore(100, 200)
-	st.PendingReset = true
-	var out bytes.Buffer
-	runner := &recoverRunner{stdout: &out}
-
-	opts := cliOptions{RecoverAbort: true, RecoverYes: true}
-	code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
-
-	require.NoError(t, err)
-	assert.Equal(t, exitOK, code)
-	assert.Equal(t, 1, st.AbortResetCallCount)
-	assert.False(t, st.PendingReset, "pending reset should be cleared after abort")
-	assert.NotNil(t, st.Recovery, "recovery-required should be preserved after abort")
-	output := out.String()
-	assert.Contains(t, output, "abort-reset")
-}
-
-// TestRecover_AbortResetNoPendingReset verifies that --abort-reset --yes when no pending
-// reset exists emits the specific "no pending reset to abort" message and returns exit 1.
-func TestRecover_AbortResetNoPendingReset(t *testing.T) {
-	st := makeRecoveryStore(100, 200)
-	// PendingReset is false (default) — no manifest present
-	var out bytes.Buffer
-	runner := &recoverRunner{stdout: &out}
-
-	opts := cliOptions{RecoverAbort: true, RecoverYes: true}
-	code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
-
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, store.ErrResetNotPending))
-	assert.Equal(t, exitError, code)
-	assert.Equal(t, 1, st.AbortResetCallCount)
-	assert.Contains(t, out.String(), "no pending reset to abort")
-}
-
-// TestRecover_AbortResetFailure verifies that an unexpected AbortReset error leaves
-// recovery-required intact and returns exit 1.
-func TestRecover_AbortResetFailure(t *testing.T) {
-	st := makeRecoveryStore(100, 200)
-	st.PendingReset = true
-	st.AbortResetErr = errors.New("unexpected error")
-	var out bytes.Buffer
-	runner := &recoverRunner{stdout: &out}
-
-	opts := cliOptions{RecoverAbort: true, RecoverYes: true}
-	code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
-
-	assert.Error(t, err)
-	assert.Equal(t, exitError, code)
-	assert.NotNil(t, st.Recovery, "recovery-required should be preserved on failure")
-}
-
-// TestRecover_AbortResetAlone verifies that --abort-reset without --yes is rejected at
-// parse time with a descriptive error message.
-func TestRecover_AbortResetAlone(t *testing.T) {
-	var stderr bytes.Buffer
-	_, err := parseCLI([]string{"recover", "--config", "test.toml", "--abort-reset"}, &stderr)
-	assert.Error(t, err)
-	assert.Contains(t, stderr.String(), "--abort-reset requires --yes")
-}
-
-// TestRecover_YesAlone verifies that --yes without --mode or --abort-reset is rejected at
-// parse time with a descriptive error message.
+// TestRecover_YesAlone verifies that --yes without --mode is rejected at parse time
+// with a descriptive error message.
 func TestRecover_YesAlone(t *testing.T) {
 	var stderr bytes.Buffer
 	_, err := parseCLI([]string{"recover", "--config", "test.toml", "--yes"}, &stderr)
 	assert.Error(t, err)
-	assert.Contains(t, stderr.String(), "--yes requires --mode or --abort-reset")
+	assert.Contains(t, stderr.String(), "--yes requires --mode")
+	assert.NotContains(t, stderr.String(), "--abort-reset")
 }
 
 // TestRecover_NoRecoveryRequired verifies that all modes exit 1 with an explanation when
@@ -259,11 +197,9 @@ func TestRecover_NoRecoveryRequired(t *testing.T) {
 		{RecoverMode: "keep-old"},
 		{RecoverMode: "discard-old"},
 		{RecoverMode: "discard-old", RecoverYes: true},
-		{RecoverAbort: true, RecoverYes: true},
 	} {
 		st.ApplyRecoveryCallCount = 0
 		st.ResetForRecoveryCallCount = 0
-		st.AbortResetCallCount = 0
 		out.Reset()
 
 		code, err := runner.Run(context.Background(), makeRecoverBoot(t, st, opts))
@@ -271,7 +207,6 @@ func TestRecover_NoRecoveryRequired(t *testing.T) {
 		assert.Equal(t, exitError, code, "store is consistent: exit 1 expected for opts %+v", opts)
 		assert.Equal(t, 0, st.ApplyRecoveryCallCount)
 		assert.Equal(t, 0, st.ResetForRecoveryCallCount)
-		assert.Equal(t, 0, st.AbortResetCallCount)
 		assert.Contains(t, out.String(), "No recovery required")
 	}
 }
@@ -284,7 +219,6 @@ func TestRecover_CommittedCleanupPending_StatusDisplay(t *testing.T) {
 		{},
 		{RecoverMode: "keep-old"},
 		{RecoverMode: "discard-old"},
-		{RecoverAbort: true, RecoverYes: true},
 	} {
 		st := storetestutil.NewFakeStore() // no Recovery (found=false)
 		st.PendingReset = true
@@ -296,7 +230,6 @@ func TestRecover_CommittedCleanupPending_StatusDisplay(t *testing.T) {
 		assert.Equal(t, exitError, code)
 		assert.Equal(t, 0, st.ResetForRecoveryCallCount)
 		assert.Equal(t, 0, st.ApplyRecoveryCallCount)
-		assert.Equal(t, 0, st.AbortResetCallCount)
 		output := out.String()
 		assert.Contains(t, output, "Previous reset committed")
 		assert.Contains(t, output, "discard-old --yes")
@@ -350,7 +283,6 @@ func TestRecover_StatusDisplayNoMode(t *testing.T) {
 	assert.Equal(t, exitError, code)
 	assert.Equal(t, 0, st.ApplyRecoveryCallCount)
 	assert.Equal(t, 0, st.ResetForRecoveryCallCount)
-	assert.Equal(t, 0, st.AbortResetCallCount)
 	assert.NotNil(t, st.Recovery)
 	output := out.String()
 	assert.Contains(t, output, "100") // previous UIDVALIDITY
@@ -374,7 +306,7 @@ func TestRecover_PendingResetDisplaysOptions(t *testing.T) {
 	output := out.String()
 	assert.Contains(t, output, "Pending reset: detected")
 	assert.Contains(t, output, "discard-old --yes")
-	assert.Contains(t, output, "abort-reset --yes")
+	assert.NotContains(t, output, "abort-reset")
 }
 
 // TestRecover_NoPendingResetShowsNone verifies that when no pending reset exists,
@@ -397,7 +329,7 @@ func TestRecover_NoPendingResetShowsNone(t *testing.T) {
 
 // TestBootstrap_PendingResetShowsGuidance verifies that when OpenReadWrite fails with
 // ErrPendingReset (e.g. during fetch or gc), the Bootstrap error includes guidance for
-// both continue and abort paths.
+// the continue path.
 func TestBootstrap_PendingResetShowsGuidance(t *testing.T) {
 	_, err := Bootstrap(subcommandFetch, "config.toml", "run-id", BootstrapOptions{
 		LoadConfig: func(string) (*config.Config, error) {
@@ -412,7 +344,7 @@ func TestBootstrap_PendingResetShowsGuidance(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "recover --mode discard-old --yes")
-	assert.Contains(t, err.Error(), "recover --abort-reset --yes")
+	assert.NotContains(t, err.Error(), "abort-reset")
 }
 
 // TestRecover_PendingResetShowsStatusForNonDestructiveModes verifies that recover opens
@@ -457,7 +389,6 @@ func TestRecover_PendingResetShowsStatusForNonDestructiveModes(t *testing.T) {
 			assert.Equal(t, exitError, code)
 			assert.Equal(t, 0, st.ApplyRecoveryCallCount)
 			assert.Equal(t, 0, st.ResetForRecoveryCallCount)
-			assert.Equal(t, 0, st.AbortResetCallCount)
 			assert.NotNil(t, st.Recovery)
 			output := out.String()
 			assert.Contains(t, output, "Recovery required for mailbox: imap.example.com:993/INBOX")
@@ -466,7 +397,7 @@ func TestRecover_PendingResetShowsStatusForNonDestructiveModes(t *testing.T) {
 			assert.Contains(t, output, "Local data path:")
 			assert.Contains(t, output, "Pending reset: detected")
 			assert.Contains(t, output, "recover --mode discard-old --yes")
-			assert.Contains(t, output, "recover --abort-reset --yes")
+			assert.NotContains(t, output, "abort-reset")
 		})
 	}
 }
@@ -486,7 +417,6 @@ func TestRecover_HasPendingResetFailure(t *testing.T) {
 	assert.Equal(t, exitError, code)
 	assert.Equal(t, 0, st.ApplyRecoveryCallCount)
 	assert.Equal(t, 0, st.ResetForRecoveryCallCount)
-	assert.Equal(t, 0, st.AbortResetCallCount)
 	assert.NotNil(t, st.Recovery)
 }
 

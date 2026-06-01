@@ -231,6 +231,7 @@ func TestFormatSystemError_ActionHint_UIDValidityChanged(t *testing.T) {
 	body := string(recv)
 	assert.Contains(t, body, "Action Required")
 	assert.Contains(t, body, "tlsrpt-digest recover")
+	assert.NotContains(t, body, "abort-reset")
 }
 
 func TestFormatSystemError_ActionHint_RecoveryRequired(t *testing.T) {
@@ -244,6 +245,7 @@ func TestFormatSystemError_ActionHint_RecoveryRequired(t *testing.T) {
 	body := string(recv)
 	assert.Contains(t, body, "Action Required")
 	assert.Contains(t, body, "tlsrpt-digest recover")
+	assert.NotContains(t, body, "abort-reset")
 }
 
 func TestFormatSystemError_ActionHint_CredentialsMissing(t *testing.T) {

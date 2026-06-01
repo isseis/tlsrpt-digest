@@ -25,11 +25,9 @@ const (
 )
 
 var (
-	errInvalidRecoverMode     = errors.New("invalid recovery mode")
-	errUnexpectedArguments    = errors.New("unexpected arguments")
-	errAbortResetRequiresYes  = errors.New("--abort-reset requires --yes to confirm")
-	errYesRequiresModeOrAbort = errors.New("--yes requires --mode or --abort-reset")
-	errAbortAndModeExclusive  = errors.New("--abort-reset and --mode are mutually exclusive")
+	errInvalidRecoverMode  = errors.New("invalid recovery mode")
+	errUnexpectedArguments = errors.New("unexpected arguments")
+	errYesRequiresMode     = errors.New("--yes requires --mode")
 )
 
 type cliOptions struct {
@@ -41,7 +39,6 @@ type cliOptions struct {
 	MaxEmailAge     *Duration
 	RecoverMode     string
 	RecoverYes      bool
-	RecoverAbort    bool
 	ReprocessNotify bool
 }
 
@@ -61,8 +58,8 @@ func runCLI(ctx context.Context, args []string, stderr io.Writer, bootOpts Boots
 	inv, err := parseCLI(args, stderr)
 	if err != nil {
 		// recover-specific confirmation errors are non-destructive operator prompts,
-		// not usage errors — return exitError (1) not exitUsage (2) per AC-40/arch §8.
-		if errors.Is(err, errAbortResetRequiresYes) || errors.Is(err, errYesRequiresModeOrAbort) {
+		// not usage errors — return exitError (1) not exitUsage (2).
+		if errors.Is(err, errYesRequiresMode) {
 			return exitError
 		}
 		return exitUsage
@@ -149,7 +146,6 @@ func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 	case subcommandRecover:
 		fs.StringVar(&opts.RecoverMode, "mode", "", "recovery mode")
 		fs.BoolVar(&opts.RecoverYes, "yes", false, "confirm recovery action")
-		fs.BoolVar(&opts.RecoverAbort, "abort-reset", false, "abort pending reset")
 	case subcommandReprocess:
 		fs.BoolVar(&opts.ReprocessNotify, "notify", false, "send notifications during reprocess")
 	}
@@ -162,23 +158,16 @@ func validateFlags(subcmd SubcommandName, opts cliOptions) error {
 	if opts.RecoverMode != "" && opts.RecoverMode != recoverModeKeepOld && opts.RecoverMode != recoverModeDiscardOld {
 		return fmt.Errorf("%w: %s", errInvalidRecoverMode, opts.RecoverMode)
 	}
-	if opts.RecoverAbort && opts.RecoverMode != "" {
-		return errAbortAndModeExclusive
-	}
-	if opts.RecoverAbort && !opts.RecoverYes {
-		return errAbortResetRequiresYes
-	}
-	if opts.RecoverYes && !opts.RecoverAbort && opts.RecoverMode == "" {
-		return errYesRequiresModeOrAbort
+	if opts.RecoverYes && opts.RecoverMode == "" {
+		return errYesRequiresMode
 	}
 	return nil
 }
 
 // recoverStoreOpenMode returns OpenRecoverReset for destructive recover operations
-// (discard-old --yes, abort-reset --yes) and OpenReadWrite for all others.
+// (discard-old --yes) and OpenReadWrite for all others.
 func recoverStoreOpenMode(opts cliOptions) store.OpenMode {
-	if (opts.RecoverMode == recoverModeDiscardOld && opts.RecoverYes) ||
-		(opts.RecoverAbort && opts.RecoverYes) {
+	if opts.RecoverMode == recoverModeDiscardOld && opts.RecoverYes {
 		return store.OpenRecoverReset
 	}
 	return store.OpenReadWrite

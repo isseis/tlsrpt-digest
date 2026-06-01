@@ -286,7 +286,7 @@ func formatSystemError(e SystemError, runID string) slackMessage {
 func systemErrorHint(kind SystemErrorKind) string {
 	switch kind {
 	case SystemErrorKindUIDValidityChanged, SystemErrorKindRecoveryRequired:
-		return "Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)"
+		return "Run: tlsrpt-digest recover --mode discard-old --yes"
 	case SystemErrorKindIMAPCredentialsMissing:
 		return "Set TLSRPT_IMAP_USERNAME and TLSRPT_IMAP_PASSWORD environment variables"
 	default:

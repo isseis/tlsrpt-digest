@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -53,9 +52,6 @@ func (r *recoverRunner) printInfo(boot *BootContext, prev, curr uint32, opts cli
 		pendingResetStatus = "detected"
 	}
 	selectedMode := opts.RecoverMode
-	if opts.RecoverAbort {
-		selectedMode = "abort-reset"
-	}
 	if selectedMode == "" {
 		selectedMode = "(status display)"
 	}
@@ -69,14 +65,11 @@ func (r *recoverRunner) printInfo(boot *BootContext, prev, curr uint32, opts cli
 		_, _ = fmt.Fprintln(r.stdout, "")
 		_, _ = fmt.Fprintln(r.stdout, "A pending reset was detected. Available options:")
 		_, _ = fmt.Fprintln(r.stdout, "  Continue reset:  tlsrpt-digest recover --mode discard-old --yes")
-		_, _ = fmt.Fprintln(r.stdout, "  Roll back reset: tlsrpt-digest recover --abort-reset --yes")
 	}
 }
 
 func (r *recoverRunner) executeMode(st store.Store, opts cliOptions, curr uint32, pendingReset bool) (int, error) {
 	switch {
-	case opts.RecoverAbort:
-		return r.runAbortReset(st)
 	case pendingReset && opts.RecoverMode == recoverModeKeepOld:
 		_, _ = fmt.Fprintln(r.stdout, "")
 		_, _ = fmt.Fprintln(r.stdout, "No changes made. Resolve the pending reset before applying keep-old recovery.")
@@ -88,19 +81,6 @@ func (r *recoverRunner) executeMode(st store.Store, opts cliOptions, curr uint32
 	default:
 		return exitError, nil
 	}
-}
-
-func (r *recoverRunner) runAbortReset(st store.Store) (int, error) {
-	if err := st.AbortReset(); err != nil {
-		if errors.Is(err, store.ErrResetNotPending) {
-			_, _ = fmt.Fprintln(r.stdout, "error: no pending reset to abort")
-		} else {
-			_, _ = fmt.Fprintln(r.stdout, "error: abort reset failed")
-		}
-		return exitError, fmt.Errorf("recover: abort reset: %w", err)
-	}
-	_, _ = fmt.Fprintln(r.stdout, "Pending reset aborted. Recovery-required state preserved.")
-	return exitOK, nil
 }
 
 func (r *recoverRunner) runKeepOld(st store.Store, curr uint32) (int, error) {
