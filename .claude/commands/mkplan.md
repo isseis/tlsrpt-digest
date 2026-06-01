@@ -51,7 +51,7 @@ Work in the following order.
 - When describing change sites, prefer pattern-based descriptions (e.g., "all `_ = notifyXxx(...)` call sites") over exact line numbers. Line numbers become stale on the first unrelated edit; grep patterns remain valid. Use line numbers only when the specific location is essential context that the pattern alone cannot convey.
 - **Specify complete before/after strings for all text edits.** When a task modifies a string literal, error message, or source comment, state the full result string explicitly — not just the substring to remove. This prevents unintended side-effects such as dropped prefixes, dangling format verbs (`%w`), or trailing spaces left by a deleted parenthetical.
   - Bad:  "Remove `(or --abort-reset --yes)` from the `systemErrorHint` return value."
-  - Good: "Change the `systemErrorHint` return value from `\"Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)\"` to `\"Run: tlsrpt-digest recover --mode discard-old --yes\"`."
+  - Good: "Change the `systemErrorHint` return value from `"Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)"` to `"Run: tlsrpt-digest recover --mode discard-old --yes"`."
 - Add a cross-search checklist for removed or redefined concepts. It must include explicit `rg` commands or pattern lists and expected results for code, tests, docs, and translation/glossary files when those files are in scope.
 
 7. Apply test helper planning rules from `docs/dev/developer_guide/test_organization.md`.
