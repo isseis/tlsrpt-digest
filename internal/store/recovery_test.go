@@ -3,6 +3,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -905,8 +906,8 @@ func TestLegacyPhaseFailsClosed_ResetForRecovery(t *testing.T) {
 			require.NoError(t, err)
 
 			err = s.ResetForRecovery(200)
-			var phaseErr *ErrResetManifestPhaseUnknown
-			require.ErrorAs(t, err, &phaseErr, "phase %d must be fail-closed", phase)
+			phaseErr, ok := errors.AsType[*ErrResetManifestPhaseUnknown](err)
+			require.True(t, ok, "phase %d must be fail-closed", phase)
 			assert.Equal(t, int(phase), phaseErr.Got)
 
 			_, statErr := os.Stat(manifestPath)
@@ -937,8 +938,8 @@ func TestLegacyPhaseFailsClosed_OpenReadWrite(t *testing.T) {
 			}))
 
 			_, err = Open(rootDir, makeTestIdentity(), OpenReadWrite)
-			var phaseErr *ErrResetManifestPhaseUnknown
-			require.ErrorAs(t, err, &phaseErr, "Open(OpenReadWrite) must fail-closed for phase %d", phase)
+			phaseErr, ok := errors.AsType[*ErrResetManifestPhaseUnknown](err)
+			require.True(t, ok, "Open(OpenReadWrite) must fail-closed for phase %d", phase)
 			assert.Equal(t, int(phase), phaseErr.Got)
 
 			_, statErr := os.Stat(manifestPath)
@@ -971,8 +972,8 @@ func TestHasPendingReset_LegacyPhaseFailsClosed(t *testing.T) {
 			require.NoError(t, err)
 
 			_, err = s.HasPendingReset()
-			var phaseErr *ErrResetManifestPhaseUnknown
-			require.ErrorAs(t, err, &phaseErr, "HasPendingReset must fail-closed for phase %d", phase)
+			phaseErr, ok := errors.AsType[*ErrResetManifestPhaseUnknown](err)
+			require.True(t, ok, "HasPendingReset must fail-closed for phase %d", phase)
 			assert.Equal(t, int(phase), phaseErr.Got)
 
 			_, statErr := os.Stat(manifestPath)
@@ -1005,8 +1006,8 @@ func TestLegacyPhaseFailsClosed_ApplyRecovery(t *testing.T) {
 			require.NoError(t, err)
 
 			err = s.ApplyRecovery(200)
-			var phaseErr *ErrResetManifestPhaseUnknown
-			require.ErrorAs(t, err, &phaseErr, "ApplyRecovery must fail-closed for phase %d", phase)
+			phaseErr, ok := errors.AsType[*ErrResetManifestPhaseUnknown](err)
+			require.True(t, ok, "ApplyRecovery must fail-closed for phase %d", phase)
 			assert.Equal(t, int(phase), phaseErr.Got)
 
 			_, statErr := os.Stat(manifestPath)

@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"testing"
@@ -127,8 +128,10 @@ func TestRunCLI_RecoverResetOpenMode(t *testing.T) {
 // TestRunCLI_AbortResetFlagUndefined verifies that recover --abort-reset --yes is rejected
 // by flag.Parse with exit code 2, because the --abort-reset flag is no longer defined.
 func TestRunCLI_AbortResetFlagUndefined(t *testing.T) {
-	exitCode := runCLI(context.Background(), []string{"recover", "-abort-reset", "-yes"}, io.Discard, BootstrapOptions{})
+	var stderr bytes.Buffer
+	exitCode := runCLI(context.Background(), []string{"recover", "-abort-reset", "-yes"}, &stderr, BootstrapOptions{})
 	assert.Equal(t, 2, exitCode)
+	assert.Contains(t, stderr.String(), "flag provided but not defined")
 }
 
 func TestRunCLI_UsageErrorsExit2(t *testing.T) {
