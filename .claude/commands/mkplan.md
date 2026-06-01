@@ -35,7 +35,7 @@ Work in the following order.
   - Acceptance Criteria Verification
   Do not rely on phase task lists as an implicit substitute for these required sections.
 - Add a `既存コード調査結果` subsection under the implementation overview (§1), incorporating the detailed findings from step 5. If no findings were identified in step 5, explicitly state that no existing code changes are required.
-- Organize work into small, phase-based steps with checkboxes.
+- Organize work into small, phase-based steps with checkboxes. When a step deletes multiple distinct, separately-named entities (e.g. several test functions), give each one its own checkbox rather than a single batch instruction (`Test*_全件削除`), so each deletion is executed and verified individually. (Uniform edits across many call sites may still be described by one pattern — see the change-site guidance below.)
 - Explicitly map each acceptance criterion to the tasks and tests that will verify it.
 - Include at least one concrete test task for each acceptance criterion.
 - In the Acceptance Criteria Verification section, every AC row must name either:
@@ -44,6 +44,7 @@ Work in the following order.
 - Do not use vague verification labels such as "compile passes", "document review", "grep check", or "none". If static verification is intended, spell out the exact `rg` command and what counts as success.
 - For documentation-only ACs, create concrete verification tasks. Include every documentation file touched by the plan, including glossaries and translation outputs, in the AC verification table or cross-search checklist.
   - Example: `rg -n -e "old term" docs/file.md` expected: no matches except explicitly allowed historical notes.
+- **Verify creation tasks against ground truth, not only by absence-search.** Absence searches confirm something is gone but cannot confirm that newly authored content (new prose, tables, command examples, runbooks, translations) is correct. For each creation task, add a verification task that checks the content against ground truth: run the documented command and confirm its exit code and output, cite the source implementation (return value, error type, branch) the text describes, or diff a translation against its source. When a table or list groups several cases under one entry, verify their described behavior or remediation is actually identical, and split the entry when it differs.
 - Reference the architecture document instead of duplicating design details.
 - Include specific file paths to modify where they can be identified confidently.
 - Keep tasks actionable, observable, and small enough to complete and verify.
@@ -82,6 +83,7 @@ Work in the following order.
 - [ ] The plan includes an explicit acceptance criteria verification section.
 - [ ] Every acceptance criterion has at least one concrete test task.
 - [ ] Test tasks cover non-trivial logic, error paths, and boundary values where applicable.
+- [ ] Creation tasks (new prose, tables, command examples, runbooks, translations) each have a verification task that checks the content against ground truth, not only an absence-search.
 - [ ] The plan does not duplicate tests or re-test behavior that existing tests already cover without reason.
 - [ ] The plan reuses existing implementations, tests, and helper utilities where appropriate.
 - [ ] The plan references architecture sections instead of duplicating design details.

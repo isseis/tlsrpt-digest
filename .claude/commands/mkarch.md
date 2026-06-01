@@ -33,6 +33,7 @@ Work in the following order.
 - Use Mermaid diagrams for the concept model, system structure, key processing flows, and a threat model when applicable.
 - Restrict code examples to high-level interfaces, type definitions, and error type definitions only.
 - Do not include implementation details, pseudocode, step-by-step algorithms, or low-level code.
+- Write the body for an engineer meeting the current system for the first time: describe how it works now. Confine the rationale for removed or superseded designs, and cross-task decision history, to a bounded "decision history" appendix or a short blockquote pointing to git history — do not interleave it with current-state description. When editing a design document that earlier tasks have appended to, preserve this separation so the body does not become a changelog.
 
 8. Spawn a review subagent using the Agent tool to critically evaluate the created document.
    Construct a self-contained prompt that includes all of the following:
@@ -73,5 +74,6 @@ Work in the following order.
 - [ ] Terminology is consistent throughout the document; the same concept always uses the same Japanese term.
 - [ ] Ambiguous or overly terse expressions are rewritten in direct, plain Japanese. Readers should not need context from prior review discussions to understand the text.
 - [ ] Architectural decisions that depend on constraints not obvious from the requirements are explained inline.
+- [ ] The body describes the current system; rationale for removed or superseded designs and cross-task history is confined to a bounded appendix or blockquote, not interleaved with current-state description.
 
 When finished, provide a concise summary of what you created and any assumptions you had to make.
