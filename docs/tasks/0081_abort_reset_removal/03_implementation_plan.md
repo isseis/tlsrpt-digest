@@ -279,7 +279,7 @@
 
 - [ ] `TestApplyRecovery_RefusesPendingReset`：植え込み値 `resetPhase(2)` を `resetPhaseManifestWritten` に変更する。コメント（L144-145）を英語で次のように書き換える：`// Plant a phase-1 manifest to verify that ApplyRecovery refuses while a pre-commit reset is in progress.`（2 行の既存コメントを 1 行に置換し、`ErrPendingReset` アサーション自体は変更しない）。
 - [ ] `TestResetForRecovery_CrashAfterStageEmailsBeforeManifestUpdate`：植え込み値 `resetPhase(2)` を `resetPhaseManifestWritten` に変更し、関数コメント・植え込み箇所コメントの「legacy phase-2」記述を英語で「partial pre-commit phase-1 staging state」へ書き換える。`assertResetConverged` のアサーションは維持し、`make test` で収束を再確認する。
-- [ ] `TestResetForRecovery_IdempotentAfterCrashBeforeCommit`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更し、「legacy phase-3 manifest」コメントを除去する。
+- [ ] `TestResetForRecovery_IdempotentAfterCrashBeforeCommit`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更し、「legacy phase-3 manifest」コメントを除去する。（AC-13：§8 の `resetPhase(3)` 横断検索でこのテストの更新漏れを検出する）
 - [ ] `TestResetForRecovery_CrashAfterStageDataBeforeManifestUpdate`：コメント内の `writeResetManifest(phase=2)` と「not yet advanced to phase=2」を、フェーズ 1 マニフェスト書き込み後かつ data staging 後にクラッシュした説明へ英語で更新する。
 - [ ] `TestOpen_BlockedByPreCommitReset`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更する。あわせて関数コメント（L1129）の「or an AbortReset is partially applied」を削除し、英語のまま「i.e. a pre-commit reset manifest is present」相当へ更新する。
 - [ ] `TestResetForRecovery_CommitCrashWindow_ZeroUID`：植え込み値 `resetPhase(3)` を `resetPhaseManifestWritten` に変更し、コメント内の `phase=3`・`phase=emails_staged`・「legacy value」をフェーズ 1 のコミットクラッシュウィンドウ説明へ英語で更新する。
@@ -332,7 +332,7 @@
 - [ ] **`TestHasPendingReset_LegacyPhaseFailsClosed`**（テーブル駆動）を追加する：フェーズ 2・3・5 のマニフェストが存在する状態で `HasPendingReset` を呼び出すと `ErrResetManifestPhaseUnknown` が返り、かつマニフェストファイルとステージングディレクトリが削除されずに残ることを検証する。（AC-10、AC-11）
 - [ ] **`TestLegacyPhaseFailsClosed_ApplyRecovery`**（テーブル駆動）を追加する：フェーズ 2・3・5 のマニフェストが存在する状態で `ApplyRecovery` を呼び出すと、`HasPendingReset` の内部で `validateManifestPhase` が fail-closed し、`ErrResetManifestPhaseUnknown` を含むエラーが返ることを検証する（`errors.As` で `*ErrResetManifestPhaseUnknown` を確認）。`Open(OpenRecoverReset)` でストアを開いてから `ApplyRecovery` を呼び出す。（AC-10、AC-11：`ApplyRecovery → HasPendingReset` 経路の fail-closed）
 
-- [ ] **`TestResetForRecovery_StaleUIDMismatchManifestReset`** を追加する：フェーズ 1（`resetPhaseManifestWritten`）かつ `CurrUIDValidity: 150`（現在の `recovery_required` の 200 と不一致）のマニフェストが存在する状態で `Open(OpenRecoverReset)` → `ResetForRecovery(200)` を呼び出すと、`cleanupCompletedReset` の UID 不一致検出により stale マニフェストとステージングが除去されて収束することを検証する（`assertResetConverged` のアサーションを維持）。`TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` が担っていた UID 不一致クリーンアップパスを、有効フェーズ 1 で再現する置換テスト。
+- [ ] **`TestResetForRecovery_StaleUIDMismatchManifestReset`** を追加する：フェーズ 1（`resetPhaseManifestWritten`）かつ `CurrUIDValidity: 150`（現在の `recovery_required` の 200 と不一致）のマニフェストが存在する状態で `Open(OpenRecoverReset)` → `ResetForRecovery(200)` を呼び出すと、`cleanupCompletedReset` の UID 不一致検出により stale マニフェストとステージングが除去されて収束することを検証する（`assertResetConverged` のアサーションを維持）。`TestResetForRecovery_LegacyPreCommitStaleManifestRestarts` が担っていた UID 不一致クリーンアップパスを、有効フェーズ 1 で再現する置換テスト。**コードパス確認**：`cleanupCompletedReset` は `readResetManifest` 後に `currUIDValidity != mfst.CurrUIDValidity` を判定し stale マニフェストを削除する分岐を持つ。この分岐は削除された `TestResetForRecovery_LegacyPreCommitStaleManifestRestarts`（フェーズ 2/3 植え込み）が exercised していたパスと同一であり、フェーズ 1 植え込みでも UID 不一致条件のみで到達可能であることを実装前に `cleanupCompletedReset` のコードで確認すること。
 
 これら 5 つのテストは `recovery_test.go`（`package store` の内部テスト）に追加し、`resetPhase` 型に直接アクセスする。新規ヘルパーファイルは不要（既存の `writeResetManifest`・`resetManifestPath`・`resetStagingPath` を再利用できる）。
 
@@ -532,7 +532,7 @@
 
 ## 8. abort 文言の横断確認チェックリスト
 
-フェーズ 2〜3 完了後に以下のパターンを `rg -n` で検索し、operator 向け案内から意図しない abort への言及が残っていないことを確認する。
+実装フェーズ 2・3 完了後（ステップ 2-1〜3-11 完了後）に以下のパターンを `rg -n` で検索し、operator 向け案内から意図しない abort への言及が残っていないことを確認する。
 
 - `--abort-reset`
 - `Roll back reset`
@@ -542,13 +542,13 @@
 
 検索対象ファイル：`internal/store/errors.go`、`cmd/tlsrpt-digest/boot.go`、`cmd/tlsrpt-digest/recover.go`、`cmd/tlsrpt-digest/main.go`、`internal/notify/format.go`。
 
-加えて、フェーズ 2 完了後に `cmd/tlsrpt-digest/main.go` の `recoverStoreOpenMode` コメント（L178）にも `abort-reset --yes` が残らないことを確認する（このコメントの除去はフェーズ 2-1 で実施済みのはずであり、本チェックリストは取りこぼし検出を目的とする）。
+加えて、実装フェーズ 2 完了後（ステップ 2-1〜2-4 完了後）に `cmd/tlsrpt-digest/main.go` の `recoverStoreOpenMode` コメント（L178）にも `abort-reset --yes` が残らないことを確認する（このコメントの除去はステップ 2-1 で実施済みのはずであり、本チェックリストは取りこぼし検出を目的とする）。
 
-- フェーズ 3 完了後に `internal/` と `cmd/` 全体で `AbortReset|abort-reset|reset or abort|or AbortReset|ErrResetAbortInProgress|ErrResetNotPending|restoreFromStaging|resetPhaseAborting` を検索し、削除対象識別子・コメントが残っていないことを確認する。（AC-01、AC-02、AC-04〜AC-08、AC-12、AC-13）
-- フェーズ 3 完了後に `internal/store/*_test.go` で `resetPhase(2)`・`resetPhase(3)`・`resetPhase(5)` を検索し、fail-closed テスト以外のレガシー値植え込みが残っていないことを確認する。（AC-10、AC-11）
-- フェーズ 3 完了後に `internal/store/*_test.go` で `phase=2`・`phase=3`・`phase=emails_staged`・`legacy phase-2`・`legacy phase-3`・`legacy value`・`2–3`・`2・3` を検索し、削除対象テストまたは新規 fail-closed テストの意図的な記述以外に stale コメントが残っていないことを確認する。（AC-10、AC-11、AC-13）
-- フェーズ 4 完了後に ADR・process locking・運用手順の日本語版と英語版で、4-1・4-2・4-5 に列挙した検索パターンを確認する。（AC-14〜AC-22）
-- フェーズ 4 完了後に `docs/translation_glossary.md` で `フェーズ 1〜3`・`フェーズ 5`・`AbortReset` を検索し、保留リセット定義に stale な説明が残っていないことを確認する。（AC-20）
+- 実装フェーズ 3 完了後（ステップ 3-1〜3-11 完了後）に `internal/` と `cmd/` 全体で `AbortReset|abort-reset|reset or abort|or AbortReset|ErrResetAbortInProgress|ErrResetNotPending|restoreFromStaging|resetPhaseAborting` を検索し、削除対象識別子・コメントが残っていないことを確認する。（AC-01、AC-02、AC-04〜AC-08、AC-12、AC-13）
+- 実装フェーズ 3 完了後に `internal/store/*_test.go` で `resetPhase(2)`・`resetPhase(3)`・`resetPhase(5)` を検索し、fail-closed テスト（ステップ 3-10）以外のレガシー値植え込みが残っていないことを確認する。（AC-10、AC-11）
+- 実装フェーズ 3 完了後に `internal/store/*_test.go` で `phase=2`・`phase=3`・`phase=emails_staged`・`legacy phase-2`・`legacy phase-3`・`legacy value`・`2–3`・`2・3` を検索し、削除対象テストまたは新規 fail-closed テスト（ステップ 3-10）の意図的な記述以外に stale コメントが残っていないことを確認する。（AC-10、AC-11、AC-13）
+- 実装フェーズ 4 完了後（ステップ 4-1〜4-5 完了後）に ADR・process locking・運用手順の日本語版と英語版で、4-1・4-2・4-5 に列挙した検索パターンを確認する。（AC-14〜AC-22）
+- 実装フェーズ 4 完了後に `docs/translation_glossary.md` で `フェーズ 1〜3`・`フェーズ 5`・`AbortReset` を検索し、保留リセット定義に stale な説明が残っていないことを確認する。（AC-20）
 
 ---
 
