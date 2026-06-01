@@ -25,6 +25,14 @@ Work in the following order.
   - Example: `rg -n "TestBootstrap_PendingReset" cmd/` to confirm which file(s) contain the function.
 - **Enumerate all instances of each changed pattern.** For any pattern the plan intends to change or delete across the codebase (e.g., a seeded phase value in tests, a flag reference, a specific comment string), search for every occurrence and map each result to its enclosing function and planned action. Missing even one instance is a common source of `make test` failures after implementation.
   - Example: `rg -n "resetPhase\((2|3|5)\)" internal/store -g "*_test.go"` to list every legacy-phase seed and decide whether each should be updated or deleted.
+- **Search code expressions and textual references.** For every concept that will be removed or redefined, search not only executable code but also comments, test names, documentation, error strings, and user-facing text. Derive search variants before writing the plan:
+  - Symbol names and function names
+  - CLI flags and option names
+  - Error names and error message fragments
+  - Numeric values or enum/string variants
+  - Old English and Japanese terminology
+  - Comment phrases and test names
+  Add explicit cleanup tasks for stale comments and documentation, not only stale executable code.
 - **Trace the call chain for behavioral changes.** When a function's return values or error conditions change (e.g., a validator now rejects previously-accepted inputs), enumerate its direct callers and determine whether each caller's observable behavior also changes. Add a test task for every affected call path that is not already covered.
 - **Analyze coverage loss from deleted tests.** Before planning to delete a test, list the non-trivial invariants it uniquely verifies (e.g., a UID-mismatch cleanup path, an idempotency guarantee). Confirm each invariant is still covered by a surviving test, or add an explicit replacement test to the plan.
 
@@ -32,17 +40,31 @@ Work in the following order.
 - Write in Japanese.
 - Set the document status to `draft`.
 - Include all required sections defined in `docs/dev/developer_guide/requirements_process.md`.
+- Include explicit top-level sections for:
+  - Implementation Order and Milestones
+  - Test Strategy
+  - Implementation Checklist
+  - Acceptance Criteria Verification
+  Do not rely on phase task lists as an implicit substitute for these required sections.
 - Add a `既存コード調査結果` subsection under the implementation overview (§1), incorporating the detailed findings from step 5. If no findings were identified in step 5, explicitly state that no existing code changes are required.
 - Organize work into small, phase-based steps with checkboxes.
 - Explicitly map each acceptance criterion to the tasks and tests that will verify it.
 - Include at least one concrete test task for each acceptance criterion.
+- In the Acceptance Criteria Verification section, every AC row must name either:
+  - an exact test location in `path::TestName` format, or
+  - an explicit static verification command with its expected result.
+- Do not use vague verification labels such as "compile passes", "document review", "grep check", or "none". If static verification is intended, spell out the exact `rg` command and what counts as success.
+- For documentation-only ACs, create concrete verification tasks. Include every documentation file touched by the plan, including glossaries and translation outputs, in the AC verification table or cross-search checklist.
+  - Example: `rg -n -e "old term" docs/file.md` expected: no matches except explicitly allowed historical notes.
 - Reference the architecture document instead of duplicating design details.
 - Include specific file paths to modify where they can be identified confidently.
 - Keep tasks actionable, observable, and small enough to complete and verify.
+- The implementation plan itself may be Japanese, but any planned Go source comment, identifier, string literal, or test comment replacement must be written in English.
 - When describing change sites, prefer pattern-based descriptions (e.g., "all `_ = notifyXxx(...)` call sites") over exact line numbers. Line numbers become stale on the first unrelated edit; grep patterns remain valid. Use line numbers only when the specific location is essential context that the pattern alone cannot convey.
 - **Specify complete before/after strings for all text edits.** When a task modifies a string literal, error message, or source comment, state the full result string explicitly — not just the substring to remove. This prevents unintended side-effects such as dropped prefixes, dangling format verbs (`%w`), or trailing spaces left by a deleted parenthetical.
   - Bad:  "Remove `(or --abort-reset --yes)` from the `systemErrorHint` return value."
   - Good: "Change the `systemErrorHint` return value from `\"Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)\"` to `\"Run: tlsrpt-digest recover --mode discard-old --yes\"`."
+- Add a cross-search checklist for removed or redefined concepts. It must include explicit `rg` commands or pattern lists and expected results for code, tests, docs, and translation/glossary files when those files are in scope.
 
 7. Apply test helper planning rules from `docs/dev/developer_guide/test_organization.md`.
 - If new cross-package helpers or mocks are needed, plan them under `testutil/` with the correct file naming and package naming rules.
