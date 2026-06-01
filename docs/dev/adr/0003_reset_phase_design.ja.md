@@ -59,14 +59,14 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 
 ## 3. フェーズ一覧と役割
 
-> **設計パターン注記**：フェーズ 1 は「先書き（WAL: Write-Ahead Log）」パターンを用いる。先書きは操作開始前に記録してクラッシュ後の再開を保証する。かつてフェーズ 2・3 として存在した「後書き（チェックポイント）」パターンは廃止された。ステージング操作（`stageDataFile`・`stageEmailsDir`）はそれぞれ冪等であるため、中間チェックポイントなしにフェーズ 1 から全操作を再実行して正しく収束できる。廃止の詳細は §4 を参照。
+> **設計パターン注記**：フェーズ 1 は「先書き（WAL: Write-Ahead Log）」パターンを用いる。先書きは操作開始前に記録してクラッシュ後の再開を保証する。ステージング操作（`stageDataFile`・`stageEmailsDir`）はそれぞれ冪等であるため、中間チェックポイントなしにフェーズ 1 から全操作を再実行して正しく収束できる。
 
 | 定数名 | 値 | 記録タイミング | 意味・役割 |
 |---|---|---|---|
 | `resetPhaseManifestWritten` | 1 | ステージング開始前（先書き） | **WAL エントリ**。この時点からマニフェストが存在するため `Open(OpenReadWrite)` は `ErrPendingReset` を返す。 |
 | `resetPhaseCommitted` | 4 | センチネル保存直後（recovery_required リセットマーカー） | センチネルへの書き込み（recovery_required クリア・新 UIDVALIDITY 設定）が完了したことを記録する。この後はマニフェストとステージングディレクトリのみが残存するため、クリーンアップ失敗は通常データパスに影響しない。 |
 
-> **レガシー値（fail-closed）**：旧バージョンのコードはフェーズ 2（`tlsrpt.json` ステージング完了後）・フェーズ 3（`emails/` ステージング完了後）のマニフェストを書いていた。さらに task 0080 まではフェーズ 5（`AbortReset` の中断 WAL エントリ）も存在した。これらはいずれも task 0081 で廃止され、現在の `validateManifestPhase` は有効値 `{1, 4}` のみを受理し、値 2・3・5 は `ErrResetManifestPhaseUnknown` で拒否する（fail-closed）。アップグレード前の移行手順は `docs/operations/legacy_reset_manifest_upgrade.ja.md` を参照。
+> **旧バージョンのマニフェストについて**：値 2・3・5 は旧バージョンが書いたフェーズ値であり、現在の `validateManifestPhase` は `ErrResetManifestPhaseUnknown` で拒否する（fail-closed）。該当するストアのアップグレード手順は `docs/operations/legacy_reset_manifest_upgrade.ja.md` を参照。
 
 ### フェーズ別ファイル配置
 
@@ -80,7 +80,7 @@ IMAP サーバーが UIDVALIDITY を変更すると、既存の UID と新しい
 | フェーズ 1 — `stageEmailsDir` 完了後（C3 クラッシュ地点） | なし | `tlsrpt.json`・`emails/` |
 | フェーズ 4（recovery_required リセット済み / クリーンアップ前） | なし | `tlsrpt.json`・`emails/` |
 
-> **クラッシュ時のファイル配置について**：現行コードは中間チェックポイントフェーズを書かないため、`stageDataFile`（C2）や `stageEmailsDir`（C3）の完了後にクラッシュしても、マニフェストはフェーズ 1 のまま上表の C2・C3 行に示すファイル配置になる。旧コードはこれらの時点でレガシー値 2・3 を書いていたため、同じファイル配置を異なるマニフェストフェーズで表していた。`advanceResetPhases` は `stageDataFile`・`stageEmailsDir` が冪等（対象ファイル不在は no-op）なため、いずれの配置からも正しく収束する。
+> **クラッシュ時のファイル配置について**：`stageDataFile`（C2）や `stageEmailsDir`（C3）の完了後にクラッシュしても、マニフェストはフェーズ 1 のまま上表の C2・C3 行に示すファイル配置になる。`advanceResetPhases` は `stageDataFile`・`stageEmailsDir` が冪等（対象ファイル不在は no-op）なため、いずれの配置からも正しく収束する。
 
 フェーズ 4 → 通常への遷移（クリーンアップ）は `Open(OpenReadWrite)` 内で実行される。ステージング削除と `tlsrpt.json`・`emails/` の再初期化が同一の Open 呼び出しで完了し、以後は通常状態に戻る。
 
@@ -150,9 +150,7 @@ stateDiagram-v2
 
 フラグを書く前にクラッシュした場合はマニフェストが存在しないため、次回実行は "fresh start" として扱われ、センチネルの recovery_required を確認して正常に再開する。
 
-### フェーズ 2・3（チェックポイント）廃止の経緯
-
-かつてフェーズ 2（`tlsrpt.json` ステージング完了後のチェックポイント）とフェーズ 3（`emails/` ステージング完了後のチェックポイント）が存在し、`rename(2)` の後にチェックポイントを書くことでクラッシュ後の再開時に既完了ステップをスキップしていた。これらは task 0080 で廃止された（詳細は §4「チェックポイントフェーズ（フェーズ 2・3）廃止の判断」を参照）。
+### `advanceResetPhases` の設計
 
 現行の `advanceResetPhases` はコミット前フェーズから `stageDataFile`・`stageEmailsDir`・`commitReset` を中間マニフェスト更新なしに順次実行する。各操作は冪等（ファイル不在は no-op）であるため、クラッシュ後の再実行は常にすべての操作を再試行して正しく収束する。
 
@@ -181,23 +179,11 @@ stateDiagram-v2
 
 一方、`Open(OpenReadWrite)` 内の `cleanupCompletedReset` はセンチネルで判断する（フェーズ 1 のままクラッシュした「コミットウィンドウクラッシュ」も拾う必要があるため）。フェーズ 4 とセンチネルはそれぞれ異なる呼び出しパスで使い分けられる。
 
-### チェックポイントフェーズ（フェーズ 2・3）廃止の判断（task 0080）および中断機能（フェーズ 5）廃止の判断（task 0081）
+### フェーズ定義を `{1, 4}` の 2 値に絞った理由
 
-> **注記**: 以下は task 0080・0081 で実施した設計変更の判断記録である。これらの変更は本 ADR にすでに反映されており、現行実装はフェーズ定義 `{1=manifest written, 4=committed}` に基づいている。レガシー値 2・3・5 は `validateManifestPhase` で fail-closed となる。
+中間チェックポイントフェーズ（値 2・3）は不要である。`stageDataFile`・`stageEmailsDir`・`commitReset` はいずれも冪等であり、どの時点でクラッシュしても `advanceResetPhases` を再実行すれば正しく収束するためである。「リセット前進のみ」の設計（abort 経路なし）も同じ冪等性から成り立っており、フェーズ 1 からの一括再実行で十分である。
 
-当初、フェーズ 2（`resetPhaseDataStaged`）・フェーズ 3（`resetPhaseEmailsStaged`）のチェックポイントは次の 3 つの目的で設けた。再評価の結果、本プロジェクトの文脈ではいずれの正当化も弱いと判断する。
-
-| 当初の目的 | 再評価 |
-|---|---|
-| **効率**：既完了の移動をスキップ | UIDVALIDITY 変化は稀な例外イベント、`recover --mode discard-old --yes` はオペレーターの手動実行、クラッシュ後の再開はさらに稀。そこで `stat(2)`／`rename(2)` 数回分（サブミリ秒）を削るだけで、最適化対象として意味を持たない |
-| **可視性**：どこまで進んだか可読 | `stageDataFile`／`stageEmailsDir` の冪等性ロジックそのものがファイル存在で進捗を判断しており、進捗はディスク上のファイル配置から導出可能。フェーズ番号 2・3 はその冗長なキャッシュにすぎない |
-| **拡張性**：ステージング対象追加への備え | 対象ファイルが増えても「`stat`→`rename` の冪等関数を 1 つ追加」するだけで、チェックポイントフェーズの追加は本質的に不要（冪等なら毎回全操作を再実行して正しく収束する）。YAGNI 原則に反する先取りである |
-
-**正しさへの影響なし**：`stageDataFile`・`stageEmailsDir`・`commitReset` はいずれも冪等であり、`rename(2)` は POSIX が保証する原子操作であるため、再開は常にフェーズ 1 から全操作を冪等に再実行して収束する。中間チェックポイントは AC-crash-safe の担保に不要である。
-
-**フェーズ 5（`AbortReset` の中断 WAL エントリ）の廃止（task 0081）**：task 0080 では `AbortReset`（`recover --abort-reset --yes`）機能が残存していたため、フェーズ 5 は `AbortReset` がファイルを元の場所に戻す前に書く WAL エントリとして存在した。task 0081 で `AbortReset` 機能ごと廃止した。廃止の理由は、`ResetForRecovery` は同期的に完走するため「一時停止して abort を選ぶ」経路が存在せず、フェーズ 1 から前進のみで十分であること、および `restoreFromStaging` のクラッシュリカバリ要件（フェーズ 5 の設計根拠）が消滅したことによる。
-
-**結論**：フェーズを `{1=manifest written, 4=committed}` に確定する。既存ストアに残るレガシー値 2・3・5 は、新バージョンの `validateManifestPhase` が fail-closed で拒否する。アップグレード手順については `docs/operations/legacy_reset_manifest_upgrade.ja.md` を参照。
+> **設計変更の記録**：過去のバージョンにはチェックポイントフェーズ（値 2・3、task 0080 で廃止）と中断 WAL エントリ（値 5、task 0081 で廃止）が存在した。これらの廃止判断の詳細は git log を参照。
 
 ---
 
