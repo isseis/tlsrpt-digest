@@ -106,7 +106,7 @@ In this state, the following are guaranteed:
 - **The staging directory and manifest file are not deleted** (fail-closed design).
 - The store's consistency is preserved.
 
-Temporarily roll back to the old version, complete the preparation steps above (`discard-old --yes` or `abort-reset --yes`), and then redo the upgrade.
+Temporarily roll back to the old version, complete the preparation steps above (`--mode discard-old --yes` or `--abort-reset --yes`), and then redo the upgrade.
 
 ### Verifying Normal Operation After Upgrade
 

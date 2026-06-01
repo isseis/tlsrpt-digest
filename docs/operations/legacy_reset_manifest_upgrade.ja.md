@@ -106,7 +106,7 @@ store: unknown reset manifest phase: got=N
 - **ステージングディレクトリとマニフェストファイルは削除されない**（fail-closed 設計）。
 - ストアの整合性は保たれている。
 
-旧バージョンに一時的にロールバックし、上記の事前作業（`discard-old --yes` または `abort-reset --yes`）を完了させてからアップグレードをやり直す。
+旧バージョンに一時的にロールバックし、上記の事前作業（`--mode discard-old --yes` または `--abort-reset --yes`）を完了させてからアップグレードをやり直す。
 
 ### 正常アップグレード後の動作確認
 
