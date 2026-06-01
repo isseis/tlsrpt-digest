@@ -18,23 +18,11 @@ Work in the following order.
 
 5. Inspect the current codebase before writing the plan.
 - Check the relevant packages, tests, and test helpers under `cmd/` and `internal/`.
-- Identify existing functions, tests, and helper utilities that should be reused.
-- Do not plan to re-implement logic or add duplicate tests when the repository already has suitable coverage or reusable helpers.
-- Identify and prepare findings for the `既存コード調査結果` subsection to be included in `03_implementation_plan.md` (see step 6). This is a sequential preparation step. For each relevant area, note: what already exists, what is missing, and what needs to change. Omit areas where the existing code requires no attention.
-- **Verify every referenced symbol before writing.** Before citing a test name, variable name, function name, error variable, or comment string in the plan, run a targeted search to confirm it exists in the expected file. When similar names appear in multiple files, note the distinction explicitly so implementers edit the right file.
-  - Example: `rg -n "TestBootstrap_PendingReset" cmd/` to confirm which file(s) contain the function.
-- **Enumerate all instances of each changed pattern.** For any pattern the plan intends to change or delete across the codebase (e.g., a seeded phase value in tests, a flag reference, a specific comment string), search for every occurrence and map each result to its enclosing function and planned action. Missing even one instance is a common source of `make test` failures after implementation.
-  - Example: `rg -n "resetPhase\((2|3|5)\)" internal/store -g "*_test.go"` to list every legacy-phase seed and decide whether each should be updated or deleted.
-- **Search code expressions and textual references.** For every concept that will be removed or redefined, search not only executable code but also comments, test names, documentation, error strings, and user-facing text. Derive search variants before writing the plan:
-  - Symbol names and function names
-  - CLI flags and option names
-  - Error names and error message fragments
-  - Numeric values or enum/string variants
-  - Old English and Japanese terminology
-  - Comment phrases and test names
-  Add explicit cleanup tasks for stale comments and documentation, not only stale executable code.
-- **Trace the call chain for behavioral changes.** When a function's return values or error conditions change (e.g., a validator now rejects previously-accepted inputs), enumerate its direct callers and determine whether each caller's observable behavior also changes. Add a test task for every affected call path that is not already covered.
-- **Analyze coverage loss from deleted tests.** Before planning to delete a test, list the non-trivial invariants it uniquely verifies (e.g., a UID-mismatch cleanup path, an idempotency guarantee). Confirm each invariant is still covered by a surviving test, or add an explicit replacement test to the plan.
+- Identify existing functions, tests, and helper utilities that should be reused. Do not plan to re-implement logic or add duplicate tests when the repository already has suitable coverage or reusable helpers.
+- For each relevant area, note: what already exists, what is missing, and what needs to change. Omit areas where the existing code requires no attention.
+- **Verify symbols and enumerate all instances before writing.** Confirm every cited function, test, variable, or error name exists in the expected file; note which file when similar names appear in multiple locations. For any symbol or pattern the plan will change or delete, find ALL occurrences across code, comments, test names, error strings, docs, and translations. Cover all search variants: function/variable names, CLI flags, error messages, numeric values, old terminology, and comment phrases. Map each result to its enclosing function and planned action. Add explicit cleanup tasks for stale comments and documentation.
+  - Example: `rg -n "TestBootstrap_PendingReset" cmd/` to confirm file; `rg -n "resetPhase\((2|3|5)\)" internal/store -g "*_test.go"` to map every legacy seed.
+- **Trace behavioral impact and coverage gaps.** When a function's return values or error conditions change, enumerate its callers and assess whether their observable behavior also changes. Before deleting a test, confirm each non-trivial invariant it verifies is covered by a surviving test, or add an explicit replacement test to the plan.
 
 6. Create `03_implementation_plan.md` in the same task directory.
 - Write in Japanese.
@@ -81,8 +69,8 @@ Work in the following order.
    After receiving findings:
    - Fix all Critical and Major issues.
    - Apply Minor fixes at your discretion.
-   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat, subject to the three-pass limit below, until the subagent reports no Critical or Major issues.
-   - After three review passes, continue only if the remaining Critical or Major issues are concrete, scoped to this document, and clearly fixable without expanding the planning scope. Otherwise, stop and report the remaining issues instead of continuing automatically.
+   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until no Critical or Major issues remain, up to three passes total.
+   - After three passes, continue only if remaining Critical or Major issues are concrete, scoped to this document, and clearly fixable without expanding the planning scope. Otherwise, stop and report the remaining issues.
    - Commit `03_implementation_plan.md` only after all review passes are complete and all Critical and Major issues are resolved.
 
 **Technical correctness checklist (use verbatim as evaluation criteria in the subagent prompt above):**
