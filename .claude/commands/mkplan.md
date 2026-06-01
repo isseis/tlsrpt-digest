@@ -18,22 +18,41 @@ Work in the following order.
 
 5. Inspect the current codebase before writing the plan.
 - Check the relevant packages, tests, and test helpers under `cmd/` and `internal/`.
-- Identify existing functions, tests, and helper utilities that should be reused.
-- Do not plan to re-implement logic or add duplicate tests when the repository already has suitable coverage or reusable helpers.
-- Identify and prepare findings for the `既存コード調査結果` subsection to be included in `03_implementation_plan.md` (see step 6). This is a sequential preparation step. For each relevant area, note: what already exists, what is missing, and what needs to change. Omit areas where the existing code requires no attention.
+- Identify existing functions, tests, and helper utilities that should be reused. Do not plan to re-implement logic or add duplicate tests when the repository already has suitable coverage or reusable helpers.
+- For each relevant area, note: what already exists, what is missing, and what needs to change. Omit areas where the existing code requires no attention.
+- **Verify symbols and enumerate all instances before writing.** Confirm every cited function, test, variable, or error name exists in the expected file; note which file when similar names appear in multiple locations. For any symbol or pattern the plan will change or delete, find ALL occurrences across code, comments, test names, error strings, docs, and translations. Cover all search variants: function/variable names, CLI flags, error messages, numeric values, old terminology, and comment phrases. Map each result to its enclosing function and planned action. Add explicit cleanup tasks for stale comments and documentation.
+  - Example: `rg -n "TestBootstrap_PendingReset" cmd/` to confirm file; `rg -n "resetPhase\((2|3|5)\)" internal/store -g "*_test.go"` to map every legacy seed.
+- **Trace behavioral impact and coverage gaps.** When a function's return values or error conditions change, enumerate its callers and assess whether their observable behavior also changes. Before deleting a test, confirm each non-trivial invariant it verifies is covered by a surviving test, or add an explicit replacement test to the plan.
 
 6. Create `03_implementation_plan.md` in the same task directory.
 - Write in Japanese.
 - Set the document status to `draft`.
 - Include all required sections defined in `docs/dev/developer_guide/requirements_process.md`.
+- Include explicit top-level sections for:
+  - Implementation Order and Milestones
+  - Test Strategy
+  - Implementation Checklist
+  - Acceptance Criteria Verification
+  Do not rely on phase task lists as an implicit substitute for these required sections.
 - Add a `既存コード調査結果` subsection under the implementation overview (§1), incorporating the detailed findings from step 5. If no findings were identified in step 5, explicitly state that no existing code changes are required.
 - Organize work into small, phase-based steps with checkboxes.
 - Explicitly map each acceptance criterion to the tasks and tests that will verify it.
 - Include at least one concrete test task for each acceptance criterion.
+- In the Acceptance Criteria Verification section, every AC row must name either:
+  - an exact test location in `path::TestName` format, or
+  - an explicit static verification command with its expected result.
+- Do not use vague verification labels such as "compile passes", "document review", "grep check", or "none". If static verification is intended, spell out the exact `rg` command and what counts as success.
+- For documentation-only ACs, create concrete verification tasks. Include every documentation file touched by the plan, including glossaries and translation outputs, in the AC verification table or cross-search checklist.
+  - Example: `rg -n -e "old term" docs/file.md` expected: no matches except explicitly allowed historical notes.
 - Reference the architecture document instead of duplicating design details.
 - Include specific file paths to modify where they can be identified confidently.
 - Keep tasks actionable, observable, and small enough to complete and verify.
+- The implementation plan itself may be Japanese, but any planned Go source comment, identifier, string literal, or test comment replacement must be written in English.
 - When describing change sites, prefer pattern-based descriptions (e.g., "all `_ = notifyXxx(...)` call sites") over exact line numbers. Line numbers become stale on the first unrelated edit; grep patterns remain valid. Use line numbers only when the specific location is essential context that the pattern alone cannot convey.
+- **Specify complete before/after strings for all text edits.** When a task modifies a string literal, error message, or source comment, state the full result string explicitly — not just the substring to remove. This prevents unintended side-effects such as dropped prefixes, dangling format verbs (`%w`), or trailing spaces left by a deleted parenthetical.
+  - Bad:  "Remove `(or --abort-reset --yes)` from the `systemErrorHint` return value."
+  - Good: "Change the `systemErrorHint` return value from `"Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)"` to `"Run: tlsrpt-digest recover --mode discard-old --yes"`."
+- Add a cross-search checklist for removed or redefined concepts. It must include explicit `rg` commands or pattern lists and expected results for code, tests, docs, and translation/glossary files when those files are in scope.
 
 7. Apply test helper planning rules from `docs/dev/developer_guide/test_organization.md`.
 - If new cross-package helpers or mocks are needed, plan them under `testutil/` with the correct file naming and package naming rules.
@@ -50,8 +69,8 @@ Work in the following order.
    After receiving findings:
    - Fix all Critical and Major issues.
    - Apply Minor fixes at your discretion.
-   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat, subject to the three-pass limit below, until the subagent reports no Critical or Major issues.
-   - After three review passes, continue only if the remaining Critical or Major issues are concrete, scoped to this document, and clearly fixable without expanding the planning scope. Otherwise, stop and report the remaining issues instead of continuing automatically.
+   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until no Critical or Major issues remain, up to three passes total.
+   - After three passes, continue only if remaining Critical or Major issues are concrete, scoped to this document, and clearly fixable without expanding the planning scope. Otherwise, stop and report the remaining issues.
    - Commit `03_implementation_plan.md` only after all review passes are complete and all Critical and Major issues are resolved.
 
 **Technical correctness checklist (use verbatim as evaluation criteria in the subagent prompt above):**
