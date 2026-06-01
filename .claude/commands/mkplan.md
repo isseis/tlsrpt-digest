@@ -21,6 +21,12 @@ Work in the following order.
 - Identify existing functions, tests, and helper utilities that should be reused.
 - Do not plan to re-implement logic or add duplicate tests when the repository already has suitable coverage or reusable helpers.
 - Identify and prepare findings for the `既存コード調査結果` subsection to be included in `03_implementation_plan.md` (see step 6). This is a sequential preparation step. For each relevant area, note: what already exists, what is missing, and what needs to change. Omit areas where the existing code requires no attention.
+- **Verify every referenced symbol before writing.** Before citing a test name, variable name, function name, error variable, or comment string in the plan, run a targeted search to confirm it exists in the expected file. When similar names appear in multiple files, note the distinction explicitly so implementers edit the right file.
+  - Example: `rg -n "TestBootstrap_PendingReset" cmd/` to confirm which file(s) contain the function.
+- **Enumerate all instances of each changed pattern.** For any pattern the plan intends to change or delete across the codebase (e.g., a seeded phase value in tests, a flag reference, a specific comment string), search for every occurrence and map each result to its enclosing function and planned action. Missing even one instance is a common source of `make test` failures after implementation.
+  - Example: `rg -n "resetPhase\((2|3|5)\)" internal/store -g "*_test.go"` to list every legacy-phase seed and decide whether each should be updated or deleted.
+- **Trace the call chain for behavioral changes.** When a function's return values or error conditions change (e.g., a validator now rejects previously-accepted inputs), enumerate its direct callers and determine whether each caller's observable behavior also changes. Add a test task for every affected call path that is not already covered.
+- **Analyze coverage loss from deleted tests.** Before planning to delete a test, list the non-trivial invariants it uniquely verifies (e.g., a UID-mismatch cleanup path, an idempotency guarantee). Confirm each invariant is still covered by a surviving test, or add an explicit replacement test to the plan.
 
 6. Create `03_implementation_plan.md` in the same task directory.
 - Write in Japanese.
@@ -34,6 +40,9 @@ Work in the following order.
 - Include specific file paths to modify where they can be identified confidently.
 - Keep tasks actionable, observable, and small enough to complete and verify.
 - When describing change sites, prefer pattern-based descriptions (e.g., "all `_ = notifyXxx(...)` call sites") over exact line numbers. Line numbers become stale on the first unrelated edit; grep patterns remain valid. Use line numbers only when the specific location is essential context that the pattern alone cannot convey.
+- **Specify complete before/after strings for all text edits.** When a task modifies a string literal, error message, or source comment, state the full result string explicitly — not just the substring to remove. This prevents unintended side-effects such as dropped prefixes, dangling format verbs (`%w`), or trailing spaces left by a deleted parenthetical.
+  - Bad:  "Remove `(or --abort-reset --yes)` from the `systemErrorHint` return value."
+  - Good: "Change the `systemErrorHint` return value from `\"Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)\"` to `\"Run: tlsrpt-digest recover --mode discard-old --yes\"`."
 
 7. Apply test helper planning rules from `docs/dev/developer_guide/test_organization.md`.
 - If new cross-package helpers or mocks are needed, plan them under `testutil/` with the correct file naming and package naming rules.
