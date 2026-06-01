@@ -236,12 +236,12 @@
 
 #### 2-3. `cmd/tlsrpt-digest/boot.go` の変更
 
-- [ ] `Bootstrap` 内の `ErrPendingReset` ラッパーメッセージ（L236）から「`or recover --abort-reset --yes to roll back`」を削除し、`"run recover --mode discard-old --yes to continue"` のみにする。（AC-07）
+- [ ] `Bootstrap` 内の `ErrPendingReset` ラッパーメッセージ（L236）の `" or recover --abort-reset --yes to roll back"` を削除し、結果の文字列を `"store reset is incomplete; run recover --mode discard-old --yes to continue: %w"` にする（`"store reset is incomplete; "` プレフィックスと `": %w"` ラッパーは保持する）。（AC-07）
 - [ ] `BootstrapOptions.StoreOpenModeOverride` のドキュメントコメント（L87）の `OpenRecoverReset for discard-old/abort-reset.` から `/abort-reset` を削除し `OpenRecoverReset for discard-old.` に更新する。
 
 #### 2-4. `internal/notify/format.go` の変更
 
-- [ ] `systemErrorHint` 関数の `SystemErrorKindUIDValidityChanged / SystemErrorKindRecoveryRequired` ケースの返却値から `(or --abort-reset --yes)` を削除する。（AC-07e）
+- [ ] `systemErrorHint` 関数の `SystemErrorKindUIDValidityChanged / SystemErrorKindRecoveryRequired` ケースの返却値から ` (or --abort-reset --yes)` を削除する（先行スペースごと削除し、結果を `"Run: tlsrpt-digest recover --mode discard-old --yes"` にする）。（AC-07e）
 
 **成功条件**：`go build ./cmd/tlsrpt-digest/...` と `go build ./internal/notify/...` が通ること。
 
