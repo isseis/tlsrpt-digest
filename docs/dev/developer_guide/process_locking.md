@@ -33,11 +33,11 @@ Multiple `summary` instances each acquire only the summary consistency guard's s
 
 ### Purpose
 
-Serialize write subcommands with respect to each other so that the state machine managing the progress of UIDVALIDITY recovery operations (`ResetForRecovery` / `AbortReset`) can be operated safely under the single-writer assumption.
+Serialize write subcommands with respect to each other so that the state machine managing the progress of UIDVALIDITY recovery operations (`ResetForRecovery`) can be operated safely under the single-writer assumption.
 
 This state machine consists of the following three files.
 
-- **Reset manifest**: a ledger recording the progress of recovery operations as `resetPhase` (1–5)
+- **Reset manifest**: a ledger recording the progress of recovery operations as `resetPhase` (values 1 and 4)
 - **Staging directory**: a working area for temporarily holding old data during a reset
 - **Sentinel**: metadata holding the `recovery_required` flag and the finalized `UIDValidity` value
 
@@ -54,14 +54,14 @@ If the exclusive lock cannot be acquired, the system treats another process as c
 - `fetch`
 - `gc`
 - `reprocess`
-- `recover` (any of `--mode keep-old` / `discard-old` / `--abort-reset`)
+- `recover` (any of `--mode keep-old` / `discard-old`)
 
 ### Contract
 
 1. Acquire before opening the store (`store.Open(...)` call).
 2. Hold until processing is complete (including abnormal exit paths).
-3. `recover --mode discard-old --yes` / `recover --abort-reset --yes` use `OpenRecoverReset` while holding the store-wide process lock.
-4. Since `ResetForRecovery` / `AbortReset` are designed under the single-writer assumption, callers must always hold the store-wide process lock.
+3. `recover --mode discard-old --yes` uses `OpenRecoverReset` while holding the store-wide process lock.
+4. Since `ResetForRecovery` is designed under the single-writer assumption, callers must always hold the store-wide process lock.
 5. When called directly from `internal/store` unit tests, an OS-level lock is not required, but the single-writer assumption must be made explicit (e.g., single goroutine sequential execution).
 
 ---
@@ -155,14 +155,13 @@ The following do not modify `recovery_required` and do not require the guard:
 
 - Initial manifest/staging creation in `ResetForRecovery`
 - `stageDataFile` / `stageEmailsDir`
-- Restore processing in `AbortReset` (guard not required because the sentinel is not modified; however, `recovery_required` remains set in the sentinel throughout, so `summary` remains fail-closed)
 - Post-commit cleanup
 
 **Additional Protection in `ApplyRecovery`**
 
 `ApplyRecovery` (keep-old recovery) requires not only `withGuardExclusive` but also a **`HasPendingReset()` pre-check**.
 
-Reason: during a reset operation (phases 1–5), data files may have been moved to staging. Because `withGuardExclusive` only guarantees the visibility of the sentinel, clearing `recovery_required` while ignoring a pending reset produces the inconsistent state of "UIDValidity updated + `recovery_required` cleared + no data."
+Reason: during a reset operation (phase 1), data files may have been moved to staging. Because `withGuardExclusive` only guarantees the visibility of the sentinel, clearing `recovery_required` while ignoring a pending reset produces the inconsistent state of "UIDValidity updated + `recovery_required` cleared + no data."
 
 The following diagram shows the sequence that produces an inconsistency when the `HasPendingReset()` check is absent.
 
@@ -173,7 +172,7 @@ sequenceDiagram
     participant Stg as "staging"
     participant Sen as "sentinel"
 
-    Note over Stg,Sen: [Precondition] ResetForRecovery interrupted at phase 2–3<br>tlsrpt.json and emails/ moved to staging<br>no data in store root, manifest still present
+    Note over Stg,Sen: [Precondition] ResetForRecovery interrupted at phase 1<br>tlsrpt.json and emails/ moved to staging<br>no data in store root, manifest still present
 
     Op->>API: recover --mode keep-old
     API->>Sen: update UIDValidity + clear recovery_required
@@ -251,8 +250,8 @@ Preferred responsibility split:
 
 - [ ] The store-wide process lock is acquired before opening the store
 - [ ] The store-wide process lock is held until processing is complete (including abnormal exit paths)
-- [ ] `recover --mode discard-old --yes` / `recover --abort-reset --yes` use `OpenRecoverReset` while holding the store-wide process lock
-- [ ] `ResetForRecovery` / `AbortReset` are called while holding the store-wide process lock
+- [ ] `recover --mode discard-old --yes` uses `OpenRecoverReset` while holding the store-wide process lock
+- [ ] When `ResetForRecovery` is called directly, the store-wide process lock is held
 - [ ] The single-writer assumption is made explicit when called directly from `internal/store` unit tests
 - [ ] When newly calling `SaveRecoveryRequired`, the contract in §3 is followed and consistency with the summary consistency guard is verified
 

@@ -408,17 +408,17 @@
 
 **レビュー観点**: ADR フェーズ表・状態遷移図・不変条件表からのフェーズ 2・3・5 削除（AC-14〜AC-18） / `process_locking` の `--abort-reset` 参照除去（AC-20） / 運用手順書（フェーズ 2・3・5 残存ストアの事前作業手順）の完全性（AC-21、AC-22）
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した
+- [x] PR がマージされた
+- [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 #### 4-5. 英語版の反映
 
-- [ ] `docs/dev/adr/0003_reset_phase_design.ja.md` → `.md` に `/mktrans` で反映する。（AC-19）
-- [ ] `docs/dev/developer_guide/process_locking.ja.md` → `.md` に `/mktrans` で反映する。（AC-20）
-- [ ] `docs/operations/legacy_reset_manifest_upgrade.ja.md` → `.md` に `/mktrans` で反映する。（AC-21、AC-22）
-- [ ] 英語版反映後、ADR・process locking・運用手順の `.md` でも日本語版と同じ検索パターンを確認し、翻訳漏れがないことを検証する。（AC-19〜AC-22）
+- [x] `docs/dev/adr/0003_reset_phase_design.ja.md` → `.md` に `/mktrans` で反映する。（AC-19）
+- [x] `docs/dev/developer_guide/process_locking.ja.md` → `.md` に `/mktrans` で反映する。（AC-20）
+- [x] `docs/operations/legacy_reset_manifest_upgrade.ja.md` → `.md` に `/mktrans` で反映する。（AC-21、AC-22）
+- [x] 英語版反映後、ADR・process locking・運用手順の `.md` でも日本語版と同じ検索パターンを確認し、翻訳漏れがないことを検証する。（AC-19〜AC-22）
 
 ### PR-3 作成ポイント: English translations
 
