@@ -22,6 +22,8 @@ Work in order.
 - Follow the design in `02_architecture.md`.
 - Place test helpers per `docs/dev/developer_guide/test_organization.md`: cross-package helpers under `testutil/`; package-internal helpers in `test_helpers.go` (or `test_helpers_<category>.go`) with `//go:build test`.
 - After each Go file change, run `make fmt && make test && make lint`; fix errors before continuing. Exception: errors caused by the phase group's incomplete state (e.g. build or test failures from missing implementations that stubs depend on) need not be fixed until the group is complete; fix only errors unrelated to the in-progress group.
+- When removing multiple scattered code sites (e.g. several test functions), delete them one at a time using the exact text read from the file. Do not script bulk deletion (e.g. a brace-counting loop); nested literals make such heuristics over-consume adjacent code. After each removal, check IDE diagnostics for unintended breakage.
+- For any newly authored or substantially rewritten artifact in this group (runbook, command example, table, prose, translation, design-doc section), confirm it is correct before committing — do not rely on absence-search of removed terms. Run any documented command and check its exit code and output; cite the source implementation that prose describes; diff a translation against its source. For a design document such as an ADR, also keep the body on the current system and confine removed-design rationale to a bounded history note rather than interleaving it.
 - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
 
 5a. **PR checkpoint** (reached when step 4 directed you here instead of step 5).
@@ -58,6 +60,7 @@ Phase-group review checklist (use verbatim as evaluation criteria in the subagen
 - [ ] No tests duplicate existing coverage without good reason.
 - [ ] No tests are so trivial that they add no verification value.
 - [ ] No logic is reimplemented when an existing function in the codebase can be used.
+- [ ] Newly authored artifacts (runbooks, command examples, tables, prose, translations) are verified against ground truth, not only by absence-search.
 - [ ] All source comments and identifiers are in English.
 - [ ] No planning document references (e.g. `AC-01`, `F-001`) remain in source comments or string literals.
 - [ ] `make fmt` produces no diff.
