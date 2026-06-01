@@ -366,39 +366,39 @@
 
 #### 4-1. `docs/dev/adr/0003_reset_phase_design.ja.md` の変更
 
-- [ ] フェーズ一覧表からフェーズ 2・3・5 の行を削除する。（AC-14）
-- [ ] 「フェーズ 5（recovery_required リセットマーカー）を設ける理由」節を削除し、必要な経緯は「チェックポイントフェーズ（フェーズ 2・3）廃止の判断」節に 0081 でフェーズ 5 も廃止した旨の 1 段落として統合する。（AC-15）
-- [ ] 状態遷移図から P5 ノードおよびその遷移（P1→P5、P5→RR）を削除する。（AC-16）
-- [ ] 不変条件表の「フェーズ 5 が書かれている ⟹ `AbortReset` のみが続行できる」行を削除する。（AC-17）
-- [ ] ユーザー操作時の挙動表から `recover --abort-reset --yes` 列を削除し、保留リセット時の案内を継続操作（`recover --mode discard-old --yes`）のみにする。（AC-18）
-- [ ] §1 要件表から `AC-abort` 行を削除し、§2 のステージングディレクトリ説明から `AbortReset` で復元可能という記述を削除する。
-- [ ] §4 の後方互換説明を、レガシー値 2・3・5 は `validateManifestPhase` で fail-closed する説明へ置換する（設計根拠は `02_architecture.md` §2.3・§2.4 を参照する）。
-- [ ] §7「将来の変更・拡張方針」の `AbortReset` サブ節を削除し、将来フェーズ追加時の手順から `AbortReset` への処理追加を削除する。
-- [ ] §8・§9 の関連ファイル表から `AbortReset`・`ErrResetNotPending`・`ErrResetAbortInProgress`・`restoreFromStaging` への言及を削除する。
-- [ ] ADR 日本語版の更新後、`AbortReset`・`abort-reset`・`resetPhaseAborting`・`ErrResetAbortInProgress`・`ErrResetNotPending`・`restoreFromStaging`・`legacy values 2`・`legacy values 2/3`・`phase < resetPhaseCommitted`・`フェーズ 5`・`{1, 4, 5}` を検索し、廃止の経緯として意図して残すもの以外がないことを確認する。（AC-14〜AC-18）
+- [x] フェーズ一覧表からフェーズ 2・3・5 の行を削除する。（AC-14）
+- [x] 「フェーズ 5（recovery_required リセットマーカー）を設ける理由」節を削除し、必要な経緯は「チェックポイントフェーズ（フェーズ 2・3）廃止の判断」節に 0081 でフェーズ 5 も廃止した旨の 1 段落として統合する。（AC-15）
+- [x] 状態遷移図から P5 ノードおよびその遷移（P1→P5、P5→RR）を削除する。（AC-16）
+- [x] 不変条件表の「フェーズ 5 が書かれている ⟹ `AbortReset` のみが続行できる」行を削除する。（AC-17）
+- [x] ユーザー操作時の挙動表から `recover --abort-reset --yes` 列を削除し、保留リセット時の案内を継続操作（`recover --mode discard-old --yes`）のみにする。（AC-18）
+- [x] §1 要件表から `AC-abort` 行を削除し、§2 のステージングディレクトリ説明から `AbortReset` で復元可能という記述を削除する。
+- [x] §4 の後方互換説明を、レガシー値 2・3・5 は `validateManifestPhase` で fail-closed する説明へ置換する（設計根拠は `02_architecture.md` §2.3・§2.4 を参照する）。
+- [x] §7「将来の変更・拡張方針」の `AbortReset` サブ節を削除し、将来フェーズ追加時の手順から `AbortReset` への処理追加を削除する。
+- [x] §8・§9 の関連ファイル表から `AbortReset`・`ErrResetNotPending`・`ErrResetAbortInProgress`・`restoreFromStaging` への言及を削除する。
+- [x] ADR 日本語版の更新後、`AbortReset`・`abort-reset`・`resetPhaseAborting`・`ErrResetAbortInProgress`・`ErrResetNotPending`・`restoreFromStaging`・`legacy values 2`・`legacy values 2/3`・`phase < resetPhaseCommitted`・`フェーズ 5`・`{1, 4, 5}` を検索し、廃止の経緯として意図して残すもの以外がないことを確認する。（AC-14〜AC-18）
 
 #### 4-2. `docs/dev/developer_guide/process_locking.ja.md` の変更
 
-- [ ] 対象サブコマンド一覧（L65）から `--abort-reset` を削除する。（AC-20）
-- [ ] 契約節（L71・L73）・チェックリスト節（L298・L300）から `recover --abort-reset --yes` および `ResetForRecovery / AbortReset` のペア記述を除去し、`recover --mode discard-old --yes` / `ResetForRecovery` のみが `OpenRecoverReset` を使うよう整合させる。（AC-20）
-- [ ] 状態機械の説明（L43）の `（`ResetForRecovery` / `AbortReset`）` から `AbortReset` を削除する。（AC-20）
-- [ ] `AbortReset の restore 処理` を説明する箇条書き（L182）を削除する（`restoreFromStaging` 廃止に伴い該当処理が存在しなくなるため）。（AC-20）
-- [ ] リセットマニフェスト定義（L48）の `resetPhase`（1〜5） を `resetPhase`（1・4） に更新する。（AC-20）
-- [ ] フェーズ説明（現行 L191 付近）の「フェーズ 1〜5」を「フェーズ 1・4」に更新し、フェーズ 2・3・5 がレガシー値として fail-closed される説明へ置換する。（AC-20）
-- [ ] シーケンス図・説明（現行 L204 付近）の「フェーズ 2–3」参照を削除し、フェーズ 1 の再実行またはレガシー値 fail-closed の説明に整合させる。（AC-20）
-- [ ] 日本語版更新後、`AbortReset`・`--abort-reset`・`resetPhase 1`・`1〜5`・`1-5`・`フェーズ 2–3`・`フェーズ 2・3` を検索し、廃止済み経緯として意図して残すもの以外がないことを確認する。（AC-20）
+- [x] 対象サブコマンド一覧（L65）から `--abort-reset` を削除する。（AC-20）
+- [x] 契約節（L71・L73）・チェックリスト節（L298・L300）から `recover --abort-reset --yes` および `ResetForRecovery / AbortReset` のペア記述を除去し、`recover --mode discard-old --yes` / `ResetForRecovery` のみが `OpenRecoverReset` を使うよう整合させる。（AC-20）
+- [x] 状態機械の説明（L43）の `（`ResetForRecovery` / `AbortReset`）` から `AbortReset` を削除する。（AC-20）
+- [x] `AbortReset の restore 処理` を説明する箇条書き（L182）を削除する（`restoreFromStaging` 廃止に伴い該当処理が存在しなくなるため）。（AC-20）
+- [x] リセットマニフェスト定義（L48）の `resetPhase`（1〜5） を `resetPhase`（1・4） に更新する。（AC-20）
+- [x] フェーズ説明（現行 L191 付近）の「フェーズ 1〜5」を「フェーズ 1・4」に更新し、フェーズ 2・3・5 がレガシー値として fail-closed される説明へ置換する。（AC-20）
+- [x] シーケンス図・説明（現行 L204 付近）の「フェーズ 2–3」参照を削除し、フェーズ 1 の再実行またはレガシー値 fail-closed の説明に整合させる。（AC-20）
+- [x] 日本語版更新後、`AbortReset`・`--abort-reset`・`resetPhase 1`・`1〜5`・`1-5`・`フェーズ 2–3`・`フェーズ 2・3` を検索し、廃止済み経緯として意図して残すもの以外がないことを確認する。（AC-20）
 
 #### 4-3. `docs/translation_glossary.md` の変更
 
-- [ ] 「保留リセット / pending reset」の定義を更新する：現状「フェーズ 1〜3 および フェーズ 5」→「フェーズ 1 のみ」に更新し、`AbortReset` 廃止に整合させる。
-- [ ] 用語集全体を `rg -n -e "AbortReset" -e "abort-reset" -e "フェーズ 5" -e "フェーズ 2" -e "フェーズ 3" -e "ErrResetAbortInProgress" -e "ErrResetNotPending" -e "中断機能" docs/translation_glossary.md` で検索し、廃止済みの状態・エラー型・機能への言及を削除または「廃止済み」として更新する。
+- [x] 「保留リセット / pending reset」の定義を更新する：現状「フェーズ 1〜3 および フェーズ 5」→「フェーズ 1 のみ」に更新し、`AbortReset` 廃止に整合させる。
+- [x] 用語集全体を `rg -n -e "AbortReset" -e "abort-reset" -e "フェーズ 5" -e "フェーズ 2" -e "フェーズ 3" -e "ErrResetAbortInProgress" -e "ErrResetNotPending" -e "中断機能" docs/translation_glossary.md` で検索し、廃止済みの状態・エラー型・機能への言及を削除または「廃止済み」として更新する。
 
 #### 4-4. `docs/operations/legacy_reset_manifest_upgrade.ja.md` の新規作成
 
-- [ ] `docs/operations/` を運用ランブック置き場として新設し、本手順書の冒頭に対象読者（アップグレード作業者）と適用条件（フェーズ 2・3・5 マニフェストが残る旧ストア）を明記する。
-- [ ] フェーズ 2・3 のマニフェストが残存するストアのアップグレード前に旧バージョンで `recover --mode discard-old --yes` を完了する手順を記載する。（AC-21）
-- [ ] フェーズ 5 のマニフェストが残存するストアのアップグレード前に旧バージョンで `AbortReset`（`recover --abort-reset --yes`）を完了する手順を記載する。（AC-22）
-- [ ] 手順書内にアップグレード後の確認として、旧マニフェストが残る場合は新バージョンが `ErrResetManifestPhaseUnknown` で停止し、ステージング・マニフェストを保全することを記載する（`02_architecture.md` §2.4 参照）。（AC-21、AC-22）
+- [x] `docs/operations/` を運用ランブック置き場として新設し、本手順書の冒頭に対象読者（アップグレード作業者）と適用条件（フェーズ 2・3・5 マニフェストが残る旧ストア）を明記する。
+- [x] フェーズ 2・3 のマニフェストが残存するストアのアップグレード前に旧バージョンで `recover --mode discard-old --yes` を完了する手順を記載する。（AC-21）
+- [x] フェーズ 5 のマニフェストが残存するストアのアップグレード前に旧バージョンで `AbortReset`（`recover --abort-reset --yes`）を完了する手順を記載する。（AC-22）
+- [x] 手順書内にアップグレード後の確認として、旧マニフェストが残る場合は新バージョンが `ErrResetManifestPhaseUnknown` で停止し、ステージング・マニフェストを保全することを記載する（`02_architecture.md` §2.4 参照）。（AC-21、AC-22）
 
 ### PR-2 作成ポイント: Japanese documentation update
 
