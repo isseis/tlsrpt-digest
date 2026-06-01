@@ -287,8 +287,9 @@ func (f *FakeStore) DeleteEmailsBefore(cutoff time.Time) (int, error) {
 
 // ResetForRecovery implements store.Store.
 // Clears all reports and emails, sets UIDValidity to currUIDValidity, and
-// clears Recovery. Returns ErrRecoveryRequiredMissing if Recovery is nil,
-// or ErrRecoveryUIDValidityMismatch if currUIDValidity does not match.
+// clears Recovery and PendingReset. Returns ErrRecoveryRequiredMissing if
+// Recovery is nil, or ErrRecoveryUIDValidityMismatch if currUIDValidity does
+// not match.
 func (f *FakeStore) ResetForRecovery(currUIDValidity uint32) error {
 	f.ResetForRecoveryCallCount++
 	if f.ResetForRecoveryErr != nil {
@@ -311,6 +312,7 @@ func (f *FakeStore) ResetForRecovery(currUIDValidity uint32) error {
 	vCopy := currUIDValidity
 	f.UIDValidity = &vCopy
 	f.Recovery = nil
+	f.PendingReset = false
 	return nil
 }
 

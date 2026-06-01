@@ -150,8 +150,8 @@ func (e *ErrResetManifestVersionMismatch) Error() string {
 }
 
 // ErrResetManifestPhaseUnknown is returned when the on-disk manifest carries a
-// phase value outside the known range.  Treated as fail-closed so callers must
-// resolve the inconsistency manually rather than risk silent cleanup.
+// phase value outside the valid set {1, 4}.  Treated as fail-closed so callers
+// must resolve the inconsistency manually rather than risk silent cleanup.
 type ErrResetManifestPhaseUnknown struct {
 	Got int
 }

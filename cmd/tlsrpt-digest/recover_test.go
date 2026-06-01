@@ -108,6 +108,7 @@ func TestRecover_DiscardOldYesCallsResetForRecovery(t *testing.T) {
 	assert.Equal(t, exitOK, code)
 	assert.Equal(t, 1, st.ResetForRecoveryCallCount)
 	assert.Nil(t, st.Recovery, "recovery-required should be cleared after reset")
+	assert.False(t, st.PendingReset, "pending reset flag should be cleared after reset")
 	output := out.String()
 	assert.Contains(t, output, "200") // current UIDVALIDITY
 	assert.Contains(t, output, "discard-old --yes")
