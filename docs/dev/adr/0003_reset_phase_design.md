@@ -136,7 +136,8 @@ Since `fetch` and `gc` are expected to run periodically, storage capacity estima
 | Phase 1 (pre-commit pending reset, CurrUIDValidity match) | Cannot execute because `Open(OpenReadWrite)` returns `ErrPendingReset`. Displays the option to continue | Displays the presence of the pending reset and the option to continue. No destructive changes | Resumes `ResetForRecovery` from pre-commit via a single-run execution (`advanceResetPhases`) and converges to empty store + current UIDVALIDITY + `recovery_required` resolved |
 | Phase 1 (stale manifest, CurrUIDValidity mismatch) | `cleanupCompletedReset` removes the manifest and Open succeeds. Executes `ApplyRecovery` | Same as left (Open succeeds; display only) | `cleanupCompletedReset` removes the manifest and Open succeeds. Starts `ResetForRecovery` as a fresh start |
 | Phase 4 or no `recovery_required` (recovery_required reset) | Cleans up leftover manifest/staging during normal open. After that, treated as no recovery required | Same as left | Cleans up and exits. Effectively idempotent |
-| Legacy values 2, 3, or 5 (phases written by older versions), version mismatch, or manifest corruption | Fail closed (`ErrResetManifestPhaseUnknown`). Complete the operation with the old version before upgrading (see `docs/operations/legacy_reset_manifest_upgrade.md`). | Same as left | Same as left |
+| Legacy values 2, 3, or 5 (phases written by older versions) | Fail closed (`ErrResetManifestPhaseUnknown`). Complete the operation with the old version before upgrading (see `docs/operations/legacy_reset_manifest_upgrade.md`). | Same as left | Same as left |
+| Version mismatch (`ErrResetManifestVersionMismatch`) or manifest corruption (JSON/read error) | Fail closed. Manual inspection of the manifest file is required; rolling back and running legacy-phase procedures does not apply. | Same as left | Same as left |
 
 ---
 

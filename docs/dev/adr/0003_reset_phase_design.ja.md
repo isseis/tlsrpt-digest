@@ -136,7 +136,8 @@ stateDiagram-v2
 | フェーズ 1（コミット前の保留リセット、CurrUIDValidity 一致） | `Open(OpenReadWrite)` が `ErrPendingReset` を返すため実行不可。継続の選択肢を表示する。 | 保留リセットの存在と継続の選択肢を表示する。破壊的変更なし。 | コミット前からの一括実行（`advanceResetPhases`）で `ResetForRecovery` を再開し、空ストア + current UIDVALIDITY + `recovery_required` 解消へ収束する |
 | フェーズ 1（残留マニフェスト、CurrUIDValidity 不一致） | `cleanupCompletedReset` がマニフェストを削除して Open 成功。`ApplyRecovery` を実行する | 同左（Open 成功・表示のみ） | `cleanupCompletedReset` がマニフェストを削除して Open 成功。`ResetForRecovery` を fresh start で開始する |
 | フェーズ 4 または `recovery_required` なし（recovery_required リセット済み） | 通常 open 時に残留マニフェスト/ステージングをクリーンアップする。その後は recovery-required 不在として復旧不要扱い。 | 同左 | クリーンアップして終了する。実質的に冪等。 |
-| レガシー値 2・3・5（旧バージョンが書いたフェーズ）・バージョン不一致・マニフェスト破損 | fail-closed（`ErrResetManifestPhaseUnknown`）。アップグレード前に旧バージョンで完了させてからアップグレードすること（`docs/operations/legacy_reset_manifest_upgrade.ja.md` 参照）。 | 同左 | 同左 |
+| レガシー値 2・3・5（旧バージョンが書いたフェーズ） | fail-closed（`ErrResetManifestPhaseUnknown`）。アップグレード前に旧バージョンで完了させてからアップグレードすること（`docs/operations/legacy_reset_manifest_upgrade.ja.md` 参照）。 | 同左 | 同左 |
+| バージョン不一致（`ErrResetManifestVersionMismatch`）またはマニフェスト破損（JSON/読み取りエラー） | fail-closed。マニフェストファイルの手動確認が必要。レガシーフェーズの手順（旧バージョンでの操作完了）は適用されない。 | 同左 | 同左 |
 
 ---
 

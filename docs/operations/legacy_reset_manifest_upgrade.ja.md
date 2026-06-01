@@ -113,10 +113,10 @@ store: unknown reset manifest phase: got=N
 アップグレード後、次のコマンドで動作を確認する。
 
 ```bash
-tlsrpt-digest recover
+tlsrpt-digest recover; echo "exit code: $?"
 ```
 
-`No recovery required: store is in a consistent state.` または recovery-required の状態表示が出力されれば正常である。
+`recover` サブコマンドはステータス表示のみの実行（正常な「復旧不要」ケースを含む）で常に終了コード 1 を返す。終了コードではなく出力テキストで確認すること。`No recovery required: store is in a consistent state.` または recovery-required の状態表示が標準出力に出力されれば正常である。この確認ステップでは `set -e` や `&&` による連結を使わないこと。
 
 ---
 

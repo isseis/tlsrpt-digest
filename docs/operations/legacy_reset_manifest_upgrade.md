@@ -113,10 +113,10 @@ Temporarily roll back to the old version, complete the preparation steps above (
 After upgrading, verify operation with the following command.
 
 ```bash
-tlsrpt-digest recover
+tlsrpt-digest recover; echo "exit code: $?"
 ```
 
-If `No recovery required: store is in a consistent state.` or a display showing that recovery is required appears, the upgrade was successful.
+The `recover` subcommand always exits with code 1 for status-only display (including the healthy case where no recovery is needed). Check the output text rather than the exit code: if `No recovery required: store is in a consistent state.` or a recovery-required status display appears in stdout, the upgrade was successful. Do not use `set -e` or `&&` chaining for this verification step.
 
 ---
 
