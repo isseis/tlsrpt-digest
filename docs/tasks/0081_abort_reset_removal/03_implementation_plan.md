@@ -343,6 +343,19 @@
 - [ ] `make lint` を実行してリントエラーがないことを確認する。
 - [ ] `make deadcode` を実行して新たな未使用関数が検出されないことを確認する。（AC-04）
 
+### PR-1 作成ポイント: abort-reset feature removal
+
+**対象ステップ**: 1-1 / 1-2 / 1-3 / 1-4 / 2-1 / 2-2 / 2-3 / 2-4 / 3-1 / 3-2 / 3-3 / 3-4 / 3-5 / 3-6 / 3-7 / 3-8 / 3-9 / 3-10 / 3-11
+
+**推奨タイトル**: `refactor(0081): remove AbortReset feature and legacy phase fallbacks`
+
+**レビュー観点**: `Store` インターフェースの `AbortReset` 削除と `cmd` 層への波及 / `validateManifestPhase` の `{1, 4}` 2 値判定への変更 / operator 向け案内からの abort 参照除去 / fail-closed テスト（フェーズ 2・3・5）の正確性
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+
 ---
 
 ### フェーズ 4：ドキュメント改訂
@@ -385,6 +398,19 @@
 - [ ] フェーズ 5 のマニフェストが残存するストアのアップグレード前に旧バージョンで `AbortReset`（`recover --abort-reset --yes`）を完了する手順を記載する。（AC-22）
 - [ ] 手順書内にアップグレード後の確認として、旧マニフェストが残る場合は新バージョンが `ErrResetManifestPhaseUnknown` で停止し、ステージング・マニフェストを保全することを記載する（`02_architecture.md` §2.4 参照）。（AC-21、AC-22）
 
+### PR-2 作成ポイント: Japanese documentation update
+
+**対象ステップ**: 4-1 / 4-2 / 4-3 / 4-4
+
+**推奨タイトル**: `docs(0081): update ADR-0003, process locking guide, glossary, and add upgrade runbook`
+
+**レビュー観点**: ADR フェーズ表・状態遷移図・不変条件表からのフェーズ 2・3・5 削除 / `process_locking` の `--abort-reset` 参照除去 / 運用手順書（フェーズ 2・3・5 残存ストアの移行手順）の完全性
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+
 #### 4-5. 英語版の反映
 
 - [ ] `docs/dev/adr/0003_reset_phase_design.ja.md` → `.md` に `/mktrans` で反映する。（AC-19）
@@ -392,9 +418,24 @@
 - [ ] `docs/operations/legacy_reset_manifest_upgrade.ja.md` → `.md` に `/mktrans` で反映する。（AC-21、AC-22）
 - [ ] 英語版反映後、ADR・process locking・運用手順の `.md` でも日本語版と同じ検索パターンを確認し、翻訳漏れがないことを検証する。（AC-19〜AC-22）
 
+### PR-3 作成ポイント: English translations
+
+**対象ステップ**: 4-5
+
+**推奨タイトル**: `docs(0081): translate updated ADR-0003, process locking guide, and upgrade runbook to English`
+
+**レビュー観点**: 日英間の内容整合性（廃止済みフェーズ 2・3・5 への言及が英語版に残っていないこと） / `--abort-reset` 参照が翻訳で再導入されていないこと
+
+- [ ] `make test && make lint` がグリーンであることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+
 ---
 
 ## 3. 実装順序とマイルストーン
+
+### 3.1 マイルストーン
 
 | マイルストーン | 対象フェーズ | 成果物 | 完了判定 |
 |---|---|---|---|
@@ -402,6 +443,16 @@
 | M2：CLI・通知案内から abort 経路を削除 | フェーズ 2 | `cmd/tlsrpt-digest` と `internal/notify` のフラグ・文言更新 | `go build ./cmd/tlsrpt-digest/...` と `go build ./internal/notify/...` が通る |
 | M3：テストを新しい fail-closed 契約へ整合 | フェーズ 3 | Go テスト更新、新規 fail-closed テスト、静的検査 | `go test -tags test ./internal/store/testutil`・`make test`・`make lint`・`make deadcode` が通る |
 | M4：設計・運用ドキュメントを `{1, 4}` に整合 | フェーズ 4 | ADR、process locking、運用手順、英語版反映 | §6 の受け入れ条件検証と §8 の検索がすべて完了 |
+
+### 3.2 PR 構成
+
+フェーズ 1〜3 は `Store` インターフェース変更が `cmd` 層のコンパイルに直接波及し、かつフェーズ 3 のテスト削除・更新がフェーズ 1・2 のシンボル削除を前提とするため、`make test && make lint` がグリーンになる最小単位は「フェーズ 1〜3 一体」となる。フェーズ 4（ドキュメント）は日本語版と英語翻訳に分割できる。
+
+| PR | 対象ステップ | 主な変更内容 |
+|---|---|---|
+| PR-1 | 1-1 / 1-2 / 1-3 / 1-4 / 2-1 / 2-2 / 2-3 / 2-4 / 3-1 / 3-2 / 3-3 / 3-4 / 3-5 / 3-6 / 3-7 / 3-8 / 3-9 / 3-10 / 3-11 | `AbortReset` 機能の全削除：`internal/store` API・CLI・通知層コード＋テスト整合 |
+| PR-2 | 4-1 / 4-2 / 4-3 / 4-4 | 日本語ドキュメント改訂：ADR-0003・`process_locking`・用語集・運用手順書新規作成 |
+| PR-3 | 4-5 | 英語版反映：`/mktrans` で ADR・`process_locking`・運用手順書を翻訳 |
 
 ---
 
@@ -469,10 +520,9 @@
 
 ## 7. 実装チェックリスト
 
-- [ ] M1：フェーズ 1 のストア層削除が完了し、`go build ./internal/store/...` が通る。
-- [ ] M2：フェーズ 2 の CLI・通知層削除が完了し、`go build ./cmd/tlsrpt-digest/...` と `go build ./internal/notify/...` が通る。
-- [ ] M3：フェーズ 3 のテスト整合が完了し、`go test -tags test ./internal/store/testutil`・`make test`・`make lint`・`make deadcode` が通る。
-- [ ] M4：フェーズ 4 のドキュメント改訂と `/mktrans` 反映が完了する。
+- [ ] PR-1 マージ済み（対象ステップ: 1-1 / 1-2 / 1-3 / 1-4 / 2-1 / 2-2 / 2-3 / 2-4 / 3-1 / 3-2 / 3-3 / 3-4 / 3-5 / 3-6 / 3-7 / 3-8 / 3-9 / 3-10 / 3-11）
+- [ ] PR-2 マージ済み（対象ステップ: 4-1 / 4-2 / 4-3 / 4-4）
+- [ ] PR-3 マージ済み（対象ステップ: 4-5）
 - [ ] §6 の全 AC 行に実装タスクとテスト・検証タスクが紐づいている。
 - [ ] §8 の横断検索で、意図しない abort・レガシーフェーズ参照が残っていない。
 
