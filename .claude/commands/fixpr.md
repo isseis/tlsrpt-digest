@@ -108,9 +108,22 @@ Based on this assessment, classify the thread as one of:
 
 Skip and move to the next thread (revisit in a later step).
 
+## Check PR Description Accuracy
+
+Before pushing, verify that the PR title and body still accurately describe the current state of the changes. A PR description becomes stale when the approach changes significantly during review (e.g., a TLS strategy is revised, a scope item is added or removed, a file list changes). Stale descriptions cause reviewers to flag inconsistencies that are not real bugs.
+
+If the description is stale, update it:
+
+```
+gh pr edit NUMBER --body "$(cat <<'EOF'
+...updated body...
+EOF
+)"
+```
+
 ## Push
 
-Once all clear comments have been addressed, run `git push`.
+Once the PR description is accurate and all clear comments have been addressed, run `git push`.
 
 ## Revisit Skipped Threads
 

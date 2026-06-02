@@ -24,6 +24,8 @@ Work in the following order.
 - Identify existing components that should be reused.
 - Do not design new logic that duplicates responsibilities already handled elsewhere in the repository.
 - For any diagram edge that depicts the *current* behavior of existing components (i.e., relationships that already exist in code today, not new relationships this feature is introducing), verify that it accurately reflects actual code behavior. Edges that show newly planned relationships introduced by this feature do not need to match existing code, but should be clearly distinguishable from current-behavior edges (e.g., by using the `enhanced` class or an explanatory label).
+- If the design introduces any behavior that conflicts with or creates an exception to policies established in other architecture documents under `docs/tasks/`, identify and document all three of the following inline in the design (not only in an appendix): (1) the original policy and where it is documented, (2) why this design is an intentional exception, (3) which existing tests assert the old behavior and will therefore need updating.
+- Identify existing tests (in `*_test.go` files) that assert behaviors this design changes. Note them in the component responsibilities table or the relevant design section so implementers know which tests require updating.
 
 7. Create `02_architecture.md` in the same task directory.
 - Write in Japanese.
@@ -55,6 +57,8 @@ Work in the following order.
 - [ ] All required sections from the requirements process guide are present.
 - [ ] All functional requirements and acceptance criteria in `01_requirements.md` are reflected in the design.
 - [ ] For each acceptance criterion that applies to an existing code pattern (e.g., "log slog.Warn when X fails"), the design accounts for ALL instances of that pattern in the codebase, not only the most prominent ones. Verify by searching the codebase for the pattern.
+- [ ] Class diagrams: each method signature and field type shown matches the actual Go source (verify by reading the corresponding `.go` file). Pay special attention to return types, including error returns, and fully-qualified package prefixes on types.
+- [ ] If the design introduces an exception to a policy established in another architecture document under `docs/tasks/`, the exception is stated inline (not only in an appendix) with: the original policy and its location, the reason for the exception, and which existing tests assert the old behavior and will need updating.
 - [ ] Mermaid diagrams follow the documented conventions consistently.
 - [ ] Data nodes use cylinder shape `[("label")]`.
 - [ ] Labels with special characters are double-quoted.
