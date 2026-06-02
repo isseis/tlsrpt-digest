@@ -60,6 +60,17 @@ func TestBuildTLSConfigSystemCA(t *testing.T) {
 	require.Equal(t, uint16(tls.VersionTLS12), cfg.MinVersion)
 }
 
+// TestBuildTLSConfigInsecureSkipVerify verifies that InsecureSkipVerify is reflected in tls.Config.
+func TestBuildTLSConfigInsecureSkipVerify(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := buildTLSConfig(Config{InsecureSkipVerify: true})
+	require.NoError(t, err)
+	require.True(t, cfg.InsecureSkipVerify)
+	require.Nil(t, cfg.RootCAs)
+	require.Equal(t, uint16(tls.VersionTLS12), cfg.MinVersion)
+}
+
 func TestTruncateToDate(t *testing.T) {
 	t.Parallel()
 

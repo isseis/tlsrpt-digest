@@ -419,6 +419,7 @@ func TestBuildIMAPConfig(t *testing.T) {
 	assert.Equal(t, int64(1024), got.MaxMessageBytes)
 	assert.Equal(t, "testuser", got.Username)
 	assert.Equal(t, config.Secret("testpass"), got.Password)
+	assert.False(t, got.InsecureSkipVerify)
 }
 
 func TestLoadConfig(t *testing.T) {
