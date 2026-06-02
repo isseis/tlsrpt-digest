@@ -316,7 +316,7 @@
 - [ ] `insecureMailFetcherFactory(cfg imap.Config) (imap.MailFetcher, error)` ヘルパーを追加する。先頭コメント: `// insecureMailFetcherFactory wraps imap.NewIMAPClient with InsecureSkipVerify=true for integration tests.`
   - 受け取った `cfg` の `InsecureSkipVerify` を `true` に設定してから `imap.NewIMAPClient(cfg)` を呼ぶ
 
-- [ ] `testRunID()` と `testMailboxName(t *testing.T) string` ヘルパーを追加する。`testRunID` は Phase 2 と同じ方針で run ごとに一意な suffix を返す。`testMailboxName` はテスト名から英数字・ハイフン以外の文字をハイフンに置換し、run-unique suffix を含めた文字列を 32 文字以内に制限して返す（IMAP メールボックス名の長さ制限に対応）。失敗・中断した過去 run のメールボックス名と衝突しないようにする
+- [ ] `testRunID()` と `testMailboxName(t *testing.T) string` ヘルパーを追加する。`testRunID` は Phase 2 と同じ方針で run ごとに一意な suffix を返す。`testMailboxName` はテスト名から英数字・ハイフン以外の文字をハイフンに置換し、プレフィックスを 24 文字以内に切り詰めてから `"-" + testRunID()` の suffix を付加して返す（suffix が 32 文字上限によって切り捨てられないよう、先にプレフィックスを切り詰める）。失敗・中断した過去 run のメールボックス名と衝突しないようにする
 
 - [ ] `TestIntegration_Recovery_KeepOld` を追加する。先頭コメント: `// TestIntegration_Recovery_KeepOld verifies fetch detects UIDVALIDITY change and recover --mode keep-old resolves it (requirement F-004, AC-11, AC-12).`
   アーキテクチャ設計書 §6.2 のシーケンス図に従い次の手順を実装する:
@@ -330,15 +330,15 @@
   8. `withCommandRunners(t, map[SubcommandName]SubcommandRunner{subcommandFetch: fr, subcommandRecover: newRecoverRunner()})` でコマンドランナーを差し替える
   9. `runCLI` で `fetch -config <configPath> -dry-run` を実行し `exitOK` を検証する（UIDVALIDITY 初回記録）。`-dry-run` フラグは Slack 等の HTTP 通知リクエストをスキップするためのものであり、ストアへの書き込み（`SaveUIDValidity` 等）は dry-run でも通常どおり実行される。空メールボックスに対しては通知が発生しないため `-dry-run` がなくても動作するが、明示的に付与することで Slack 設定なしで Bootstrap が成功することを保証する（`buildTestConfigTOML` の `allowed_host = ""` と合わせて Slack URL 不要にする設計）
   10. `imaptestutil.DeleteMailbox(t, fixedCfg, mailbox)` と `imaptestutil.CreateMailbox(t, fixedCfg, mailbox)` で UIDVALIDITY を変化させる
-  11. `runCLI` で fetch を再実行し終了コードが `exitError` であることを検証する（AC-11 (1)）
+  11. `runCLI` で `fetch -config <configPath> -dry-run` を再実行し終了コードが `exitError` であることを検証する（AC-11 (1)）。`-dry-run` を付与することで `allowed_host = ""` の設定でも Bootstrap が正常に完了し、UIDVALIDITY 不一致が原因の `exitError` であることを確認できる
   12. `store.Open(rootDir, store.IMAPIdentity{Host: imapHost, Port: imapPort, Mailbox: mailbox}, store.OpenReadOnly)` でストアを開き `LoadRecoveryRequired` を呼び `found == true` を検証する（AC-11 (2)）。`IMAPIdentity` の `Host`・`Port`・`Mailbox` は `buildTestConfigTOML` に渡した値と必ず一致させること。`store.Store` には `Close` メソッドがないため、存在しない close 処理を追加しないこと
   13. `runCLI` で `recover -config <configPath> -mode keep-old` を実行し `exitOK` を検証する（AC-12）
-  14. `runCLI` で fetch を再実行し `exitOK` を検証する（recovery 解消の確認）
+  14. `runCLI` で `fetch -config <configPath> -dry-run` を再実行し `exitOK` を検証する（recovery 解消の確認）
 
 - [ ] `TestIntegration_Recovery_DiscardOld` を追加する。先頭コメント: `// TestIntegration_Recovery_DiscardOld verifies recover --mode discard-old --yes resolves UIDVALIDITY mismatch (requirement F-004, AC-11, AC-13).`
-  - `TestIntegration_Recovery_KeepOld` と同じ手順でステップ 1〜12 を実施する。メールボックス名は `testMailboxName(t)` で生成するためテスト関数名が異なれば自動的に別の固有名になる
+  - `TestIntegration_Recovery_KeepOld` と同じ手順でステップ 1〜12 を実施する。メールボックス名は `testMailboxName(t)` で生成するためテスト関数名が異なれば自動的に別の固有名になる（ステップ 11 の fetch 再実行も `-dry-run` 付きで行う）
   - ステップ 13 を `runCLI` で `recover -config <configPath> -mode discard-old -yes` に変更し `exitOK` を検証する（AC-13）
-  - ステップ 14 は同様に fetch が `exitOK` を返すことを検証する
+  - ステップ 14 は同様に `fetch -config <configPath> -dry-run` が `exitOK` を返すことを検証する
 
 **フェーズ完了の確認**:
 - [ ] greenmail IMAPS 環境（Phase 5 の devcontainer 更新後、または同等の手動設定）で `go test -v -count=1 -tags test,integration ./cmd/tlsrpt-digest/...` が通過すること
@@ -382,8 +382,8 @@
 
 - [ ] `greenmail` サービスの healthcheck コマンドを変更する（devcontainer は Docker Compose なので `healthcheck.test:` キーで記述する）:
   - 変更前: `test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3143"]`
-  - 変更後: `test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 3993"]`
-  - 注: devcontainer は Docker Compose 形式のため `healthcheck.test:` キーが有効。GitHub Actions CI の service container（`options: --health-cmd ...`）とは記述形式が異なる
+  - 変更後: `test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3993"]`
+  - 注: `bash` の `/dev/tcp` 機能は `nc` と異なり JRE ベースイメージに含まれる `bash` で動作する（元の devcontainer でも同コマンドを使用しており実績あり）。devcontainer は Docker Compose 形式のため `healthcheck.test:` キーが有効。GitHub Actions CI の service container（`options: --health-cmd ...`）とは記述形式が異なる
 
 #### 変更ファイル: `Makefile`
 
@@ -409,7 +409,7 @@
   - greenmail service container（`greenmail/standalone:2.1.3`）を設定する:
     - `ports: ["3993:3993", "3025:3025"]`
     - `env.GREENMAIL_OPTS`: `-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=imap-test:imap-test@example.com -Dgreenmail.users.login=email`
-    - ヘルスチェックは `options:` フィールドに Docker の `--health-*` フラグで指定する（GitHub Actions の `services` は `healthcheck:` キーをサポートしないため）: `options: --health-cmd "sh -c 'nc -z 127.0.0.1 3993'" --health-interval 5s --health-timeout 3s --health-retries 10 --health-start-period 10s`
+    - ヘルスチェックは `options:` フィールドに Docker の `--health-*` フラグで指定する（GitHub Actions の `services` は `healthcheck:` キーをサポートしないため）: `options: --health-cmd "bash -c 'echo > /dev/tcp/localhost/3993'" --health-interval 5s --health-timeout 3s --health-retries 10 --health-start-period 10s`
   - 環境変数（ジョブレベル `env:` に設定）:
     - `IMAP_TEST_HOST: localhost`
     - `IMAP_TEST_PORT: "3993"`
@@ -424,7 +424,7 @@
 
 - [ ] `changed_files`（改行区切り）を標準入力または第 1 引数のファイルパスから受け取り、`has-code-changes`、`has-devcontainer-changes`、`has-integration-changes` を算出するスクリプトを作成する。`GITHUB_OUTPUT` が設定されている場合はそのファイルへ `key=value` を追記し、未設定の場合は stdout に同じ `key=value` を出力する。既存 `ci.yml` の `has-code-changes`・`has-devcontainer-changes` 判定と同じ挙動を維持する
 
-- [ ] `has-integration-changes` の判定条件は、Go ソース（`*.go`）、`Makefile`、`.github/workflows/` 以下のファイル、`.devcontainer/` 以下のファイル、`testdata/` 以下のファイルのいずれかが変更された場合に `true` とする。その他の docs-only 変更では `false` とする
+- [ ] `has-integration-changes` の判定条件は、Go ソース（`*.go`）、`Makefile`、`.github/workflows/` 以下のファイル、`.github/scripts/` 以下のファイル、`.devcontainer/` 以下のファイル、`testdata/` 以下のファイルのいずれかが変更された場合に `true` とする。その他の docs-only 変更では `false` とする（`.github/scripts/` を含めることで、変更分類スクリプト自体の変更が integration-test ジョブをスキップしてマージされることを防ぐ）
 
 #### 新規ファイル: `.github/scripts/classify-changes_test.sh`
 
@@ -432,6 +432,7 @@
   - `internal/imap/client.go` → code `true` / devcontainer `false` / integration `true`
   - `Makefile` → code `true` / devcontainer `false` / integration `true`
   - `.github/workflows/ci.yml` → code `true` / devcontainer `false` / integration `true`
+  - `.github/scripts/classify-changes.sh` → code `true` / devcontainer `false` / integration `true`
   - `.devcontainer/docker-compose.base.yml` → code `false` / devcontainer `true` / integration `true`
   - `testdata/tlsrpt_google.eml` → code `true` / devcontainer `false` / integration `true`
   - `docs/overview.md` のみ → code `false` / devcontainer `false` / integration `false`
