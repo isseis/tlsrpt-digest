@@ -28,11 +28,16 @@ var sanitizeIdentifier = regexp.MustCompile(`[^a-zA-Z0-9-]`)
 
 // testRecipientEmail returns a unique recipient email address derived from the
 // test name, ensuring no collision with previous runs on the same greenmail
-// instance.
+// instance. The local-part is kept within the 64-byte RFC 5321 limit by
+// truncating the prefix to 37 characters before appending "-" + ULID (26 chars).
 func testRecipientEmail(t *testing.T) string {
 	t.Helper()
 	sanitized := sanitizeIdentifier.ReplaceAllString(t.Name(), "-")
-	return sanitized + "-" + testRunID() + "@test.example.com"
+	prefix := sanitized
+	if len(prefix) > 37 {
+		prefix = prefix[:37]
+	}
+	return prefix + "-" + testRunID() + "@test.example.com"
 }
 
 // testMessageID returns a unique Message-ID for the test run.
