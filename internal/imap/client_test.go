@@ -60,7 +60,7 @@ func TestBuildTLSConfigSystemCA(t *testing.T) {
 	require.Equal(t, uint16(tls.VersionTLS12), cfg.MinVersion)
 }
 
-// TestBuildTLSConfigInsecureSkipVerify verifies that InsecureSkipVerify is reflected in tls.Config (requirement F-001, AC-01).
+// TestBuildTLSConfigInsecureSkipVerify verifies that InsecureSkipVerify is reflected in tls.Config.
 func TestBuildTLSConfigInsecureSkipVerify(t *testing.T) {
 	t.Parallel()
 
