@@ -183,7 +183,7 @@
   - `Mailbox`: `"INBOX"`、`InsecureSkipVerify`: `true`
   - `smtpAddr`: `IMAP_TEST_SMTP_HOST:IMAP_TEST_SMTP_PORT`
 
-- [ ] `testMailboxName(t *testing.T) string` ヘルパーを追加する。テスト名から英数字・ハイフン以外の文字をハイフンに置換し、`testRunID()` の suffix を付け、全体を 32 文字以内に切り詰めた文字列を返す（IMAP メールボックス名に `@` は使用できないため、`testRecipientEmail(t)` と別の実装が必要）。`TestIntegration_UIDValidity_Change` での非 INBOX メールボックス名生成に使用する。
+- [ ] `testMailboxName(t *testing.T) string` ヘルパーを追加する。テスト名から英数字・ハイフン以外の文字をハイフンに置換し、まず先頭を 24 文字以内に切り詰めてから `"-" + testRunID()` の suffix を付加した文字列を返す（IMAP メールボックス名に `@` は使用できないため、`testRecipientEmail(t)` と別の実装が必要）。切り詰めは suffix を削らないよう**先頭部分を先に**制限する。`TestIntegration_UIDValidity_Change` での非 INBOX メールボックス名生成に使用する。
 
 - [ ] 環境変数判定をテスト可能にするため、`missingFixedUserEnv(getenv func(string) string) []string` と `missingSMTPEnv(getenv func(string) string) []string` を追加し、`requireFixedUserEnv` と `requireSMTPEnv` はその結果が空でない場合にだけ `t.Skip(...)` を呼ぶようにする。`IMAP_TEST_PORT` の値は整数として parse できることも検査対象に含める。
 
@@ -192,13 +192,15 @@
 #### 新規ファイル: `internal/imap/testutil/helpers.go`
 
 - [ ] `//go:build test` タグでファイルを作成する。パッケージ名は `imaptestutil`。
-- [ ] `CreateMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。`crypto/tls` と `emersion/go-imap` の `imapclient.DialTLS` を使い、`buildTLSConfig` の代わりに `tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify, MinVersion: tls.VersionTLS12}` を渡してダイヤルする。接続成功直後に接続終了の `defer` を登録し、`cfg.Username` と `cfg.Password.Value()` で `LOGIN` 成功後に `LOGOUT` の `defer` を登録してから、`CREATE mailbox` コマンドを実行する。CREATE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
+- [ ] `CreateMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。`crypto/tls` と `emersion/go-imap` の `imapclient.DialTLS` を使い、`buildTLSConfig` の代わりに `tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify, MinVersion: tls.VersionTLS12}` を渡してダイヤルする。`tls.Config` リテラルには `//nolint:gosec // InsecureSkipVerify is set only in integration tests via cfg.InsecureSkipVerify; production paths never set it true` コメントを付与する（`make lint --build-tags test` で gosec G402 が `testutil/helpers.go` に適用されるため）。接続成功直後に接続終了の `defer` を登録し、`cfg.Username` と `cfg.Password.Value()` で `LOGIN` 成功後に `LOGOUT` の `defer` を登録してから、`CREATE mailbox` コマンドを実行する。CREATE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
 - [ ] `DeleteMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。同じ接続・LOGIN・LOGOUT 手順で `DELETE mailbox` コマンドを実行する。対象メールボックスが存在しない場合も greenmail の応答をそのままテスト失敗として扱う。DELETE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
 
 > **テストヘルパーファイルの分類**: `docs/dev/developer_guide/test_organization.md` の Classification A に従い、公開 API のみを使う cross-package helper として `internal/imap/testutil/helpers.go` に配置し、`//go:build test` タグを付与する。これにより `make lint`（`--build-tags test`）の静的解析対象に含まれ、linter によるコンパイルエラー早期検出が機能する。
 
 **フェーズ完了の確認**:
 - [ ] `make test` が通過すること（統合テストはタグなしでスキップされること）
+- [ ] `go test -c -tags test,integration -o /dev/null ./internal/imap/...` が通過すること（`client_integration_test.go` と `testutil/helpers.go` のコンパイルエラーを Phase 2 の段階で検出する）
+- [ ] `make lint` が通過すること
 
 ### PR-2 作成ポイント: integration test helpers
 
@@ -228,7 +230,7 @@
 - [ ] `TestIntegration_EmptyInbox` を追加する。先頭に次のコメントを付ける: `// TestIntegration_EmptyInbox verifies FetchMeta on an empty fixed-user mailbox (requirement F-002, AC-05).`
   - `requireFixedUserEnv(t)` を呼ぶ
   - `loadIntegrationConfig(t)` で `imap.Config` を構築する
-  - `imap.NewIMAPClient(cfg)` で接続する
+  - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する
   - `FetchMeta(ctx, time.Now().AddDate(-1, 0, 0))` を呼ぶ
   - `len(result.Messages) == 0` かつ `result.UIDValidity > 0` を `require.Empty` / `require.Positive` で検証する
 
@@ -236,26 +238,28 @@
 - [ ] `TestIntegration_FetchMeta` を追加する。先頭コメント: `// TestIntegration_FetchMeta verifies FetchMeta retrieves metadata of an injected message (requirement F-002, AC-06).`
   - `loadSMTPTestConfig(t)` を呼ぶ（`cfg.Username` は `testRecipientEmail(t)` から生成したテスト専用の動的ユーザアドレスであり、固定ユーザ `IMAP_TEST_USER` とは別物である）
   - `messageID := testMessageID(t)` を作成し、`injectTestMail(t, smtpAddr, cfg.Username, "fetch-meta-test", "test body", messageID)` でメール注入する
-  - `imap.NewIMAPClient(cfg)` で接続（`cfg.Username` = 受信者アドレス、`cfg.Password` = 受信者アドレス）
+  - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する（`cfg.Username` = 受信者アドレス、`cfg.Password` = 受信者アドレス）
   - `context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使って `FetchMeta` を実行する
   - `result.Messages` から `normalizeMessageID(meta.MessageID) == normalizeMessageID(messageID)` のメッセージを 1 件だけ見つけ、その `UID > 0`、`Size > 0` を検証する。メールボックス全体の `len(result.Messages) == 1` は assert しない（同一 greenmail run に過去メールが残る可能性に備える）
 
 ##### AC-07: Download でメール本文取得
 - [ ] `TestIntegration_Download` を追加する。先頭コメント: `// TestIntegration_Download verifies Download retrieves full message body (requirement F-002, AC-07).`
   - `injectTestMail` で subject を `"download-test"`、messageID を `testMessageID(t)` としてメール注入する
+  - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する
   - `context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使って `FetchMeta` を呼び、注入した `Message-ID` に一致するメッセージの UID を取得する
   - 同じ context で `Download(ctx, []uint32{uid})` を実行する
   - 返されたバイト列に `Subject: download-test` が含まれることを `require.Contains` で検証する（`injectTestMail` が RFC 2822 ヘッダを正しく構築した結果、Subject ヘッダが本文に含まれる）
 
 ##### AC-08: MarkSeen で Seen フラグ付与
 - [ ] `TestIntegration_MarkSeen` を追加する。先頭コメント: `// TestIntegration_MarkSeen verifies MarkSeen sets the Seen flag (requirement F-002, AC-08).`
-  - メール注入後、`context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使って `FetchMeta` を呼び、注入した `Message-ID` に一致するメッセージを選択して `Seen == false` を確認する
+  - メール注入後、`imap.NewIMAPClient(cfg)` で接続し直後に `t.Cleanup(func() { client.Close() })` を登録してから、`context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使って `FetchMeta` を呼び、注入した `Message-ID` に一致するメッセージを選択して `Seen == false` を確認する
   - 同じ context で `MarkSeen(ctx, []uint32{uid})` を実行する
-  - 別セッションで `imap.NewIMAPClient(cfg)` を再接続し、同じ since 値で `FetchMeta` を呼んで、同じ `Message-ID` のメッセージが `Seen == true` になっていることを検証する
+  - 別セッションで `imap.NewIMAPClient(cfg)` を再接続し直後に `t.Cleanup(func() { client2.Close() })` を登録してから、同じ since 値で `FetchMeta` を呼んで、同じ `Message-ID` のメッセージが `Seen == true` になっていることを検証する
 
 ##### AC-09: UIDValidity 安定性確認
 - [ ] `TestIntegration_UIDValidity_Stable` を追加する。先頭コメント: `// TestIntegration_UIDValidity_Stable verifies UIDValidity is stable across consecutive FetchMeta calls (requirement F-002, AC-09).`
   - `requireFixedUserEnv(t)` を呼ぶ
+  - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する
   - `context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使い、同一 INBOX に対して `FetchMeta` を 2 回呼ぶ
   - 両呼び出しの `UIDValidity` が同一であることを `require.Equal` で検証する
 
@@ -265,9 +269,9 @@
   - `loadIntegrationConfig(t)` で固定ユーザの接続設定 `fixedCfg` を取得する
   - `testMailboxName(t)` でテスト固有の非 INBOX メールボックス名を導出する（`@` を含まない IMAP 互換の名前。Phase 2 で `client_integration_test.go` に追加する `testMailboxName` ヘルパーを使用する）
   - `imaptestutil.CreateMailbox(t, fixedCfg, mailbox)` でメールボックスを作成し、`t.Cleanup(func() { imaptestutil.DeleteMailbox(t, fixedCfg, mailbox) })` を登録する
-  - `fixedCfg` の `Mailbox` フィールドを当該非 INBOX メールボックス名に設定した新しい `Config` で `imap.NewIMAPClient` を呼んで接続し、`FetchMeta` で `V1 := result.UIDValidity` を取得する
+  - `fixedCfg` の `Mailbox` フィールドを当該非 INBOX メールボックス名に設定した新しい `Config` で `imap.NewIMAPClient` を呼んで接続し、直後に `t.Cleanup(func() { client1.Close() })` を登録してから `FetchMeta` で `V1 := result.UIDValidity` を取得する
   - `imaptestutil.DeleteMailbox(t, fixedCfg, mailbox)` で削除し、`imaptestutil.CreateMailbox(t, fixedCfg, mailbox)` で同名で再作成する。クリーンアップは初回作成後に登録した 1 つだけにし、テスト終了時に最終的な再作成済みメールボックスを削除する
-  - 新しい接続で `FetchMeta` を呼び `V2 := result.UIDValidity` を取得し、`require.NotEqual(t, V1, V2)` で検証する
+  - 再度 `imap.NewIMAPClient` で接続し直後に `t.Cleanup(func() { client2.Close() })` を登録してから `FetchMeta` を呼び `V2 := result.UIDValidity` を取得し、`require.NotEqual(t, V1, V2)` で検証する
 
 **フェーズ完了の確認**:
 - [ ] greenmail IMAPS 環境（Phase 5 の devcontainer 更新後、または同等の手動設定）で `go test -v -count=1 -tags test,integration ./internal/imap/...` が通過すること
@@ -376,9 +380,10 @@
   - 変更前: `- "127.0.0.1:3143:3143"  # IMAP`
   - 変更後: `- "127.0.0.1:3993:3993"  # IMAPS`
 
-- [ ] `greenmail` サービスの healthcheck コマンドを変更する:
+- [ ] `greenmail` サービスの healthcheck コマンドを変更する（devcontainer は Docker Compose なので `healthcheck.test:` キーで記述する）:
   - 変更前: `test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3143"]`
-  - 変更後: `test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3993"]`
+  - 変更後: `test: ["CMD", "sh", "-c", "nc -z 127.0.0.1 3993"]`
+  - 注: devcontainer は Docker Compose 形式のため `healthcheck.test:` キーが有効。GitHub Actions CI の service container（`options: --health-cmd ...`）とは記述形式が異なる
 
 #### 変更ファイル: `Makefile`
 
@@ -404,7 +409,7 @@
   - greenmail service container（`greenmail/standalone:2.1.3`）を設定する:
     - `ports: ["3993:3993", "3025:3025"]`
     - `env.GREENMAIL_OPTS`: `-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=imap-test:imap-test@example.com -Dgreenmail.users.login=email`
-    - healthcheck コマンド: `["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3993"]`、`interval: 5s`、`timeout: 3s`、`retries: 10`、`start_period: 10s`
+    - ヘルスチェックは `options:` フィールドに Docker の `--health-*` フラグで指定する（GitHub Actions の `services` は `healthcheck:` キーをサポートしないため）: `options: --health-cmd "sh -c 'nc -z 127.0.0.1 3993'" --health-interval 5s --health-timeout 3s --health-retries 10 --health-start-period 10s`
   - 環境変数（ジョブレベル `env:` に設定）:
     - `IMAP_TEST_HOST: localhost`
     - `IMAP_TEST_PORT: "3993"`
@@ -436,7 +441,7 @@
 
 #### 新規ファイル: `.github/scripts/verify-integration-workflow.sh`
 
-- [ ] `.github/workflows/ci.yml` を検証するスクリプトを作成する。`ruby` の `YAML.load_file` など、構造化パーサで YAML を読み、文字列 grep だけに依存しない
+- [ ] `.github/workflows/ci.yml` を検証するスクリプトを作成する。`go run` で実行できる Go スクリプトとして実装し（`ruby` は Go 開発コンテナに含まれないため）、`gopkg.in/yaml.v3` などの構造化パーサで YAML を読み、文字列 grep だけに依存しない。スクリプトファイル自体は `go run .github/scripts/verify-integration-workflow.go` 形式でも、`//go:build ignore` 付きの単一 `.go` ファイルとして呼び出す形でも可
 
 - [ ] `integration-test` ジョブについて、`needs: check-changes`、`if: needs.check-changes.outputs.has-integration-changes == 'true'`、greenmail service image `greenmail/standalone:2.1.3`、ports `3993:3993` と `3025:3025`、`GREENMAIL_OPTS` の固定ユーザ設定、ジョブ env の `IMAP_TEST_*` 全項目、`make test-integration` 実行ステップを検証する（AC-14）
 
