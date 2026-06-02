@@ -113,7 +113,7 @@
 
 #### 変更ファイル: `internal/imap/imap.go`
 
-- [ ] `Config` 構造体の末尾に `InsecureSkipVerify bool` フィールドを追加する。フィールドコメントは次の英語文字列とする:
+- [x] `Config` 構造体の末尾に `InsecureSkipVerify bool` フィールドを追加する。フィールドコメントは次の英語文字列とする:
   ```
   // InsecureSkipVerify, when true, disables TLS certificate verification.
   // Intended only for integration tests against self-signed servers
@@ -122,24 +122,24 @@
 
 #### 変更ファイル: `internal/imap/client.go`
 
-- [ ] `buildTLSConfig` 内の `tls.Config` リテラルにある `InsecureSkipVerify: false,` を `InsecureSkipVerify: cfg.InsecureSkipVerify,` に変更する。
+- [x] `buildTLSConfig` 内の `tls.Config` リテラルにある `InsecureSkipVerify: false,` を `InsecureSkipVerify: cfg.InsecureSkipVerify,` に変更する。
   - 変更前: `InsecureSkipVerify: false,`
   - 変更後: `InsecureSkipVerify: cfg.InsecureSkipVerify,`
 
-- [ ] `buildTLSConfig` の `tls.Config` リテラルに、`gosec` の `G402` を限定的に抑制する `//nolint:gosec` を付与する。理由コメントには「`InsecureSkipVerify` は設定ファイルに公開せず、AC-03 の `buildIMAPConfig` テストと integration-only 使用箇所チェックで本番経路への混入を防ぐ」ことを書く。抑制範囲は当該 `tls.Config` リテラルのみに限定し、パッケージ全体やファイル全体では抑制しない。
+- [x] `buildTLSConfig` の `tls.Config` リテラルに、`gosec` の `G402` を限定的に抑制する `//nolint:gosec` を付与する。理由コメントには「`InsecureSkipVerify` は設定ファイルに公開せず、AC-03 の `buildIMAPConfig` テストと integration-only 使用箇所チェックで本番経路への混入を防ぐ」ことを書く。抑制範囲は当該 `tls.Config` リテラルのみに限定し、パッケージ全体やファイル全体では抑制しない。
 
 #### 変更ファイル: `internal/imap/client_test.go`
 
-- [ ] `TestBuildTLSConfigInsecureSkipVerify` テスト関数を追加する。関数の先頭に次のコメントを付ける: `// TestBuildTLSConfigInsecureSkipVerify verifies that InsecureSkipVerify is reflected in tls.Config (requirement F-001, AC-01).`
+- [x] `TestBuildTLSConfigInsecureSkipVerify` テスト関数を追加する。関数の先頭に次のコメントを付ける: `// TestBuildTLSConfigInsecureSkipVerify verifies that InsecureSkipVerify is reflected in tls.Config (requirement F-001, AC-01).`
   - `buildTLSConfig(Config{InsecureSkipVerify: true})` を呼び、返値の `InsecureSkipVerify == true`、`RootCAs == nil`、`MinVersion == tls.VersionTLS12` を assert する
 
 #### 変更ファイル: `cmd/tlsrpt-digest/boot_test.go`
 
-- [ ] `TestBuildIMAPConfig` に `assert.False(t, got.InsecureSkipVerify)` を追加する（他のフィールド検証の末尾に追加する）
+- [x] `TestBuildIMAPConfig` に `assert.False(t, got.InsecureSkipVerify)` を追加する（他のフィールド検証の末尾に追加する）
 
 **フェーズ完了の確認**:
-- [ ] `make test` が通過すること
-- [ ] `make lint` が通過すること
+- [x] `make test` が通過すること
+- [x] `make lint` が通過すること
 
 ### PR-1 作成ポイント: internal API and unit tests
 

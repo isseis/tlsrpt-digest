@@ -17,6 +17,10 @@ type Config struct {
 	Mailbox         string
 	TLSCACert       string
 	MaxMessageBytes int64
+	// InsecureSkipVerify, when true, disables TLS certificate verification.
+	// Intended only for integration tests against self-signed servers
+	// (e.g. greenmail). Never set from production configuration paths.
+	InsecureSkipVerify bool
 }
 
 // MessageMeta contains IMAP metadata without message body.

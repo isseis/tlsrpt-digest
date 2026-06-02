@@ -77,7 +77,7 @@ func NewIMAPClient(cfg Config) (MailFetcher, error) {
 func buildTLSConfig(cfg Config) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: false,
+		InsecureSkipVerify: cfg.InsecureSkipVerify, //nolint:gosec // InsecureSkipVerify is not set from production config paths; AC-03 test and integration-only usage enforce this.
 		RootCAs:            nil,
 	}
 
