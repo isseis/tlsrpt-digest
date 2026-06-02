@@ -17,37 +17,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// runID is a unique suffix generated once per test binary invocation.
-var runID = sync.OnceValue(func() string {
+// testRunID returns a unique suffix for this test binary invocation.
+var testRunID = sync.OnceValue(func() string {
 	return ulid.Make().String()
 })
 
-// testRunID returns a unique suffix for this test run.
-func testRunID() string {
-	return runID()
-}
-
-// sanitizeForEmail replaces characters not safe in the local part of an email
-// address (keeping only alphanumerics and hyphens) with hyphens.
-var sanitizeForEmail = regexp.MustCompile(`[^a-zA-Z0-9-]`)
-
-// sanitizeForMailbox replaces characters not valid in an IMAP mailbox name
-// with hyphens.
-var sanitizeForMailbox = regexp.MustCompile(`[^a-zA-Z0-9-]`)
+// sanitizeIdentifier replaces characters not safe in email local-parts or IMAP
+// mailbox names (keeping only alphanumerics and hyphens) with hyphens.
+var sanitizeIdentifier = regexp.MustCompile(`[^a-zA-Z0-9-]`)
 
 // testRecipientEmail returns a unique recipient email address derived from the
 // test name, ensuring no collision with previous runs on the same greenmail
 // instance.
 func testRecipientEmail(t *testing.T) string {
 	t.Helper()
-	sanitized := sanitizeForEmail.ReplaceAllString(t.Name(), "-")
+	sanitized := sanitizeIdentifier.ReplaceAllString(t.Name(), "-")
 	return sanitized + "-" + testRunID() + "@test.example.com"
 }
 
 // testMessageID returns a unique Message-ID for the test run.
 func testMessageID(t *testing.T) string {
 	t.Helper()
-	sanitized := sanitizeForEmail.ReplaceAllString(t.Name(), "-")
+	sanitized := sanitizeIdentifier.ReplaceAllString(t.Name(), "-")
 	return "<" + sanitized + "-" + testRunID() + "@test.example.com>"
 }
 
@@ -77,7 +68,7 @@ func injectTestMail(t *testing.T, smtpAddr, recipient, subject, body, messageID 
 // run-ID suffix is appended so the suffix is never cut off.
 func testMailboxName(t *testing.T) string {
 	t.Helper()
-	sanitized := sanitizeForMailbox.ReplaceAllString(t.Name(), "-")
+	sanitized := sanitizeIdentifier.ReplaceAllString(t.Name(), "-")
 	prefix := sanitized
 	if len(prefix) > 24 {
 		prefix = prefix[:24]
@@ -251,6 +242,16 @@ func TestIntegration_EnvRequirements(t *testing.T) {
 		}
 		got := missingSMTPEnv(func(k string) string { return env[k] })
 		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_SMTP_PORT")
+	})
+	t.Run("smtp_imap_port_invalid", func(t *testing.T) {
+		env := map[string]string{
+			"IMAP_TEST_HOST":      "h",
+			"IMAP_TEST_PORT":      "notanint",
+			"IMAP_TEST_SMTP_HOST": "h",
+			"IMAP_TEST_SMTP_PORT": "3025",
+		}
+		got := missingSMTPEnv(func(k string) string { return env[k] })
+		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_PORT")
 	})
 }
 

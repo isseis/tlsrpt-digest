@@ -14,8 +14,8 @@ import (
 )
 
 // CreateMailbox creates the named mailbox on the server configured by cfg.
-// t.Fatal is called on any error; deferred Logout and connection teardown run
-// even when t.Fatal exits via runtime.Goexit.
+// t.Fatal is called on any error; the deferred Logout runs even when t.Fatal
+// exits via runtime.Goexit, closing the IMAP session and underlying connection.
 func CreateMailbox(t *testing.T, cfg imap.Config, mailbox string) {
 	t.Helper()
 	c := dialAndLogin(t, cfg)
@@ -31,8 +31,9 @@ func CreateMailbox(t *testing.T, cfg imap.Config, mailbox string) {
 
 // DeleteMailbox deletes the named mailbox on the server configured by cfg.
 // If the mailbox does not exist, greenmail returns an error which is treated
-// as a test failure. t.Fatal is called on any error; deferred Logout and
-// connection teardown run even when t.Fatal exits via runtime.Goexit.
+// as a test failure. t.Fatal is called on any error; the deferred Logout runs
+// even when t.Fatal exits via runtime.Goexit, closing the IMAP session and
+// underlying connection.
 func DeleteMailbox(t *testing.T, cfg imap.Config, mailbox string) {
 	t.Helper()
 	c := dialAndLogin(t, cfg)
