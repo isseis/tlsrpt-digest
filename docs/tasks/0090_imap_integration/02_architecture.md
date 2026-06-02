@@ -16,7 +16,7 @@
 
 ### 1.1 設計原則
 
-- **本番コードの変更を最小化する**: 本番の振る舞いに影響する変更は `internal/imap.Config` への `InsecureSkipVerify` フィールド追加と `buildTLSConfig` への反映のみに限定する。`internal/config.IMAPConfig` や TOML 設定キーには追加せず、本番の設定構築経路（`buildIMAPConfig`）はこのフィールドを設定しない。
+- **本番コードの変更を最小化する**: 本番の振る舞いに影響する変更は `internal/imap.Config` への `InsecureSkipVerify` フィールド追加と `buildTLSConfig` への反映のみに限定する。`internal/config.IMAPConfig` や TOML 設定キーには追加せず、本番の設定構築経路（`buildIMAPConfig`）はこのフィールドを設定しない。なお、既存の `internal/imap/client_test.go` は `buildTLSConfig` の出力 `tls.Config.InsecureSkipVerify == false`（ゼロ値）を assert しており、本フィールドの追加後もゼロ値動作の互換性テストとして有効であるが、`InsecureSkipVerify: true` の場合のテストケースを新たに追加する必要がある（AC-01）。
 - **テスト専用設定はテストコードから注入する**: greenmail への接続に必要な `InsecureSkipVerify: true` は本番コード・設定ファイルから設定せず、テストコードに限定する。単体テストでは `buildTLSConfig` のフィールド反映を直接検証し、統合テストでは `imap.Config` の組み立てまたは `fetchRunner.newMailFetcher` の差し替え（依存注入）を通じて注入する。
 - **ビルドタグによる分離**: すべての統合テストに `//go:build integration` タグを付与し、通常の `go test ./...` では一切ビルド・実行されないようにする。
 - **既存コンポーネントの再利用**: `imapClient`・`fetchRunner`・`recoverRunner`・`Bootstrap`・`store` を再利用し、テスト専用のロジックを新規実装しない。メールボックスの管理操作（`CREATE`/`DELETE`/`APPEND`）は `MailFetcher` 抽象の対象外であるため、依存ライブラリ `emersion/go-imap` のクライアントをテストヘルパー内で直接利用する。
@@ -227,8 +227,8 @@ type Config struct {
 classDiagram
     class MailFetcher {
         <<interface>>
-        +FetchMeta(ctx, since) FetchMetaResult
-        +Download(ctx, uids) map[uint32][]byte
+        +FetchMeta(ctx, since) (FetchMetaResult, error)
+        +Download(ctx, uids) (map[uint32][]byte, error)
         +MarkSeen(ctx, uids) error
         +Close() error
     }
@@ -241,8 +241,8 @@ classDiagram
 
     class fetchRunner {
         <<struct>>
-        +newMailFetcher func(Config) (MailFetcher, error)
-        +credentials func() (string, Secret)
+        +newMailFetcher func(imap.Config) (imap.MailFetcher, error)
+        +credentials func() (string, config.Secret)
     }
 
     MailFetcher <|.. imapClient : implements
