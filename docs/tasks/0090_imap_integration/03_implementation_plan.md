@@ -145,7 +145,7 @@
 
 **対象ステップ**: Phase 1
 
-**推奨タイトル**: `feat(0090): add InsecureSkipVerify to imap.Config and reflect in buildTLSConfig`
+**推奨タイトル**: `feat(0090): add InsecureSkipVerify to imap.Config and buildTLSConfig`
 
 **レビュー観点**: `InsecureSkipVerify` のゼロ値が既存の証明書検証動作に影響しないこと / `buildTLSConfig` がフィールドを正しく `tls.Config` へ反映すること / `buildIMAPConfig` が `InsecureSkipVerify` を設定しないことをテストで保証していること / `gosec G402` の `//nolint` 抑制範囲がリテラル 1 箇所のみに限定されていること
 
@@ -204,9 +204,9 @@
 
 **対象ステップ**: Phase 2
 
-**推奨タイトル**: `feat(0090): add IMAP integration test helpers for SMTP injection and mailbox management`
+**推奨タイトル**: `feat(0090): add IMAP test helpers for SMTP injection and mailbox mgmt`
 
-**レビュー観点**: テストヘルパーが `//go:build test` または `//go:build integration` タグで本番ビルドから除外されていること / `testRunID` / `testRecipientEmail` の一意性設計が devcontainer 長時間稼働時の再実行衝突を防いでいること / `CreateMailbox` / `DeleteMailbox` の defer 登録順序（LOGIN 後に LOGOUT が登録されること）が正しいこと / `TestIntegrationEnvRequirements` が AC-04 の全必須環境変数を網羅していること
+**レビュー観点**: テストヘルパーが `//go:build test` タグ（`testutil/helpers.go`）または `//go:build integration` タグ（`client_integration_test.go`）で本番ビルドから除外されていること / `testRunID` / `testRecipientEmail` の一意性設計が devcontainer 長時間稼働時の再実行衝突を防いでいること / `CreateMailbox` / `DeleteMailbox` の defer 登録順序（LOGIN 後に LOGOUT が登録されること）が正しいこと / `TestIntegrationEnvRequirements` が AC-04 の全必須環境変数を網羅していること
 
 - [ ] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
@@ -272,6 +272,8 @@
 **フェーズ完了の確認**:
 - [ ] greenmail IMAPS 環境（Phase 5 の devcontainer 更新後、または同等の手動設定）で `go test -v -count=1 -tags test,integration ./internal/imap/...` が通過すること
 
+> **手動設定での検証方法**: Phase 5 の devcontainer 変更前に検証する場合は、greenmail を `GREENMAIL_OPTS="-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=imap-test:imap-test@example.com -Dgreenmail.users.login=email"` で起動し、環境変数 `IMAP_TEST_PORT=3993`・`IMAP_TEST_PASS=imap-test`・`IMAP_TEST_SMTP_PORT=3025` を設定すること（Phase 5 の `.devcontainer/docker-compose.base.yml` 変更内容と同等）。
+
 ### PR-3 作成ポイント: IMAP client integration tests
 
 **対象ステップ**: Phase 3
@@ -336,6 +338,8 @@
 
 **フェーズ完了の確認**:
 - [ ] greenmail IMAPS 環境（Phase 5 の devcontainer 更新後、または同等の手動設定）で `go test -v -count=1 -tags test,integration ./cmd/tlsrpt-digest/...` が通過すること
+
+> **手動設定での検証方法**: Phase 5 の devcontainer 変更前に検証する場合は、Phase 3 と同様に `GREENMAIL_OPTS`・`IMAP_TEST_PORT=3993`・`IMAP_TEST_PASS=imap-test`・`IMAP_TEST_SMTP_PORT=3025` を設定した greenmail を起動すること。
 
 ### PR-4 作成ポイント: recovery E2E integration tests
 
@@ -451,7 +455,7 @@
 
 **対象ステップ**: Phase 5
 
-**推奨タイトル**: `feat(0090): add GitHub Actions integration-test job and update devcontainer IMAPS port`
+**推奨タイトル**: `feat(0090): add CI integration-test job and update devcontainer to IMAPS`
 
 **レビュー観点**: devcontainer と CI の greenmail 設定（ポート・固定ユーザ GREENMAIL_OPTS）が一致していること / `classify-changes.sh` の `has-integration-changes` 判定条件が devcontainer・testdata の変更も捕捉し既存 `has-code-changes` ロジックと整合していること / `verify-integration-workflow.sh` が文字列 grep ではなく構造化 YAML パーサで検証していること / 通常 `test` ジョブが greenmail なし・integration タグなしのまま維持されていること
 
