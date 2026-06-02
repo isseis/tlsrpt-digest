@@ -149,7 +149,7 @@
 
 **レビュー観点**: `InsecureSkipVerify` のゼロ値が既存の証明書検証動作に影響しないこと / `buildTLSConfig` がフィールドを正しく `tls.Config` へ反映すること / `buildIMAPConfig` が `InsecureSkipVerify` を設定しないことをテストで保証していること / `gosec G402` の `//nolint` 抑制範囲がリテラル 1 箇所のみに限定されていること
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
