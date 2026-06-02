@@ -26,24 +26,24 @@ Work in the following order.
 
 6. Create `03_implementation_plan.md` in the same task directory.
 
-**[Always required] structural and traceability rules — apply to every plan:**
-- Write in Japanese; set the document status to `draft`.
-- Include all required sections from `docs/dev/developer_guide/requirements_process.md`, plus explicit top-level sections for: Implementation Order and Milestones, Test Strategy, Implementation Checklist, Acceptance Criteria Verification. Do not let phase task lists implicitly substitute for these.
-- Add a `既存コード調査結果` subsection under the implementation overview (§1) with the findings from step 5. If none, state explicitly that no existing code changes are required.
-- Organize work into small, phase-based steps with checkboxes. When a step deletes multiple distinct, separately-named entities (e.g. several test functions), give each its own checkbox rather than a batch instruction (`Test*_全件削除`). (Uniform edits across many call sites may still be described by one pattern — see "change sites" below.)
-- Map each acceptance criterion to the tasks and tests that verify it. Every AC row in the Acceptance Criteria Verification section must name either an exact test location in `path::TestName` format, or an explicit static verification command with its expected result. Do not use vague labels ("compile passes", "document review", "grep check", "none"); spell out the exact `rg` command and what counts as success.
-- Label each AC verification as `test` (executable, fails on wrong behavior), `static` (rg/grep/compile), or `manual` (PR observation, deploy check). Every AC must have at least one `test` or `static` entry; `manual` supplements but never replaces them. A static `rg` check is valid only when the AC is purely about textual presence/absence; behavior encoded in scripts, env handling, or command routing needs an executable test (for workflow YAML declarative conditions such as `if:` expressions, manual verification on a test branch is acceptable).
-- Keep tasks actionable, observable, and small enough to complete and verify. Include specific file paths where confidently known.
-- Add a cross-search checklist for removed or redefined concepts, with explicit `rg` commands/patterns and expected results for code, tests, docs, and translation/glossary files in scope.
-- Any planned Go source comment, identifier, or string literal must be written in English (the plan prose itself may be Japanese).
+   **[Always required] structural and traceability rules — apply to every plan:**
+   - Write in Japanese; set the document status to `draft`.
+   - Include all required sections from `docs/dev/developer_guide/requirements_process.md`, plus explicit top-level sections for: Implementation Order and Milestones, Test Strategy, Implementation Checklist, Acceptance Criteria Verification. Do not let phase task lists implicitly substitute for these.
+   - Add a `既存コード調査結果` subsection under the implementation overview (§1) with the findings from step 5. If none, state explicitly that no existing code changes are required.
+   - Organize work into small, phase-based steps with checkboxes. When a step deletes multiple distinct, separately-named entities (e.g. several test functions), give each its own checkbox rather than a batch instruction (`Test*_全件削除`). (Uniform edits across many call sites may still be described by one pattern — see "change sites" below.)
+   - Map each acceptance criterion to the tasks and tests that verify it. Every AC row in the Acceptance Criteria Verification section must name either an exact test location in `path::TestName` format, or an explicit static verification command with its expected result. Do not use vague labels ("compile passes", "document review", "grep check", "none"); spell out the exact `rg` command and what counts as success.
+   - Label each AC verification as `test` (executable, fails on wrong behavior), `static` (rg/grep/compile), or `manual` (PR observation, deploy check). Every AC must have at least one `test` or `static` entry; `manual` supplements but never replaces them. A static `rg` check is valid only when the AC is purely about textual presence/absence; behavior encoded in scripts, env handling, or command routing needs an executable test (for workflow YAML declarative conditions such as `if:` expressions, manual verification on a test branch is acceptable).
+   - Keep tasks actionable, observable, and small enough to complete and verify. Include specific file paths where confidently known.
+   - Add a cross-search checklist for removed or redefined concepts, with explicit `rg` commands/patterns and expected results for code, tests, docs, and translation/glossary files in scope.
+   - Any planned Go source comment, identifier, or string literal must be written in English (the plan prose itself may be Japanese).
 
-**[When applicable] apply only when the trigger matches:**
-- Documentation-only ACs: create concrete verification tasks; include every touched doc (glossaries, translations) in the AC table or cross-search checklist. Example: `rg -n -e "old term" docs/file.md` expected: no matches except allowed historical notes.
-- New authored content (prose, tables, command examples, runbooks, translations): verify against ground truth, not only absence-search — run the documented command and confirm exit code/output, cite the source implementation the text describes, or diff a translation against its source. When a table groups several cases under one entry, confirm their behavior/remediation is truly identical, else split the entry.
-- Text edits to a string literal, error message, or source comment: state the complete before/after string, not just the substring to change. This prevents dropped prefixes, dangling `%w`, or stray trailing spaces.
-  - Bad:  "Remove `(or --abort-reset --yes)` from the `systemErrorHint` return value."
-  - Good: "Change the `systemErrorHint` return value from `"Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)"` to `"Run: tlsrpt-digest recover --mode discard-old --yes"`."
-- Change sites spread across many locations: describe them by grep pattern (e.g. "all `_ = notifyXxx(...)` call sites"), not line numbers, which go stale. Use line numbers only when the pattern alone cannot locate the spot.
+   **[When applicable] apply only when the trigger matches:**
+   - Documentation-only ACs: create concrete verification tasks; include every touched doc (glossaries, translations) in the AC table or cross-search checklist. Example: `rg -n -e "old term" docs/file.md` expected: no matches except allowed historical notes.
+   - New authored content (prose, tables, command examples, runbooks, translations): verify against ground truth, not only absence-search — run the documented command and confirm exit code/output, cite the source implementation the text describes, or diff a translation against its source. When a table groups several cases under one entry, confirm their behavior/remediation is truly identical, else split the entry.
+   - Text edits to a string literal, error message, or source comment: state the complete before/after string, not just the substring to change. This prevents dropped prefixes, dangling `%w`, or stray trailing spaces.
+     - Bad:  "Remove `(or --abort-reset --yes)` from the `systemErrorHint` return value."
+     - Good: "Change the `systemErrorHint` return value from `"Run: tlsrpt-digest recover --mode discard-old --yes (or --abort-reset --yes)"` to `"Run: tlsrpt-digest recover --mode discard-old --yes"`."
+   - Change sites spread across many locations: describe them by grep pattern (e.g. "all `_ = notifyXxx(...)` call sites"), not line numbers, which go stale. Use line numbers only when the pattern alone cannot locate the spot.
 
 7. Apply test helper planning rules from `docs/dev/developer_guide/test_organization.md`.
 - If new cross-package helpers or mocks are needed, plan them under `testutil/` with the correct file naming and package naming rules.
@@ -92,7 +92,7 @@ Work in the following order.
 
 **Readability and consistency checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] Terminology is consistent with `02_architecture.md`; the same concept always uses the same Japanese term.
-- [ ] Task descriptions are phrased as clear, actionable instructions. Vague verbs (e.g., "対応する", "実装する") are replaced with specific actions where possible.
+- [ ] Task descriptions are phrased as clear, actionable instructions. Vague verbs (e.g., Japanese equivalents of "handle", "implement", "address") are replaced with specific actions where possible.
 - [ ] Redundant or repetitive content is removed; design details already in the architecture document are referenced rather than restated.
 - [ ] Ambiguous or overly terse expressions are rewritten in direct, plain Japanese so readers do not need prior context to understand what is expected.
 
