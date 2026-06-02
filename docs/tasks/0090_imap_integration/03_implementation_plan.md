@@ -211,7 +211,7 @@
 **レビュー観点**: テストヘルパーが `//go:build test` タグ（`testutil/helpers.go`）または `//go:build integration` タグ（`client_integration_test.go`）で本番ビルドから除外されていること / `testRunID` / `testRecipientEmail` の一意性設計が devcontainer 長時間稼働時の再実行衝突を防いでいること / `CreateMailbox` / `DeleteMailbox` の defer 登録順序（LOGIN 後に LOGOUT が登録されること）が正しいこと / `TestIntegration_EnvRequirements` が AC-04 の全必須環境変数を網羅していること
 
 - [x] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
