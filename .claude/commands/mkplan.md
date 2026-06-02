@@ -83,6 +83,9 @@ Work in the following order.
 - [ ] The plan does not imply Japanese text in Go source comments, identifiers, or string literals.
 - [ ] Any planned test helper files follow `docs/dev/developer_guide/test_organization.md`.
 - [ ] Planned file paths are specific where known and do not conflict with existing package responsibilities.
+- [ ] Every non-trivial external assumption (container image contents, CI platform schema, tool flag semantics, protocol/server behavior) is verified against an authoritative source (image Dockerfile, platform docs, `go help`/`--help`, RFC), and the plan uses runtimes already available in the project's dev/CI environment rather than introducing new dependencies.
+- [ ] When a correctness rule, setup step, constraint, or suppression applies to one instance of a duplicated pattern (sibling tests, parallel helpers, repeated CLI invocations), it is applied to ALL analogous instances — no instance is left out.
+- [ ] Templated sections (e.g. "next steps") reflect the document's actual state; actions already completed for this document are not listed as remaining work.
 
 **Conditional checks (apply each only when its trigger matches; mark N/A otherwise — N/A is not a finding):**
 - [ ] Integration tests touch external/long-lived state (containers, DBs, mailboxes, queues, files outside `t.TempDir`) → rerun isolation is planned: identifiers unique per run (not just per test name), and tests locate their own artifacts by a stable marker instead of assuming result length/ordering. When a unique identifier is length-limited (e.g. a 32-char mailbox name), the stable prefix is truncated first and the uniqueness suffix appended afterward, so truncation never drops the suffix.
