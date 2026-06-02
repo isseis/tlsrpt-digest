@@ -199,7 +199,7 @@
 
 **フェーズ完了の確認**:
 - [ ] `make test` が通過すること（統合テストはタグなしでスキップされること）
-- [ ] `go test -c -tags test,integration -o /dev/null ./internal/imap/...` が通過すること（`client_integration_test.go` と `testutil/helpers.go` のコンパイルエラーを Phase 2 の段階で検出する）
+- [ ] `go test -run '^$' -tags test,integration ./internal/imap/...` が通過すること（`client_integration_test.go` と `testutil/helpers.go` のコンパイルエラーを Phase 2 の段階で検出する。`-c -o /dev/null` は複数パッケージに対して使用できないため `-run '^$'` でテスト実行をスキップしつつコンパイルを確認する）
 - [ ] `make lint` が通過すること
 
 ### PR-2 作成ポイント: integration test helpers
@@ -244,6 +244,7 @@
 
 ##### AC-07: Download でメール本文取得
 - [ ] `TestIntegration_Download` を追加する。先頭コメント: `// TestIntegration_Download verifies Download retrieves full message body (requirement F-002, AC-07).`
+  - `loadSMTPTestConfig(t)` を呼ぶ（`requireSMTPEnv` によるスキップ判定と `cfg`/`smtpAddr` の取得。AC-06 と同様にテスト専用の動的ユーザアドレスを使用する）
   - `injectTestMail` で subject を `"download-test"`、messageID を `testMessageID(t)` としてメール注入する
   - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する
   - `context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使って `FetchMeta` を呼び、注入した `Message-ID` に一致するメッセージの UID を取得する
@@ -252,6 +253,7 @@
 
 ##### AC-08: MarkSeen で Seen フラグ付与
 - [ ] `TestIntegration_MarkSeen` を追加する。先頭コメント: `// TestIntegration_MarkSeen verifies MarkSeen sets the Seen flag (requirement F-002, AC-08).`
+  - `loadSMTPTestConfig(t)` を呼ぶ（`requireSMTPEnv` によるスキップ判定と `cfg`/`smtpAddr` の取得。AC-06 と同様にテスト専用の動的ユーザアドレスを使用する）
   - メール注入後、`imap.NewIMAPClient(cfg)` で接続し直後に `t.Cleanup(func() { client.Close() })` を登録してから、`context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使って `FetchMeta` を呼び、注入した `Message-ID` に一致するメッセージを選択して `Seen == false` を確認する
   - 同じ context で `MarkSeen(ctx, []uint32{uid})` を実行する
   - 別セッションで `imap.NewIMAPClient(cfg)` を再接続し直後に `t.Cleanup(func() { client2.Close() })` を登録してから、同じ since 値で `FetchMeta` を呼んで、同じ `Message-ID` のメッセージが `Seen == true` になっていることを検証する
@@ -269,7 +271,7 @@
   - `loadIntegrationConfig(t)` で固定ユーザの接続設定 `fixedCfg` を取得する
   - `testMailboxName(t)` でテスト固有の非 INBOX メールボックス名を導出する（`@` を含まない IMAP 互換の名前。Phase 2 で `client_integration_test.go` に追加する `testMailboxName` ヘルパーを使用する）
   - `imaptestutil.CreateMailbox(t, fixedCfg, mailbox)` でメールボックスを作成し、`t.Cleanup(func() { imaptestutil.DeleteMailbox(t, fixedCfg, mailbox) })` を登録する
-  - `fixedCfg` の `Mailbox` フィールドを当該非 INBOX メールボックス名に設定した新しい `Config` で `imap.NewIMAPClient` を呼んで接続し、直後に `t.Cleanup(func() { client1.Close() })` を登録してから `FetchMeta` で `V1 := result.UIDValidity` を取得する
+  - `fixedCfg` の `Mailbox` フィールドを当該非 INBOX メールボックス名に設定した新しい `Config` で `imap.NewIMAPClient` を呼んで接続し、直後に `t.Cleanup(func() { client1.Close() })` を登録してから `FetchMeta` で `V1 := result.UIDValidity` を取得する。取得後すぐに `client1.Close()` を呼ぶ（メールボックスが選択状態のまま別セッションから `DELETE` を実行するとサーバが拒否する場合があるため、削除前に接続を切る）
   - `imaptestutil.DeleteMailbox(t, fixedCfg, mailbox)` で削除し、`imaptestutil.CreateMailbox(t, fixedCfg, mailbox)` で同名で再作成する。クリーンアップは初回作成後に登録した 1 つだけにし、テスト終了時に最終的な再作成済みメールボックスを削除する
   - 再度 `imap.NewIMAPClient` で接続し直後に `t.Cleanup(func() { client2.Close() })` を登録してから `FetchMeta` を呼び `V2 := result.UIDValidity` を取得し、`require.NotEqual(t, V1, V2)` で検証する
 
