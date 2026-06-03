@@ -111,7 +111,9 @@ func (c *imapClient) Close() error {
 	// the mailbox in a "session-open" state after LOGOUT-only, which prevents
 	// concurrent DELETE from another connection.
 	if c.lastSelectReadOnly {
-		_ = c.session.Close()
+		if err := c.session.Close(); err != nil {
+			slog.Warn("imap: CLOSE before logout failed (mailbox may remain session-open)", "error", err)
+		}
 	}
 	if err := c.session.Logout(); err != nil {
 		return fmt.Errorf("imap: logout: %w", err)
