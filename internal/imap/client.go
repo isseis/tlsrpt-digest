@@ -28,7 +28,6 @@ var (
 type imapSession interface {
 	Login(username, password string) error
 	Logout() error
-	Close() error
 	Select(mailbox string, readOnly bool) (*goimap.MailboxStatus, error)
 	UidSearch(criteria *goimap.SearchCriteria) ([]uint32, error)
 	UidFetch(seqset *goimap.SeqSet, items []goimap.FetchItem, ch chan *goimap.Message) error
@@ -101,12 +100,6 @@ func buildTLSConfig(cfg Config) (*tls.Config, error) {
 }
 
 func (c *imapClient) Close() error {
-	// Send IMAP CLOSE before LOGOUT so the server deselects the mailbox.
-	// Some servers (including greenmail) keep the mailbox in a transitional
-	// state after LOGOUT if CLOSE was not sent first, which prevents deletion
-	// from other sessions.  Ignore the error: CLOSE is only valid in the
-	// SELECTED/EXAMINED state and will fail silently if no mailbox is open.
-	_ = c.session.Close()
 	if err := c.session.Logout(); err != nil {
 		return fmt.Errorf("imap: logout: %w", err)
 	}
@@ -118,7 +111,8 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 		return FetchMetaResult{}, fmt.Errorf("imap: fetch meta: %w", err)
 	}
 
-	mailboxStatus, err := c.session.Select(c.cfg.Mailbox, false)
+	// Use EXAMINE (read-only) since FetchMeta does not modify any messages.
+	mailboxStatus, err := c.session.Select(c.cfg.Mailbox, true)
 	if err != nil {
 		return FetchMetaResult{}, fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
 	}

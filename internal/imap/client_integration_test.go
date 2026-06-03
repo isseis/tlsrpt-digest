@@ -448,14 +448,9 @@ func TestIntegration_UIDValidity_Change(t *testing.T) {
 	testCfg := fixedCfg
 	testCfg.Mailbox = mailbox
 
-	client1, err := imap.NewIMAPClient(testCfg)
-	require.NoError(t, err)
-	// Close before checking the error so the connection is released even on FetchMeta failure,
-	// preventing the subsequent t.Cleanup DeleteMailbox from seeing a 'mailbox in use' error.
-	r1, fetchErr := client1.FetchMeta(context.Background(), time.Now().AddDate(-1, 0, 0))
-	require.NoError(t, client1.Close())
-	require.NoError(t, fetchErr)
-	v1 := r1.UIDValidity
+	// FetchUIDValidity uses EXAMINE + IMAP CLOSE so greenmail releases the
+	// mailbox before the subsequent DELETE (LOGOUT alone leaves it in use).
+	v1 := imaptestutil.FetchUIDValidity(t, testCfg, mailbox)
 
 	// greenmail assigns UIDVALIDITY from the current Unix timestamp (second resolution).
 	// Wait one second so that the recreated mailbox gets a strictly later timestamp.
@@ -463,11 +458,6 @@ func TestIntegration_UIDValidity_Change(t *testing.T) {
 	imaptestutil.DeleteMailbox(t, fixedCfg, mailbox)
 	imaptestutil.CreateMailbox(t, fixedCfg, mailbox)
 
-	client2, err := imap.NewIMAPClient(testCfg)
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = client2.Close() })
-
-	r2, err := client2.FetchMeta(context.Background(), time.Now().AddDate(-1, 0, 0))
-	require.NoError(t, err)
-	require.NotEqual(t, v1, r2.UIDValidity)
+	v2 := imaptestutil.FetchUIDValidity(t, testCfg, mailbox)
+	require.NotEqual(t, v1, v2)
 }

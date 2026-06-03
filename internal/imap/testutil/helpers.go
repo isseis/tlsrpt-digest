@@ -46,6 +46,29 @@ func DeleteMailbox(t *testing.T, cfg imap.Config, mailbox string) {
 	}
 }
 
+// FetchUIDValidity opens the mailbox with EXAMINE, reads its UIDValidity, then
+// sends IMAP CLOSE before LOGOUT. CLOSE deselects the mailbox so that another
+// session can immediately DELETE it; it does not expunge messages because the
+// mailbox was opened read-only (RFC 3501 §6.3.2 forbids permanent changes in a
+// read-only session). t.Fatal is called on any error.
+func FetchUIDValidity(t *testing.T, cfg imap.Config, mailbox string) uint32 {
+	t.Helper()
+	c := dialAndLogin(t, cfg)
+	defer func() {
+		if err := c.Logout(); err != nil {
+			t.Logf("FetchUIDValidity: logout: %v", err)
+		}
+	}()
+	status, err := c.Select(mailbox, true) // EXAMINE (read-only)
+	if err != nil {
+		t.Fatalf("FetchUIDValidity: EXAMINE %q: %v", mailbox, err)
+	}
+	if err := c.Close(); err != nil { // IMAP CLOSE: deselect without expunge
+		t.Fatalf("FetchUIDValidity: CLOSE %q: %v", mailbox, err)
+	}
+	return status.UidValidity
+}
+
 // dialAndLogin establishes an IMAPS connection and logs in. A deferred Logout
 // is NOT registered here — callers are responsible for registering it
 // immediately after dialAndLogin returns so it executes even on t.Fatal.
