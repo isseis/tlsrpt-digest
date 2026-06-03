@@ -104,8 +104,8 @@ func TestClose_SendsIMAPCloseOnlyAfterEXAMINE(t *testing.T) {
 		require.True(t, s.closeCalled, "IMAP CLOSE must be sent after EXAMINE (FetchMeta)")
 	})
 
-	// After Download (SELECT, lastSelectReadOnly=false), Close must NOT send IMAP CLOSE.
-	t.Run("after_Download_no_CLOSE", func(t *testing.T) {
+	// Download uses EXAMINE (read-only, BODY.PEEK), so Close must send IMAP CLOSE.
+	t.Run("after_Download_sends_CLOSE", func(t *testing.T) {
 		t.Parallel()
 		s := &fakeSession{
 			selectMailboxStatus: &goimap.MailboxStatus{Name: "INBOX"},
@@ -122,7 +122,7 @@ func TestClose_SendsIMAPCloseOnlyAfterEXAMINE(t *testing.T) {
 		_, err := c.Download(context.Background(), []uint32{1})
 		require.NoError(t, err)
 		require.NoError(t, c.Close())
-		require.False(t, s.closeCalled, "IMAP CLOSE must NOT be sent after SELECT (Download)")
+		require.True(t, s.closeCalled, "IMAP CLOSE must be sent after EXAMINE (Download)")
 	})
 
 	// After MarkSeen (SELECT, lastSelectReadOnly=false), Close must NOT send IMAP CLOSE.
