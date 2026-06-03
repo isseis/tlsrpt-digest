@@ -26,6 +26,17 @@ Work in order.
 - For any newly authored or substantially rewritten artifact in this group (runbook, command example, table, prose, translation, design-doc section), confirm it is correct before committing — do not rely on absence-search of removed terms. Run any documented command and check its exit code and output; cite the source implementation that prose describes; diff a translation against its source. For a design document such as an ADR, also keep the body on the current system and confine removed-design rationale to a bounded history note rather than interleaving it.
 - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
 
+**Before committing each group, self-check (catches common defects before the step 7 review):**
+- No planning-doc references (`AC-01`, `F-001`) in source comments or strings — put the *why* in plain English.
+- Validators/parsers/env-checks have a happy-path test (all-valid → no error), not only failure cases.
+- A helper guarding a precondition calls its own guard internally; callers shouldn't have to.
+- Sub-test names match what they test (`smtp_smtp_host_missing` tests `IMAP_TEST_SMTP_HOST`, not `IMAP_TEST_HOST`).
+- Reuse existing utilities before writing new ones (e.g. `ulid.Make()`); consolidate duplicate regexes/constants.
+- Read-only work uses read-only protocol verbs (IMAP EXAMINE, not SELECT).
+- State-mutating or deleting operations are intentional and scoped — confirm side effects don't touch data the operation doesn't own (e.g. IMAP CLOSE expunges `\Deleted`).
+- Test-only behavior stays in test packages; don't branch production code for tests.
+- A Go test file importing a `testutil` that imports the package under test uses `package foo_test` to avoid an import cycle.
+
 5a. **PR checkpoint** (reached when step 4 directed you here instead of step 5).
 - Verify `make test && make lint` is green. Fix any failures before continuing.
 - Mark the first PR checkpoint checkbox (`make test && make lint がグリーンであることを確認した`) as `[x]` and commit.
