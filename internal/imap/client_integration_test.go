@@ -99,7 +99,7 @@ func missingSMTPEnv(getenv func(string) string) []string {
 			missing = append(missing, key+" (empty)")
 			continue
 		}
-		if key == "IMAP_TEST_PORT" {
+		if key == "IMAP_TEST_PORT" || key == "IMAP_TEST_SMTP_PORT" {
 			if _, err := strconv.Atoi(val); err != nil {
 				missing = append(missing, key+" (not a valid integer)")
 			}
@@ -246,6 +246,16 @@ func TestIntegration_EnvRequirements(t *testing.T) {
 		}
 		got := missingSMTPEnv(func(k string) string { return env[k] })
 		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_PORT")
+	})
+	t.Run("smtp_smtp_port_invalid", func(t *testing.T) {
+		env := map[string]string{
+			"IMAP_TEST_HOST":      "h",
+			"IMAP_TEST_PORT":      "3993",
+			"IMAP_TEST_SMTP_HOST": "h",
+			"IMAP_TEST_SMTP_PORT": "notanint",
+		}
+		got := missingSMTPEnv(func(k string) string { return env[k] })
+		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_SMTP_PORT")
 	})
 }
 
