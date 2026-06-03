@@ -154,21 +154,13 @@ func loadSMTPTestConfig(t *testing.T) (cfg imap.Config, smtpAddr string) {
 
 func loadIntegrationConfig(t *testing.T) imap.Config {
 	t.Helper()
+	requireFixedUserEnv(t)
 
-	host := os.Getenv("IMAP_TEST_HOST")
-	if host == "" {
-		t.Skip("integration env is not configured")
-	}
-
-	port := 993
-	if rawPort := os.Getenv("IMAP_TEST_PORT"); rawPort != "" {
-		parsed, err := strconv.Atoi(rawPort)
-		require.NoError(t, err)
-		port = parsed
-	}
+	port, err := strconv.Atoi(os.Getenv("IMAP_TEST_PORT"))
+	require.NoError(t, err)
 
 	return imap.Config{
-		Host:               host,
+		Host:               os.Getenv("IMAP_TEST_HOST"),
 		Port:               port,
 		Username:           os.Getenv("IMAP_TEST_USER"),
 		Password:           config.Secret(os.Getenv("IMAP_TEST_PASS")),
@@ -185,7 +177,6 @@ func envOrDefault(key, fallback string) string {
 }
 
 func TestIntegration_EnvConfig(t *testing.T) {
-	requireFixedUserEnv(t)
 	cfg := loadIntegrationConfig(t)
 	require.NotEmpty(t, cfg.Host)
 	require.NotEmpty(t, cfg.Username)
@@ -294,11 +285,31 @@ func TestIntegration_EnvRequirements(t *testing.T) {
 		got := missingSMTPEnv(func(k string) string { return env[k] })
 		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_SMTP_PORT")
 	})
+	t.Run("fixed_user_all_valid", func(t *testing.T) {
+		env := map[string]string{
+			"IMAP_TEST_HOST":    "h",
+			"IMAP_TEST_PORT":    "3993",
+			"IMAP_TEST_USER":    "u",
+			"IMAP_TEST_PASS":    "p",
+			"IMAP_TEST_MAILBOX": "INBOX",
+		}
+		got := missingFixedUserEnv(func(k string) string { return env[k] })
+		require.Empty(t, got)
+	})
+	t.Run("smtp_all_valid", func(t *testing.T) {
+		env := map[string]string{
+			"IMAP_TEST_HOST":      "h",
+			"IMAP_TEST_PORT":      "3993",
+			"IMAP_TEST_SMTP_HOST": "h",
+			"IMAP_TEST_SMTP_PORT": "3025",
+		}
+		got := missingSMTPEnv(func(k string) string { return env[k] })
+		require.Empty(t, got)
+	})
 }
 
 // TestIntegration_EmptyInbox verifies FetchMeta on an empty fixed-user mailbox.
 func TestIntegration_EmptyInbox(t *testing.T) {
-	requireFixedUserEnv(t)
 	cfg := loadIntegrationConfig(t)
 	client, err := imap.NewIMAPClient(cfg)
 	require.NoError(t, err)
@@ -409,7 +420,6 @@ func TestIntegration_MarkSeen(t *testing.T) {
 
 // TestIntegration_UIDValidity_Stable verifies UIDValidity is stable across consecutive FetchMeta calls.
 func TestIntegration_UIDValidity_Stable(t *testing.T) {
-	requireFixedUserEnv(t)
 	cfg := loadIntegrationConfig(t)
 
 	client, err := imap.NewIMAPClient(cfg)
@@ -428,7 +438,6 @@ func TestIntegration_UIDValidity_Stable(t *testing.T) {
 
 // TestIntegration_UIDValidity_Change verifies UIDValidity changes after mailbox DELETE and CREATE.
 func TestIntegration_UIDValidity_Change(t *testing.T) {
-	requireFixedUserEnv(t)
 	fixedCfg := loadIntegrationConfig(t)
 	mailbox := testMailboxName(t)
 
@@ -440,8 +449,8 @@ func TestIntegration_UIDValidity_Change(t *testing.T) {
 
 	client1, err := imap.NewIMAPClient(testCfg)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = client1.Close() })
-
+	// Close explicitly before DELETE to avoid server-side mailbox-in-use rejection.
+	// No t.Cleanup registered; if FetchMeta fails, the leaked connection is acceptable in tests.
 	r1, err := client1.FetchMeta(context.Background(), time.Now().AddDate(-1, 0, 0))
 	require.NoError(t, err)
 	v1 := r1.UIDValidity
