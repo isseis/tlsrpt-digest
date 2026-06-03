@@ -17,6 +17,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	// maxEmailLocalPart is the RFC 5321 maximum length for an email local-part.
+	maxEmailLocalPart = 64
+	// ulidLen is the fixed string length of a ULID produced by ulid.Make().
+	ulidLen = 26
+	// maxEmailPrefix is the maximum prefix length before "-" + ULID fits within maxEmailLocalPart.
+	maxEmailPrefix = maxEmailLocalPart - 1 - ulidLen // 37
+)
+
 // testRunID returns a unique suffix for this test binary invocation.
 var testRunID = sync.OnceValue(func() string {
 	return ulid.Make().String()
@@ -26,18 +35,19 @@ var testRunID = sync.OnceValue(func() string {
 // mailbox names (keeping only alphanumerics and hyphens) with hyphens.
 var sanitizeIdentifier = regexp.MustCompile(`[^a-zA-Z0-9-]`)
 
-// testRecipientEmail returns a unique recipient email address derived from the
-// test name, ensuring no collision with previous runs on the same greenmail
-// instance. The local-part is kept within the 64-byte RFC 5321 limit by
-// truncating the prefix to 37 characters before appending "-" + ULID (26 chars).
+// testRecipientEmail returns a per-call unique recipient email address derived
+// from the test name. A fresh ULID is generated on every call so different
+// tests (or subtests) never share an address even when their sanitized names
+// share the same first maxEmailPrefix characters. The local-part is kept within
+// the RFC 5321 64-byte limit.
 func testRecipientEmail(t *testing.T) string {
 	t.Helper()
 	sanitized := sanitizeIdentifier.ReplaceAllString(t.Name(), "-")
 	prefix := sanitized
-	if len(prefix) > 37 {
-		prefix = prefix[:37]
+	if len(prefix) > maxEmailPrefix {
+		prefix = prefix[:maxEmailPrefix]
 	}
-	return prefix + "-" + testRunID() + "@test.example.com"
+	return prefix + "-" + ulid.Make().String() + "@test.example.com"
 }
 
 // testMessageID returns a unique Message-ID for the test run.
