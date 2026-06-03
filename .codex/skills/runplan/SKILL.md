@@ -63,7 +63,7 @@ Work in order.
      diff a translation against its source. For design documents, keep the body
      focused on the current system and confine removed-design rationale to a
      bounded history note instead of interleaving it.
-   - Before committing, self-check (catches common defects before the step 7 review):
+   - Before committing each group, self-check (catches common defects before the step 7 review):
      - No planning-doc references (`AC-01`, `F-001`) in source comments or strings — put the *why* in plain English.
      - Validators/parsers/env-checks have a happy-path test (all-valid → no error), not only failure cases.
      - A helper guarding a precondition calls its own guard internally; callers shouldn't have to.

@@ -24,16 +24,16 @@ Work in order.
 - After each Go file change, run `make fmt && make test && make lint`; fix errors before continuing. Exception: errors caused by the phase group's incomplete state (e.g. build or test failures from missing implementations that stubs depend on) need not be fixed until the group is complete; fix only errors unrelated to the in-progress group.
 - When removing multiple scattered code sites (e.g. several test functions), delete them one at a time using the exact text read from the file. Do not script bulk deletion (e.g. a brace-counting loop); nested literals make such heuristics over-consume adjacent code. After each removal, check IDE diagnostics for unintended breakage.
 - For any newly authored or substantially rewritten artifact in this group (runbook, command example, table, prose, translation, design-doc section), confirm it is correct before committing — do not rely on absence-search of removed terms. Run any documented command and check its exit code and output; cite the source implementation that prose describes; diff a translation against its source. For a design document such as an ADR, also keep the body on the current system and confine removed-design rationale to a bounded history note rather than interleaving it.
-**Before committing each group, self-check (catches common defects before the step 7 review):**
-- No planning-doc references (`AC-01`, `F-001`) in source comments or strings — put the *why* in plain English.
-- Validators/parsers/env-checks have a happy-path test (all-valid → no error), not only failure cases.
-- A helper guarding a precondition calls its own guard internally; callers shouldn't have to.
-- Sub-test names match what they test (`smtp_host_missing` tests `IMAP_TEST_SMTP_HOST`, not `IMAP_TEST_HOST`).
-- Reuse existing utilities before writing new ones (e.g. `ulid.Make()`); consolidate duplicate regexes/constants.
-- Read-only work uses read-only protocol verbs (IMAP EXAMINE, not SELECT).
-- State-mutating or deleting operations are intentional and scoped — confirm side effects don't touch data the operation doesn't own (e.g. IMAP CLOSE expunges `\Deleted`).
-- Test-only behavior stays in test packages; don't branch production code for tests.
-- A Go test file importing a `testutil` that imports the package under test uses `package foo_test` to avoid an import cycle.
+- **Before committing each group, self-check** (catches common defects before the step 7 review):
+  - No planning-doc references (`AC-01`, `F-001`) in source comments or strings — put the *why* in plain English.
+  - Validators/parsers/env-checks have a happy-path test (all-valid → no error), not only failure cases.
+  - A helper guarding a precondition calls its own guard internally; callers shouldn't have to.
+  - Sub-test names match what they test (`smtp_host_missing` tests `IMAP_TEST_SMTP_HOST`, not `IMAP_TEST_HOST`).
+  - Reuse existing utilities before writing new ones (e.g. `ulid.Make()`); consolidate duplicate regexes/constants.
+  - Read-only work uses read-only protocol verbs (IMAP EXAMINE, not SELECT).
+  - State-mutating or deleting operations are intentional and scoped — confirm side effects don't touch data the operation doesn't own (e.g. IMAP CLOSE expunges `\Deleted`).
+  - Test-only behavior stays in test packages; don't branch production code for tests.
+  - A Go test file importing a `testutil` that imports the package under test uses `package foo_test` to avoid an import cycle.
 
 - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
 
