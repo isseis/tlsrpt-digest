@@ -1,6 +1,5 @@
 //go:build test
 
-// Package imaptestutil provides test doubles for the imap package.
 package imaptestutil
 
 import (

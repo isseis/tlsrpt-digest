@@ -220,13 +220,14 @@ func TestIntegration_EnvRequirements(t *testing.T) {
 		got := missingFixedUserEnv(func(k string) string { return env[k] })
 		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_MAILBOX")
 	})
-	t.Run("smtp_host_missing", func(t *testing.T) {
+	t.Run("smtp_smtp_host_missing", func(t *testing.T) {
 		env := map[string]string{
+			"IMAP_TEST_HOST":      "h",
 			"IMAP_TEST_PORT":      "3993",
 			"IMAP_TEST_SMTP_PORT": "3025",
 		}
 		got := missingSMTPEnv(func(k string) string { return env[k] })
-		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_HOST")
+		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_SMTP_HOST")
 	})
 	t.Run("smtp_port_missing", func(t *testing.T) {
 		env := map[string]string{
