@@ -456,6 +456,9 @@ func TestIntegration_UIDValidity_Change(t *testing.T) {
 	v1 := r1.UIDValidity
 	require.NoError(t, client1.Close())
 
+	// greenmail assigns UIDVALIDITY from the current Unix timestamp (second resolution).
+	// Wait one second so that the recreated mailbox gets a strictly later timestamp.
+	time.Sleep(time.Second)
 	imaptestutil.DeleteMailbox(t, fixedCfg, mailbox)
 	imaptestutil.CreateMailbox(t, fixedCfg, mailbox)
 
