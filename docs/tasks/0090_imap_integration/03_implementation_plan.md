@@ -289,7 +289,7 @@
 **レビュー観点**: 各テストが独立して実行でき SMTP 注入受信者アドレスの一意性によりテスト間のメッセージ混入が防がれていること / `TestIntegration_UIDValidity_Change` が固有名の非 INBOX メールボックスを使用していること / `normalizeMessageID` による Message-ID 正規化比較が go-imap/greenmail の実装差異を吸収できること / `//go:build integration` タグが全テスト関数に適用されていること
 
 - [x] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
