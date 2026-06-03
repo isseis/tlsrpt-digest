@@ -343,7 +343,7 @@
   - ステップ 14 は同様に `fetch -config <configPath> -dry-run` が `exitOK` を返すことを検証する
 
 **フェーズ完了の確認**:
-- [x] greenmail IMAPS 環境（devcontainer で `go test -v -count=1 -tags test,integration ./cmd/tlsrpt-digest/...` が通過すること
+- [x] greenmail IMAPS 環境（devcontainer で `go test -v -count=1 -tags test,integration ./cmd/tlsrpt-digest/...` が通過すること）
 
 > **手動設定での検証方法**: Phase 5 の devcontainer 変更前に検証する場合は、Phase 3 と同様に `GREENMAIL_OPTS`・`IMAP_TEST_PORT=3993`・`IMAP_TEST_PASS=imap-test`・`IMAP_TEST_SMTP_PORT=3025` を設定した greenmail を起動すること。
 
