@@ -9,7 +9,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -22,27 +21,9 @@ import (
 	"github.com/isseis/tlsrpt-digest/internal/store"
 )
 
-// recoveryTestRunID is a unique suffix for this test binary invocation.
-var recoveryTestRunID = sync.OnceValue(func() string {
+// recoveryTestMailboxName returns a per-call unique IMAP mailbox name.
+func recoveryTestMailboxName() string {
 	return ulid.Make().String()
-})
-
-// recoveryTestMailboxName returns a unique IMAP mailbox name derived from the
-// test name. The prefix is truncated to 24 characters before the run-ID
-// suffix is appended so the suffix is never cut off.
-func recoveryTestMailboxName(t *testing.T) string {
-	t.Helper()
-	sanitized := strings.Map(func(r rune) rune {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' {
-			return r
-		}
-		return '-'
-	}, t.Name())
-	prefix := sanitized
-	if len(prefix) > 24 {
-		prefix = prefix[:24]
-	}
-	return prefix + "-" + recoveryTestRunID()
 }
 
 // missingRecoveryEnv returns the names of environment variables required for
@@ -210,7 +191,7 @@ func TestIntegration_Recovery_KeepOld(t *testing.T) {
 		InsecureSkipVerify: true,
 	}
 
-	mailbox := recoveryTestMailboxName(t)
+	mailbox := recoveryTestMailboxName()
 	imaptestutil.CreateMailbox(t, fixedCfg, mailbox)
 	t.Cleanup(func() { imaptestutil.DeleteMailbox(t, fixedCfg, mailbox) })
 
@@ -273,7 +254,7 @@ func TestIntegration_Recovery_DiscardOld(t *testing.T) {
 		InsecureSkipVerify: true,
 	}
 
-	mailbox := recoveryTestMailboxName(t)
+	mailbox := recoveryTestMailboxName()
 	imaptestutil.CreateMailbox(t, fixedCfg, mailbox)
 	t.Cleanup(func() { imaptestutil.DeleteMailbox(t, fixedCfg, mailbox) })
 
