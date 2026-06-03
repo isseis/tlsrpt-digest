@@ -63,6 +63,16 @@ Work in order.
      diff a translation against its source. For design documents, keep the body
      focused on the current system and confine removed-design rationale to a
      bounded history note instead of interleaving it.
+   - Before committing, self-check (catches common defects before the step 7 review):
+     - No planning-doc references (`AC-01`, `F-001`) in source comments or strings — put the *why* in plain English.
+     - Validators/parsers/env-checks have a happy-path test (all-valid → no error), not only failure cases.
+     - A helper guarding a precondition calls its own guard internally; callers shouldn't have to.
+     - Sub-test names match what they test (`smtp_host_missing` tests `IMAP_TEST_SMTP_HOST`, not `IMAP_TEST_HOST`).
+     - Reuse existing utilities before writing new ones (e.g. `ulid.Make()`); consolidate duplicate regexes/constants.
+     - Read-only work uses read-only protocol verbs (IMAP EXAMINE, not SELECT).
+     - State-mutating or deleting operations are intentional and scoped — confirm side effects don't touch data the operation doesn't own (e.g. IMAP CLOSE expunges `\Deleted`).
+     - Test-only behavior stays in test packages; don't branch production code for tests.
+     - A Go test file importing a `testutil` that imports the package under test uses `package foo_test` to avoid an import cycle.
    - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note).
      Commit the phase group using the `git-commit` skill guidelines.
 
