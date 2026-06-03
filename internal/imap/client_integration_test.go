@@ -43,11 +43,7 @@ var sanitizeIdentifier = regexp.MustCompile(`[^a-zA-Z0-9-]`)
 func testRecipientEmail(t *testing.T) string {
 	t.Helper()
 	sanitized := sanitizeIdentifier.ReplaceAllString(t.Name(), "-")
-	prefix := sanitized
-	if len(prefix) > maxEmailPrefix {
-		prefix = prefix[:maxEmailPrefix]
-	}
-	return prefix + "-" + ulid.Make().String() + "@test.example.com"
+	return sanitized[:min(len(sanitized), maxEmailPrefix)] + "-" + ulid.Make().String() + "@test.example.com"
 }
 
 // testMessageID returns a per-call unique Message-ID. A fresh ULID is generated
@@ -56,11 +52,7 @@ func testRecipientEmail(t *testing.T) string {
 func testMessageID(t *testing.T) string {
 	t.Helper()
 	sanitized := sanitizeIdentifier.ReplaceAllString(t.Name(), "-")
-	prefix := sanitized
-	if len(prefix) > maxEmailPrefix {
-		prefix = prefix[:maxEmailPrefix]
-	}
-	return "<" + prefix + "-" + ulid.Make().String() + "@test.example.com>"
+	return "<" + sanitized[:min(len(sanitized), maxEmailPrefix)] + "-" + ulid.Make().String() + "@test.example.com>"
 }
 
 // normalizeMessageID strips leading/trailing whitespace and ensures the value
