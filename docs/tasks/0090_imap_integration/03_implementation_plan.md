@@ -151,8 +151,8 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+- [x] PR がマージされた
+- [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ---
 
@@ -160,47 +160,47 @@
 
 #### 変更ファイル: `internal/imap/client_integration_test.go`
 
-- [ ] `loadIntegrationConfig` に `InsecureSkipVerify: true` を追加する（返す `Config` のフィールドとして設定する）
+- [x] `loadIntegrationConfig` に `InsecureSkipVerify: true` を追加する（返す `Config` のフィールドとして設定する）
 
-- [ ] `requireFixedUserEnv(t *testing.T)` ヘルパーを追加する。スキップ条件: `IMAP_TEST_HOST`、`IMAP_TEST_PORT`、`IMAP_TEST_USER`、`IMAP_TEST_PASS`、`IMAP_TEST_MAILBOX` のいずれかが空文字の場合に `t.Skip("fixed-user integration env not configured")` を呼ぶ
+- [x] `requireFixedUserEnv(t *testing.T)` ヘルパーを追加する。スキップ条件: `IMAP_TEST_HOST`、`IMAP_TEST_PORT`、`IMAP_TEST_USER`、`IMAP_TEST_PASS`、`IMAP_TEST_MAILBOX` のいずれかが空文字の場合に `t.Skip("fixed-user integration env not configured")` を呼ぶ
 
-- [ ] `requireSMTPEnv(t *testing.T)` ヘルパーを追加する。スキップ条件: `IMAP_TEST_HOST`、`IMAP_TEST_PORT`、`IMAP_TEST_SMTP_HOST`、`IMAP_TEST_SMTP_PORT` のいずれかが空文字の場合に `t.Skip("SMTP integration env not configured")` を呼ぶ
+- [x] `requireSMTPEnv(t *testing.T)` ヘルパーを追加する。スキップ条件: `IMAP_TEST_HOST`、`IMAP_TEST_PORT`、`IMAP_TEST_SMTP_HOST`、`IMAP_TEST_SMTP_PORT` のいずれかが空文字の場合に `t.Skip("SMTP integration env not configured")` を呼ぶ
 
-- [ ] `testRunID() string` ヘルパーを追加する。`time.Now().UnixNano()` と 4〜8 bytes のランダム値（`crypto/rand`）から、同一 greenmail devcontainer 上の再実行でも衝突しない短い英数字・ハイフン文字列を返す。テストファイル内で一度だけ生成し、SMTP 注入ユーザ・Message-ID・非 INBOX メールボックス名の suffix に使う
+- [x] `testRunID` を `sync.OnceValue` で実装する。`ulid.Make().String()` をバイナリ実行ごとに一度だけ生成し、非 INBOX メールボックス名のクロスラン衝突防止 suffix として使う
 
-- [ ] `testRecipientEmail(t *testing.T) string` ヘルパーを追加する。`t.Name()` から英数字・ハイフン以外の文字をハイフンに置換し、`testRunID()` の suffix を含めたうえで、末尾に `@test.example.com` を付与した文字列を返す。これにより greenmail が長時間起動している devcontainer で `make test-integration` を再実行しても、過去 run の自動作成 INBOX と衝突しない
+- [x] `testRecipientEmail() string` ヘルパーを追加する。`ulid.Make().String() + "@test.example.com"` を返す。テスト名を含めないことで RFC 5321 ローカルパート上限（64 バイト）を確実に遵守し、呼び出しごとに新規 ULID を生成するためテスト間の衝突も防ぐ
 
-- [ ] `testMessageID(t *testing.T) string` ヘルパーを追加する。`t.Name()` をサニタイズし、`testRunID()` の suffix を含めた `<sanitized-test-name-run-id@test.example.com>` 形式の run ごとに一意な Message-ID を返す。`FetchMeta` の検証では go-imap/greenmail の正規化差異に備え、期待値と実測値の両方を同じ関数で正規化してから比較する
+- [x] `testMessageID() string` ヘルパーを追加する。`"<" + ulid.Make().String() + "@test.example.com>"` を返す。呼び出しごとに新規 ULID を生成し一意性を保証する。`FetchMeta` の検証では go-imap/greenmail の正規化差異に備え、期待値と実測値の両方を `normalizeMessageID` で正規化してから比較する
 
-- [ ] `injectTestMail(t *testing.T, smtpAddr, recipient, subject, body, messageID string)` ヘルパーを追加する。`net/smtp` の `SendMail` を使い `from@test.example.com` から `recipient` 宛てにメールを送信する。`msg` パラメータは RFC 2822 準拠のヘッダ付き本文として組み立て、`From`、`To`、`Subject`、`Message-ID` ヘッダを必ず含め、各ヘッダ行は `\r\n` で区切り、ヘッダと本文の間に `\r\n\r\n` を置く。これにより `TestIntegration_Download` で `Subject:` ヘッダを、`TestIntegration_FetchMeta` で注入した `Message-ID` を検証できる。失敗時は `require.NoError` でテストを即座に停止させる
+- [x] `injectTestMail(t *testing.T, smtpAddr, recipient, subject, body, messageID string)` ヘルパーを追加する。`net/smtp` の `SendMail` を使い `from@test.example.com` から `recipient` 宛てにメールを送信する。`msg` パラメータは RFC 2822 準拠のヘッダ付き本文として組み立て、`From`、`To`、`Subject`、`Message-ID` ヘッダを必ず含め、各ヘッダ行は `\r\n` で区切り、ヘッダと本文の間に `\r\n\r\n` を置く。これにより `TestIntegration_Download` で `Subject:` ヘッダを、`TestIntegration_FetchMeta` で注入した `Message-ID` を検証できる。失敗時は `require.NoError` でテストを即座に停止させる
 
-- [ ] `normalizeMessageID(messageID string) string` ヘルパーを追加する。先頭末尾の空白を除去し、外側の `<` `>` の有無だけを正規化する。`TestIntegration_FetchMeta` は `result.Messages` から注入した Message-ID と正規化後に一致するメッセージを探して検証する
+- [x] `normalizeMessageID(messageID string) string` ヘルパーを追加する。先頭末尾の空白を除去し、外側の `<` `>` の有無だけを正規化する。`TestIntegration_FetchMeta` は `result.Messages` から注入した Message-ID と正規化後に一致するメッセージを探して検証する
 
-- [ ] `loadSMTPTestConfig(t *testing.T) (cfg Config, smtpAddr string)` ヘルパーを追加する。`requireSMTPEnv(t)` を呼び出した後、次のように `Config` を構築して返す:
+- [x] `loadSMTPTestConfig(t *testing.T) (cfg Config, smtpAddr string)` ヘルパーを追加する。`requireSMTPEnv(t)` を呼び出した後、次のように `Config` を構築して返す:
   - `Host`: `IMAP_TEST_HOST`、`Port`: 必須環境変数 `IMAP_TEST_PORT`
-  - `Username`: `testRecipientEmail(t)`、`Password`: `config.Secret(testRecipientEmail(t))`
+  - `Username`: `testRecipientEmail()`、`Password`: `config.Secret(testRecipientEmail())`（`*testing.T` パラメータなし）
     - greenmail は未登録の受信者宛て SMTP 配送を受け入れると、受信者アドレスをユーザ名・パスワードとしてメールボックスを自動作成する。これにより Username と Password に同じ受信者アドレスを使うことで IMAP ログインが成功する（`02_architecture.md` §6.1 参照）
   - `Mailbox`: `"INBOX"`、`InsecureSkipVerify`: `true`
   - `smtpAddr`: `IMAP_TEST_SMTP_HOST:IMAP_TEST_SMTP_PORT`
 
-- [ ] `testMailboxName(t *testing.T) string` ヘルパーを追加する。テスト名から英数字・ハイフン以外の文字をハイフンに置換し、まず先頭を 24 文字以内に切り詰めてから `"-" + testRunID()` の suffix を付加した文字列を返す（IMAP メールボックス名に `@` は使用できないため、`testRecipientEmail(t)` と別の実装が必要）。切り詰めは suffix を削らないよう**先頭部分を先に**制限する。`TestIntegration_UIDValidity_Change` での非 INBOX メールボックス名生成に使用する。
+- [x] `testMailboxName(t *testing.T) string` ヘルパーを追加する。テスト名から英数字・ハイフン以外の文字をハイフンに置換し、まず先頭を 24 文字以内に切り詰めてから `"-" + testRunID()` の suffix を付加した文字列を返す（IMAP メールボックス名に `@` は使用できないため、`testRecipientEmail(t)` と別の実装が必要）。切り詰めは suffix を削らないよう**先頭部分を先に**制限する。`TestIntegration_UIDValidity_Change` での非 INBOX メールボックス名生成に使用する。
 
-- [ ] 環境変数判定をテスト可能にするため、`missingFixedUserEnv(getenv func(string) string) []string` と `missingSMTPEnv(getenv func(string) string) []string` を追加し、`requireFixedUserEnv` と `requireSMTPEnv` はその結果が空でない場合にだけ `t.Skip(...)` を呼ぶようにする。`IMAP_TEST_PORT` の値は整数として parse できることも検査対象に含める。
+- [x] 環境変数判定をテスト可能にするため、`missingFixedUserEnv(getenv func(string) string) []string` と `missingSMTPEnv(getenv func(string) string) []string` を追加し、`requireFixedUserEnv` と `requireSMTPEnv` はその結果が空でない場合にだけ `t.Skip(...)` を呼ぶようにする。`IMAP_TEST_PORT` の値は整数として parse できることも検査対象に含める（`missingSMTPEnv` では `IMAP_TEST_SMTP_PORT` も同様に整数検証を行う）。
 
-- [ ] `TestIntegration_EnvRequirements` を追加する。`missingFixedUserEnv` と `missingSMTPEnv` にテスト用 `getenv` を渡し、`IMAP_TEST_HOST` 欠落、`IMAP_TEST_PORT` 欠落、`IMAP_TEST_PORT` 不正値、SMTP host/port 欠落、固定ユーザの user/pass/mailbox 欠落をそれぞれ検証する（AC-04）。
+- [x] `TestIntegration_EnvRequirements` を追加する。`missingFixedUserEnv` と `missingSMTPEnv` にテスト用 `getenv` を渡し、`IMAP_TEST_HOST` 欠落、`IMAP_TEST_PORT` 欠落、`IMAP_TEST_PORT` 不正値、SMTP host/port 欠落、固定ユーザの user/pass/mailbox 欠落をそれぞれ検証する（AC-04）。
 
 #### 新規ファイル: `internal/imap/testutil/helpers.go`
 
-- [ ] `//go:build test` タグでファイルを作成する。パッケージ名は `imaptestutil`。
-- [ ] `CreateMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。`crypto/tls` と `emersion/go-imap` の `imapclient.DialTLS` を使い、`buildTLSConfig` の代わりに `tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify, MinVersion: tls.VersionTLS12}` を渡してダイヤルする。`tls.Config` リテラルには `//nolint:gosec // InsecureSkipVerify is set only in integration tests via cfg.InsecureSkipVerify; production paths never set it true` コメントを付与する（`make lint --build-tags test` で gosec G402 が `testutil/helpers.go` に適用されるため）。接続成功直後に接続終了の `defer` を登録し、`cfg.Username` と `cfg.Password.Value()` で `LOGIN` 成功後に `LOGOUT` の `defer` を登録してから、`CREATE mailbox` コマンドを実行する。CREATE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
-- [ ] `DeleteMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。同じ接続・LOGIN・LOGOUT 手順で `DELETE mailbox` コマンドを実行する。対象メールボックスが存在しない場合も greenmail の応答をそのままテスト失敗として扱う。DELETE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
+- [x] `//go:build test` タグでファイルを作成する。パッケージ名は `imaptestutil`。
+- [x] `CreateMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。`crypto/tls` と `emersion/go-imap` の `imapclient.DialTLS` を使い、`buildTLSConfig` の代わりに `tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify, MinVersion: tls.VersionTLS12}` を渡してダイヤルする。`tls.Config` リテラルには `//nolint:gosec // InsecureSkipVerify is set only in integration tests via cfg.InsecureSkipVerify; production paths never set it true` コメントを付与する（`make lint --build-tags test` で gosec G402 が `testutil/helpers.go` に適用されるため）。接続成功直後に接続終了の `defer` を登録し、`cfg.Username` と `cfg.Password.Value()` で `LOGIN` 成功後に `LOGOUT` の `defer` を登録してから、`CREATE mailbox` コマンドを実行する。CREATE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
+- [x] `DeleteMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。同じ接続・LOGIN・LOGOUT 手順で `DELETE mailbox` コマンドを実行する。対象メールボックスが存在しない場合も greenmail の応答をそのままテスト失敗として扱う。DELETE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
 
 > **テストヘルパーファイルの分類**: `docs/dev/developer_guide/test_organization.md` の Classification A に従い、公開 API のみを使う cross-package helper として `internal/imap/testutil/helpers.go` に配置し、`//go:build test` タグを付与する。これにより `make lint`（`--build-tags test`）の静的解析対象に含まれ、linter によるコンパイルエラー早期検出が機能する。
 
 **フェーズ完了の確認**:
-- [ ] `make test` が通過すること（統合テストはタグなしでスキップされること）
-- [ ] `go test -run '^$' -tags test,integration ./internal/imap/...` が通過すること（`client_integration_test.go` と `testutil/helpers.go` のコンパイルエラーを Phase 2 の段階で検出する。`-c -o /dev/null` は複数パッケージに対して使用できないため `-run '^$'` でテスト実行をスキップしつつコンパイルを確認する）
-- [ ] `make lint` が通過すること
+- [x] `make test` が通過すること（統合テストはタグなしでスキップされること）
+- [x] `go test -run '^$' -tags test,integration ./internal/imap/...` が通過すること（`client_integration_test.go` と `testutil/helpers.go` のコンパイルエラーを Phase 2 の段階で検出する。`-c -o /dev/null` は複数パッケージに対して使用できないため `-run '^$'` でテスト実行をスキップしつつコンパイルを確認する）
+- [x] `make lint` が通過すること
 
 ### PR-2 作成ポイント: integration test helpers
 
@@ -210,8 +210,8 @@
 
 **レビュー観点**: テストヘルパーが `//go:build test` タグ（`testutil/helpers.go`）または `//go:build integration` タグ（`client_integration_test.go`）で本番ビルドから除外されていること / `testRunID` / `testRecipientEmail` の一意性設計が devcontainer 長時間稼働時の再実行衝突を防いでいること / `CreateMailbox` / `DeleteMailbox` の defer 登録順序（LOGIN 後に LOGOUT が登録されること）が正しいこと / `TestIntegration_EnvRequirements` が AC-04 の全必須環境変数を網羅していること
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
