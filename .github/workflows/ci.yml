@@ -74,20 +74,19 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
-
       - name: Run golangci-lint security scan (gosec)
-        run: |
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11.4
           # Use "sarif:filename" format so golangci-lint writes the file itself
           # rather than relying on shell redirection, which can leave a
           # truncated (invalid) JSON file when the process is killed.
-          golangci-lint run \
-            --enable gosec \
-            --disable-all \
-            --build-tags test \
-            --out-format sarif:golangci-security.sarif \
-            --timeout=5m \
+          args: >-
+            --disable-all
+            --enable gosec
+            --build-tags test
+            --out-format sarif:golangci-security.sarif
+            --timeout=5m
             ./...
         continue-on-error: true
 
