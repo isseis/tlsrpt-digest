@@ -17,42 +17,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	// maxEmailLocalPart is the RFC 5321 maximum length for an email local-part.
-	maxEmailLocalPart = 64
-	// ulidLen is the fixed string length of a ULID produced by ulid.Make().
-	ulidLen = 26
-	// maxEmailPrefix is the maximum prefix length before "-" + ULID fits within maxEmailLocalPart.
-	maxEmailPrefix = maxEmailLocalPart - 1 - ulidLen // 37
-)
-
 // testRunID returns a unique suffix for this test binary invocation.
 var testRunID = sync.OnceValue(func() string {
 	return ulid.Make().String()
 })
 
-// sanitizeIdentifier replaces characters not safe in email local-parts or IMAP
-// mailbox names (keeping only alphanumerics and hyphens) with hyphens.
+// sanitizeIdentifier replaces characters not valid in an IMAP mailbox name
+// (keeping only alphanumerics and hyphens) with hyphens.
 var sanitizeIdentifier = regexp.MustCompile(`[^a-zA-Z0-9-]`)
 
-// testRecipientEmail returns a per-call unique recipient email address derived
-// from the test name. A fresh ULID is generated on every call so different
-// tests (or subtests) never share an address even when their sanitized names
-// share the same first maxEmailPrefix characters. The local-part is kept within
-// the RFC 5321 64-byte limit.
-func testRecipientEmail(t *testing.T) string {
-	t.Helper()
-	sanitized := sanitizeIdentifier.ReplaceAllString(t.Name(), "-")
-	return sanitized[:min(len(sanitized), maxEmailPrefix)] + "-" + ulid.Make().String() + "@test.example.com"
+// testRecipientEmail returns a per-call unique recipient email address.
+func testRecipientEmail() string {
+	return ulid.Make().String() + "@test.example.com"
 }
 
-// testMessageID returns a per-call unique Message-ID. A fresh ULID is generated
-// on every call, and the sanitized test-name prefix is truncated to
-// maxEmailPrefix so the local-part stays within the RFC 5321 64-byte limit.
-func testMessageID(t *testing.T) string {
-	t.Helper()
-	sanitized := sanitizeIdentifier.ReplaceAllString(t.Name(), "-")
-	return "<" + sanitized[:min(len(sanitized), maxEmailPrefix)] + "-" + ulid.Make().String() + "@test.example.com>"
+// testMessageID returns a per-call unique Message-ID.
+func testMessageID() string {
+	return "<" + ulid.Make().String() + "@test.example.com>"
 }
 
 // normalizeMessageID strips leading/trailing whitespace and ensures the value
@@ -154,7 +135,7 @@ func loadSMTPTestConfig(t *testing.T) (cfg Config, smtpAddr string) {
 	port, err := strconv.Atoi(os.Getenv("IMAP_TEST_PORT"))
 	require.NoError(t, err)
 
-	recipient := testRecipientEmail(t)
+	recipient := testRecipientEmail()
 	cfg = Config{
 		Host:               os.Getenv("IMAP_TEST_HOST"),
 		Port:               port,
