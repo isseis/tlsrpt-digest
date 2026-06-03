@@ -120,6 +120,7 @@ type fakeSession struct {
 
 func (f *fakeSession) Login(_, _ string) error { return nil }
 func (f *fakeSession) Logout() error           { return nil }
+func (f *fakeSession) Close() error            { return nil }
 
 func (f *fakeSession) Select(_ string, _ bool) (*goimap.MailboxStatus, error) {
 	if f.selectErr != nil {

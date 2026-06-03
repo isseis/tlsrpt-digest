@@ -28,6 +28,7 @@ var (
 type imapSession interface {
 	Login(username, password string) error
 	Logout() error
+	Close() error
 	Select(mailbox string, readOnly bool) (*goimap.MailboxStatus, error)
 	UidSearch(criteria *goimap.SearchCriteria) ([]uint32, error)
 	UidFetch(seqset *goimap.SeqSet, items []goimap.FetchItem, ch chan *goimap.Message) error
@@ -41,8 +42,9 @@ var dialTLS dialTLSFunc = func(addr string, tlsConfig *tls.Config) (imapSession,
 }
 
 type imapClient struct {
-	cfg     Config
-	session imapSession
+	cfg                Config
+	session            imapSession
+	lastSelectReadOnly bool // true when the last Select used EXAMINE (read-only)
 }
 
 var _ MailFetcher = (*imapClient)(nil)
@@ -100,6 +102,17 @@ func buildTLSConfig(cfg Config) (*tls.Config, error) {
 }
 
 func (c *imapClient) Close() error {
+	// Send IMAP CLOSE only when the last Select opened the mailbox read-only
+	// (EXAMINE). RFC 3501 §6.3.2 forbids permanent state changes in read-only
+	// sessions, so CLOSE deselects the mailbox without expunging any messages.
+	// When the last Select was read-write (SELECT), CLOSE would expunge messages
+	// flagged \Deleted by other clients, so we rely on LOGOUT alone in that case.
+	// Sending CLOSE is necessary because some servers (including greenmail) keep
+	// the mailbox in a "session-open" state after LOGOUT-only, which prevents
+	// concurrent DELETE from another connection.
+	if c.lastSelectReadOnly {
+		_ = c.session.Close()
+	}
 	if err := c.session.Logout(); err != nil {
 		return fmt.Errorf("imap: logout: %w", err)
 	}
@@ -116,6 +129,7 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 	if err != nil {
 		return FetchMetaResult{}, fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
 	}
+	c.lastSelectReadOnly = true
 
 	criteria := goimap.NewSearchCriteria()
 	criteria.Since = truncateToDate(since)
@@ -185,6 +199,7 @@ func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32][]
 	if _, err := c.session.Select(c.cfg.Mailbox, false); err != nil {
 		return nil, fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
 	}
+	c.lastSelectReadOnly = false
 
 	seqSet := uidsToSeqSet(uids)
 	section := &goimap.BodySectionName{Peek: true}
@@ -249,6 +264,7 @@ func (c *imapClient) MarkSeen(ctx context.Context, uids []uint32) error {
 	if _, err := c.session.Select(c.cfg.Mailbox, false); err != nil {
 		return fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
 	}
+	c.lastSelectReadOnly = false
 
 	seqSet := uidsToSeqSet(uids)
 	storeItem := goimap.FormatFlagsOp(goimap.AddFlags, false)
