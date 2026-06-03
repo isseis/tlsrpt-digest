@@ -50,11 +50,17 @@ func testRecipientEmail(t *testing.T) string {
 	return prefix + "-" + ulid.Make().String() + "@test.example.com"
 }
 
-// testMessageID returns a unique Message-ID for the test run.
+// testMessageID returns a per-call unique Message-ID. A fresh ULID is generated
+// on every call, and the sanitized test-name prefix is truncated to
+// maxEmailPrefix so the local-part stays within the RFC 5321 64-byte limit.
 func testMessageID(t *testing.T) string {
 	t.Helper()
 	sanitized := sanitizeIdentifier.ReplaceAllString(t.Name(), "-")
-	return "<" + sanitized + "-" + testRunID() + "@test.example.com>"
+	prefix := sanitized
+	if len(prefix) > maxEmailPrefix {
+		prefix = prefix[:maxEmailPrefix]
+	}
+	return "<" + prefix + "-" + ulid.Make().String() + "@test.example.com>"
 }
 
 // normalizeMessageID strips leading/trailing whitespace and ensures the value
