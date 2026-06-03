@@ -151,8 +151,8 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [x] PR がマージされた
-- [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ---
 
@@ -191,11 +191,11 @@
 
 #### 新規ファイル: `internal/imap/testutil/helpers.go`
 
-- [x] `//go:build test` タグでファイルを作成する。パッケージ名は `imaptestutil`。
+- [x] `//go:build test || integration` タグでファイルを作成する。パッケージ名は `imaptestutil`。
 - [x] `CreateMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。`crypto/tls` と `emersion/go-imap` の `imapclient.DialTLS` を使い、`buildTLSConfig` の代わりに `tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify, MinVersion: tls.VersionTLS12}` を渡してダイヤルする。`tls.Config` リテラルには `//nolint:gosec // InsecureSkipVerify is set only in integration tests via cfg.InsecureSkipVerify; production paths never set it true` コメントを付与する（`make lint --build-tags test` で gosec G402 が `testutil/helpers.go` に適用されるため）。接続成功直後に接続終了の `defer` を登録し、`cfg.Username` と `cfg.Password.Value()` で `LOGIN` 成功後に `LOGOUT` の `defer` を登録してから、`CREATE mailbox` コマンドを実行する。CREATE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
 - [x] `DeleteMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。同じ接続・LOGIN・LOGOUT 手順で `DELETE mailbox` コマンドを実行する。対象メールボックスが存在しない場合も greenmail の応答をそのままテスト失敗として扱う。DELETE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
 
-> **テストヘルパーファイルの分類**: `docs/dev/developer_guide/test_organization.md` の Classification A に従い、公開 API のみを使う cross-package helper として `internal/imap/testutil/helpers.go` に配置し、`//go:build test` タグを付与する。これにより `make lint`（`--build-tags test`）の静的解析対象に含まれ、linter によるコンパイルエラー早期検出が機能する。
+> **テストヘルパーファイルの分類**: `docs/dev/developer_guide/test_organization.md` の Classification A に従い、公開 API のみを使う cross-package helper として `internal/imap/testutil/helpers.go` に配置し、`//go:build test || integration` タグを付与する。これにより `make lint`（`--build-tags test`）の静的解析対象に含まれ、`go test -tags integration ./internal/imap/...` の手動実行でも参照できる。
 
 **フェーズ完了の確認**:
 - [x] `make test` が通過すること（統合テストはタグなしでスキップされること）
@@ -208,7 +208,7 @@
 
 **推奨タイトル**: `feat(0090): add IMAP test helpers for SMTP injection and mailbox mgmt`
 
-**レビュー観点**: テストヘルパーが `//go:build test` タグ（`testutil/helpers.go`）または `//go:build integration` タグ（`client_integration_test.go`）で本番ビルドから除外されていること / `testRunID` / `testRecipientEmail` の一意性設計が devcontainer 長時間稼働時の再実行衝突を防いでいること / `CreateMailbox` / `DeleteMailbox` の defer 登録順序（LOGIN 後に LOGOUT が登録されること）が正しいこと / `TestIntegration_EnvRequirements` が AC-04 の全必須環境変数を網羅していること
+**レビュー観点**: テストヘルパーが `//go:build test || integration` タグ（`testutil/helpers.go`）または `//go:build integration` タグ（`client_integration_test.go`）で本番ビルドから除外されていること / `testRunID` / `testRecipientEmail` の一意性設計が devcontainer 長時間稼働時の再実行衝突を防いでいること / `CreateMailbox` / `DeleteMailbox` の defer 登録順序（LOGIN 後に LOGOUT が登録されること）が正しいこと / `TestIntegration_EnvRequirements` が AC-04 の全必須環境変数を網羅していること
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
@@ -222,12 +222,12 @@
 #### 変更ファイル: `internal/imap/client_integration_test.go`
 
 ##### `TestIntegration_EnvConfig` の更新（既存テスト）
-- [ ] 先頭に `requireFixedUserEnv(t)` の呼び出しを追加する。
+- [x] 先頭に `requireFixedUserEnv(t)` の呼び出しを追加する。
   - 注意: `loadIntegrationConfig` 自体も `IMAP_TEST_HOST` が未設定の場合に `t.Skip` を呼ぶ。`requireFixedUserEnv` を先頭に加えることで `IMAP_TEST_USER`・`IMAP_TEST_PASS`・`IMAP_TEST_MAILBOX` が未設定の場合にもスキップするようになる。これにより `loadIntegrationConfig` 内スキップと `requireFixedUserEnv` のスキップが重複するが、いずれも `IMAP_TEST_HOST` を含むため「IMAP_TEST_HOST 未設定」は `requireFixedUserEnv` が先に検出してスキップする。実装後は `loadIntegrationConfig` 内の `t.Skip` を `requireFixedUserEnv` に集約することも検討できる（ただし後方互換性のある変更に限定する）。
-- [ ] `require.True(t, cfg.InsecureSkipVerify)` の assertion を追加する（`loadIntegrationConfig` の変更確認）
+- [x] `require.True(t, cfg.InsecureSkipVerify)` の assertion を追加する（`loadIntegrationConfig` の変更確認）
 
 ##### AC-05: 空メールボックス接続テスト
-- [ ] `TestIntegration_EmptyInbox` を追加する。先頭に次のコメントを付ける: `// TestIntegration_EmptyInbox verifies FetchMeta on an empty fixed-user mailbox (requirement F-002, AC-05).`
+- [x] `TestIntegration_EmptyInbox` を追加する。
   - `requireFixedUserEnv(t)` を呼ぶ
   - `loadIntegrationConfig(t)` で `imap.Config` を構築する
   - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する
@@ -235,7 +235,7 @@
   - `len(result.Messages) == 0` かつ `result.UIDValidity > 0` を `require.Empty` / `require.Positive` で検証する
 
 ##### AC-06: FetchMeta でメタ情報取得
-- [ ] `TestIntegration_FetchMeta` を追加する。先頭コメント: `// TestIntegration_FetchMeta verifies FetchMeta retrieves metadata of an injected message (requirement F-002, AC-06).`
+- [x] `TestIntegration_FetchMeta` を追加する。
   - `loadSMTPTestConfig(t)` を呼ぶ（`cfg.Username` は `testRecipientEmail(t)` から生成したテスト専用の動的ユーザアドレスであり、固定ユーザ `IMAP_TEST_USER` とは別物である）
   - `messageID := testMessageID(t)` を作成し、`injectTestMail(t, smtpAddr, cfg.Username, "fetch-meta-test", "test body", messageID)` でメール注入する
   - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する（`cfg.Username` = 受信者アドレス、`cfg.Password` = 受信者アドレス）
@@ -243,7 +243,7 @@
   - `result.Messages` から `normalizeMessageID(meta.MessageID) == normalizeMessageID(messageID)` のメッセージを 1 件だけ見つけ、その `UID > 0`、`Size > 0` を検証する。メールボックス全体の `len(result.Messages) == 1` は assert しない（同一 greenmail run に過去メールが残る可能性に備える）
 
 ##### AC-07: Download でメール本文取得
-- [ ] `TestIntegration_Download` を追加する。先頭コメント: `// TestIntegration_Download verifies Download retrieves full message body (requirement F-002, AC-07).`
+- [x] `TestIntegration_Download` を追加する。
   - `loadSMTPTestConfig(t)` を呼ぶ（`requireSMTPEnv` によるスキップ判定と `cfg`/`smtpAddr` の取得。AC-06 と同様にテスト専用の動的ユーザアドレスを使用する）
   - `injectTestMail` で subject を `"download-test"`、messageID を `testMessageID(t)` としてメール注入する
   - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する
@@ -252,21 +252,21 @@
   - 返されたバイト列に `Subject: download-test` が含まれることを `require.Contains` で検証する（`injectTestMail` が RFC 2822 ヘッダを正しく構築した結果、Subject ヘッダが本文に含まれる）
 
 ##### AC-08: MarkSeen で Seen フラグ付与
-- [ ] `TestIntegration_MarkSeen` を追加する。先頭コメント: `// TestIntegration_MarkSeen verifies MarkSeen sets the Seen flag (requirement F-002, AC-08).`
+- [x] `TestIntegration_MarkSeen` を追加する。
   - `loadSMTPTestConfig(t)` を呼ぶ（`requireSMTPEnv` によるスキップ判定と `cfg`/`smtpAddr` の取得。AC-06 と同様にテスト専用の動的ユーザアドレスを使用する）
   - メール注入後、`imap.NewIMAPClient(cfg)` で接続し直後に `t.Cleanup(func() { client.Close() })` を登録してから、`context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使って `FetchMeta` を呼び、注入した `Message-ID` に一致するメッセージを選択して `Seen == false` を確認する
   - 同じ context で `MarkSeen(ctx, []uint32{uid})` を実行する
   - 別セッションで `imap.NewIMAPClient(cfg)` を再接続し直後に `t.Cleanup(func() { client2.Close() })` を登録してから、同じ since 値で `FetchMeta` を呼んで、同じ `Message-ID` のメッセージが `Seen == true` になっていることを検証する
 
 ##### AC-09: UIDValidity 安定性確認
-- [ ] `TestIntegration_UIDValidity_Stable` を追加する。先頭コメント: `// TestIntegration_UIDValidity_Stable verifies UIDValidity is stable across consecutive FetchMeta calls (requirement F-002, AC-09).`
+- [x] `TestIntegration_UIDValidity_Stable` を追加する。
   - `requireFixedUserEnv(t)` を呼ぶ
   - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する
   - `context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使い、同一 INBOX に対して `FetchMeta` を 2 回呼ぶ
   - 両呼び出しの `UIDValidity` が同一であることを `require.Equal` で検証する
 
 ##### AC-10: UIDValidity 変化検出
-- [ ] `TestIntegration_UIDValidity_Change` を追加する。先頭コメント: `// TestIntegration_UIDValidity_Change verifies UIDValidity changes after mailbox DELETE and CREATE (requirement F-003, AC-10).`
+- [x] `TestIntegration_UIDValidity_Change` を追加する。
   - `requireFixedUserEnv(t)` を呼ぶ
   - `loadIntegrationConfig(t)` で固定ユーザの接続設定 `fixedCfg` を取得する
   - `testMailboxName(t)` でテスト固有の非 INBOX メールボックス名を導出する（`@` を含まない IMAP 互換の名前。Phase 2 で `client_integration_test.go` に追加する `testMailboxName` ヘルパーを使用する）
@@ -288,8 +288,8 @@
 
 **レビュー観点**: 各テストが独立して実行でき SMTP 注入受信者アドレスの一意性によりテスト間のメッセージ混入が防がれていること / `TestIntegration_UIDValidity_Change` が固有名の非 INBOX メールボックスを使用していること / `normalizeMessageID` による Message-ID 正規化比較が go-imap/greenmail の実装差異を吸収できること / `//go:build integration` タグが全テスト関数に適用されていること
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 

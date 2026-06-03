@@ -111,7 +111,8 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 		return FetchMetaResult{}, fmt.Errorf("imap: fetch meta: %w", err)
 	}
 
-	mailboxStatus, err := c.session.Select(c.cfg.Mailbox, false)
+	// Use EXAMINE (read-only) since FetchMeta does not modify any messages.
+	mailboxStatus, err := c.session.Select(c.cfg.Mailbox, true)
 	if err != nil {
 		return FetchMetaResult{}, fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
 	}
