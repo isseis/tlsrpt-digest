@@ -355,7 +355,7 @@
 
 **レビュー観点**: `insecureMailFetcherFactory` による依存注入が本番の `buildIMAPConfig` を変更せずに greenmail へ接続できていること / 非ゼロ終了コード（AC-11(1)）とストアの recovery-required 状態（AC-11(2)）の両方を検証していること / `t.Parallel()` を使用しておらず `withCommandRunners` のグローバル変数変更による並行実行干渉がないこと / `testMailboxName` が各テスト間でメールボックス名の衝突を防いでいること
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
@@ -467,7 +467,7 @@
 
 **レビュー観点**: devcontainer と CI の greenmail 設定（ポート・固定ユーザ GREENMAIL_OPTS）が一致していること / `classify-changes.sh` の `has-integration-changes` 判定条件が devcontainer・testdata の変更も捕捉し既存 `has-code-changes` ロジックと整合していること / `verify-integration-workflow.go` が文字列 grep ではなく構造化 YAML パーサで検証していること / 通常 `test` ジョブが greenmail なし・integration タグなしのまま維持されていること
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
