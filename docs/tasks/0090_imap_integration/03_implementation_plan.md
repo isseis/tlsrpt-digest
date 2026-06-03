@@ -151,8 +151,8 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [x] PR がマージされた
-- [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ---
 
@@ -191,11 +191,11 @@
 
 #### 新規ファイル: `internal/imap/testutil/helpers.go`
 
-- [x] `//go:build test` タグでファイルを作成する。パッケージ名は `imaptestutil`。
+- [x] `//go:build test || integration` タグでファイルを作成する。パッケージ名は `imaptestutil`。
 - [x] `CreateMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。`crypto/tls` と `emersion/go-imap` の `imapclient.DialTLS` を使い、`buildTLSConfig` の代わりに `tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify, MinVersion: tls.VersionTLS12}` を渡してダイヤルする。`tls.Config` リテラルには `//nolint:gosec // InsecureSkipVerify is set only in integration tests via cfg.InsecureSkipVerify; production paths never set it true` コメントを付与する（`make lint --build-tags test` で gosec G402 が `testutil/helpers.go` に適用されるため）。接続成功直後に接続終了の `defer` を登録し、`cfg.Username` と `cfg.Password.Value()` で `LOGIN` 成功後に `LOGOUT` の `defer` を登録してから、`CREATE mailbox` コマンドを実行する。CREATE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
 - [x] `DeleteMailbox(t *testing.T, cfg imap.Config, mailbox string)` を追加する。同じ接続・LOGIN・LOGOUT 手順で `DELETE mailbox` コマンドを実行する。対象メールボックスが存在しない場合も greenmail の応答をそのままテスト失敗として扱う。DELETE が失敗して `t.Fatal` へ進む場合でも、登録済みの `LOGOUT` と接続終了が実行されるようにする。
 
-> **テストヘルパーファイルの分類**: `docs/dev/developer_guide/test_organization.md` の Classification A に従い、公開 API のみを使う cross-package helper として `internal/imap/testutil/helpers.go` に配置し、`//go:build test` タグを付与する。これにより `make lint`（`--build-tags test`）の静的解析対象に含まれ、linter によるコンパイルエラー早期検出が機能する。
+> **テストヘルパーファイルの分類**: `docs/dev/developer_guide/test_organization.md` の Classification A に従い、公開 API のみを使う cross-package helper として `internal/imap/testutil/helpers.go` に配置し、`//go:build test || integration` タグを付与する。これにより `make lint`（`--build-tags test`）の静的解析対象に含まれ、`go test -tags integration ./internal/imap/...` の手動実行でも参照できる。
 
 **フェーズ完了の確認**:
 - [x] `make test` が通過すること（統合テストはタグなしでスキップされること）
@@ -208,12 +208,12 @@
 
 **推奨タイトル**: `feat(0090): add IMAP test helpers for SMTP injection and mailbox mgmt`
 
-**レビュー観点**: テストヘルパーが `//go:build test` タグ（`testutil/helpers.go`）または `//go:build integration` タグ（`client_integration_test.go`）で本番ビルドから除外されていること / `testRunID` / `testRecipientEmail` の一意性設計が devcontainer 長時間稼働時の再実行衝突を防いでいること / `CreateMailbox` / `DeleteMailbox` の defer 登録順序（LOGIN 後に LOGOUT が登録されること）が正しいこと / `TestIntegration_EnvRequirements` が AC-04 の全必須環境変数を網羅していること
+**レビュー観点**: テストヘルパーが `//go:build test || integration` タグ（`testutil/helpers.go`）または `//go:build integration` タグ（`client_integration_test.go`）で本番ビルドから除外されていること / `testRunID` / `testRecipientEmail` の一意性設計が devcontainer 長時間稼働時の再実行衝突を防いでいること / `CreateMailbox` / `DeleteMailbox` の defer 登録順序（LOGIN 後に LOGOUT が登録されること）が正しいこと / `TestIntegration_EnvRequirements` が AC-04 の全必須環境変数を網羅していること
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [x] PR がマージされた
-- [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ---
 

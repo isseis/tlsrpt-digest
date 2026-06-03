@@ -164,16 +164,9 @@ func loadIntegrationConfig(t *testing.T) imap.Config {
 		Port:               port,
 		Username:           os.Getenv("IMAP_TEST_USER"),
 		Password:           config.Secret(os.Getenv("IMAP_TEST_PASS")),
-		Mailbox:            envOrDefault("IMAP_TEST_MAILBOX", "INBOX"),
+		Mailbox:            os.Getenv("IMAP_TEST_MAILBOX"),
 		InsecureSkipVerify: true,
 	}
-}
-
-func envOrDefault(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
 }
 
 func TestIntegration_EnvConfig(t *testing.T) {
