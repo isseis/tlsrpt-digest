@@ -372,6 +372,7 @@ func TestIntegration_Download(t *testing.T) {
 
 	bodies, err := client.Download(ctx, []uint32{uid})
 	require.NoError(t, err)
+	require.Contains(t, bodies, uid, "downloaded map must contain the requested UID")
 	require.Contains(t, string(bodies[uid]), "Subject: download-test")
 }
 
@@ -449,12 +450,12 @@ func TestIntegration_UIDValidity_Change(t *testing.T) {
 
 	client1, err := imap.NewIMAPClient(testCfg)
 	require.NoError(t, err)
-	// Close explicitly before DELETE to avoid server-side mailbox-in-use rejection.
-	// No t.Cleanup registered; if FetchMeta fails, the leaked connection is acceptable in tests.
-	r1, err := client1.FetchMeta(context.Background(), time.Now().AddDate(-1, 0, 0))
-	require.NoError(t, err)
-	v1 := r1.UIDValidity
+	// Close before checking the error so the connection is released even on FetchMeta failure,
+	// preventing the subsequent t.Cleanup DeleteMailbox from seeing a 'mailbox in use' error.
+	r1, fetchErr := client1.FetchMeta(context.Background(), time.Now().AddDate(-1, 0, 0))
 	require.NoError(t, client1.Close())
+	require.NoError(t, fetchErr)
+	v1 := r1.UIDValidity
 
 	// greenmail assigns UIDVALIDITY from the current Unix timestamp (second resolution).
 	// Wait one second so that the recreated mailbox gets a strictly later timestamp.
