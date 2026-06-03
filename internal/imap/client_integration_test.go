@@ -1,8 +1,9 @@
 //go:build integration
 
-package imap
+package imap_test
 
 import (
+	"context"
 	"net/smtp"
 	"os"
 	"regexp"
@@ -10,10 +11,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/oklog/ulid/v2"
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
+	"github.com/isseis/tlsrpt-digest/internal/imap"
+	imaptestutil "github.com/isseis/tlsrpt-digest/internal/imap/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -128,7 +132,7 @@ func requireSMTPEnv(t *testing.T) {
 
 // loadSMTPTestConfig builds an imap.Config for an SMTP-injected test user and
 // returns the SMTP address.
-func loadSMTPTestConfig(t *testing.T) (cfg Config, smtpAddr string) {
+func loadSMTPTestConfig(t *testing.T) (cfg imap.Config, smtpAddr string) {
 	t.Helper()
 	requireSMTPEnv(t)
 
@@ -136,7 +140,7 @@ func loadSMTPTestConfig(t *testing.T) (cfg Config, smtpAddr string) {
 	require.NoError(t, err)
 
 	recipient := testRecipientEmail()
-	cfg = Config{
+	cfg = imap.Config{
 		Host:               os.Getenv("IMAP_TEST_HOST"),
 		Port:               port,
 		Username:           recipient,
@@ -146,6 +150,38 @@ func loadSMTPTestConfig(t *testing.T) (cfg Config, smtpAddr string) {
 	}
 	smtpAddr = os.Getenv("IMAP_TEST_SMTP_HOST") + ":" + os.Getenv("IMAP_TEST_SMTP_PORT")
 	return cfg, smtpAddr
+}
+
+func loadIntegrationConfig(t *testing.T) imap.Config {
+	t.Helper()
+
+	host := os.Getenv("IMAP_TEST_HOST")
+	if host == "" {
+		t.Skip("integration env is not configured")
+	}
+
+	port := 993
+	if rawPort := os.Getenv("IMAP_TEST_PORT"); rawPort != "" {
+		parsed, err := strconv.Atoi(rawPort)
+		require.NoError(t, err)
+		port = parsed
+	}
+
+	return imap.Config{
+		Host:               host,
+		Port:               port,
+		Username:           os.Getenv("IMAP_TEST_USER"),
+		Password:           config.Secret(os.Getenv("IMAP_TEST_PASS")),
+		Mailbox:            envOrDefault("IMAP_TEST_MAILBOX", "INBOX"),
+		InsecureSkipVerify: true,
+	}
+}
+
+func envOrDefault(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func TestIntegration_EnvConfig(t *testing.T) {
@@ -260,34 +296,165 @@ func TestIntegration_EnvRequirements(t *testing.T) {
 	})
 }
 
-func loadIntegrationConfig(t *testing.T) Config {
-	t.Helper()
+// TestIntegration_EmptyInbox verifies FetchMeta on an empty fixed-user mailbox.
+func TestIntegration_EmptyInbox(t *testing.T) {
+	requireFixedUserEnv(t)
+	cfg := loadIntegrationConfig(t)
+	client, err := imap.NewIMAPClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
 
-	host := os.Getenv("IMAP_TEST_HOST")
-	if host == "" {
-		t.Skip("integration env is not configured")
-	}
-
-	port := 993
-	if rawPort := os.Getenv("IMAP_TEST_PORT"); rawPort != "" {
-		parsed, err := strconv.Atoi(rawPort)
-		require.NoError(t, err)
-		port = parsed
-	}
-
-	return Config{
-		Host:               host,
-		Port:               port,
-		Username:           os.Getenv("IMAP_TEST_USER"),
-		Password:           config.Secret(os.Getenv("IMAP_TEST_PASS")),
-		Mailbox:            envOrDefault("IMAP_TEST_MAILBOX", "INBOX"),
-		InsecureSkipVerify: true,
-	}
+	result, err := client.FetchMeta(context.Background(), time.Now().AddDate(-1, 0, 0))
+	require.NoError(t, err)
+	require.Empty(t, result.Messages)
+	require.Positive(t, result.UIDValidity)
 }
 
-func envOrDefault(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+// TestIntegration_FetchMeta verifies FetchMeta retrieves metadata of an injected message.
+func TestIntegration_FetchMeta(t *testing.T) {
+	cfg, smtpAddr := loadSMTPTestConfig(t)
+	messageID := testMessageID()
+	injectTestMail(t, smtpAddr, cfg.Username, "fetch-meta-test", "test body", messageID)
+
+	client, err := imap.NewIMAPClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	result, err := client.FetchMeta(context.Background(), time.Now().AddDate(-1, 0, 0))
+	require.NoError(t, err)
+
+	var found *imap.MessageMeta
+	for i := range result.Messages {
+		if normalizeMessageID(result.Messages[i].MessageID) == normalizeMessageID(messageID) {
+			found = &result.Messages[i]
+			break
+		}
 	}
-	return fallback
+	require.NotNil(t, found, "injected message not found in FetchMeta result")
+	require.Positive(t, found.UID)
+	require.Positive(t, found.Size)
+}
+
+// TestIntegration_Download verifies Download retrieves full message body.
+func TestIntegration_Download(t *testing.T) {
+	cfg, smtpAddr := loadSMTPTestConfig(t)
+	messageID := testMessageID()
+	injectTestMail(t, smtpAddr, cfg.Username, "download-test", "test body", messageID)
+
+	client, err := imap.NewIMAPClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	ctx := context.Background()
+	since := time.Now().AddDate(-1, 0, 0)
+	result, err := client.FetchMeta(ctx, since)
+	require.NoError(t, err)
+
+	var uid uint32
+	for _, meta := range result.Messages {
+		if normalizeMessageID(meta.MessageID) == normalizeMessageID(messageID) {
+			uid = meta.UID
+			break
+		}
+	}
+	require.NotZero(t, uid, "injected message not found in FetchMeta result")
+
+	bodies, err := client.Download(ctx, []uint32{uid})
+	require.NoError(t, err)
+	require.Contains(t, string(bodies[uid]), "Subject: download-test")
+}
+
+// TestIntegration_MarkSeen verifies MarkSeen sets the Seen flag.
+func TestIntegration_MarkSeen(t *testing.T) {
+	cfg, smtpAddr := loadSMTPTestConfig(t)
+	messageID := testMessageID()
+	injectTestMail(t, smtpAddr, cfg.Username, "mark-seen-test", "test body", messageID)
+
+	ctx := context.Background()
+	since := time.Now().AddDate(-1, 0, 0)
+
+	client, err := imap.NewIMAPClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	result, err := client.FetchMeta(ctx, since)
+	require.NoError(t, err)
+
+	var uid uint32
+	for _, meta := range result.Messages {
+		if normalizeMessageID(meta.MessageID) == normalizeMessageID(messageID) {
+			require.False(t, meta.Seen)
+			uid = meta.UID
+			break
+		}
+	}
+	require.NotZero(t, uid, "injected message not found in FetchMeta result")
+
+	require.NoError(t, client.MarkSeen(ctx, []uint32{uid}))
+
+	client2, err := imap.NewIMAPClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client2.Close() })
+
+	result2, err := client2.FetchMeta(ctx, since)
+	require.NoError(t, err)
+	for _, meta := range result2.Messages {
+		if normalizeMessageID(meta.MessageID) == normalizeMessageID(messageID) {
+			require.True(t, meta.Seen)
+			return
+		}
+	}
+	t.Fatal("injected message not found in second FetchMeta result")
+}
+
+// TestIntegration_UIDValidity_Stable verifies UIDValidity is stable across consecutive FetchMeta calls.
+func TestIntegration_UIDValidity_Stable(t *testing.T) {
+	requireFixedUserEnv(t)
+	cfg := loadIntegrationConfig(t)
+
+	client, err := imap.NewIMAPClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	ctx := context.Background()
+	since := time.Now().AddDate(-1, 0, 0)
+
+	r1, err := client.FetchMeta(ctx, since)
+	require.NoError(t, err)
+	r2, err := client.FetchMeta(ctx, since)
+	require.NoError(t, err)
+	require.Equal(t, r1.UIDValidity, r2.UIDValidity)
+}
+
+// TestIntegration_UIDValidity_Change verifies UIDValidity changes after mailbox DELETE and CREATE.
+func TestIntegration_UIDValidity_Change(t *testing.T) {
+	requireFixedUserEnv(t)
+	fixedCfg := loadIntegrationConfig(t)
+	mailbox := testMailboxName(t)
+
+	imaptestutil.CreateMailbox(t, fixedCfg, mailbox)
+	t.Cleanup(func() { imaptestutil.DeleteMailbox(t, fixedCfg, mailbox) })
+
+	testCfg := fixedCfg
+	testCfg.Mailbox = mailbox
+
+	client1, err := imap.NewIMAPClient(testCfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client1.Close() })
+
+	r1, err := client1.FetchMeta(context.Background(), time.Now().AddDate(-1, 0, 0))
+	require.NoError(t, err)
+	v1 := r1.UIDValidity
+	require.NoError(t, client1.Close())
+
+	imaptestutil.DeleteMailbox(t, fixedCfg, mailbox)
+	imaptestutil.CreateMailbox(t, fixedCfg, mailbox)
+
+	client2, err := imap.NewIMAPClient(testCfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client2.Close() })
+
+	r2, err := client2.FetchMeta(context.Background(), time.Now().AddDate(-1, 0, 0))
+	require.NoError(t, err)
+	require.NotEqual(t, v1, r2.UIDValidity)
 }

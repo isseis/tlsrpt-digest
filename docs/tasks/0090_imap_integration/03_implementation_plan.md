@@ -222,12 +222,12 @@
 #### 変更ファイル: `internal/imap/client_integration_test.go`
 
 ##### `TestIntegration_EnvConfig` の更新（既存テスト）
-- [ ] 先頭に `requireFixedUserEnv(t)` の呼び出しを追加する。
+- [x] 先頭に `requireFixedUserEnv(t)` の呼び出しを追加する。
   - 注意: `loadIntegrationConfig` 自体も `IMAP_TEST_HOST` が未設定の場合に `t.Skip` を呼ぶ。`requireFixedUserEnv` を先頭に加えることで `IMAP_TEST_USER`・`IMAP_TEST_PASS`・`IMAP_TEST_MAILBOX` が未設定の場合にもスキップするようになる。これにより `loadIntegrationConfig` 内スキップと `requireFixedUserEnv` のスキップが重複するが、いずれも `IMAP_TEST_HOST` を含むため「IMAP_TEST_HOST 未設定」は `requireFixedUserEnv` が先に検出してスキップする。実装後は `loadIntegrationConfig` 内の `t.Skip` を `requireFixedUserEnv` に集約することも検討できる（ただし後方互換性のある変更に限定する）。
-- [ ] `require.True(t, cfg.InsecureSkipVerify)` の assertion を追加する（`loadIntegrationConfig` の変更確認）
+- [x] `require.True(t, cfg.InsecureSkipVerify)` の assertion を追加する（`loadIntegrationConfig` の変更確認）
 
 ##### AC-05: 空メールボックス接続テスト
-- [ ] `TestIntegration_EmptyInbox` を追加する。先頭に次のコメントを付ける: `// TestIntegration_EmptyInbox verifies FetchMeta on an empty fixed-user mailbox (requirement F-002, AC-05).`
+- [x] `TestIntegration_EmptyInbox` を追加する。
   - `requireFixedUserEnv(t)` を呼ぶ
   - `loadIntegrationConfig(t)` で `imap.Config` を構築する
   - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する
@@ -235,7 +235,7 @@
   - `len(result.Messages) == 0` かつ `result.UIDValidity > 0` を `require.Empty` / `require.Positive` で検証する
 
 ##### AC-06: FetchMeta でメタ情報取得
-- [ ] `TestIntegration_FetchMeta` を追加する。先頭コメント: `// TestIntegration_FetchMeta verifies FetchMeta retrieves metadata of an injected message (requirement F-002, AC-06).`
+- [x] `TestIntegration_FetchMeta` を追加する。
   - `loadSMTPTestConfig(t)` を呼ぶ（`cfg.Username` は `testRecipientEmail(t)` から生成したテスト専用の動的ユーザアドレスであり、固定ユーザ `IMAP_TEST_USER` とは別物である）
   - `messageID := testMessageID(t)` を作成し、`injectTestMail(t, smtpAddr, cfg.Username, "fetch-meta-test", "test body", messageID)` でメール注入する
   - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する（`cfg.Username` = 受信者アドレス、`cfg.Password` = 受信者アドレス）
@@ -243,7 +243,7 @@
   - `result.Messages` から `normalizeMessageID(meta.MessageID) == normalizeMessageID(messageID)` のメッセージを 1 件だけ見つけ、その `UID > 0`、`Size > 0` を検証する。メールボックス全体の `len(result.Messages) == 1` は assert しない（同一 greenmail run に過去メールが残る可能性に備える）
 
 ##### AC-07: Download でメール本文取得
-- [ ] `TestIntegration_Download` を追加する。先頭コメント: `// TestIntegration_Download verifies Download retrieves full message body (requirement F-002, AC-07).`
+- [x] `TestIntegration_Download` を追加する。
   - `loadSMTPTestConfig(t)` を呼ぶ（`requireSMTPEnv` によるスキップ判定と `cfg`/`smtpAddr` の取得。AC-06 と同様にテスト専用の動的ユーザアドレスを使用する）
   - `injectTestMail` で subject を `"download-test"`、messageID を `testMessageID(t)` としてメール注入する
   - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する
@@ -252,21 +252,21 @@
   - 返されたバイト列に `Subject: download-test` が含まれることを `require.Contains` で検証する（`injectTestMail` が RFC 2822 ヘッダを正しく構築した結果、Subject ヘッダが本文に含まれる）
 
 ##### AC-08: MarkSeen で Seen フラグ付与
-- [ ] `TestIntegration_MarkSeen` を追加する。先頭コメント: `// TestIntegration_MarkSeen verifies MarkSeen sets the Seen flag (requirement F-002, AC-08).`
+- [x] `TestIntegration_MarkSeen` を追加する。
   - `loadSMTPTestConfig(t)` を呼ぶ（`requireSMTPEnv` によるスキップ判定と `cfg`/`smtpAddr` の取得。AC-06 と同様にテスト専用の動的ユーザアドレスを使用する）
   - メール注入後、`imap.NewIMAPClient(cfg)` で接続し直後に `t.Cleanup(func() { client.Close() })` を登録してから、`context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使って `FetchMeta` を呼び、注入した `Message-ID` に一致するメッセージを選択して `Seen == false` を確認する
   - 同じ context で `MarkSeen(ctx, []uint32{uid})` を実行する
   - 別セッションで `imap.NewIMAPClient(cfg)` を再接続し直後に `t.Cleanup(func() { client2.Close() })` を登録してから、同じ since 値で `FetchMeta` を呼んで、同じ `Message-ID` のメッセージが `Seen == true` になっていることを検証する
 
 ##### AC-09: UIDValidity 安定性確認
-- [ ] `TestIntegration_UIDValidity_Stable` を追加する。先頭コメント: `// TestIntegration_UIDValidity_Stable verifies UIDValidity is stable across consecutive FetchMeta calls (requirement F-002, AC-09).`
+- [x] `TestIntegration_UIDValidity_Stable` を追加する。
   - `requireFixedUserEnv(t)` を呼ぶ
   - `imap.NewIMAPClient(cfg)` で接続し、直後に `t.Cleanup(func() { client.Close() })` を登録する
   - `context.Background()` と `time.Now().AddDate(-1, 0, 0)` を使い、同一 INBOX に対して `FetchMeta` を 2 回呼ぶ
   - 両呼び出しの `UIDValidity` が同一であることを `require.Equal` で検証する
 
 ##### AC-10: UIDValidity 変化検出
-- [ ] `TestIntegration_UIDValidity_Change` を追加する。先頭コメント: `// TestIntegration_UIDValidity_Change verifies UIDValidity changes after mailbox DELETE and CREATE (requirement F-003, AC-10).`
+- [x] `TestIntegration_UIDValidity_Change` を追加する。
   - `requireFixedUserEnv(t)` を呼ぶ
   - `loadIntegrationConfig(t)` で固定ユーザの接続設定 `fixedCfg` を取得する
   - `testMailboxName(t)` でテスト固有の非 INBOX メールボックス名を導出する（`@` を含まない IMAP 互換の名前。Phase 2 で `client_integration_test.go` に追加する `testMailboxName` ヘルパーを使用する）
