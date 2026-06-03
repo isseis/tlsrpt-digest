@@ -17,6 +17,7 @@ jobs:
     outputs:
       has-code-changes: ${{ steps.check.outputs.has-code-changes }}
       has-devcontainer-changes: ${{ steps.check.outputs.has-devcontainer-changes }}
+      has-integration-changes: ${{ steps.check.outputs.has-integration-changes }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,29 +34,11 @@ jobs:
           echo "Changed files:"
           echo "$changed_files"
 
-          # Files that do not require running tests:
-          #   - *.md (documentation)
-          #   - docs/ (documentation)
-          #   - .devcontainer/ (dev environment config)
-          #   - LICENSE
-          code_files=$(echo "$changed_files" | grep -vE '(\.md$|^docs/|^\.devcontainer/|^LICENSE$)' || true)
-
-          if [ -z "$code_files" ]; then
-            echo "has-code-changes=false" >> $GITHUB_OUTPUT
-            echo "No code changes detected, skipping tests"
-          else
-            echo "has-code-changes=true" >> $GITHUB_OUTPUT
-            echo "Code changes detected, running tests"
-          fi
-
-          # Check if devcontainer files were changed
-          if echo "$changed_files" | grep -q '^\.devcontainer/'; then
-            echo "has-devcontainer-changes=true" >> $GITHUB_OUTPUT
-            echo "Devcontainer files changed, running devcontainer build test"
-          else
-            echo "has-devcontainer-changes=false" >> $GITHUB_OUTPUT
-            echo "No devcontainer changes, skipping devcontainer build test"
-          fi
+          # Write changed files to a temp file and delegate to the classify script.
+          tmp=$(mktemp)
+          echo "$changed_files" > "$tmp"
+          bash .github/scripts/classify-changes.sh "$tmp"
+          rm -f "$tmp"
 
   security-scan:
     name: Security Scan
@@ -221,17 +204,53 @@ jobs:
             gh --version
             pre-commit --version
 
+  integration-test:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    needs: check-changes
+    if: needs.check-changes.outputs.has-integration-changes == 'true'
+    services:
+      greenmail:
+        image: greenmail/standalone:2.1.3
+        env:
+          GREENMAIL_OPTS: "-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=imap-test:imap-test@example.com -Dgreenmail.users.login=email"
+        ports:
+          - "3993:3993"
+          - "3025:3025"
+        options: >-
+          --health-cmd "bash -c 'echo > /dev/tcp/localhost/3993'"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+          --health-start-period 10s
+    env:
+      IMAP_TEST_HOST: localhost
+      IMAP_TEST_PORT: "3993"
+      IMAP_TEST_SMTP_HOST: localhost
+      IMAP_TEST_SMTP_PORT: "3025"
+      IMAP_TEST_USER: imap-test@example.com
+      IMAP_TEST_PASS: imap-test
+      IMAP_TEST_MAILBOX: INBOX
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run integration tests
+        run: make test-integration
+
   non-code-only-notification:
     name: Non-code changes only detected
     runs-on: ubuntu-latest
     needs: check-changes
-    if: needs.check-changes.outputs.has-code-changes == 'false'
+    if: needs.check-changes.outputs.has-code-changes == 'false' && needs.check-changes.outputs.has-integration-changes == 'false'
     steps:
       - name: Notify non-code-only changes
         run: |
-          echo "This pull request contains only non-code changes (docs, .devcontainer, LICENSE, etc.)."
-          if [ "${{ needs.check-changes.outputs.has-devcontainer-changes }}" = "true" ]; then
-            echo "Running devcontainer build test. Skipping security scans, build, and Go tests."
-          else
-            echo "Skipping all CI jobs to save resources."
-          fi
+          echo "This pull request contains only non-code changes (docs, LICENSE, etc.)."
+          echo "Skipping all CI jobs to save resources."
