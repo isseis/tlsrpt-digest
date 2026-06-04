@@ -27,14 +27,41 @@ VS Code の [Dev Containers](https://marketplace.visualstudio.com/items?itemName
 
 ### ローカル環境で直接セットアップする場合
 
-devcontainer を使わない場合は以下のツールをインストールしてください。
+devcontainer を使わない場合は以下のツールをインストールしてください。devcontainer で使用しているバージョンは [`.devcontainer/Dockerfile`](.devcontainer/Dockerfile) を参照してください。
 
-| ツール | 用途 | バージョン |
-|---|---|---|
-| Go | ビルド・テスト | 1.26 以上 |
-| golangci-lint | 静的解析 | 最新 |
-| gofumpt | コードフォーマット | 最新 |
-| Claude Code | AI 支援開発 | 最新 |
+**Go**（1.26 以上）
+
+[https://go.dev/dl/](https://go.dev/dl/) から OS に合わせたインストーラをダウンロードするか、パッケージマネージャを使用してください。
+
+```bash
+# macOS (Homebrew)
+brew install go
+
+# Ubuntu / Debian
+sudo apt-get install golang-go
+```
+
+**golangci-lint**
+
+```bash
+# 公式インストールスクリプト（Linux / macOS）
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+
+# macOS (Homebrew)
+brew install golangci-lint
+```
+
+**gofumpt**
+
+```bash
+go install mvdan.cc/gofumpt@latest
+```
+
+**Claude Code**
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
 
 インストール後、リポジトリをクローンしてビルドを確認します。
 
