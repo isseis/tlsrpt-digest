@@ -8,7 +8,7 @@ SMTP TLS Reporting (RFC 8460, commonly known as TLSRPT) is a specification by wh
 
 ### Why Automated Processing is Needed
 
-TLSRPT reports arrive in large volumes every day, making manual review impractical. What matters is the presence or absence of `failure_session_count` (the number of TLS connection failures). When failures are detected, administrators must be notified promptly. Routine reports with no issues are accumulated and reported as a periodic summary, minimizing management overhead.
+TLSRPT reports arrive in large volumes every day, making manual review impractical. What matters is whether `failure_session_count` (the number of TLS connection failures) is non-zero. When failures are detected, administrators must be notified promptly. Routine reports with no issues are accumulated and reported as a periodic summary, minimizing management overhead.
 
 ### Project Purpose
 
@@ -63,26 +63,13 @@ flowchart LR
 
 ```
 tlsrpt-digest/
-├── cmd/
-│   └── tlsrpt-digest/        # Entry point, subcommands, one-shot execution
-├── internal/
-│   ├── imap/                 # IMAP connection, metadata fetch (all in window), selective download, marking as read
-│   ├── tlsrpt/               # RFC 8460 JSON parsing, failure detection
-│   ├── notify/               # Slack / email notification (immediate alerts and periodic summaries)
-│   └── store/                # Report persistence (.json / .eml), data management for periodic summaries
-├── testdata/                 # Real test data (.eml, .json.gz)
-└── docs/                     # Documentation
+├── cmd/        # Command-line entry points
+├── internal/   # Core implementation
+├── testdata/   # Real test data (.eml, .json.gz)
+└── docs/       # Documentation
 ```
 
-### Responsibilities of Each Package
-
-| Package | Responsibility |
-|---|---|
-| `internal/imap` | Connecting to the IMAP server, fetching metadata for all messages in the lookback window, selectively downloading messages, marking as read after processing |
-| `internal/tlsrpt` | Extracting .json.gz attachments, parsing RFC 8460 JSON, evaluating failure_session_count |
-| `internal/notify` | Sending notifications via Slack Webhook / email (both immediate alerts and periodic summaries) |
-| `internal/store` | Saving and loading .eml files, persisting report data as JSON, aggregation for periodic summaries |
-| `cmd/tlsrpt-digest` | Loading configuration files, initializing each package, running subcommands (fetch / summary / reprocess) |
+For detailed responsibilities of each package, see the [Package Reference](dev/developer_guide/package_reference.md).
 
 ---
 
@@ -105,7 +92,7 @@ By defining interfaces such as `MailFetcher` and implementing notifications as a
 
 ### Adopting File-Based Storage for Data Accumulation
 
-Report data must be accumulated for the periodic summary. The project uses JSON files for aggregated report data and stores original emails as `.eml` files so it can operate without an external database server while preserving inputs for reprocessing.
+Report data must be accumulated for the periodic summary. To operate without an external database server, the project stores aggregated report data as JSON files and preserves original emails as `.eml` files for reprocessing.
 
 ---
 
@@ -118,9 +105,9 @@ Report data must be accumulated for the periodic summary. The project uses JSON 
 - **Content**: Sending organization name, target policy (MTA-STS / DANE), failure count, report period
 - **Notification destination**: Slack Webhook (preferred) or email
 
-### Weekly Summary (normal operation)
+### Periodic Summary (normal operation)
 
-- **Trigger**: Weekly schedule (e.g., every Monday)
+- **Trigger**: Periodic schedule (e.g., every Monday)
 - **Content**: Aggregation of reports received during the past week (success counts by domain and by policy)
 - **Purpose**: Provides regular confirmation that the system is operating correctly even in weeks with no issues
 - **Notification destination**: Same as for immediate alerts
