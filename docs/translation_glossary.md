@@ -331,7 +331,8 @@
 | 参照 | reference | |
 | Reflection | reflection | Go言語のreflectionパッケージ |
 | 正規表現 | regex | "regular expression" の略 |
-| 定期的 | regular | |
+| 定期 | periodic | サマリ・実行など技術文脈での「定期」。`定期サマリ` → "periodic summary"、`定期実行` → "periodic execution" |
+| 定期的 | periodic / regular | 形容詞形。技術文脈では "periodic" を優先する |
 | リリース | release | |
 | レポート | report | fetch が取得したメールから抽出・蓄積する解析済み TLSRPT レポート（RFC 8460 JSON）。`tlsrpt.json` に保存される。 |
 | リポジトリ | repository | |
