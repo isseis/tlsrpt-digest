@@ -51,20 +51,7 @@ If all commands complete without errors, the environment is ready.
 
 ## 2. Codebase Overview
 
-For the overall project design, see the [Project Overview](../../overview.md). The responsibilities of each package are described in the [Package Reference](package_reference.md).
-
-Key directories:
-
-```
-tlsrpt-digest/
-├── cmd/tlsrpt-digest/   # Entry point and subcommands
-├── internal/            # Packages (imap / tlsrpt / notify / store, etc.)
-├── docs/
-│   ├── overview.md      # Project overview
-│   ├── dev/             # Developer documentation
-│   └── tasks/           # Per-task design and implementation documents
-└── testdata/            # Real email data for testing
-```
+For the overall project design, see the [Project Overview](../../overview.md). The directory structure and responsibilities of each package are described in the [Package Reference](package_reference.md).
 
 ---
 
