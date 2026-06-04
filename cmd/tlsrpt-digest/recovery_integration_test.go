@@ -92,10 +92,23 @@ func loadRecoveryTestEnv(t *testing.T) {
 	t.Setenv("TLSRPT_IMAP_PASSWORD", os.Getenv("IMAP_TEST_PASS"))
 }
 
+// noopBootstrapOptions returns BootstrapOptions that bypass the Slack notifier.
+// Recovery tests do not send notifications; using a no-op notifier avoids the
+// need for Slack webhook configuration. The tests do NOT use -dry-run because
+// dry-run skips downloads, store writes, and MarkSeen — all of which must
+// execute for the UIDVALIDITY mismatch detection and recovery flow to work.
+func noopBootstrapOptions() BootstrapOptions {
+	return BootstrapOptions{
+		BuildNotifier: func(_, _ config.Secret, _ *config.Config, _ string, _ bool) (NotificationSink, error) {
+			return nopNotifier{}, nil
+		},
+	}
+}
+
 // buildTestConfigTOML writes a minimal config.toml to a temp file and returns
-// its path. The config connects to the given IMAP host/port/mailbox, uses
-// rootDir as the store location, and sets an empty Slack allowed_host so that
-// Bootstrap succeeds without a real webhook URL.
+// its path. The config connects to the given IMAP host/port/mailbox and uses
+// rootDir as the store location. No Slack section is included; notification is
+// suppressed via the noopBootstrapOptions BuildNotifier instead.
 func buildTestConfigTOML(t *testing.T, rootDir, imapHost string, imapPort int, mailbox string) string {
 	t.Helper()
 	content := fmt.Sprintf(`[imap]
@@ -105,9 +118,6 @@ mailbox = %q
 
 [store]
 root_dir = %q
-
-[notify.slack]
-allowed_host = ""
 `, imapHost, imapPort, mailbox, rootDir)
 	path := t.TempDir() + "/config.toml"
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
@@ -240,7 +250,7 @@ func TestIntegration_Recovery_KeepOld(t *testing.T) {
 	})
 
 	// Initial fetch records UIDVALIDITY.
-	require.Equal(t, exitOK, runCLI(context.Background(), []string{"fetch", "-config", configPath, "-dry-run"}, io.Discard, BootstrapOptions{}))
+	require.Equal(t, exitOK, runCLI(context.Background(), []string{"fetch", "-config", configPath}, io.Discard, noopBootstrapOptions()))
 
 	waitForGreenmailUIDValidityTick()
 
@@ -249,7 +259,7 @@ func TestIntegration_Recovery_KeepOld(t *testing.T) {
 	imaptestutil.CreateMailbox(t, fixedCfg, mailbox)
 
 	// Re-fetch detects the mismatch and exits with an error.
-	require.Equal(t, exitError, runCLI(context.Background(), []string{"fetch", "-config", configPath, "-dry-run"}, io.Discard, BootstrapOptions{}))
+	require.Equal(t, exitError, runCLI(context.Background(), []string{"fetch", "-config", configPath}, io.Discard, noopBootstrapOptions()))
 
 	// Verify that recovery-required is persisted in the store.
 	s, err := store.Open(rootDir, store.IMAPIdentity{Host: imapHost, Port: imapPort, Mailbox: mailbox}, store.OpenReadOnly)
@@ -259,10 +269,10 @@ func TestIntegration_Recovery_KeepOld(t *testing.T) {
 	require.True(t, found, "store must have recovery-required set after UIDVALIDITY mismatch")
 
 	// recover --mode keep-old resolves the mismatch.
-	require.Equal(t, exitOK, runCLI(context.Background(), []string{"recover", "-config", configPath, "-mode", "keep-old"}, io.Discard, BootstrapOptions{}))
+	require.Equal(t, exitOK, runCLI(context.Background(), []string{"recover", "-config", configPath, "-mode", "keep-old"}, io.Discard, noopBootstrapOptions()))
 
 	// A subsequent fetch succeeds.
-	require.Equal(t, exitOK, runCLI(context.Background(), []string{"fetch", "-config", configPath, "-dry-run"}, io.Discard, BootstrapOptions{}))
+	require.Equal(t, exitOK, runCLI(context.Background(), []string{"fetch", "-config", configPath}, io.Discard, noopBootstrapOptions()))
 }
 
 // TestIntegration_Recovery_DiscardOld verifies that recover --mode discard-old
@@ -299,7 +309,7 @@ func TestIntegration_Recovery_DiscardOld(t *testing.T) {
 	})
 
 	// Initial fetch records UIDVALIDITY.
-	require.Equal(t, exitOK, runCLI(context.Background(), []string{"fetch", "-config", configPath, "-dry-run"}, io.Discard, BootstrapOptions{}))
+	require.Equal(t, exitOK, runCLI(context.Background(), []string{"fetch", "-config", configPath}, io.Discard, noopBootstrapOptions()))
 
 	waitForGreenmailUIDValidityTick()
 
@@ -308,7 +318,7 @@ func TestIntegration_Recovery_DiscardOld(t *testing.T) {
 	imaptestutil.CreateMailbox(t, fixedCfg, mailbox)
 
 	// Re-fetch detects the mismatch and exits with an error.
-	require.Equal(t, exitError, runCLI(context.Background(), []string{"fetch", "-config", configPath, "-dry-run"}, io.Discard, BootstrapOptions{}))
+	require.Equal(t, exitError, runCLI(context.Background(), []string{"fetch", "-config", configPath}, io.Discard, noopBootstrapOptions()))
 
 	// Verify that recovery-required is persisted in the store.
 	s, err := store.Open(rootDir, store.IMAPIdentity{Host: imapHost, Port: imapPort, Mailbox: mailbox}, store.OpenReadOnly)
@@ -318,8 +328,8 @@ func TestIntegration_Recovery_DiscardOld(t *testing.T) {
 	require.True(t, found, "store must have recovery-required set after UIDVALIDITY mismatch")
 
 	// recover --mode discard-old --yes resolves the mismatch.
-	require.Equal(t, exitOK, runCLI(context.Background(), []string{"recover", "-config", configPath, "-mode", "discard-old", "-yes"}, io.Discard, BootstrapOptions{}))
+	require.Equal(t, exitOK, runCLI(context.Background(), []string{"recover", "-config", configPath, "-mode", "discard-old", "-yes"}, io.Discard, noopBootstrapOptions()))
 
 	// A subsequent fetch succeeds.
-	require.Equal(t, exitOK, runCLI(context.Background(), []string{"fetch", "-config", configPath, "-dry-run"}, io.Discard, BootstrapOptions{}))
+	require.Equal(t, exitOK, runCLI(context.Background(), []string{"fetch", "-config", configPath}, io.Discard, noopBootstrapOptions()))
 }

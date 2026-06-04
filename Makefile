@@ -8,9 +8,9 @@ test:
 	go test -v -tags test ./...
 
 # Run integration tests against GreenMail (requires devcontainer or manual GreenMail setup).
-# See docs/tasks/0010_imap/03_implementation_plan.md section 5.2 for setup instructions.
+# Covers internal/imap and cmd/tlsrpt-digest integration tests.
 test-integration:
-	go test -v -count=1 -tags test,integration ./internal/imap/...
+	go test -v -count=1 -tags test,integration ./internal/imap/... ./cmd/tlsrpt-digest/...
 
 lint:
 	golangci-lint run --build-tags test --timeout=5m

@@ -357,8 +357,8 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+- [x] PR がマージされた
+- [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ---
 
@@ -366,46 +366,46 @@
 
 #### 変更ファイル: `.devcontainer/docker-compose.base.yml`
 
-- [ ] `dev-env` サービスの `IMAP_TEST_PORT` を変更する:
+- [x] `dev-env` サービスの `IMAP_TEST_PORT` を変更する:
   - 変更前: `- IMAP_TEST_PORT=3143`
   - 変更後: `- IMAP_TEST_PORT=3993`
 
-- [ ] `dev-env` サービスの `IMAP_TEST_PASS` を変更する:
+- [x] `dev-env` サービスの `IMAP_TEST_PASS` を変更する:
   - 変更前: `- IMAP_TEST_PASS=imap-test@example.com`
   - 変更後: `- IMAP_TEST_PASS=imap-test`
 
-- [ ] `greenmail` サービスの `GREENMAIL_OPTS` を変更する:
+- [x] `greenmail` サービスの `GREENMAIL_OPTS` を変更する:
   - 変更前: `- GREENMAIL_OPTS=-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0`
   - 変更後: `- GREENMAIL_OPTS=-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.users=imap-test:imap-test@example.com -Dgreenmail.users.login=email`
 
-- [ ] `greenmail` サービスのポートマッピングを変更する:
+- [x] `greenmail` サービスのポートマッピングを変更する:
   - 変更前: `- "127.0.0.1:3143:3143"  # IMAP`
   - 変更後: `- "127.0.0.1:3993:3993"  # IMAPS`
 
-- [ ] `greenmail` サービスの healthcheck コマンドを変更する（devcontainer は Docker Compose なので `healthcheck.test:` キーで記述する）:
+- [x] `greenmail` サービスの healthcheck コマンドを変更する（devcontainer は Docker Compose なので `healthcheck.test:` キーで記述する）:
   - 変更前: `test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3143"]`
   - 変更後: `test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3993"]`
   - 注: `bash` の `/dev/tcp` 機能は `nc` と異なり JRE ベースイメージに含まれる `bash` で動作する（元の devcontainer でも同コマンドを使用しており実績あり）。devcontainer は Docker Compose 形式のため `healthcheck.test:` キーが有効。GitHub Actions CI の service container（`options: --health-cmd ...`）とは記述形式が異なる
 
 #### 変更ファイル: `Makefile`
 
-- [ ] `test-integration` ターゲットのコマンドを変更する:
+- [x] `test-integration` ターゲットのコマンドを変更する:
   - 変更前: `go test -v -count=1 -tags test,integration ./internal/imap/...`
   - 変更後: `go test -v -count=1 -tags test,integration ./internal/imap/... ./cmd/tlsrpt-digest/...`
 
-- [ ] `Makefile` 内の `test-integration` に関するコメントを更新する:
+- [x] `Makefile` 内の `test-integration` に関するコメントを更新する:
   - 変更前: `# Run integration tests against GreenMail (requires devcontainer or manual GreenMail setup).`（以下2行のコメント）
   - 変更後: `# Run integration tests against GreenMail (requires devcontainer or manual GreenMail setup).\n# Covers internal/imap and cmd/tlsrpt-digest integration tests.`
 
 #### 変更ファイル: `.github/workflows/ci.yml`
 
-- [ ] `check-changes` ジョブの `outputs:` に `has-integration-changes: ${{ steps.check.outputs.has-integration-changes }}` を追加する
+- [x] `check-changes` ジョブの `outputs:` に `has-integration-changes: ${{ steps.check.outputs.has-integration-changes }}` を追加する
 
-- [ ] `check-changes` ジョブの `Classify changed files` ステップを、下記 `classify-changes.sh` を呼び出す形へ変更する。インラインの変更分類ロジックを増やさず、CI とテストが同じスクリプトを使うようにする。具体的には `changed_files` を一時ファイルへ書き出し、`GITHUB_OUTPUT` が設定された状態で `.github/scripts/classify-changes.sh <tmp-file>` を実行し、スクリプト自身が `$GITHUB_OUTPUT` へ `has-code-changes`、`has-devcontainer-changes`、`has-integration-changes` を追記する
+- [x] `check-changes` ジョブの `Classify changed files` ステップを、下記 `classify-changes.sh` を呼び出す形へ変更する。インラインの変更分類ロジックを増やさず、CI とテストが同じスクリプトを使うようにする。具体的には `changed_files` を一時ファイルへ書き出し、`GITHUB_OUTPUT` が設定された状態で `.github/scripts/classify-changes.sh <tmp-file>` を実行し、スクリプト自身が `$GITHUB_OUTPUT` へ `has-code-changes`、`has-devcontainer-changes`、`has-integration-changes` を追記する
 
-- [ ] 既存の docs-only / non-code 変更通知ステップ（存在する場合）の文言を更新し、`.devcontainer/` 変更など `has-code-changes=false` でも `has-integration-changes=true` の場合は `integration-test` が実行されることを表示する。通知条件も `has-code-changes == 'false' && has-integration-changes == 'false'` のように、統合テストが走るケースを「全テスト skipped」と誤表示しない形に変更する
+- [x] 既存の docs-only / non-code 変更通知ステップ（存在する場合）の文言を更新し、`.devcontainer/` 変更など `has-code-changes=false` でも `has-integration-changes=true` の場合は `integration-test` が実行されることを表示する。通知条件も `has-code-changes == 'false' && has-integration-changes == 'false'` のように、統合テストが走るケースを「全テスト skipped」と誤表示しない形に変更する
 
-- [ ] `integration-test` ジョブを追加する:
+- [x] `integration-test` ジョブを追加する:
   - `needs: check-changes` を設定する
   - 実行条件: `if: needs.check-changes.outputs.has-integration-changes == 'true'`
   - greenmail service container（`greenmail/standalone:2.1.3`）を設定する:
@@ -424,13 +424,13 @@
 
 #### 新規ファイル: `.github/scripts/classify-changes.sh`
 
-- [ ] `changed_files`（改行区切り）を標準入力または第 1 引数のファイルパスから受け取り、`has-code-changes`、`has-devcontainer-changes`、`has-integration-changes` を算出するスクリプトを作成する。`GITHUB_OUTPUT` が設定されている場合はそのファイルへ `key=value` を追記し、未設定の場合は stdout に同じ `key=value` を出力する。既存 `ci.yml` の `has-code-changes`・`has-devcontainer-changes` 判定と同じ挙動を維持する
+- [x] `changed_files`（改行区切り）を標準入力または第 1 引数のファイルパスから受け取り、`has-code-changes`、`has-devcontainer-changes`、`has-integration-changes` を算出するスクリプトを作成する。`GITHUB_OUTPUT` が設定されている場合はそのファイルへ `key=value` を追記し、未設定の場合は stdout に同じ `key=value` を出力する。既存 `ci.yml` の `has-code-changes`・`has-devcontainer-changes` 判定と同じ挙動を維持する
 
-- [ ] `has-integration-changes` の判定条件は、Go ソース（`*.go`）、`Makefile`、`.github/workflows/` 以下のファイル、`.github/scripts/` 以下のファイル、`.devcontainer/` 以下のファイル、`testdata/` 以下のファイルのいずれかが変更された場合に `true` とする。その他の docs-only 変更では `false` とする（`.github/scripts/` を含めることで、変更分類スクリプト自体の変更が integration-test ジョブをスキップしてマージされることを防ぐ）
+- [x] `has-integration-changes` の判定条件は、Go ソース（`*.go`）、`Makefile`、`.github/workflows/` 以下のファイル、`.github/scripts/` 以下のファイル、`.devcontainer/` 以下のファイル、`testdata/` 以下のファイルのいずれかが変更された場合に `true` とする。その他の docs-only 変更では `false` とする（`.github/scripts/` を含めることで、変更分類スクリプト自体の変更が integration-test ジョブをスキップしてマージされることを防ぐ）
 
 #### 新規ファイル: `.github/scripts/classify-changes_test.sh`
 
-- [ ] `classify-changes.sh` のテストスクリプトを作成する。以下の代表ケースをそれぞれ入力し、`has-code-changes`、`has-devcontainer-changes`、`has-integration-changes` の 3 出力すべての期待値を検証する:
+- [x] `classify-changes.sh` のテストスクリプトを作成する。以下の代表ケースをそれぞれ入力し、`has-code-changes`、`has-devcontainer-changes`、`has-integration-changes` の 3 出力すべての期待値を検証する:
   - `internal/imap/client.go` → code `true` / devcontainer `false` / integration `true`
   - `Makefile` → code `true` / devcontainer `false` / integration `true`
   - `.github/workflows/ci.yml` → code `true` / devcontainer `false` / integration `true`
@@ -440,23 +440,23 @@
   - `docs/overview.md` のみ → code `false` / devcontainer `false` / integration `false`
   - `LICENSE` のみ → code `false` / devcontainer `false` / integration `false`
 
-- [ ] `classify-changes_test.sh` を `bash .github/scripts/classify-changes_test.sh` で実行できるようにする。失敗時は非ゼロ終了し、期待値と実際の output を表示する
+- [x] `classify-changes_test.sh` を `bash .github/scripts/classify-changes_test.sh` で実行できるようにする。失敗時は非ゼロ終了し、期待値と実際の output を表示する
 
 #### 新規ファイル: `.github/scripts/verify-integration-workflow.go`
 
-- [ ] `.github/workflows/ci.yml` を検証するスクリプトを作成する。`go run .github/scripts/verify-integration-workflow.go` で実行できる Go スクリプトとして実装し（`ruby` は Go 開発コンテナに含まれないため）、`gopkg.in/yaml.v3` などの構造化パーサで YAML を読み、文字列 grep だけに依存しない。ファイル先頭に `//go:build ignore` を付与して通常ビルドから除外する
+- [x] `.github/workflows/ci.yml` を検証するスクリプトを作成する。`go run .github/scripts/verify-integration-workflow.go` で実行できる Go スクリプトとして実装し（`ruby` は Go 開発コンテナに含まれないため）、`gopkg.in/yaml.v3` などの構造化パーサで YAML を読み、文字列 grep だけに依存しない。ファイル先頭に `//go:build ignore` を付与して通常ビルドから除外する
 
-- [ ] `integration-test` ジョブについて、`needs: check-changes`、`if: needs.check-changes.outputs.has-integration-changes == 'true'`、greenmail service image `greenmail/standalone:2.1.3`、ports `3993:3993` と `3025:3025`、`GREENMAIL_OPTS` の固定ユーザ設定、ジョブ env の `IMAP_TEST_*` 全項目、`make test-integration` 実行ステップを検証する（AC-14）
+- [x] `integration-test` ジョブについて、`needs: check-changes`、`if: needs.check-changes.outputs.has-integration-changes == 'true'`、greenmail service image `greenmail/standalone:2.1.3`、ports `3993:3993` と `3025:3025`、`GREENMAIL_OPTS` の固定ユーザ設定、ジョブ env の `IMAP_TEST_*` 全項目、`make test-integration` 実行ステップを検証する（AC-14）
 
-- [ ] 通常の `test` ジョブについて、greenmail service を持たないこと、`make test` を実行すること、`-tags integration` または `test-integration` を含まないことを検証する（AC-15）
+- [x] 通常の `test` ジョブについて、greenmail service を持たないこと、`make test` を実行すること、`-tags integration` または `test-integration` を含まないことを検証する（AC-15）
 
-- [ ] docs-only / non-code 変更通知ステップが存在する場合、その条件と表示文言が `has-integration-changes` を考慮しており、統合テストが実行される変更を「全テスト skipped」と表示しないことを検証する
+- [x] docs-only / non-code 変更通知ステップが存在する場合、その条件と表示文言が `has-integration-changes` を考慮しており、統合テストが実行される変更を「全テスト skipped」と表示しないことを検証する
 
 **フェーズ完了の確認**:
-- [ ] `bash .github/scripts/classify-changes_test.sh` が通過すること
-- [ ] `go run .github/scripts/verify-integration-workflow.go` が通過すること
-- [ ] `actionlint .github/workflows/ci.yml` が通過すること
-- [ ] devcontainer で `make test-integration` が通過すること
+- [x] `bash .github/scripts/classify-changes_test.sh` が通過すること
+- [x] `go run .github/scripts/verify-integration-workflow.go` が通過すること
+- [x] `actionlint .github/workflows/ci.yml` が通過すること
+- [x] devcontainer で `make test-integration` が通過すること
 - [ ] PR で `.github/workflows/ci.yml` の変更を含む変更を push し、GitHub Actions の `integration-test` ジョブが起動することを確認する
 
 ### PR-5 作成ポイント: CI and devcontainer infrastructure
@@ -468,7 +468,7 @@
 **レビュー観点**: devcontainer と CI の greenmail 設定（ポート・固定ユーザ GREENMAIL_OPTS）が一致していること / `classify-changes.sh` の `has-integration-changes` 判定条件が devcontainer・testdata の変更も捕捉し既存 `has-code-changes` ロジックと整合していること / `verify-integration-workflow.go` が文字列 grep ではなく構造化 YAML パーサで検証していること / 通常 `test` ジョブが greenmail なし・integration タグなしのまま維持されていること
 
 - [x] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 

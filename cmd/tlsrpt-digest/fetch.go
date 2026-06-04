@@ -126,9 +126,15 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 		return exitError, err
 	}
 
-	// Step 7: Download and save messages that lack a local .eml.
-	if err := r.fetchDownloadAndSave(ctx, boot, states, currentUID, mailbox, fetcher); err != nil {
-		return exitError, err
+	// Step 7: Download and save messages that lack a local .eml (skipped in dry-run).
+	if !boot.Options.DryRun {
+		if err := r.fetchDownloadAndSave(ctx, boot, states, currentUID, mailbox, fetcher); err != nil {
+			return exitError, err
+		}
+	}
+
+	if boot.Options.DryRun {
+		return fetchDryRunExit(ctx, boot, states), nil
 	}
 
 	// Step 8: Register metadata for all messages that now have a local .eml.
@@ -179,18 +185,22 @@ func fetchValidateUID(ctx context.Context, boot *BootContext, now time.Time, cur
 		return exitError, fmt.Errorf("fetch: load uidvalidity: %w", err)
 	}
 	if !uidFound {
-		if err := boot.Store.SaveUIDValidity(currentUID); err != nil {
-			slog.Error("fetch: save initial uidvalidity", "error", err)
-			logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
-			return exitError, fmt.Errorf("fetch: save uidvalidity: %w", err)
+		if !boot.Options.DryRun {
+			if err := boot.Store.SaveUIDValidity(currentUID); err != nil {
+				slog.Error("fetch: save initial uidvalidity", "error", err)
+				logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
+				return exitError, fmt.Errorf("fetch: save uidvalidity: %w", err)
+			}
 		}
 		return fetchContinue, nil
 	}
 	if storedUID != currentUID {
-		if saveErr := boot.Store.SaveRecoveryRequired(storedUID, currentUID, now); saveErr != nil {
-			slog.Error("fetch: save recovery-required after uidvalidity change", "error", saveErr)
-			logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
-			return exitError, fmt.Errorf("fetch: save recovery-required: %w", saveErr)
+		if !boot.Options.DryRun {
+			if saveErr := boot.Store.SaveRecoveryRequired(storedUID, currentUID, now); saveErr != nil {
+				slog.Error("fetch: save recovery-required after uidvalidity change", "error", saveErr)
+				logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindStoreCorruption, mailbox))
+				return exitError, fmt.Errorf("fetch: save recovery-required: %w", saveErr)
+			}
 		}
 		slog.Error("fetch: uidvalidity changed; run tlsrpt-digest recover to resolve")
 		logNotifyError("fetch: notify system error", notifyFetchSystemError(ctx, boot.Notifier, notify.SystemErrorKindUIDValidityChanged, mailbox))
@@ -348,6 +358,43 @@ func buildEmailMetas(states []fetchMsgState, currentUID uint32) []store.EmailMet
 		}
 	}
 	return metas
+}
+
+// fetchDryRunExit logs the dry-run summary, flushes buffered notifications as
+// "[dry-run] would send" messages, then returns exitOK.
+func fetchDryRunExit(ctx context.Context, boot *BootContext, states []fetchMsgState) int {
+	logFetchDryRunSummary(states)
+	// Flush so that any buffered warnings (e.g. size mismatches from
+	// buildFetchStates) appear as "[dry-run] would send" log lines.
+	if err := boot.Notifier.Flush(ctx); err != nil {
+		slog.Warn("fetch: dry-run flush notifications", "error", err)
+	}
+	return exitOK
+}
+
+// dryRunUIDSample returns up to maxSample UIDs and a boolean indicating whether
+// the list was truncated.
+const dryRunUIDSampleMax = 20
+
+// logFetchDryRunSummary logs what would have happened in a real (non-dry) run.
+func logFetchDryRunSummary(states []fetchMsgState) {
+	var wouldDownload []uint32
+	for _, s := range states {
+		if !s.emlExistedBefore {
+			wouldDownload = append(wouldDownload, s.meta.UID)
+		}
+	}
+	sample := wouldDownload
+	truncated := false
+	if len(sample) > dryRunUIDSampleMax {
+		sample = sample[:dryRunUIDSampleMax]
+		truncated = true
+	}
+	slog.Info("fetch: dry-run complete; no messages downloaded, no store writes, no IMAP flags set",
+		"candidate_count", len(states),
+		"would_download_count", len(wouldDownload),
+		"would_download_uids_sample", sample,
+		"would_download_uids_truncated", truncated)
 }
 
 // collectUnseenUIDs returns the UIDs of all messages that were UNSEEN at fetch time.

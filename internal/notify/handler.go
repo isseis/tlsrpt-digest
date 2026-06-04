@@ -160,7 +160,7 @@ func (h *SlackHandler) logDryRun(records []slog.Record) {
 	}
 	for _, msg := range formatRecords(records, h.opts.RunID, h.opts.DebugLogger) {
 		if raw, err := json.Marshal(msg); err == nil {
-			h.opts.DebugLogger.Debug("[dry-run] slack notification would send", "payload", string(raw))
+			h.opts.DebugLogger.Info("[dry-run] slack notification would send", "payload", string(raw))
 		}
 	}
 }
