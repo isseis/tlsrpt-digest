@@ -354,7 +354,7 @@ crontab（`crontab -e` で編集）：
 | ドキュメント | 内容 |
 |---|---|
 | [プロジェクト概要](docs/overview.ja.md) | アーキテクチャ、処理フロー、設計判断の詳細 |
-| [パッケージリファレンス](docs/dev/developer_guide/package_reference.md) | 各パッケージの責務と内部構造 |
+| [パッケージリファレンス](docs/dev/developer_guide/package_reference.ja.md) | 各パッケージの責務と内部構造 |
 
 ---
 

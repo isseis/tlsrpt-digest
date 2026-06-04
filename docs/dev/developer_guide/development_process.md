@@ -27,7 +27,7 @@ The recommended approach is to use the [Dev Containers](https://marketplace.visu
 
 ### Setting Up a Local Environment Directly
 
-If you are not using devcontainer, install the following tools. For the versions used in devcontainer, see [`.devcontainer/Dockerfile`](.devcontainer/Dockerfile).
+If you are not using devcontainer, install the following tools. For the versions used in devcontainer, see [`.devcontainer/Dockerfile`](../../../.devcontainer/Dockerfile).
 
 **Go** (1.26 or later)
 
@@ -270,6 +270,6 @@ Approval is performed by a human reviewer. Claude Code always creates documents 
 | [Requirements and Acceptance Criteria Process](requirements_process.md) | How to write ACs and detailed review flow |
 | [Test Organization Guide](test_organization.md) | Rules for placing test helpers |
 | [Mermaid Diagram Reference](mermaid_reference.md) | Diagram notation and conventions |
-| [Package Reference](package_reference.md) | Responsibilities and structure of each package |
+| [Package Reference](package_reference.md) | Responsibilities and internal structure of each package |
 | [Task Identification](task_identification.md) | How slash commands identify the target task |
 | [Robustness Principle](robustness_principle.md) | Design guidelines for handling external data |
