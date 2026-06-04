@@ -51,20 +51,7 @@ make build && make test && make lint
 
 ## 2. コードベースの概要
 
-プロジェクトの全体設計については [プロジェクト概要](../../overview.ja.md) を参照してください。各パッケージの責務は [パッケージリファレンス](package_reference.md) に記載されています。
-
-主要ディレクトリ：
-
-```
-tlsrpt-digest/
-├── cmd/tlsrpt-digest/   # エントリポイント・サブコマンド
-├── internal/            # 各パッケージ（imap / tlsrpt / notify / store 等）
-├── docs/
-│   ├── overview.ja.md   # プロジェクト概要
-│   ├── dev/             # 開発者向けドキュメント
-│   └── tasks/           # タスクごとの設計・実装ドキュメント
-└── testdata/            # テスト用実メールデータ
-```
+プロジェクトの全体設計については [プロジェクト概要](../../overview.ja.md) を参照してください。ディレクトリ構造と各パッケージの責務は [パッケージリファレンス](package_reference.ja.md) に記載されています。
 
 ---
 
