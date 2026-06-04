@@ -14,8 +14,16 @@ The recommended approach is to use the [Dev Containers](https://marketplace.visu
 
 1. Install [VS Code](https://code.visualstudio.com/) and [Docker](https://www.docker.com/)
 2. Install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) in VS Code
-3. Clone the repository and open it in VS Code
-4. Select "Reopen in Container"
+3. Clone the repository on the **host machine**:
+   ```bash
+   git clone https://github.com/isseis/tlsrpt-digest.git
+   ```
+4. Open the cloned directory in VS Code (`code tlsrpt-digest`, or use File → Open Folder)
+5. When VS Code detects the devcontainer configuration, select "Reopen in Container"
+6. Once the container is running, verify the build in the VS Code terminal (inside the container):
+   ```bash
+   make build && make test && make lint
+   ```
 
 ### Setting Up a Local Environment Directly
 
@@ -28,25 +36,13 @@ If you are not using devcontainer, install the following tools:
 | gofumpt | Code formatting | Latest |
 | Claude Code | AI-assisted development | Latest |
 
-### Verifying the Build
-
-Whether using devcontainer or a local environment, run the following to verify setup:
+After installing, clone the repository and verify the build:
 
 ```bash
 git clone https://github.com/isseis/tlsrpt-digest.git
 cd tlsrpt-digest
 
-# Build
-make build
-
-# Test (all packages)
-make test
-
-# Static analysis
-make lint
-
-# Format
-make fmt
+make build && make test && make lint
 ```
 
 If all commands complete without errors, the environment is ready.
