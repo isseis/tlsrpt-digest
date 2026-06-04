@@ -27,6 +27,14 @@ func recoveryTestMailboxName() string {
 	return ulid.Make().String()
 }
 
+// waitForGreenmailUIDValidityTick waits until greenmail will assign a new
+// UIDVALIDITY value to a recreated mailbox.
+func waitForGreenmailUIDValidityTick() {
+	for start := time.Now().Unix(); time.Now().Unix() == start; {
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // missingRecoveryEnv returns the names of environment variables required for
 // recovery integration tests that are missing or invalid.
 func missingRecoveryEnv(getenv func(string) string) []string {
@@ -227,11 +235,7 @@ func TestIntegration_Recovery_KeepOld(t *testing.T) {
 	// Initial fetch records UIDVALIDITY.
 	require.Equal(t, exitOK, runCLI(context.Background(), []string{"fetch", "-config", configPath, "-dry-run"}, io.Discard, BootstrapOptions{}))
 
-	// greenmail assigns UIDVALIDITY from the current Unix timestamp (second
-	// resolution). Wait until the Unix second ticks so the recreated mailbox gets a different value.
-	for start := time.Now().Unix(); time.Now().Unix() == start; {
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForGreenmailUIDValidityTick()
 
 	// DELETE + CREATE changes UIDVALIDITY.
 	imaptestutil.DeleteMailbox(t, fixedCfg, mailbox)
@@ -290,11 +294,7 @@ func TestIntegration_Recovery_DiscardOld(t *testing.T) {
 	// Initial fetch records UIDVALIDITY.
 	require.Equal(t, exitOK, runCLI(context.Background(), []string{"fetch", "-config", configPath, "-dry-run"}, io.Discard, BootstrapOptions{}))
 
-	// greenmail assigns UIDVALIDITY from the current Unix timestamp (second
-	// resolution). Wait until the Unix second ticks so the recreated mailbox gets a different value.
-	for start := time.Now().Unix(); time.Now().Unix() == start; {
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForGreenmailUIDValidityTick()
 
 	// DELETE + CREATE changes UIDVALIDITY.
 	imaptestutil.DeleteMailbox(t, fixedCfg, mailbox)
