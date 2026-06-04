@@ -32,11 +32,13 @@ else
   has_devcontainer=false
 fi
 
-# has-integration-changes: Go sources, Makefile, GitHub Actions workflows,
-# GitHub scripts, devcontainer config, or testdata.
+# has-integration-changes: Go sources, go.mod/go.sum, Makefile, GitHub Actions
+# workflows, GitHub scripts, devcontainer config, or testdata.
+# go.mod/go.sum are included so that dependency-only bumps (e.g. go-imap)
+# still exercise the GreenMail integration suite.
 # Including .github/scripts/ ensures that changes to this script itself
 # trigger the integration-test job.
-if printf '%s\n' "$changed_files" | grep -qE '(\.go$|^Makefile$|^\.github/workflows/|^\.github/scripts/|^\.devcontainer/|^testdata/)'; then
+if printf '%s\n' "$changed_files" | grep -qE '(\.go$|^go\.(mod|sum)$|^Makefile$|^\.github/workflows/|^\.github/scripts/|^\.devcontainer/|^testdata/)'; then
   has_integration=true
 else
   has_integration=false

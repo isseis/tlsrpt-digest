@@ -46,6 +46,8 @@ run_case "CI workflow"           ".github/workflows/ci.yml"             true  fa
 run_case "classify-changes.sh"  ".github/scripts/classify-changes.sh"  true  false true
 run_case "devcontainer"         ".devcontainer/docker-compose.base.yml" false true  true
 run_case "testdata"             "testdata/tlsrpt_google.eml"            true  false true
+run_case "go.mod"               "go.mod"                                true  false true
+run_case "go.sum"               "go.sum"                                true  false true
 run_case "docs only"            "docs/overview.md"                      false false false
 run_case "LICENSE only"         "LICENSE"                               false false false
 
