@@ -293,6 +293,7 @@ WantedBy=timers.target
 Environment variable file **`/etc/tlsrpt-digest/env`**:
 
 ```
+TLSRPT_IMAP_USERNAME=your-imap-username
 TLSRPT_IMAP_PASSWORD=your-imap-password
 TLSRPT_SLACK_WEBHOOK_URL_SUCCESS=https://hooks.slack.com/services/...
 TLSRPT_SLACK_WEBHOOK_URL_ERROR=https://hooks.slack.com/services/...
