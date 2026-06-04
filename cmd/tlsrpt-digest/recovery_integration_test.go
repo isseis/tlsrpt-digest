@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -195,7 +196,7 @@ func TestIntegration_RecoveryEnvRequirements(t *testing.T) {
 func TestIntegration_Recovery_KeepOld(t *testing.T) {
 	loadRecoveryTestEnv(t)
 	// Store root requires 0700 or 0750; t.TempDir creates 0755.
-	rootDir := t.TempDir() + "/store"
+	rootDir := filepath.Join(t.TempDir(), "store")
 	require.NoError(t, os.Mkdir(rootDir, 0o700))
 
 	imapHost := os.Getenv("IMAP_TEST_HOST")
@@ -258,7 +259,7 @@ func TestIntegration_Recovery_KeepOld(t *testing.T) {
 func TestIntegration_Recovery_DiscardOld(t *testing.T) {
 	loadRecoveryTestEnv(t)
 	// Store root requires 0700 or 0750; t.TempDir creates 0755.
-	rootDir := t.TempDir() + "/store"
+	rootDir := filepath.Join(t.TempDir(), "store")
 	require.NoError(t, os.Mkdir(rootDir, 0o700))
 
 	imapHost := os.Getenv("IMAP_TEST_HOST")
