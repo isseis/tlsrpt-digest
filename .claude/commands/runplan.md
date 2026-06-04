@@ -20,6 +20,7 @@ Work in order.
 
 5. Implement the selected phase group.
 - Follow the design in `02_architecture.md`.
+- **State invariants before coding.** For any generated value (IDs/names), flag/mode, or side-effecting operation, write its contract in one line and implement to that — not to the first approach that compiles. Examples that would have prevented real bugs: a test ID → *unique per call, within the protocol length limit* (a bare ULID, no test-name prefix); `--dry-run` → *no external side effects* (skip every write and network call, not just notifications); a teardown → *never mutates data it didn't create* (no IMAP CLOSE after a read-write SELECT — it expunges other clients' `\Deleted`).
 - Place test helpers per `docs/dev/developer_guide/test_organization.md`: cross-package helpers under `testutil/`; package-internal helpers in `test_helpers.go` (or `test_helpers_<category>.go`) with `//go:build test`.
 - After each Go file change, run `make fmt && make test && make lint`; fix errors before continuing. Exception: errors caused by the phase group's incomplete state (e.g. build or test failures from missing implementations that stubs depend on) need not be fixed until the group is complete; fix only errors unrelated to the in-progress group.
 - When removing multiple scattered code sites (e.g. several test functions), delete them one at a time using the exact text read from the file. Do not script bulk deletion (e.g. a brace-counting loop); nested literals make such heuristics over-consume adjacent code. After each removal, check IDE diagnostics for unintended breakage.
@@ -30,8 +31,6 @@ Work in order.
   - A helper guarding a precondition calls its own guard internally; callers shouldn't have to.
   - Sub-test names match what they test (`smtp_host_missing` tests `IMAP_TEST_SMTP_HOST`, not `IMAP_TEST_HOST`).
   - Reuse existing utilities before writing new ones (e.g. `ulid.Make()`); consolidate duplicate regexes/constants.
-  - Read-only work uses read-only protocol verbs (IMAP EXAMINE, not SELECT).
-  - State-mutating or deleting operations are intentional and scoped — confirm side effects don't touch data the operation doesn't own (e.g. IMAP CLOSE expunges `\Deleted`).
   - Test-only behavior stays in test packages; don't branch production code for tests.
   - A Go test file importing a `testutil` that imports the package under test uses `package foo_test` to avoid an import cycle.
 

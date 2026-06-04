@@ -32,6 +32,7 @@ Work in the following order.
 - Set the document status to `draft`.
 - Include all required sections defined in `docs/dev/developer_guide/requirements_process.md`.
 - Reflect all functional requirements and acceptance criteria from `01_requirements.md`.
+- For any flag, mode, or option that changes which side effects occur (e.g. `--dry-run`, `--force`, read-only mode), define explicitly which external side effects (writes, deletes, network sends) it suppresses or permits. An under-specified side-effect contract leads to inconsistent implementations.
 - Use Mermaid diagrams for the concept model, system structure, key processing flows, and a threat model when applicable.
 - Restrict code examples to high-level interfaces, type definitions, and error type definitions only.
 - Do not include implementation details, pseudocode, step-by-step algorithms, or low-level code.
