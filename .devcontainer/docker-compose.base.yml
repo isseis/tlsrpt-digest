@@ -35,7 +35,8 @@ services:
 
   # In-memory IMAP/SMTP server for integration tests.
   # Accessible from dev-env as hostname "greenmail".
-  # Users are created automatically on first SMTP delivery; password = email address.
+  # Fixed user: imap-test@example.com / imap-test (pre-registered via GREENMAIL_OPTS).
+  # SMTP delivery to unknown addresses auto-creates a mailbox with the recipient address as the password.
   greenmail:
     image: greenmail/standalone:2.1.3
     environment:

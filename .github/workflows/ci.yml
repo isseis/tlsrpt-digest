@@ -36,9 +36,9 @@ jobs:
 
           # Write changed files to a temp file and delegate to the classify script.
           tmp=$(mktemp)
+          trap 'rm -f "$tmp"' EXIT
           echo "$changed_files" > "$tmp"
           bash .github/scripts/classify-changes.sh "$tmp"
-          rm -f "$tmp"
 
   security-scan:
     name: Security Scan
