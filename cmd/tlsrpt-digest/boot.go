@@ -330,9 +330,11 @@ func setupNotifyHandlers(successURL, errorURL config.Secret, cfg *config.Config,
 		return nil, errSlackWebhookURLRequired
 	}
 
+	// Non-dry: warn-and-above only (pre-send payload dump at Debug is suppressed).
+	// Dry-run: Info-and-above so that the "[dry-run] would send" messages are visible.
 	debugLevel := slog.LevelWarn
 	if dryRun {
-		debugLevel = slog.LevelDebug
+		debugLevel = slog.LevelInfo
 	}
 	debugLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: debugLevel})).With("run_id", runID)
 

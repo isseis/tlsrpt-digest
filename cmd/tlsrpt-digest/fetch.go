@@ -134,8 +134,7 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	}
 
 	if boot.Options.DryRun {
-		logFetchDryRunSummary(states)
-		return exitOK, nil
+		return fetchDryRunExit(ctx, boot, states), nil
 	}
 
 	// Step 8: Register metadata for all messages that now have a local .eml.
@@ -359,6 +358,18 @@ func buildEmailMetas(states []fetchMsgState, currentUID uint32) []store.EmailMet
 		}
 	}
 	return metas
+}
+
+// fetchDryRunExit logs the dry-run summary, flushes buffered notifications as
+// "[dry-run] would send" messages, then returns exitOK.
+func fetchDryRunExit(ctx context.Context, boot *BootContext, states []fetchMsgState) int {
+	logFetchDryRunSummary(states)
+	// Flush so that any buffered warnings (e.g. size mismatches from
+	// buildFetchStates) appear as "[dry-run] would send" log lines.
+	if err := boot.Notifier.Flush(ctx); err != nil {
+		slog.Warn("fetch: dry-run flush notifications", "error", err)
+	}
+	return exitOK
 }
 
 // logFetchDryRunSummary logs what would have happened in a real (non-dry) run.
