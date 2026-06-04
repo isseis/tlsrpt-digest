@@ -372,6 +372,10 @@ func fetchDryRunExit(ctx context.Context, boot *BootContext, states []fetchMsgSt
 	return exitOK
 }
 
+// dryRunUIDSample returns up to maxSample UIDs and a boolean indicating whether
+// the list was truncated.
+const dryRunUIDSampleMax = 20
+
 // logFetchDryRunSummary logs what would have happened in a real (non-dry) run.
 func logFetchDryRunSummary(states []fetchMsgState) {
 	var wouldDownload []uint32
@@ -380,10 +384,17 @@ func logFetchDryRunSummary(states []fetchMsgState) {
 			wouldDownload = append(wouldDownload, s.meta.UID)
 		}
 	}
+	sample := wouldDownload
+	truncated := false
+	if len(sample) > dryRunUIDSampleMax {
+		sample = sample[:dryRunUIDSampleMax]
+		truncated = true
+	}
 	slog.Info("fetch: dry-run complete; no messages downloaded, no store writes, no IMAP flags set",
 		"candidate_count", len(states),
 		"would_download_count", len(wouldDownload),
-		"would_download_uids", wouldDownload)
+		"would_download_uids_sample", sample,
+		"would_download_uids_truncated", truncated)
 }
 
 // collectUnseenUIDs returns the UIDs of all messages that were UNSEEN at fetch time.

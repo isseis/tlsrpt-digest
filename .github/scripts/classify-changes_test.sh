@@ -13,10 +13,10 @@ run_case() {
   local want_dc="$4"
   local want_int="$5"
 
-  output=$(echo "$input" | bash "$SCRIPT")
-  got_code=$(echo "$output"    | grep '^has-code-changes='        | cut -d= -f2)
-  got_dc=$(echo "$output"      | grep '^has-devcontainer-changes=' | cut -d= -f2)
-  got_int=$(echo "$output"     | grep '^has-integration-changes='  | cut -d= -f2)
+  output=$(printf '%s\n' "$input" | bash "$SCRIPT")
+  got_code=$(printf '%s\n' "$output"  | grep '^has-code-changes='        | cut -d= -f2)
+  got_dc=$(printf '%s\n' "$output"    | grep '^has-devcontainer-changes=' | cut -d= -f2)
+  got_int=$(printf '%s\n' "$output"   | grep '^has-integration-changes='  | cut -d= -f2)
 
   local ok=true
   if [ "$got_code" != "$want_code" ]; then
