@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -35,18 +36,6 @@ func waitForGreenmailUIDValidityTick() {
 	}
 }
 
-// missingRecoveryEnv returns the names of environment variables required for
-// recovery integration tests that are missing or invalid.
-func missingRecoveryEnv(getenv func(string) string) []string {
-	return checkRecoveryEnvSpecs(getenv, []recoveryEnvSpec{
-		{"IMAP_TEST_HOST", false},
-		{"IMAP_TEST_PORT", true},
-		{"IMAP_TEST_USER", false},
-		{"IMAP_TEST_PASS", false},
-		{"IMAP_TEST_MAILBOX", false},
-	})
-}
-
 // recoveryEnvSpec describes a required environment variable and whether its
 // value must be parseable as an integer.
 type recoveryEnvSpec struct {
@@ -54,12 +43,27 @@ type recoveryEnvSpec struct {
 	mustBeInt bool
 }
 
-// checkRecoveryEnvSpecs validates a list of env var specs and returns the
-// names of variables that are missing or fail their type constraint.
-func checkRecoveryEnvSpecs(getenv func(string) string, specs []recoveryEnvSpec) []string {
+var recoveryEnvSpecs = []recoveryEnvSpec{
+	{"IMAP_TEST_HOST", false},
+	{"IMAP_TEST_PORT", true},
+	{"IMAP_TEST_USER", false},
+	{"IMAP_TEST_PASS", false},
+	{"IMAP_TEST_MAILBOX", false},
+}
+
+// missingRecoveryEnv returns the names of environment variables required for
+// recovery integration tests that are missing or invalid.
+//
+// When env is nil, values are read from the process environment. When env is
+// non-nil, it replaces the process environment for the default recoveryEnvSpecs:
+// keys absent from env are treated as missing even if they exist in os.Environ.
+func missingRecoveryEnv(env map[string]string) []string {
 	var missing []string
-	for _, s := range specs {
-		val := getenv(s.key)
+	for _, s := range recoveryEnvSpecs {
+		val := os.Getenv(s.key)
+		if env != nil {
+			val = env[s.key]
+		}
 		if val == "" {
 			missing = append(missing, s.key+" (empty)")
 			continue
@@ -78,7 +82,7 @@ func checkRecoveryEnvSpecs(getenv func(string) string, specs []recoveryEnvSpec) 
 // the fetch subcommand reads.
 func loadRecoveryTestEnv(t *testing.T) {
 	t.Helper()
-	if missing := missingRecoveryEnv(os.Getenv); len(missing) > 0 {
+	if missing := missingRecoveryEnv(nil); len(missing) > 0 {
 		t.Skip("recovery integration env not configured: " + strings.Join(missing, ", "))
 	}
 	t.Setenv("TLSRPT_IMAP_USERNAME", os.Getenv("IMAP_TEST_USER"))
@@ -122,8 +126,8 @@ func TestIntegration_RecoveryEnvRequirements(t *testing.T) {
 			"IMAP_TEST_PASS":    "p",
 			"IMAP_TEST_MAILBOX": "INBOX",
 		}
-		got := missingRecoveryEnv(func(k string) string { return env[k] })
-		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_HOST")
+		got := missingRecoveryEnv(env)
+		require.True(t, slices.Contains(got, "IMAP_TEST_HOST (empty)"))
 	})
 	t.Run("port_missing", func(t *testing.T) {
 		env := map[string]string{
@@ -132,8 +136,8 @@ func TestIntegration_RecoveryEnvRequirements(t *testing.T) {
 			"IMAP_TEST_PASS":    "p",
 			"IMAP_TEST_MAILBOX": "INBOX",
 		}
-		got := missingRecoveryEnv(func(k string) string { return env[k] })
-		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_PORT")
+		got := missingRecoveryEnv(env)
+		require.True(t, slices.Contains(got, "IMAP_TEST_PORT (empty)"))
 	})
 	t.Run("port_invalid", func(t *testing.T) {
 		env := map[string]string{
@@ -143,8 +147,8 @@ func TestIntegration_RecoveryEnvRequirements(t *testing.T) {
 			"IMAP_TEST_PASS":    "p",
 			"IMAP_TEST_MAILBOX": "INBOX",
 		}
-		got := missingRecoveryEnv(func(k string) string { return env[k] })
-		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_PORT")
+		got := missingRecoveryEnv(env)
+		require.True(t, slices.Contains(got, "IMAP_TEST_PORT (not a valid integer)"))
 	})
 	t.Run("user_missing", func(t *testing.T) {
 		env := map[string]string{
@@ -153,8 +157,8 @@ func TestIntegration_RecoveryEnvRequirements(t *testing.T) {
 			"IMAP_TEST_PASS":    "p",
 			"IMAP_TEST_MAILBOX": "INBOX",
 		}
-		got := missingRecoveryEnv(func(k string) string { return env[k] })
-		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_USER")
+		got := missingRecoveryEnv(env)
+		require.True(t, slices.Contains(got, "IMAP_TEST_USER (empty)"))
 	})
 	t.Run("pass_missing", func(t *testing.T) {
 		env := map[string]string{
@@ -163,8 +167,8 @@ func TestIntegration_RecoveryEnvRequirements(t *testing.T) {
 			"IMAP_TEST_USER":    "u",
 			"IMAP_TEST_MAILBOX": "INBOX",
 		}
-		got := missingRecoveryEnv(func(k string) string { return env[k] })
-		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_PASS")
+		got := missingRecoveryEnv(env)
+		require.True(t, slices.Contains(got, "IMAP_TEST_PASS (empty)"))
 	})
 	t.Run("mailbox_missing", func(t *testing.T) {
 		env := map[string]string{
@@ -173,8 +177,8 @@ func TestIntegration_RecoveryEnvRequirements(t *testing.T) {
 			"IMAP_TEST_USER": "u",
 			"IMAP_TEST_PASS": "p",
 		}
-		got := missingRecoveryEnv(func(k string) string { return env[k] })
-		require.Contains(t, strings.Join(got, " "), "IMAP_TEST_MAILBOX")
+		got := missingRecoveryEnv(env)
+		require.True(t, slices.Contains(got, "IMAP_TEST_MAILBOX (empty)"))
 	})
 	t.Run("all_valid", func(t *testing.T) {
 		env := map[string]string{
@@ -184,7 +188,7 @@ func TestIntegration_RecoveryEnvRequirements(t *testing.T) {
 			"IMAP_TEST_PASS":    "p",
 			"IMAP_TEST_MAILBOX": "INBOX",
 		}
-		got := missingRecoveryEnv(func(k string) string { return env[k] })
+		got := missingRecoveryEnv(env)
 		require.Empty(t, got)
 	})
 	t.Run("credential_propagation", func(t *testing.T) {
