@@ -145,7 +145,7 @@ func TestReprocess_Notify_TLSFailure_LogsAlert(t *testing.T) {
 }
 
 func TestParseCLI_ReprocessNotifyFlag(t *testing.T) {
-	inv, err := parseCLI([]string{"reprocess", "--notify"}, io.Discard)
+	inv, err := parseCLI([]string{"--config", "custom.toml", "reprocess", "--notify"}, io.Discard)
 	require.NoError(t, err)
 	assert.True(t, inv.Options.ReprocessNotify)
 }

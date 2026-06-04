@@ -230,7 +230,8 @@ func TestFormatSystemError_ActionHint_UIDValidityChanged(t *testing.T) {
 	require.NoError(t, h.Flush(context.Background()))
 	body := string(recv)
 	assert.Contains(t, body, "Action Required")
-	assert.Contains(t, body, "tlsrpt-digest recover")
+	assert.Contains(t, body, "tlsrpt-digest --config")
+	assert.Contains(t, body, "recover --mode discard-old --yes")
 	assert.NotContains(t, body, "abort-reset")
 }
 
@@ -244,7 +245,8 @@ func TestFormatSystemError_ActionHint_RecoveryRequired(t *testing.T) {
 	require.NoError(t, h.Flush(context.Background()))
 	body := string(recv)
 	assert.Contains(t, body, "Action Required")
-	assert.Contains(t, body, "tlsrpt-digest recover")
+	assert.Contains(t, body, "tlsrpt-digest --config")
+	assert.Contains(t, body, "recover --mode discard-old --yes")
 	assert.NotContains(t, body, "abort-reset")
 }
 

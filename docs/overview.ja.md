@@ -63,26 +63,13 @@ flowchart LR
 
 ```
 tlsrpt-digest/
-├── cmd/
-│   └── tlsrpt-digest/        # エントリポイント・サブコマンド・one-shot 実行
-├── internal/
-│   ├── imap/                 # IMAP接続・メタ情報取得（期間内全件）・選択的ダウンロード・既読マーク
-│   ├── tlsrpt/               # RFC 8460 JSON パース・failure判定
-│   ├── notify/               # Slack / メール通知（即時アラート・定期サマリ）
-│   └── store/                # レポート永続化（.json / .eml）・定期サマリ用データ管理
-├── testdata/                 # テスト用実データ（.eml, .json.gz）
-└── docs/                     # ドキュメント
+├── cmd/        # コマンドラインエントリーポイント
+├── internal/   # コア実装
+├── testdata/   # テスト用実データ（.eml, .json.gz）
+└── docs/       # ドキュメント
 ```
 
-### 各パッケージの責務
-
-| パッケージ | 責務 |
-|---|---|
-| `internal/imap` | IMAP サーバへの接続、取得期間内の全メールのメタ情報取得、選択的ダウンロード、処理後の既読マーク |
-| `internal/tlsrpt` | .json.gz 添付ファイルの展開、RFC 8460 JSON のパース、failure_session_count の評価 |
-| `internal/notify` | Slack Webhook / メールによる通知送信（即時アラートと定期サマリの両方） |
-| `internal/store` | .eml ファイルの保存・読み込み、JSON によるレポートデータの永続化、定期サマリ用の集計 |
-| `cmd/tlsrpt-digest` | 設定ファイル読み込み、各パッケージの初期化、サブコマンド（fetch / summary / reprocess）の実行 |
+各パッケージの詳細な責務については [パッケージリファレンス](dev/developer_guide/package_reference.ja.md) を参照してください。
 
 ---
 

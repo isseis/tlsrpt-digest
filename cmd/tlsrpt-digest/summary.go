@@ -36,7 +36,7 @@ func (r *summaryRunner) Run(ctx context.Context, boot *BootContext) (int, error)
 		return exitError, fmt.Errorf("summary: check recovery required (pre-aggregation): %w", err)
 	}
 	if found {
-		slog.Warn("recovery required: run tlsrpt-digest recover to resolve")
+		slog.Warn("recovery required: run tlsrpt-digest --config <path> recover to resolve")
 		notifier, buildErr := r.buildNotifier(boot)
 		if buildErr != nil {
 			slog.Error("summary: build notifier for recovery error", "error", buildErr)

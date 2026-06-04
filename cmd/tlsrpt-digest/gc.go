@@ -34,7 +34,7 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 		return exitError, fmt.Errorf("gc: load recovery-required: %w", err)
 	}
 	if recoveryFound {
-		slog.Error("gc: recovery required; run tlsrpt-digest recover to resolve")
+		slog.Error("gc: recovery required; run tlsrpt-digest --config <path> recover to resolve")
 		return exitError, nil
 	}
 

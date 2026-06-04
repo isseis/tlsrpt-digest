@@ -28,7 +28,7 @@ func TestRunCLI_DispatchesSubcommands(t *testing.T) {
 				}),
 			})
 
-			exitCode := runCLI(context.Background(), []string{string(subcmd), "-config", "custom.toml"}, io.Discard, BootstrapOptions{
+			exitCode := runCLI(context.Background(), []string{"--config", "custom.toml", string(subcmd)}, io.Discard, BootstrapOptions{
 				LoadConfig: func(path string) (*config.Config, error) {
 					assert.Equal(t, "custom.toml", path)
 					return configForRoot(secureStoreRoot(t)), nil
@@ -57,7 +57,7 @@ func TestRunCLI_PassesParsedOptionsAndDryRun(t *testing.T) {
 	})
 	gotDryRun := false
 
-	exitCode := runCLI(context.Background(), []string{"fetch", "-dry-run", "-since", "7d"}, io.Discard, BootstrapOptions{
+	exitCode := runCLI(context.Background(), []string{"--config", "custom.toml", "fetch", "-dry-run", "-since", "7d"}, io.Discard, BootstrapOptions{
 		LoadConfig: func(string) (*config.Config, error) {
 			return configForRoot(secureStoreRoot(t)), nil
 		},
@@ -82,17 +82,17 @@ func TestRunCLI_RecoverResetOpenMode(t *testing.T) {
 	}{
 		{
 			name:     "discard old confirmed",
-			args:     []string{"recover", "-mode", "discard-old", "-yes"},
+			args:     []string{"--config", "custom.toml", "recover", "-mode", "discard-old", "-yes"},
 			wantMode: store.OpenRecoverReset,
 		},
 		{
 			name:     "keep old confirmed",
-			args:     []string{"recover", "-mode", "keep-old", "-yes"},
+			args:     []string{"--config", "custom.toml", "recover", "-mode", "keep-old", "-yes"},
 			wantMode: store.OpenReadWrite,
 		},
 		{
 			name:     "discard old unconfirmed",
-			args:     []string{"recover", "-mode", "discard-old"},
+			args:     []string{"--config", "custom.toml", "recover", "-mode", "discard-old"},
 			wantMode: store.OpenReadWrite,
 		},
 	}
@@ -153,7 +153,7 @@ func TestRunCLI_UsageErrorsExit2(t *testing.T) {
 }
 
 func TestRunCLI_BootstrapFailureExits1(t *testing.T) {
-	exitCode := runCLI(context.Background(), []string{"fetch", "-config", "missing.toml"}, io.Discard, BootstrapOptions{
+	exitCode := runCLI(context.Background(), []string{"--config", "missing.toml", "fetch"}, io.Discard, BootstrapOptions{
 		LoadConfig: func(string) (*config.Config, error) {
 			return nil, config.ErrConfigFileRead
 		},
@@ -165,21 +165,43 @@ func TestRunCLI_BootstrapFailureExits1(t *testing.T) {
 func TestParseCLI_ConfigFlagAllSubcommands(t *testing.T) {
 	for _, subcmd := range []SubcommandName{subcommandFetch, subcommandSummary, subcommandReprocess, subcommandGC, subcommandRecover} {
 		t.Run(string(subcmd), func(t *testing.T) {
-			inv, err := parseCLI([]string{string(subcmd), "-config", "custom.toml"}, io.Discard)
+			inv, err := parseCLI([]string{"--config", "custom.toml", string(subcmd)}, io.Discard)
 			require.NoError(t, err)
 			assert.Equal(t, "custom.toml", inv.Options.ConfigPath)
 		})
 	}
 }
 
-func TestParseCLI_DefaultConfigPath(t *testing.T) {
+func TestParseCLI_MissingConfigReturnsError(t *testing.T) {
 	for _, subcmd := range []SubcommandName{subcommandFetch, subcommandSummary, subcommandReprocess, subcommandGC, subcommandRecover} {
 		t.Run(string(subcmd), func(t *testing.T) {
-			inv, err := parseCLI([]string{string(subcmd)}, io.Discard)
-			require.NoError(t, err)
-			assert.Equal(t, defaultConfigPath, inv.Options.ConfigPath)
+			_, err := parseCLI([]string{string(subcmd)}, io.Discard)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errConfigRequired)
 		})
 	}
+}
+
+func TestRunCLI_HelpExits2(t *testing.T) {
+	for _, args := range [][]string{
+		{"help"},
+		{"-h"},
+		{"--help"},
+	} {
+		t.Run(args[0], func(t *testing.T) {
+			var buf bytes.Buffer
+			exitCode := runCLI(context.Background(), args, &buf, BootstrapOptions{})
+			assert.Equal(t, 2, exitCode)
+			assert.Contains(t, buf.String(), "Usage:")
+		})
+	}
+}
+
+func TestParseCLI_ShortFlags(t *testing.T) {
+	inv, err := parseCLI([]string{"-c", "custom.toml", "fetch", "-n"}, io.Discard)
+	require.NoError(t, err)
+	assert.Equal(t, "custom.toml", inv.Options.ConfigPath)
+	assert.True(t, inv.Options.DryRun)
 }
 
 func TestParseCLI_InvalidDurationFlag(t *testing.T) {

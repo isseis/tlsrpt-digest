@@ -32,7 +32,7 @@ func (r *reprocessRunner) Run(ctx context.Context, boot *BootContext) (int, erro
 		return exitError, fmt.Errorf("reprocess: load recovery-required: %w", err)
 	}
 	if recoveryFound {
-		slog.Error("reprocess: recovery required; run tlsrpt-digest recover to resolve")
+		slog.Error("reprocess: recovery required; run tlsrpt-digest --config <path> recover to resolve")
 		return exitError, nil
 	}
 
