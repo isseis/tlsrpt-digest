@@ -134,8 +134,7 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	}
 
 	if boot.Options.DryRun {
-		slog.Info("fetch: dry-run complete; no messages downloaded, no store writes, no IMAP flags set",
-			"candidate_count", len(states))
+		logFetchDryRunSummary(states)
 		return exitOK, nil
 	}
 
@@ -360,6 +359,20 @@ func buildEmailMetas(states []fetchMsgState, currentUID uint32) []store.EmailMet
 		}
 	}
 	return metas
+}
+
+// logFetchDryRunSummary logs what would have happened in a real (non-dry) run.
+func logFetchDryRunSummary(states []fetchMsgState) {
+	var wouldDownload []uint32
+	for _, s := range states {
+		if !s.emlExistedBefore {
+			wouldDownload = append(wouldDownload, s.meta.UID)
+		}
+	}
+	slog.Info("fetch: dry-run complete; no messages downloaded, no store writes, no IMAP flags set",
+		"candidate_count", len(states),
+		"would_download_count", len(wouldDownload),
+		"would_download_uids", wouldDownload)
 }
 
 // collectUnseenUIDs returns the UIDs of all messages that were UNSEEN at fetch time.
