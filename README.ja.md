@@ -62,6 +62,7 @@ RUN apt-get update && apt-get install -y ca-certificates
 ### 2. 環境変数を設定する
 
 ```bash
+export TLSRPT_IMAP_USERNAME="your-imap-username"
 export TLSRPT_IMAP_PASSWORD="your-imap-password"
 export TLSRPT_SLACK_WEBHOOK_URL_SUCCESS="https://hooks.slack.com/services/..."
 export TLSRPT_SLACK_WEBHOOK_URL_ERROR="https://hooks.slack.com/services/..."
@@ -87,7 +88,12 @@ export TLSRPT_SLACK_WEBHOOK_URL_ERROR="https://hooks.slack.com/services/..."
 [imap]
 host = "imap.example.com"
 port = 993
+
+[notify.slack]
+allowed_host = "hooks.slack.com"
 ```
+
+> **注意：** Slack Webhook URL を環境変数で設定する場合は `[notify.slack] allowed_host` が必須です。Slack 通知を使用しない場合のみ `[notify.slack]` セクション全体を省略できます。
 
 ### 全設定項目
 

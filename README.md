@@ -62,6 +62,7 @@ Create `config.toml` (see the next section for a template).
 ### 2. Set environment variables
 
 ```bash
+export TLSRPT_IMAP_USERNAME="your-imap-username"
 export TLSRPT_IMAP_PASSWORD="your-imap-password"
 export TLSRPT_SLACK_WEBHOOK_URL_SUCCESS="https://hooks.slack.com/services/..."
 export TLSRPT_SLACK_WEBHOOK_URL_ERROR="https://hooks.slack.com/services/..."
@@ -87,7 +88,12 @@ The configuration file path must always be specified with the `-c` / `--config` 
 [imap]
 host = "imap.example.com"
 port = 993
+
+[notify.slack]
+allowed_host = "hooks.slack.com"
 ```
+
+> **Note:** `[notify.slack] allowed_host` is required when Slack webhook URLs are set via environment variables. Omit the entire `[notify.slack]` section only if you are not using Slack notifications.
 
 ### All Configuration Items
 

@@ -100,8 +100,9 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 	// Step 1: Parse the global --config flag that must precede the subcommand.
 	global := flag.NewFlagSet("tlsrpt-digest", flag.ContinueOnError)
 	global.SetOutput(io.Discard)
-	configPath := global.String("config", "", "path to TOML configuration file (required)")
-	global.StringVar(configPath, "c", "", "shorthand for --config")
+	var configPath string
+	global.StringVar(&configPath, "config", "", "path to TOML configuration file (required)")
+	global.StringVar(&configPath, "c", "", "shorthand for --config")
 
 	if err := global.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -139,7 +140,7 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 	// Step 5: Parse subcommand-specific flags.
 	fs := flag.NewFlagSet(string(subcmd), flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
-	opts := cliOptions{ConfigPath: *configPath}
+	opts := cliOptions{ConfigPath: configPath}
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "connect to IMAP and check UIDVALIDITY, then stop: skip message downloads, report and UIDVALIDITY store writes, MarkSeen, and Slack HTTP notifications (store bootstrap still runs)")
 	fs.BoolVar(&opts.DryRun, "n", false, "shorthand for --dry-run")
 	registerFlags(fs, subcmd, &opts)

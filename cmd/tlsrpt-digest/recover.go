@@ -64,7 +64,7 @@ func (r *recoverRunner) printInfo(boot *BootContext, prev, curr uint32, opts cli
 	if pendingReset {
 		_, _ = fmt.Fprintln(r.stdout, "")
 		_, _ = fmt.Fprintln(r.stdout, "A pending reset was detected. Available options:")
-		_, _ = fmt.Fprintln(r.stdout, "  Continue reset:  tlsrpt-digest recover --mode discard-old --yes")
+		_, _ = fmt.Fprintln(r.stdout, "  Continue reset:  tlsrpt-digest --config <path> recover --mode discard-old --yes")
 	}
 }
 
@@ -144,6 +144,6 @@ func (r *recoverRunner) handleNoRecoveryRequired(st store.Store, opts cliOptions
 	_, _ = fmt.Fprintln(r.stdout, "Previous reset committed: pending cleanup detected.")
 	_, _ = fmt.Fprintln(r.stdout, "The store is already in a consistent state; leftover files will be")
 	_, _ = fmt.Fprintln(r.stdout, "removed automatically on the next fetch or gc.")
-	_, _ = fmt.Fprintln(r.stdout, "Or finalize now: tlsrpt-digest recover --mode discard-old --yes")
+	_, _ = fmt.Fprintln(r.stdout, "Or finalize now: tlsrpt-digest --config <path> recover --mode discard-old --yes")
 	return exitError, nil
 }
