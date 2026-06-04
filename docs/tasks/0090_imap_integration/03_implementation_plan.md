@@ -305,7 +305,7 @@
   - スキップ条件: `IMAP_TEST_HOST`、`IMAP_TEST_PORT`、`IMAP_TEST_USER`、`IMAP_TEST_PASS`、`IMAP_TEST_MAILBOX` のいずれかが空文字の場合に `t.Skip("recovery integration env not configured")` を呼ぶ
   - `t.Setenv("TLSRPT_IMAP_USERNAME", os.Getenv("IMAP_TEST_USER"))` と `t.Setenv("TLSRPT_IMAP_PASSWORD", os.Getenv("IMAP_TEST_PASS"))` で fetch サブコマンドが読む IMAP 認証情報を設定する
 
-- [x] `missingRecoveryEnv(getenv func(string) string) []string` ヘルパーを追加し、`loadRecoveryTestEnv` はその結果が空でない場合にだけ `t.Skip(...)` を呼ぶようにする。`IMAP_TEST_PORT` の値は整数として parse できることも検査対象に含める。
+- [x] `missingRecoveryEnv(env map[string]string) []string` ヘルパーを追加し、`loadRecoveryTestEnv` はその結果が空でない場合にだけ `t.Skip(...)` を呼ぶようにする。`env` が `nil` の場合は `os.Getenv` で読み取る。`IMAP_TEST_PORT` の値は整数として parse できることも検査対象に含める。テーブル駆動（`recoveryEnvSpec` スライス + `checkRecoveryEnvSpecs` ループ）で実装する。
 
 - [x] `TestIntegration_RecoveryEnvRequirements` を追加する。`missingRecoveryEnv` にテスト用 `getenv` を渡し、`IMAP_TEST_HOST` 欠落、`IMAP_TEST_PORT` 欠落、`IMAP_TEST_PORT` 不正値、`IMAP_TEST_USER` 欠落、`IMAP_TEST_PASS` 欠落、`IMAP_TEST_MAILBOX` 欠落を検証する。加えて `loadRecoveryTestEnv` 相当の credential propagation が `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` に固定ユーザの値を設定することを検証する（AC-04）。
 
@@ -318,7 +318,7 @@
 - [x] `insecureMailFetcherFactory(cfg imap.Config) (imap.MailFetcher, error)` ヘルパーを追加する。先頭コメント: `// insecureMailFetcherFactory wraps imap.NewIMAPClient with InsecureSkipVerify=true for integration tests.`
   - 受け取った `cfg` の `InsecureSkipVerify` を `true` に設定してから `imap.NewIMAPClient(cfg)` を呼ぶ
 
-- [x] `testRunID()` と `testMailboxName(t *testing.T) string` ヘルパーを追加する。`testRunID` は Phase 2 と同じ方針で run ごとに一意な suffix を返す。`testMailboxName` はテスト名から英数字・ハイフン以外の文字をハイフンに置換し、プレフィックスを 24 文字以内に切り詰めてから `"-" + testRunID()` の suffix を付加して返す（suffix が 32 文字上限によって切り捨てられないよう、先にプレフィックスを切り詰める）。失敗・中断した過去 run のメールボックス名と衝突しないようにする
+- [x] `recoveryTestMailboxName() string` ヘルパーを追加する。`ulid.Make().String()` を返し、呼び出しごとに一意なメールボックス名を生成する（テスト名プレフィックス不要）。
 
 - [x] `TestIntegration_Recovery_KeepOld` を追加する。先頭コメント: `// TestIntegration_Recovery_KeepOld verifies fetch detects UIDVALIDITY change and recover --mode keep-old resolves it (requirement F-004, AC-11, AC-12).`
   アーキテクチャ設計書 §6.2 のシーケンス図に従い次の手順を実装する:
