@@ -30,6 +30,9 @@ func recoveryTestMailboxName() string {
 
 // waitForGreenmailUIDValidityTick waits until greenmail will assign a new
 // UIDVALIDITY value to a recreated mailbox.
+//
+// This can take close to one second. If more tests need this helper, consider
+// running those tests in parallel so the wait overlaps across test cases.
 func waitForGreenmailUIDValidityTick() {
 	for start := time.Now().Unix(); time.Now().Unix() == start; {
 		time.Sleep(10 * time.Millisecond)
