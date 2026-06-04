@@ -290,8 +290,8 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+- [x] PR がマージされた
+- [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ---
 
@@ -299,28 +299,28 @@
 
 #### 新規ファイル: `cmd/tlsrpt-digest/recovery_integration_test.go`
 
-- [ ] `//go:build integration` タグ付きでファイルを作成する。パッケージ名は `main`。
+- [x] `//go:build integration` タグ付きでファイルを作成する。パッケージ名は `main`。
 
-- [ ] `loadRecoveryTestEnv(t *testing.T)` ヘルパーを追加する:
+- [x] `loadRecoveryTestEnv(t *testing.T)` ヘルパーを追加する:
   - スキップ条件: `IMAP_TEST_HOST`、`IMAP_TEST_PORT`、`IMAP_TEST_USER`、`IMAP_TEST_PASS`、`IMAP_TEST_MAILBOX` のいずれかが空文字の場合に `t.Skip("recovery integration env not configured")` を呼ぶ
   - `t.Setenv("TLSRPT_IMAP_USERNAME", os.Getenv("IMAP_TEST_USER"))` と `t.Setenv("TLSRPT_IMAP_PASSWORD", os.Getenv("IMAP_TEST_PASS"))` で fetch サブコマンドが読む IMAP 認証情報を設定する
 
-- [ ] `missingRecoveryEnv(getenv func(string) string) []string` ヘルパーを追加し、`loadRecoveryTestEnv` はその結果が空でない場合にだけ `t.Skip(...)` を呼ぶようにする。`IMAP_TEST_PORT` の値は整数として parse できることも検査対象に含める。
+- [x] `missingRecoveryEnv(env map[string]string) []string` ヘルパーを追加し、`loadRecoveryTestEnv` はその結果が空でない場合にだけ `t.Skip(...)` を呼ぶようにする。`env` が `nil` の場合は `os.Getenv` で読み取る。`IMAP_TEST_PORT` の値は整数として parse できることも検査対象に含める。テーブル駆動（`recoveryEnvSpec` スライス + `checkRecoveryEnvSpecs` ループ）で実装する。
 
-- [ ] `TestIntegration_RecoveryEnvRequirements` を追加する。`missingRecoveryEnv` にテスト用 `getenv` を渡し、`IMAP_TEST_HOST` 欠落、`IMAP_TEST_PORT` 欠落、`IMAP_TEST_PORT` 不正値、`IMAP_TEST_USER` 欠落、`IMAP_TEST_PASS` 欠落、`IMAP_TEST_MAILBOX` 欠落を検証する。加えて `loadRecoveryTestEnv` 相当の credential propagation が `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` に固定ユーザの値を設定することを検証する（AC-04）。
+- [x] `TestIntegration_RecoveryEnvRequirements` を追加する。`missingRecoveryEnv` にテスト用 `getenv` を渡し、`IMAP_TEST_HOST` 欠落、`IMAP_TEST_PORT` 欠落、`IMAP_TEST_PORT` 不正値、`IMAP_TEST_USER` 欠落、`IMAP_TEST_PASS` 欠落、`IMAP_TEST_MAILBOX` 欠落を検証する。加えて `loadRecoveryTestEnv` 相当の credential propagation が `TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD` に固定ユーザの値を設定することを検証する（AC-04）。
 
-- [ ] `buildTestConfigTOML(t *testing.T, rootDir, imapHost string, imapPort int, mailbox string) string` ヘルパーを追加する:
+- [x] `buildTestConfigTOML(t *testing.T, rootDir, imapHost string, imapPort int, mailbox string) string` ヘルパーを追加する:
   - 一時ディレクトリに `config.toml` を書き込み、そのパスを返す
   - TOML の内容: `[imap]` セクションに `host`・`port`・`mailbox` を設定し、`[store]` セクションに `root_dir = rootDir` を設定する
   - `[notify.slack]` セクションに `allowed_host = ""` を設定する（Slack 通知を使用しないため）
   - 動作上の注意: `allowed_host = ""` かつ `dry-run=true` のとき、`setupNotifyHandlers` が呼ぶ `notify.BuildHandlers` は空の webhookURL をスキップして dry-run ハンドラのみを生成するため、Slack URL なしでも Bootstrap が正常に完了する（`boot.go` の `setupNotifyHandlers` 実装参照）
 
-- [ ] `insecureMailFetcherFactory(cfg imap.Config) (imap.MailFetcher, error)` ヘルパーを追加する。先頭コメント: `// insecureMailFetcherFactory wraps imap.NewIMAPClient with InsecureSkipVerify=true for integration tests.`
+- [x] `insecureMailFetcherFactory(cfg imap.Config) (imap.MailFetcher, error)` ヘルパーを追加する。先頭コメント: `// insecureMailFetcherFactory wraps imap.NewIMAPClient with InsecureSkipVerify=true for integration tests.`
   - 受け取った `cfg` の `InsecureSkipVerify` を `true` に設定してから `imap.NewIMAPClient(cfg)` を呼ぶ
 
-- [ ] `testRunID()` と `testMailboxName(t *testing.T) string` ヘルパーを追加する。`testRunID` は Phase 2 と同じ方針で run ごとに一意な suffix を返す。`testMailboxName` はテスト名から英数字・ハイフン以外の文字をハイフンに置換し、プレフィックスを 24 文字以内に切り詰めてから `"-" + testRunID()` の suffix を付加して返す（suffix が 32 文字上限によって切り捨てられないよう、先にプレフィックスを切り詰める）。失敗・中断した過去 run のメールボックス名と衝突しないようにする
+- [x] `recoveryTestMailboxName() string` ヘルパーを追加する。`ulid.Make().String()` を返し、呼び出しごとに一意なメールボックス名を生成する（テスト名プレフィックス不要）。
 
-- [ ] `TestIntegration_Recovery_KeepOld` を追加する。先頭コメント: `// TestIntegration_Recovery_KeepOld verifies fetch detects UIDVALIDITY change and recover --mode keep-old resolves it (requirement F-004, AC-11, AC-12).`
+- [x] `TestIntegration_Recovery_KeepOld` を追加する。先頭コメント: `// TestIntegration_Recovery_KeepOld verifies fetch detects UIDVALIDITY change and recover --mode keep-old resolves it (requirement F-004, AC-11, AC-12).`
   アーキテクチャ設計書 §6.2 のシーケンス図に従い次の手順を実装する:
   1. `loadRecoveryTestEnv(t)` を呼ぶ
   2. `t.TempDir()` でストア root を作成する
@@ -337,13 +337,13 @@
   13. `runCLI` で `recover -config <configPath> -mode keep-old` を実行し `exitOK` を検証する（AC-12）
   14. `runCLI` で `fetch -config <configPath> -dry-run` を再実行し `exitOK` を検証する（recovery 解消の確認）
 
-- [ ] `TestIntegration_Recovery_DiscardOld` を追加する。先頭コメント: `// TestIntegration_Recovery_DiscardOld verifies recover --mode discard-old --yes resolves UIDVALIDITY mismatch (requirement F-004, AC-11, AC-13).`
+- [x] `TestIntegration_Recovery_DiscardOld` を追加する。先頭コメント: `// TestIntegration_Recovery_DiscardOld verifies recover --mode discard-old --yes resolves UIDVALIDITY mismatch (requirement F-004, AC-11, AC-13).`
   - `TestIntegration_Recovery_KeepOld` と同じ手順でステップ 1〜12 を実施する。メールボックス名は `testMailboxName(t)` で生成するためテスト関数名が異なれば自動的に別の固有名になる（ステップ 11 の fetch 再実行も `-dry-run` 付きで行う）
   - ステップ 13 を `runCLI` で `recover -config <configPath> -mode discard-old -yes` に変更し `exitOK` を検証する（AC-13）
   - ステップ 14 は同様に `fetch -config <configPath> -dry-run` が `exitOK` を返すことを検証する
 
 **フェーズ完了の確認**:
-- [ ] greenmail IMAPS 環境（Phase 5 の devcontainer 更新後、または同等の手動設定）で `go test -v -count=1 -tags test,integration ./cmd/tlsrpt-digest/...` が通過すること
+- [x] greenmail IMAPS 環境（devcontainer で `go test -v -count=1 -tags test,integration ./cmd/tlsrpt-digest/...` が通過すること）
 
 > **手動設定での検証方法**: Phase 5 の devcontainer 変更前に検証する場合は、Phase 3 と同様に `GREENMAIL_OPTS`・`IMAP_TEST_PORT=3993`・`IMAP_TEST_PASS=imap-test`・`IMAP_TEST_SMTP_PORT=3025` を設定した greenmail を起動すること。
 
@@ -355,8 +355,8 @@
 
 **レビュー観点**: `insecureMailFetcherFactory` による依存注入が本番の `buildIMAPConfig` を変更せずに greenmail へ接続できていること / 非ゼロ終了コード（AC-11(1)）とストアの recovery-required 状態（AC-11(2)）の両方を検証していること / `t.Parallel()` を使用しておらず `withCommandRunners` のグローバル変数変更による並行実行干渉がないこと / `testMailboxName` が各テスト間でメールボックス名の衝突を防いでいること
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
@@ -467,7 +467,7 @@
 
 **レビュー観点**: devcontainer と CI の greenmail 設定（ポート・固定ユーザ GREENMAIL_OPTS）が一致していること / `classify-changes.sh` の `has-integration-changes` 判定条件が devcontainer・testdata の変更も捕捉し既存 `has-code-changes` ロジックと整合していること / `verify-integration-workflow.go` が文字列 grep ではなく構造化 YAML パーサで検証していること / 通常 `test` ジョブが greenmail なし・integration タグなしのまま維持されていること
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）

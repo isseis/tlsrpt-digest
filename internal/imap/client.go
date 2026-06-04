@@ -28,6 +28,7 @@ var (
 type imapSession interface {
 	Login(username, password string) error
 	Logout() error
+	Close() error
 	Select(mailbox string, readOnly bool) (*goimap.MailboxStatus, error)
 	UidSearch(criteria *goimap.SearchCriteria) ([]uint32, error)
 	UidFetch(seqset *goimap.SeqSet, items []goimap.FetchItem, ch chan *goimap.Message) error
@@ -43,6 +44,10 @@ var dialTLS dialTLSFunc = func(addr string, tlsConfig *tls.Config) (imapSession,
 type imapClient struct {
 	cfg     Config
 	session imapSession
+	// lastSelectReadOnly is true when the last Select used EXAMINE (read-only).
+	// Close() consults it to avoid expunging other clients' \Deleted messages
+	// (see Close for the full rationale).
+	lastSelectReadOnly bool
 }
 
 var _ MailFetcher = (*imapClient)(nil)
@@ -100,6 +105,22 @@ func buildTLSConfig(cfg Config) (*tls.Config, error) {
 }
 
 func (c *imapClient) Close() error {
+	// Guard against collateral expunge: RFC 3501 §6.4.2 says CLOSE permanently
+	// removes every \Deleted-flagged message from the selected mailbox, but does
+	// nothing destructive when the mailbox was opened read-only (EXAMINE). After a
+	// read-write SELECT (MarkSeen), an unconditional CLOSE would silently expunge
+	// messages that another client flagged \Deleted — data we do not own — so we
+	// send only LOGOUT in that case (LOGOUT does not expunge).
+	//
+	// After a read-only EXAMINE, CLOSE cannot expunge anything, so we send it: this
+	// is required because some servers (including greenmail) keep the mailbox in a
+	// "session-open" state after LOGOUT-only, blocking a concurrent DELETE from
+	// another connection.
+	if c.lastSelectReadOnly {
+		if err := c.session.Close(); err != nil {
+			slog.Warn("imap: CLOSE before logout failed (mailbox may remain session-open)", "error", err)
+		}
+	}
 	if err := c.session.Logout(); err != nil {
 		return fmt.Errorf("imap: logout: %w", err)
 	}
@@ -116,6 +137,7 @@ func (c *imapClient) FetchMeta(ctx context.Context, since time.Time) (FetchMetaR
 	if err != nil {
 		return FetchMetaResult{}, fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
 	}
+	c.lastSelectReadOnly = true
 
 	criteria := goimap.NewSearchCriteria()
 	criteria.Since = truncateToDate(since)
@@ -182,9 +204,12 @@ func (c *imapClient) Download(ctx context.Context, uids []uint32) (map[uint32][]
 		return map[uint32][]byte{}, nil
 	}
 
-	if _, err := c.session.Select(c.cfg.Mailbox, false); err != nil {
+	// Use EXAMINE (read-only): Download fetches bodies with BODY.PEEK and never
+	// modifies any message, so a read-write SELECT is unnecessary.
+	if _, err := c.session.Select(c.cfg.Mailbox, true); err != nil {
 		return nil, fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
 	}
+	c.lastSelectReadOnly = true
 
 	seqSet := uidsToSeqSet(uids)
 	section := &goimap.BodySectionName{Peek: true}
@@ -249,6 +274,7 @@ func (c *imapClient) MarkSeen(ctx context.Context, uids []uint32) error {
 	if _, err := c.session.Select(c.cfg.Mailbox, false); err != nil {
 		return fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
 	}
+	c.lastSelectReadOnly = false
 
 	seqSet := uidsToSeqSet(uids)
 	storeItem := goimap.FormatFlagsOp(goimap.AddFlags, false)

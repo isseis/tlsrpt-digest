@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"errors"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -90,6 +89,64 @@ func TestIsTooLarge(t *testing.T) {
 	require.False(t, isTooLarge(999, 0))
 }
 
+func TestClose_SendsIMAPCloseOnlyAfterEXAMINE(t *testing.T) {
+	t.Parallel()
+
+	// After FetchMeta (EXAMINE, lastSelectReadOnly=true), Close must send IMAP CLOSE.
+	t.Run("after_FetchMeta_sends_CLOSE", func(t *testing.T) {
+		t.Parallel()
+		// uidSearchResult is nil by default → FetchMeta returns empty, no UidFetch.
+		s := &fakeSession{selectMailboxStatus: &goimap.MailboxStatus{Name: "INBOX"}}
+		c := &imapClient{cfg: Config{Mailbox: "INBOX"}, session: s}
+		_, err := c.FetchMeta(context.Background(), time.Time{})
+		require.NoError(t, err)
+		require.NoError(t, c.Close())
+		require.True(t, s.closeCalled, "IMAP CLOSE must be sent after EXAMINE (FetchMeta)")
+	})
+
+	// Download uses EXAMINE (read-only, BODY.PEEK), so Close must send IMAP CLOSE.
+	t.Run("after_Download_sends_CLOSE", func(t *testing.T) {
+		t.Parallel()
+		s := &fakeSession{
+			selectMailboxStatus: &goimap.MailboxStatus{Name: "INBOX"},
+			uidFetchFn: func(_ *goimap.SeqSet, _ []goimap.FetchItem, ch chan *goimap.Message) error {
+				msg := &goimap.Message{Uid: 1, Body: map[*goimap.BodySectionName]goimap.Literal{}}
+				section := &goimap.BodySectionName{Peek: true}
+				msg.Body[section] = newByteLiteral("body")
+				ch <- msg
+				close(ch)
+				return nil
+			},
+		}
+		c := &imapClient{cfg: Config{Mailbox: "INBOX"}, session: s}
+		_, err := c.Download(context.Background(), []uint32{1})
+		require.NoError(t, err)
+		require.NoError(t, c.Close())
+		require.True(t, s.closeCalled, "IMAP CLOSE must be sent after EXAMINE (Download)")
+	})
+
+	// After MarkSeen (SELECT, lastSelectReadOnly=false), Close must NOT send IMAP CLOSE.
+	t.Run("after_MarkSeen_no_CLOSE", func(t *testing.T) {
+		t.Parallel()
+		s := &fakeSession{
+			selectMailboxStatus: &goimap.MailboxStatus{Name: "INBOX"},
+		}
+		c := &imapClient{cfg: Config{Mailbox: "INBOX"}, session: s}
+		require.NoError(t, c.MarkSeen(context.Background(), []uint32{1}))
+		require.NoError(t, c.Close())
+		require.False(t, s.closeCalled, "IMAP CLOSE must NOT be sent after SELECT (MarkSeen)")
+	})
+
+	// A fresh client that never called Select must not send IMAP CLOSE.
+	t.Run("fresh_client_no_CLOSE", func(t *testing.T) {
+		t.Parallel()
+		s := &fakeSession{}
+		c := &imapClient{cfg: Config{Mailbox: "INBOX"}, session: s}
+		require.NoError(t, c.Close())
+		require.False(t, s.closeCalled, "IMAP CLOSE must NOT be sent on a fresh client")
+	})
+}
+
 func TestDownloadMissingUID(t *testing.T) {
 	t.Parallel()
 
@@ -115,11 +172,15 @@ func TestDownloadMissingUID(t *testing.T) {
 type fakeSession struct {
 	selectMailboxStatus *goimap.MailboxStatus
 	selectErr           error
+	uidSearchResult     []uint32
+	uidSearchErr        error
 	uidFetchFn          func(seqset *goimap.SeqSet, items []goimap.FetchItem, ch chan *goimap.Message) error
+	closeCalled         bool
 }
 
 func (f *fakeSession) Login(_, _ string) error { return nil }
 func (f *fakeSession) Logout() error           { return nil }
+func (f *fakeSession) Close() error            { f.closeCalled = true; return nil }
 
 func (f *fakeSession) Select(_ string, _ bool) (*goimap.MailboxStatus, error) {
 	if f.selectErr != nil {
@@ -133,7 +194,10 @@ func (f *fakeSession) Select(_ string, _ bool) (*goimap.MailboxStatus, error) {
 
 //revive:disable:var-naming
 func (f *fakeSession) UidSearch(_ *goimap.SearchCriteria) ([]uint32, error) {
-	return nil, errors.New("not implemented")
+	if f.uidSearchErr != nil {
+		return nil, f.uidSearchErr
+	}
+	return f.uidSearchResult, nil
 }
 
 func (f *fakeSession) UidFetch(seqset *goimap.SeqSet, items []goimap.FetchItem, ch chan *goimap.Message) error {
