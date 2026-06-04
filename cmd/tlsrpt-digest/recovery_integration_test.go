@@ -29,16 +29,35 @@ func recoveryTestMailboxName() string {
 // missingRecoveryEnv returns the names of environment variables required for
 // recovery integration tests that are missing or invalid.
 func missingRecoveryEnv(getenv func(string) string) []string {
+	return checkRecoveryEnvSpecs(getenv, []recoveryEnvSpec{
+		{"IMAP_TEST_HOST", false},
+		{"IMAP_TEST_PORT", true},
+		{"IMAP_TEST_USER", false},
+		{"IMAP_TEST_PASS", false},
+		{"IMAP_TEST_MAILBOX", false},
+	})
+}
+
+// recoveryEnvSpec describes a required environment variable and whether its
+// value must be parseable as an integer.
+type recoveryEnvSpec struct {
+	key       string
+	mustBeInt bool
+}
+
+// checkRecoveryEnvSpecs validates a list of env var specs and returns the
+// names of variables that are missing or fail their type constraint.
+func checkRecoveryEnvSpecs(getenv func(string) string, specs []recoveryEnvSpec) []string {
 	var missing []string
-	for _, key := range []string{"IMAP_TEST_HOST", "IMAP_TEST_PORT", "IMAP_TEST_USER", "IMAP_TEST_PASS", "IMAP_TEST_MAILBOX"} {
-		val := getenv(key)
+	for _, s := range specs {
+		val := getenv(s.key)
 		if val == "" {
-			missing = append(missing, key+" (empty)")
+			missing = append(missing, s.key+" (empty)")
 			continue
 		}
-		if key == "IMAP_TEST_PORT" {
+		if s.mustBeInt {
 			if _, err := strconv.Atoi(val); err != nil {
-				missing = append(missing, key+" (not a valid integer)")
+				missing = append(missing, s.key+" (not a valid integer)")
 			}
 		}
 	}

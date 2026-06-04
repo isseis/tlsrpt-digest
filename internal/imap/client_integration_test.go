@@ -77,35 +77,46 @@ func testMailboxName(t *testing.T) string {
 // missingFixedUserEnv returns the names of environment variables required for
 // fixed-user integration tests that are missing or invalid.
 func missingFixedUserEnv(getenv func(string) string) []string {
-	var missing []string
-	for _, key := range []string{"IMAP_TEST_HOST", "IMAP_TEST_PORT", "IMAP_TEST_USER", "IMAP_TEST_PASS", "IMAP_TEST_MAILBOX"} {
-		val := getenv(key)
-		if val == "" {
-			missing = append(missing, key+" (empty)")
-			continue
-		}
-		if key == "IMAP_TEST_PORT" {
-			if _, err := strconv.Atoi(val); err != nil {
-				missing = append(missing, key+" (not a valid integer)")
-			}
-		}
-	}
-	return missing
+	return checkEnvSpecs(getenv, []envSpec{
+		{"IMAP_TEST_HOST", false},
+		{"IMAP_TEST_PORT", true},
+		{"IMAP_TEST_USER", false},
+		{"IMAP_TEST_PASS", false},
+		{"IMAP_TEST_MAILBOX", false},
+	})
 }
 
 // missingSMTPEnv returns the names of environment variables required for
 // SMTP-injection integration tests that are missing or invalid.
 func missingSMTPEnv(getenv func(string) string) []string {
+	return checkEnvSpecs(getenv, []envSpec{
+		{"IMAP_TEST_HOST", false},
+		{"IMAP_TEST_PORT", true},
+		{"IMAP_TEST_SMTP_HOST", false},
+		{"IMAP_TEST_SMTP_PORT", true},
+	})
+}
+
+// envSpec describes a required environment variable and whether its value must
+// be parseable as an integer.
+type envSpec struct {
+	key       string
+	mustBeInt bool
+}
+
+// checkEnvSpecs validates a list of env var specs and returns the names of
+// variables that are missing or fail their type constraint.
+func checkEnvSpecs(getenv func(string) string, specs []envSpec) []string {
 	var missing []string
-	for _, key := range []string{"IMAP_TEST_HOST", "IMAP_TEST_PORT", "IMAP_TEST_SMTP_HOST", "IMAP_TEST_SMTP_PORT"} {
-		val := getenv(key)
+	for _, s := range specs {
+		val := getenv(s.key)
 		if val == "" {
-			missing = append(missing, key+" (empty)")
+			missing = append(missing, s.key+" (empty)")
 			continue
 		}
-		if key == "IMAP_TEST_PORT" || key == "IMAP_TEST_SMTP_PORT" {
+		if s.mustBeInt {
 			if _, err := strconv.Atoi(val); err != nil {
-				missing = append(missing, key+" (not a valid integer)")
+				missing = append(missing, s.key+" (not a valid integer)")
 			}
 		}
 	}
