@@ -468,7 +468,7 @@
 **レビュー観点**: devcontainer と CI の greenmail 設定（ポート・固定ユーザ GREENMAIL_OPTS）が一致していること / `classify-changes.sh` の `has-integration-changes` 判定条件が devcontainer・testdata の変更も捕捉し既存 `has-code-changes` ロジックと整合していること / `verify-integration-workflow.go` が文字列 grep ではなく構造化 YAML パーサで検証していること / 通常 `test` ジョブが greenmail なし・integration タグなしのまま維持されていること
 
 - [x] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
