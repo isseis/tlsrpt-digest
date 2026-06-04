@@ -205,6 +205,25 @@ func TestBootstrap_NonFetchSubcommandsSucceedWithoutIMAPCredentials(t *testing.T
 	}
 }
 
+func TestBootstrap_FetchDryRun_OpensStoreReadOnly(t *testing.T) {
+	var gotMode store.OpenMode
+	cfg := configForRoot(secureStoreRoot(t))
+	boot, err := Bootstrap(subcommandFetch, "config.toml", "run-dry", BootstrapOptions{
+		DryRun:     true,
+		LoadConfig: func(string) (*config.Config, error) { return cfg, nil },
+		BuildNotifier: func(config.Secret, config.Secret, *config.Config, string, bool) (NotificationSink, error) {
+			return &SpyNotificationSink{}, nil
+		},
+		OpenStore: func(_ string, _ store.IMAPIdentity, mode store.OpenMode) (store.Store, error) {
+			gotMode = mode
+			return storetestutil.NewFakeStore(), nil
+		},
+	})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, boot.Close()) }()
+	assert.Equal(t, store.OpenReadOnly, gotMode, "dry-run fetch must open the store read-only to prevent side effects")
+}
+
 func TestBootstrap_Summary_ExistingStore(t *testing.T) {
 	fakeStore := storetestutil.NewFakeStore()
 	buildCalled := false

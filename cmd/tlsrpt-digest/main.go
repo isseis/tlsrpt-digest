@@ -27,6 +27,7 @@ var (
 	errUnexpectedArguments = errors.New("unexpected arguments")
 	errYesRequiresMode     = errors.New("--yes requires --mode")
 	errConfigRequired      = errors.New("--config is required")
+	errDryRunNotSupported  = errors.New("--dry-run is not supported for this subcommand")
 )
 
 type cliOptions struct {
@@ -141,7 +142,7 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 	fs := flag.NewFlagSet(string(subcmd), flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	opts := cliOptions{ConfigPath: configPath}
-	fs.BoolVar(&opts.DryRun, "dry-run", false, "connect to IMAP and check UIDVALIDITY, then stop: skip message downloads, report and UIDVALIDITY store writes, MarkSeen, and Slack HTTP notifications (store bootstrap still runs)")
+	fs.BoolVar(&opts.DryRun, "dry-run", false, "connect to IMAP and check UIDVALIDITY, then stop: skip message downloads, report and UIDVALIDITY store writes, MarkSeen, and Slack HTTP notifications (store opened read-only: no files created or modified)")
 	fs.BoolVar(&opts.DryRun, "n", false, "shorthand for --dry-run")
 	registerFlags(fs, subcmd, &opts)
 
@@ -191,6 +192,9 @@ func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 func validateFlags(subcmd SubcommandName, opts cliOptions) error {
 	if opts.ConfigPath == "" {
 		return errConfigRequired
+	}
+	if opts.DryRun && subcmd != subcommandFetch && subcmd != subcommandSummary {
+		return errDryRunNotSupported
 	}
 	if subcmd != subcommandRecover {
 		return nil

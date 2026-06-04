@@ -225,7 +225,7 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 	if opts.StoreOpenModeOverride != nil {
 		mode = *opts.StoreOpenModeOverride
 	} else {
-		mode = storeOpenMode(subcmd)
+		mode = storeOpenMode(subcmd, opts.DryRun)
 	}
 	boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
 	if err != nil {
@@ -279,8 +279,8 @@ func notifySystemError(ctx context.Context, notifier NotificationSink, kind noti
 	return errors.Join(err, notifier.Flush(ctx))
 }
 
-func storeOpenMode(subcmd SubcommandName) store.OpenMode {
-	if subcmd == subcommandSummary {
+func storeOpenMode(subcmd SubcommandName, dryRun bool) store.OpenMode {
+	if subcmd == subcommandSummary || dryRun {
 		return store.OpenReadOnly
 	}
 	return store.OpenReadWrite
