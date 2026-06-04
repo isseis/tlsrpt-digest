@@ -42,7 +42,7 @@ func makeRecoveryStore(prev, curr uint32) *storetestutil.FakeStore {
 // TestRecover_ModeFlag verifies that the --mode flag is registered and accepts keep-old/discard-old.
 func TestRecover_ModeFlag(t *testing.T) {
 	for _, mode := range []string{"keep-old", "discard-old"} {
-		inv, err := parseCLI([]string{"recover", "--mode", mode}, io.Discard)
+		inv, err := parseCLI([]string{"--config", "custom.toml", "recover", "--mode", mode}, io.Discard)
 		require.NoError(t, err, "mode %s should be accepted", mode)
 		assert.Equal(t, mode, inv.Options.RecoverMode)
 	}
@@ -179,7 +179,7 @@ func TestRecover_DiscardOldDryRun(t *testing.T) {
 // with a descriptive error message.
 func TestRecover_YesAlone(t *testing.T) {
 	var stderr bytes.Buffer
-	_, err := parseCLI([]string{"recover", "--config", "test.toml", "--yes"}, &stderr)
+	_, err := parseCLI([]string{"--config", "test.toml", "recover", "--yes"}, &stderr)
 	assert.Error(t, err)
 	assert.Contains(t, stderr.String(), "--yes requires --mode")
 	assert.NotContains(t, stderr.String(), "--abort-reset")

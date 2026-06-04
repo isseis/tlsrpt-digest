@@ -14,8 +14,6 @@ import (
 	"github.com/oklog/ulid/v2"
 )
 
-const defaultConfigPath = "./config.toml"
-
 var commandRunners = defaultRunners()
 
 const (
@@ -28,6 +26,7 @@ var (
 	errInvalidRecoverMode  = errors.New("invalid recovery mode")
 	errUnexpectedArguments = errors.New("unexpected arguments")
 	errYesRequiresMode     = errors.New("--yes requires --mode")
+	errConfigRequired      = errors.New("--config is required")
 )
 
 type cliOptions struct {
@@ -98,27 +97,60 @@ func runCLI(ctx context.Context, args []string, stderr io.Writer, bootOpts Boots
 }
 
 func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
-	if len(args) == 0 {
-		printUsage(stderr)
+	// Step 1: Parse the global --config flag that must precede the subcommand.
+	global := flag.NewFlagSet("tlsrpt-digest", flag.ContinueOnError)
+	global.SetOutput(io.Discard)
+	configPath := global.String("config", "", "path to TOML configuration file (required)")
+	global.StringVar(configPath, "c", "", "shorthand for --config")
+
+	if err := global.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			printDetailedHelp(stderr)
+		} else {
+			_, _ = fmt.Fprintln(stderr, err)
+			printUsage(stderr)
+		}
+		return cliInvocation{}, err
+	}
+
+	remaining := global.Args()
+
+	// Step 2: Require at least a subcommand.
+	if len(remaining) == 0 {
+		printDetailedHelp(stderr)
 		return cliInvocation{}, flag.ErrHelp
 	}
-	subcmd := SubcommandName(args[0])
+
+	// Step 3: Handle the help subcommand.
+	if SubcommandName(remaining[0]) == subcommandHelp {
+		printDetailedHelp(stderr)
+		return cliInvocation{}, flag.ErrHelp
+	}
+
+	// Step 4: Dispatch to the subcommand runner.
+	subcmd := SubcommandName(remaining[0])
 	runner, ok := commandRunners[subcmd]
 	if !ok {
-		_, _ = fmt.Fprintf(stderr, "unknown subcommand %q\n", args[0])
+		_, _ = fmt.Fprintf(stderr, "unknown subcommand %q\n", remaining[0])
 		printUsage(stderr)
 		return cliInvocation{}, flag.ErrHelp
 	}
 
+	// Step 5: Parse subcommand-specific flags.
 	fs := flag.NewFlagSet(string(subcmd), flag.ContinueOnError)
-	fs.SetOutput(stderr)
-	opts := cliOptions{ConfigPath: defaultConfigPath}
-	fs.StringVar(&opts.ConfigPath, "config", defaultConfigPath, "path to TOML configuration file")
+	fs.SetOutput(io.Discard)
+	opts := cliOptions{ConfigPath: *configPath}
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "connect to IMAP and check UIDVALIDITY, then stop: skip message downloads, report and UIDVALIDITY store writes, MarkSeen, and Slack HTTP notifications (store bootstrap still runs)")
+	fs.BoolVar(&opts.DryRun, "n", false, "shorthand for --dry-run")
 	registerFlags(fs, subcmd, &opts)
 
-	if err := fs.Parse(args[1:]); err != nil {
-		printUsage(stderr)
+	if err := fs.Parse(remaining[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			printDetailedHelp(stderr)
+		} else {
+			_, _ = fmt.Fprintln(stderr, err)
+			printUsage(stderr)
+		}
 		return cliInvocation{}, err
 	}
 	if fs.NArg() > 0 {
@@ -128,7 +160,11 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 	}
 	if err := validateFlags(subcmd, opts); err != nil {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
-		printUsage(stderr)
+		if errors.Is(err, errConfigRequired) {
+			printDetailedHelp(stderr)
+		} else {
+			printUsage(stderr)
+		}
 		return cliInvocation{}, err
 	}
 	return cliInvocation{Subcommand: subcmd, Options: opts, Runner: runner}, nil
@@ -152,6 +188,9 @@ func registerFlags(fs *flag.FlagSet, subcmd SubcommandName, opts *cliOptions) {
 }
 
 func validateFlags(subcmd SubcommandName, opts cliOptions) error {
+	if opts.ConfigPath == "" {
+		return errConfigRequired
+	}
 	if subcmd != subcommandRecover {
 		return nil
 	}
@@ -174,7 +213,47 @@ func recoverStoreOpenMode(opts cliOptions) store.OpenMode {
 }
 
 func printUsage(w io.Writer) {
-	_, _ = fmt.Fprintln(w, "usage: tlsrpt-digest <fetch|summary|reprocess|gc|recover> [options]")
+	_, _ = fmt.Fprintln(w, "usage: tlsrpt-digest --config <path> <fetch|summary|reprocess|gc|recover> [options]")
+	_, _ = fmt.Fprintln(w, "Run 'tlsrpt-digest help' or 'tlsrpt-digest -h' for detailed help.")
+}
+
+func printDetailedHelp(w io.Writer) {
+	_, _ = fmt.Fprint(w, `Usage:
+  tlsrpt-digest --config <path> <subcommand> [options]
+
+Global flags:
+  -c, --config <path>   Path to TOML configuration file (required)
+
+Subcommands:
+  fetch       Fetch TLSRPT reports from IMAP and process them
+  summary     Send a periodic summary of accumulated reports
+  reprocess   Re-parse stored .eml files and rebuild the report store
+  gc          Delete report data older than the retention period
+  recover     Inspect and repair store consistency
+  help        Show this help
+
+Subcommand options:
+  fetch:
+    -n, --dry-run         Connect to IMAP without downloading messages or sending notifications
+    --since <duration>    Override fetch window (default: fetch_days in config)
+
+  summary:
+    -n, --dry-run         Log Slack payload instead of sending it
+    --window <duration>   Override summary window (default: window_days in config)
+
+  reprocess:
+    --notify              Send Slack notifications for TLS failures and parse errors
+
+  gc:
+    --before <duration>          Override report retention duration (default: retention_days in config)
+    --max-email-age <duration>   Override .eml file retention duration (default: max_email_age_days in config)
+
+  recover:
+    --mode <keep-old|discard-old>   Recovery mode
+    --yes                           Confirm destructive action (required with --mode discard-old)
+
+Duration format: integer followed by d (days) or w (weeks). Examples: 7d, 2w.
+`)
 }
 
 func setupPhase1Logging() slog.Handler {

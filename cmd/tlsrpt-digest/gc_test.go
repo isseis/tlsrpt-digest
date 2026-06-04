@@ -42,14 +42,14 @@ func makeGCBoot(t *testing.T, st *storetestutil.FakeStore, spy *SpyNotificationS
 }
 
 func TestGC_BeforeFlag(t *testing.T) {
-	inv, err := parseCLI([]string{"gc", "--before", "7d"}, io.Discard)
+	inv, err := parseCLI([]string{"--config", "custom.toml", "gc", "--before", "7d"}, io.Discard)
 	require.NoError(t, err)
 	require.NotNil(t, inv.Options.Before)
 	assert.Equal(t, 7, inv.Options.Before.Days)
 }
 
 func TestGC_MaxEmailAgeFlag(t *testing.T) {
-	inv, err := parseCLI([]string{"gc", "--max-email-age", "4w"}, io.Discard)
+	inv, err := parseCLI([]string{"--config", "custom.toml", "gc", "--max-email-age", "4w"}, io.Discard)
 	require.NoError(t, err)
 	require.NotNil(t, inv.Options.MaxEmailAge)
 	assert.Equal(t, 28, inv.Options.MaxEmailAge.Days)

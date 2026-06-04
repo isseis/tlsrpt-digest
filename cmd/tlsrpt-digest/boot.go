@@ -22,6 +22,7 @@ const (
 	subcommandReprocess SubcommandName = "reprocess"
 	subcommandGC        SubcommandName = "gc"
 	subcommandRecover   SubcommandName = "recover"
+	subcommandHelp      SubcommandName = "help"
 )
 
 type BootContext struct {
