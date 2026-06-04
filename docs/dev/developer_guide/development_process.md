@@ -27,14 +27,41 @@ The recommended approach is to use the [Dev Containers](https://marketplace.visu
 
 ### Setting Up a Local Environment Directly
 
-If you are not using devcontainer, install the following tools:
+If you are not using devcontainer, install the following tools. For the versions used in devcontainer, see [`.devcontainer/Dockerfile`](.devcontainer/Dockerfile).
 
-| Tool | Purpose | Version |
-|---|---|---|
-| Go | Build and test | 1.26 or later |
-| golangci-lint | Static analysis | Latest |
-| gofumpt | Code formatting | Latest |
-| Claude Code | AI-assisted development | Latest |
+**Go** (1.26 or later)
+
+Download an installer for your OS from [https://go.dev/dl/](https://go.dev/dl/), or use a package manager:
+
+```bash
+# macOS (Homebrew)
+brew install go
+
+# Ubuntu / Debian
+sudo apt-get install golang-go
+```
+
+**golangci-lint**
+
+```bash
+# Official install script (Linux / macOS)
+curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin
+
+# macOS (Homebrew)
+brew install golangci-lint
+```
+
+**gofumpt**
+
+```bash
+go install mvdan.cc/gofumpt@latest
+```
+
+**Claude Code**
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
 
 After installing, clone the repository and verify the build:
 
@@ -77,11 +104,11 @@ flowchart TD
     L["Merge"]
 
     A --> B --> C
-    C -- "Sent back" --> B
+    C -- "Rejected" --> B
     C -- "Approved" --> D --> E
-    E -- "Sent back" --> D
+    E -- "Rejected" --> D
     E -- "Approved" --> F --> G
-    G -- "Sent back" --> F
+    G -- "Rejected" --> F
     G -- "Approved" --> H --> I --> J
     J -- "Comments" --> K --> I
     J -- "Approved" --> L
@@ -161,7 +188,7 @@ A human reviewer reviews the document and updates its status to `approved`.
 
 ### Step 8: Design PR Boundaries (`/mkplan2`)
 
-When the plan has multiple phases, design the PR groupings.
+When the plan has multiple phases, define the PR boundaries.
 
 ```
 /mkplan2
@@ -179,7 +206,7 @@ When the plan has multiple phases, design the PR groupings.
 
 The command processes the implementation plan checkboxes in order. After each file change, it runs `make fmt && make test && make lint` and fixes any errors. When it reaches a PR-N checkpoint, it automatically creates a PR and stops. After the PR is merged, run `/runplan` again to proceed to the next phase.
 
-> **Note:** After merging, update your local branch with `git pull` before running the next `/runplan`.
+> **Note:** After merging, update your local repository with `git pull` before running the next `/runplan`.
 
 ### Step 10: Address PR Review Comments (`/fixpr`)
 
@@ -229,7 +256,7 @@ Approval is performed by a human reviewer. Claude Code always creates documents 
 - **Formatting:** Run `make fmt` after any change
 - **Testing:** Run `make test` after any change; see the [Test Organization Guide](test_organization.md) for test structure conventions
 - **Static analysis:** Verify there are no errors with `make lint`
-- **Comments, identifiers, and string literals:** Write all Go source code in English
+- **Comments, identifiers, and string literals:** Write comments, identifiers, and string literals in English
 - **Commit messages:** Write in English
 - **Modern Go idioms:** Actively use Go 1.21+ features such as `any`, the `slices`/`maps` packages, and the `min`/`max` built-in functions (see [CLAUDE.md](../../../CLAUDE.md) for details)
 
