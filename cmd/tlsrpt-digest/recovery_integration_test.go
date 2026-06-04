@@ -90,6 +90,11 @@ func loadRecoveryTestEnv(t *testing.T) {
 	}
 	t.Setenv("TLSRPT_IMAP_USERNAME", os.Getenv("IMAP_TEST_USER"))
 	t.Setenv("TLSRPT_IMAP_PASSWORD", os.Getenv("IMAP_TEST_PASS"))
+	// Clear any ambient Slack webhook URLs so Bootstrap does not attempt
+	// to validate a non-empty URL against the empty allowed_host in the
+	// test config.
+	t.Setenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS", "")
+	t.Setenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR", "")
 }
 
 // buildTestConfigTOML writes a minimal config.toml to a temp file and returns
