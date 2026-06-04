@@ -453,10 +453,10 @@
 - [x] docs-only / non-code 変更通知ステップが存在する場合、その条件と表示文言が `has-integration-changes` を考慮しており、統合テストが実行される変更を「全テスト skipped」と表示しないことを検証する
 
 **フェーズ完了の確認**:
-- [ ] `bash .github/scripts/classify-changes_test.sh` が通過すること
-- [ ] `go run .github/scripts/verify-integration-workflow.go` が通過すること
-- [ ] `actionlint .github/workflows/ci.yml` が通過すること
-- [ ] devcontainer で `make test-integration` が通過すること
+- [x] `bash .github/scripts/classify-changes_test.sh` が通過すること
+- [x] `go run .github/scripts/verify-integration-workflow.go` が通過すること
+- [x] `actionlint .github/workflows/ci.yml` が通過すること
+- [x] devcontainer で `make test-integration` が通過すること
 - [ ] PR で `.github/workflows/ci.yml` の変更を含む変更を push し、GitHub Actions の `integration-test` ジョブが起動することを確認する
 
 ### PR-5 作成ポイント: CI and devcontainer infrastructure
