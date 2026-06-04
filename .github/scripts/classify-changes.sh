@@ -18,7 +18,7 @@ else
 fi
 
 # has-code-changes: any file that is not docs-only / devcontainer / LICENSE
-code_files=$(printf '%s\n' "$changed_files" | grep -vE '(\.md$|^docs/|^\.devcontainer/|^LICENSE$)' || true)
+code_files=$(printf '%s\n' "$changed_files" | grep -vE '(\.md$|^docs/|^\.devcontainer/|^LICENSE$|^$)' || true)
 if [ -n "$code_files" ]; then
   has_code=true
 else

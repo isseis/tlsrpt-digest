@@ -114,7 +114,7 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 	fs.SetOutput(stderr)
 	opts := cliOptions{ConfigPath: defaultConfigPath}
 	fs.StringVar(&opts.ConfigPath, "config", defaultConfigPath, "path to TOML configuration file")
-	fs.BoolVar(&opts.DryRun, "dry-run", false, "log notification payloads to stderr without sending HTTP requests")
+	fs.BoolVar(&opts.DryRun, "dry-run", false, "verify connectivity and config only: connect to IMAP and check UIDVALIDITY, but skip all writes (downloads, store, MarkSeen) and HTTP notifications")
 	registerFlags(fs, subcmd, &opts)
 
 	if err := fs.Parse(args[1:]); err != nil {

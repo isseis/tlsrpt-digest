@@ -50,6 +50,7 @@ run_case "go.mod"               "go.mod"                                true  fa
 run_case "go.sum"               "go.sum"                                true  false true
 run_case "docs only"            "docs/overview.md"                      false false false
 run_case "LICENSE only"         "LICENSE"                               false false false
+run_case "empty input"          ""                                       false false false
 
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"

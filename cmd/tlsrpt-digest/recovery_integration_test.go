@@ -94,8 +94,9 @@ func loadRecoveryTestEnv(t *testing.T) {
 
 // noopBootstrapOptions returns BootstrapOptions that bypass the Slack notifier.
 // Recovery tests do not send notifications; using a no-op notifier avoids the
-// need for Slack webhook configuration and does not require -dry-run (which
-// would skip IMAP operations, defeating the test's purpose).
+// need for Slack webhook configuration. The tests do NOT use -dry-run because
+// dry-run skips downloads, store writes, and MarkSeen — all of which must
+// execute for the UIDVALIDITY mismatch detection and recovery flow to work.
 func noopBootstrapOptions() BootstrapOptions {
 	return BootstrapOptions{
 		BuildNotifier: func(_, _ config.Secret, _ *config.Config, _ string, _ bool) (NotificationSink, error) {
