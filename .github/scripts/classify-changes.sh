@@ -18,7 +18,7 @@ else
 fi
 
 # has-code-changes: any file that is not docs-only / devcontainer / LICENSE
-code_files=$(echo "$changed_files" | grep -vE '(\.md$|^docs/|^\.devcontainer/|^LICENSE$)' || true)
+code_files=$(printf '%s\n' "$changed_files" | grep -vE '(\.md$|^docs/|^\.devcontainer/|^LICENSE$)' || true)
 if [ -n "$code_files" ]; then
   has_code=true
 else
@@ -26,7 +26,7 @@ else
 fi
 
 # has-devcontainer-changes: any file under .devcontainer/
-if echo "$changed_files" | grep -q '^\.devcontainer/'; then
+if printf '%s\n' "$changed_files" | grep -q '^\.devcontainer/'; then
   has_devcontainer=true
 else
   has_devcontainer=false
@@ -36,7 +36,7 @@ fi
 # GitHub scripts, devcontainer config, or testdata.
 # Including .github/scripts/ ensures that changes to this script itself
 # trigger the integration-test job.
-if echo "$changed_files" | grep -qE '(\.go$|^Makefile$|^\.github/workflows/|^\.github/scripts/|^\.devcontainer/|^testdata/)'; then
+if printf '%s\n' "$changed_files" | grep -qE '(\.go$|^Makefile$|^\.github/workflows/|^\.github/scripts/|^\.devcontainer/|^testdata/)'; then
   has_integration=true
 else
   has_integration=false

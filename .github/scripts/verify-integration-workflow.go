@@ -99,9 +99,6 @@ func checkTestJob(jobs map[string]any) {
 		if strings.Contains(run, "-tags integration") || strings.Contains(run, "test-integration") {
 			fatalf("test job step %q must not run integration tests", run)
 		}
-		if strings.Contains(run, "make test-integration") {
-			fatalf("test job must not run make test-integration")
-		}
 	}
 
 	assertStepRuns(job, "make test", "test job must run make test")
