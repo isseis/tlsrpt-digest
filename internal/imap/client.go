@@ -275,10 +275,10 @@ func (c *imapClient) MarkSeen(ctx context.Context, uids []uint32) error {
 	if err != nil {
 		return fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
 	}
+	c.lastSelectReadOnly = status.ReadOnly
 	if status.ReadOnly {
 		return ErrMailboxReadOnly
 	}
-	c.lastSelectReadOnly = false
 
 	seqSet := uidsToSeqSet(uids)
 	storeItem := goimap.FormatFlagsOp(goimap.AddFlags, false)
