@@ -284,41 +284,60 @@ func TestHasFailure_EmptyPolicies(t *testing.T) {
 }
 
 func TestParseRealReport(t *testing.T) {
-	data, err := os.ReadFile("../../testdata/tlsrpt_google.eml")
-	require.NoError(t, err)
-
-	msg, err := mail.ReadMessage(bytes.NewReader(data))
-	require.NoError(t, err)
-
-	attachments, err := mailparse.ExtractAttachments(msg, 10<<20)
-	require.NoError(t, err)
-
-	var parsed []*tlsrpt.Report
-	for _, att := range attachments {
-		name := strings.ToLower(att.Filename)
-		var r *tlsrpt.Report
-		var parseErr error
-		// Dispatch by Content-Type (RFC 8460 mandated), fall back to filename suffix.
-		switch {
-		case att.ContentType == "application/tlsrpt+gzip" ||
-			(att.ContentType == "" && strings.HasSuffix(name, ".json.gz")):
-			r, parseErr = tlsrpt.ParseGzip(att.Content)
-		case att.ContentType == "application/tlsrpt+json" ||
-			(att.ContentType == "" && strings.HasSuffix(name, ".json")):
-			r, parseErr = tlsrpt.ParseJSON(att.Content)
-		default:
-			continue
-		}
-		require.NoError(t, parseErr)
-		parsed = append(parsed, r)
+	tests := []struct {
+		filename    string
+		wantFailure bool
+	}{
+		{
+			filename:    "../../testdata/tlsrpt_success.eml",
+			wantFailure: false,
+		},
+		{
+			filename:    "../../testdata/tlsrpt_failure.eml",
+			wantFailure: true,
+		},
 	}
 
-	require.NotEmpty(t, parsed, "no .json.gz or .json attachments found in test email")
-	for _, r := range parsed {
-		assert.NotEmpty(t, r.OrganizationName, "OrganizationName should be set")
-		assert.NotEmpty(t, r.ReportID, "ReportID should be set")
-		assert.False(t, r.DateRange.StartDatetime.IsZero(), "DateRange.StartDatetime should be set")
-		assert.False(t, r.DateRange.EndDatetime.IsZero(), "DateRange.EndDatetime should be set")
-		assert.NotNil(t, r.Policies, "Policies should not be nil")
+	for _, tc := range tests {
+		t.Run(tc.filename, func(t *testing.T) {
+			data, err := os.ReadFile(tc.filename)
+			require.NoError(t, err)
+
+			msg, err := mail.ReadMessage(bytes.NewReader(data))
+			require.NoError(t, err)
+
+			attachments, err := mailparse.ExtractAttachments(msg, 10<<20)
+			require.NoError(t, err)
+
+			var parsed []*tlsrpt.Report
+			for _, att := range attachments {
+				name := strings.ToLower(att.Filename)
+				var r *tlsrpt.Report
+				var parseErr error
+				// Dispatch by Content-Type (RFC 8460 mandated), fall back to filename suffix.
+				switch {
+				case att.ContentType == "application/tlsrpt+gzip" ||
+					(att.ContentType == "" && strings.HasSuffix(name, ".json.gz")):
+					r, parseErr = tlsrpt.ParseGzip(att.Content)
+				case att.ContentType == "application/tlsrpt+json" ||
+					(att.ContentType == "" && strings.HasSuffix(name, ".json")):
+					r, parseErr = tlsrpt.ParseJSON(att.Content)
+				default:
+					continue
+				}
+				require.NoError(t, parseErr)
+				parsed = append(parsed, r)
+			}
+
+			require.NotEmpty(t, parsed, "no .json.gz or .json attachments found in test email")
+			for _, r := range parsed {
+				assert.NotEmpty(t, r.OrganizationName, "OrganizationName should be set")
+				assert.NotEmpty(t, r.ReportID, "ReportID should be set")
+				assert.False(t, r.DateRange.StartDatetime.IsZero(), "DateRange.StartDatetime should be set")
+				assert.False(t, r.DateRange.EndDatetime.IsZero(), "DateRange.EndDatetime should be set")
+				assert.NotNil(t, r.Policies, "Policies should not be nil")
+				assert.Equal(t, tc.wantFailure, r.HasFailure())
+			}
+		})
 	}
 }
