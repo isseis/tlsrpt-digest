@@ -407,7 +407,9 @@ func fetchMarkSeen(ctx context.Context, notifier NotificationSink, fetcher imap.
 	if err := fetcher.MarkSeen(ctx, unseenUIDs); err != nil {
 		if errors.Is(err, imap.ErrMailboxReadOnly) {
 			logWarn(ctx, notifier, notify.WarningKindMailboxReadOnly, 0, 0, "", "fetch")
-			logNotifyError("fetch: flush mailbox-read-only warning", notifier.Flush(ctx))
+			if notifier != nil {
+				logNotifyError("fetch: flush mailbox-read-only warning", notifier.Flush(ctx))
+			}
 			return nil
 		}
 		return fmt.Errorf("fetch: mark seen: %w", err)
