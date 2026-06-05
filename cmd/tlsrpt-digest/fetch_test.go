@@ -770,7 +770,7 @@ func TestFetch_MarkSeenMailboxReadOnly_ExitsOKAndSavesUIDValidity(t *testing.T) 
 	}
 	require.Len(t, readOnlyWarnings, 1, "exactly one WarningKindMailboxReadOnly must be recorded")
 	assert.Equal(t, uint32(0), readOnlyWarnings[0].UID, "mailbox-level warning must not carry a message UID")
-	assert.GreaterOrEqual(t, bed.notif.FlushCount, 1, "warning must be flushed before run exits")
+	assert.Equal(t, 2, bed.notif.FlushCount, "step 12 flush + fetchMarkSeen flush must both execute")
 }
 
 func TestFetch_FinalSaveUIDValidityFails_Exits(t *testing.T) {

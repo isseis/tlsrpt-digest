@@ -225,7 +225,7 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 	if opts.StoreOpenModeOverride != nil {
 		mode = *opts.StoreOpenModeOverride
 	} else {
-		mode = storeOpenMode(subcmd, opts.DryRun)
+		mode = storeOpenMode(opts.DryRun)
 	}
 	boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
 	if err != nil {
@@ -297,7 +297,7 @@ func bootstrapAcquireWriterLock(boot *BootContext, opts BootstrapOptions, cfg *c
 	return nil
 }
 
-func storeOpenMode(_ SubcommandName, dryRun bool) store.OpenMode {
+func storeOpenMode(dryRun bool) store.OpenMode {
 	if dryRun {
 		return store.OpenReadOnly
 	}
