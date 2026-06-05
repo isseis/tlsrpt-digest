@@ -26,7 +26,7 @@
 
 ### 1.2 コンセプトモデル
 
-本テストは、`testdata` のメールファイルを起点に、本番と同一のパース経路・通知経路を辿って実 Slack へ到達する一本道のフローである。新規に実装するのはテストドライバ（フロー全体を駆動する `*_test.go`）と `Makefile` ターゲットのみで、フロー中の処理ノードはすべて既存コンポーネントを再利用する。
+本テストは、`testdata` のメールファイルを起点に、本番と同一のパース経路・通知経路を辿って実 Slack へ到達する一本道のフローである。新規に実装するのは env 検出ヘルパーの常時実行ユニットテスト、フロー全体を駆動する統合テストドライバ、`Makefile` ターゲットのみで、フロー中の処理ノードはすべて既存コンポーネントを再利用する。
 
 ```mermaid
 flowchart TD
@@ -135,7 +135,7 @@ flowchart TD
     class SLACK external
 ```
 
-矢印 A → B は「A が B を呼び出す」という呼び出し関係を表す。緑（新規追加）はテストドライバのみであり、その他の橙のノードはすべて既存実装を変更せずに再利用する。
+矢印 A → B は「A が B を呼び出す」という呼び出し関係を表す。緑（新規追加）は統合テストドライバを表し、env 検出ヘルパーの常時実行ユニットテストも別ファイルで追加する。その他の橙のノードはすべて既存実装を変更せずに再利用する。
 
 凡例（Legend）:
 
@@ -293,8 +293,9 @@ classDiagram
 
 | ファイル | 区分 | 責務 |
 |---|---|---|
-| `cmd/tlsrpt-digest/slack_notify_integration_test.go` | 新規 | `slack_notify` ビルドタグ付き統合テストドライバ。環境変数判定・EML 読み込み・パース・failure 検証・本番経路でのアラート送信・送信成否の検証を行う。入力 EML はリポジトリルートの `testdata/` にあるため、Go テストの作業ディレクトリ（パッケージディレクトリ `cmd/tlsrpt-digest`）からの相対パス `../../testdata/tlsrpt_failure.eml` で参照する。これは同パッケージの既存テスト [`reprocess_test.go`](../../../cmd/tlsrpt-digest/reprocess_test.go) が用いる `filepath.Join("..", "..", "testdata", ...)` パターンを踏襲する。 |
-| `Makefile` | 変更 | 手動実行用ターゲット `test-slack-notify` を追加する。`slack_notify` タグを付けて当該テストのみを実行する。 |
+| `cmd/tlsrpt-digest/slack_notify_env_test.go` | 新規 | `//go:build test` の env 検出ヘルパーとユニットテスト。`TLSRPT_SLACK_WEBHOOK_URL_ERROR` の欠落判定を注入マップで検証し、`make test` 経路で常時実行する。 |
+| `cmd/tlsrpt-digest/slack_notify_integration_test.go` | 新規 | `//go:build test && slack_notify` の統合テストドライバ。環境変数判定・EML 読み込み・パース・failure 検証・本番経路でのアラート送信・送信成否の検証を行う。入力 EML はリポジトリルートの `testdata/` にあるため、Go テストの作業ディレクトリ（パッケージディレクトリ `cmd/tlsrpt-digest`）からの相対パス `../../testdata/tlsrpt_failure.eml` で参照する。これは同パッケージの既存テスト [`reprocess_test.go`](../../../cmd/tlsrpt-digest/reprocess_test.go) が用いる `filepath.Join("..", "..", "testdata", ...)` パターンを踏襲する。 |
+| `Makefile` | 変更 | 手動実行用ターゲット `test-slack-notify` を追加する。`test,slack_notify` タグを付けて当該テストのみを実行する。 |
 | `cmd/tlsrpt-digest/fetch.go` | 再利用（変更なし） | `parseTLSRPTAttachment` を提供。 |
 | `cmd/tlsrpt-digest/notify_helpers.go` | 再利用（変更なし） | `logAlerts` を提供。 |
 | `cmd/tlsrpt-digest/boot.go` | 再利用（変更なし） | `setupNotifyHandlers`、`notificationSink` を提供。 |
@@ -445,7 +446,7 @@ flowchart TD
 
 ### 7.1 本タスクが追加するテスト
 
-本タスクの成果物そのものが統合テストであるため、テストに対するテスト（メタテスト）は追加しない。受け入れ条件と検証手段の対応は次のとおり。
+本タスクの主要成果物は手動実行専用の統合テストである。これに加えて、環境変数欠落判定だけは純粋ヘルパーとして切り出し、`//go:build test` のユニットテストで常時検証する。実 Slack 送信を伴うフローは `//go:build test && slack_notify` に隔離する。受け入れ条件と検証手段の対応は次のとおり。
 
 | AC | 検証手段 |
 |---|---|
@@ -456,8 +457,8 @@ flowchart TD
 | AC-05 | `NotificationSink.Flush` の戻り値が `nil` であることをアサート。非 nil なら失敗。 |
 | AC-06 | 送信経路として本番の `setupNotifyHandlers`／`logAlerts` を呼び出すことで担保。 |
 | AC-07 | 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_ERROR`（error チャネル）を使用する。 |
-| AC-08 | 環境変数未設定時に `t.Skip` することをフロー先頭で保証。 |
-| AC-09 | `slack_notify` ビルドタグ付きファイルとし、`make test` のタグに含めないことで通常実行から除外。専用ターゲットでのみ実行。 |
+| AC-08 | `missingSlackNotifyEnv` のユニットテストで欠落判定を常時検証し、統合テストのフロー先頭で未設定時に `t.Skip` することを保証。 |
+| AC-09 | `test && slack_notify` ビルドタグ付きファイルとし、`make test` / `make test-integration` のタグに含めないことで通常実行から除外。専用ターゲットでのみ実行。 |
 | AC-10 | Webhook URL をシェル環境変数として渡して実行できることを `Makefile` ターゲットで保証。 |
 | AC-11 | `fetch` ランナー・store を経由せずパースと通知のみを呼ぶ設計により、`tlsrpt.json` 等の永続ファイルを作成しないことを保証（§5.2）。テスト後に作業ツリーへ未追跡ファイルが残らないことで確認できる。 |
 | AC-12 | ストレージ領域を使う設計に変更しない限り該当しないが、必要時は `t.TempDir` を用いる方針を明記（§5.2）。 |
@@ -468,17 +469,18 @@ flowchart TD
 
 ### 7.3 ビルドタグ運用
 
-`cmd/tlsrpt-digest` パッケージの既存テストヘルパー（`SpyNotificationSink` 等）は `//go:build test` で隔離されている。本テストを `go test` でコンパイルする際はパッケージ内の他テストファイルも同時にコンパイルされるため、専用ターゲットでは `test` タグと `slack_notify` タグを併用する。これにより本番経路の再利用に必要な定義が揃った状態で、`slack_notify` タグ付きの本テストを選択実行する。タグの正確な指定とテスト選択方法は実装計画書で定義する。
+`cmd/tlsrpt-digest` パッケージの既存テストヘルパー（`SpyNotificationSink` 等）は `//go:build test` で隔離されている。本テストを `go test` でコンパイルする際はパッケージ内の他テストファイルも同時にコンパイルされるため、専用ターゲットでは `test` タグと `slack_notify` タグを併用する。統合テストファイル自体も `//go:build test && slack_notify` とし、本番経路の再利用に必要な定義が揃った状態でのみ選択実行する。タグの正確な指定とテスト選択方法は実装計画書で定義する。
 
 ---
 
 ## 8. 実装の優先順位
 
-本タスクは小規模であり、単一フェーズで完結する。順序は次のとおり。
+本タスクは小規模だが、常時実行できる env ヘルパー検証と、手動実行専用の実 Slack 送信フローを分けて実装する。順序は次のとおり。
 
-1. `slack_notify` ビルドタグ付き統合テストドライバを新規作成し、環境変数判定からアラート送信・検証までのフローを実装する（F-001、F-002）。
-2. `Makefile` に手動実行用ターゲット `test-slack-notify` を追加する（F-003）。
-3. ローカルで実 Webhook を指定して実行し、Slack 上の表示を目視確認する（§7.2）。
+1. `//go:build test` の env 検出ヘルパーとユニットテストを新規作成する（AC-08）。
+2. `//go:build test && slack_notify` の統合テストドライバを新規作成し、環境変数判定からアラート送信・検証までのフローを実装する（F-001、F-002）。
+3. `Makefile` に手動実行用ターゲット `test-slack-notify` を追加する（F-003）。
+4. ローカルで実 Webhook を指定して実行し、Slack 上の表示を目視確認する（§7.2）。
 
 ---
 

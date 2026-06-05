@@ -21,8 +21,8 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 ### 1.2 実装方針
 
 - 本番経路（`parseTLSRPTAttachment` / `setupNotifyHandlers` / `logAlerts`）を再利用し、テスト専用の送信処理は新規実装しない（[`02_architecture.md`](02_architecture.md) §1.1、§3）。
-- テスト本体は `//go:build slack_notify` タグ付きファイルに置き、`make test` / `make test-integration` から除外する（[`02_architecture.md`](02_architecture.md) §7.3）。
-- 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_ERROR` 未設定時は `t.Skip` する。検出ロジックは注入可能な純粋ヘルパー（既存 `missingRecoveryEnv` と同型）に切り出し、`//go:build test` ファイルへ置いて `make test` で常時ユニットテストする。実 Slack 送信を伴う統合テスト本体のみ `//go:build slack_notify` に隔離する。
+- テスト本体は `//go:build test && slack_notify` タグ付きファイルに置き、`make test` / `make test-integration` から除外する（[`02_architecture.md`](02_architecture.md) §7.3）。
+- 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_ERROR` 未設定時は `t.Skip` する。検出ロジックは注入可能な純粋ヘルパー（既存 `missingRecoveryEnv` と同型）に切り出し、`//go:build test` ファイルへ置いて `make test` で常時ユニットテストする。実 Slack 送信を伴う統合テスト本体のみ `//go:build test && slack_notify` に隔離する。
 - store / `fetch` ランナーを一切呼ばず、永続ファイル（`tlsrpt.json`）を作成しない（[`02_architecture.md`](02_architecture.md) §5.2）。
 - Go ソース内のコメント・識別子・文字列リテラルはすべて英語で記述する。
 
@@ -34,13 +34,13 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 | 通知経路 | `setupNotifyHandlers(successURL, errorURL config.Secret, cfg *config.Config, runID string, dryRun bool) (NotificationSink, error)`、`notificationSink`、`logAlerts(ctx, notifier NotificationSink, report *tlsrpt.Report, component string)` が存在（[`boot.go`](../../../cmd/tlsrpt-digest/boot.go)、[`notify_helpers.go`](../../../cmd/tlsrpt-digest/notify_helpers.go)）。 | 変更不要。テストから呼び出すのみ。 |
 | 許可ホスト検証 | `BuildHandlers` 経由で `validateWebhookURL`（[`validate.go`](../../../internal/notify/validate.go) 26 行）が呼ばれ、`AllowedHost` が空または不一致でエラー。 | テストは `cfg.Notify.Slack.AllowedHost` に Webhook URL のホストを設定する必要あり。新規実装不要。 |
 | 環境変数スキップ | `missingRecoveryEnv(env map[string]string) []string` と `loadRecoveryTestEnv(t)`（[`recovery_integration_test.go`](../../../cmd/tlsrpt-digest/recovery_integration_test.go) 63・86 行）、ユニットテスト `TestIntegration_RecoveryEnvRequirements`（134 行）が存在。ただしこのファイルは `//go:build integration` であり `make test-integration` 経路で実行される。 | 本タスク用に同型のヘルパー `missingSlackNotifyEnv`（単一変数版）を新規作成し、`//go:build test` ファイルへ置いて `make test` で実行されるようにする。 |
-| ビルドタグ依存 | `cmd/tlsrpt-digest` の `test_helpers.go`（`SpyNotificationSink` 等）や `boot_test.go`・`fetch_test.go` 等は `//go:build test`。`go test` 時はパッケージ内の他テストファイルも同時にコンパイルされる。 | 統合テストは `-tags test,slack_notify` で実行し、`test` タグ依存の定義が揃った状態にする（[`02_architecture.md`](02_architecture.md) §7.3）。 |
+| ビルドタグ依存 | `cmd/tlsrpt-digest` の `test_helpers.go`（`SpyNotificationSink` 等）や `boot_test.go`・`fetch_test.go` 等は `//go:build test`。`go test` 時はパッケージ内の他テストファイルも同時にコンパイルされる。 | 統合テストファイルも `//go:build test && slack_notify` にし、`-tags test,slack_notify` でのみ対象化する（[`02_architecture.md`](02_architecture.md) §7.3）。 |
 | config 構築 | テストでは `cfg := &config.Config{}` を手組みし必要フィールドのみ設定する慣習（[`reprocess_test.go`](../../../cmd/tlsrpt-digest/reprocess_test.go) 78・82 行）。 | 同様に手組みする。新規ヘルパー不要。 |
 | パース単体検証 | `internal/tlsrpt/tlsrpt_test.go::TestParseRealReport` が `tlsrpt_failure.eml` を含むテーブル駆動で `HasFailure()==true` を検証済み（`make test` で常時実行）。 | 変更不要。AC-01／AC-02 の常時実行セーフティネットとして参照。 |
 | testdata | `testdata/tlsrpt_failure.eml`（リポジトリルート、org=`Google Inc.`、policy-type=`sts`、failure=2、期間 2026-02-08〜2026-02-09）が存在。 | 変更不要。 |
 | ulid | `github.com/oklog/ulid/v2` が既存依存（[`recovery_integration_test.go`](../../../cmd/tlsrpt-digest/recovery_integration_test.go) 17 行）。 | runID 生成に再利用。 |
 
-新規に追加するのは統合テストファイル 1 本と `Makefile` ターゲット 1 つのみ。既存の処理ロジック・既存テストの変更は不要。
+新規に追加するのは env ヘルパー用テストファイル 1 本、統合テストファイル 1 本、`Makefile` ターゲット 1 つのみ。既存の処理ロジック・既存テストの変更は不要。
 
 ---
 
@@ -79,7 +79,7 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 ### ステップ 1-2: 統合テストドライバの実装（手動実行）
 
-**対象ファイル**: `cmd/tlsrpt-digest/slack_notify_integration_test.go`（新規、`//go:build slack_notify`、`package main`）
+**対象ファイル**: `cmd/tlsrpt-digest/slack_notify_integration_test.go`（新規、`//go:build test && slack_notify`、`package main`）
 
 - [ ] スキップラッパー `loadSlackNotifyTestEnv(t *testing.T) string` を実装する。`missingSlackNotifyEnv(nil)`（ステップ 1-1 で定義、`test,slack_notify` 併用時に可視）が非空なら `t.Skip` し、設定済みなら `os.Getenv(slackNotifyWebhookEnvKey)` の Webhook URL 文字列を返す。
 - [ ] 統合テスト `TestSlackNotify_FailureAlert_Integration(t *testing.T)` を実装する。処理フローは [`02_architecture.md`](02_architecture.md) §6 に従う。
@@ -130,32 +130,19 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 **完了基準**:
 - [ ] `TLSRPT_SLACK_WEBHOOK_URL_ERROR` 未設定で `make test-slack-notify` を実行すると、統合テストは skip、環境変数ユニットテストは pass する（実送信は発生しない）。
 
-### PR-3 作成ポイント: manual Slack notify make target
-
-**対象ステップ**: 2-1
-
-**推奨タイトル**: `feat(0100): add Slack notify manual test target`
-
-**レビュー観点**: 通常 test 経路からの隔離 / 手動実行コマンドの最小性 / env 未設定時の skip 動作
-
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
-
 ### ステップ 3-1: ローカル実行と目視確認（手動）
 
 - [ ] 実 Webhook URL を指定して `TLSRPT_SLACK_WEBHOOK_URL_ERROR=https://hooks.slack.com/services/... make test-slack-notify` を実行する。
 - [ ] Slack チャンネルにアラートが届き、組織名（`Google Inc.`）・ポリシー種別（`sts`）・失敗セッション数（`2`）・レポート期間（2026-02-08〜2026-02-09）が表示されることを目視確認する（[`02_architecture.md`](02_architecture.md) §7.2）。
 - [ ] 実行後に `git status --porcelain` が空である（`tlsrpt.json` 等の永続ファイルが残らない）ことを確認する。
 
-### PR-4 作成ポイント: manual Slack verification
+### PR-3 作成ポイント: manual Slack notify target and verification
 
-**対象ステップ**: 3-1
+**対象ステップ**: 2-1 / 3-1
 
-**推奨タイトル**: `test(0100): verify Slack notify webhook manually`
+**推奨タイトル**: `feat(0100): add Slack notify manual test target`
 
-**レビュー観点**: 実 Webhook 送信結果の記録 / Slack 表示項目の目視確認 / 実行後の作業ツリー無副作用
+**レビュー観点**: 通常 test 経路からの隔離 / 手動実行コマンドの最小性 / 実 Webhook 送信結果と作業ツリー無副作用の確認
 
 - [ ] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
@@ -174,16 +161,15 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 | M2 | ステップ 2-1 完了 | `Makefile` の `test-slack-notify` ターゲット |
 | M3 | ステップ 3-1 完了 | 実 Slack への送信成功と目視確認、永続ファイル非作成の確認 |
 
-ステップ 1-1/1-2 は [`02_architecture.md`](02_architecture.md) §8 の step 1（テストドライバ実装）を、常時実行する env ヘルパーを先行させるために細分したものである。ステップ 1-2（統合テスト）はステップ 1-1 の純粋ヘルパー `missingSlackNotifyEnv` を前提とするため、1-1→1-2 の順で実装する。ステップ 2-1・3-1 はそれぞれ §8 の step 2・3 に対応する。
+ステップ 1-1 は [`02_architecture.md`](02_architecture.md) §8 の step 1（env ヘルパー実装）に、ステップ 1-2 は §8 の step 2（統合テストドライバ実装）に対応する。ステップ 1-2（統合テスト）はステップ 1-1 の純粋ヘルパー `missingSlackNotifyEnv` を前提とするため、1-1→1-2 の順で実装する。ステップ 2-1 は §8 の step 3、ステップ 3-1 は §8 の step 4 に対応する。
 
 ### 3.2 PR 構成
 
 | PR | 対象ステップ | 主な変更内容 |
 |---|---|---|
 | PR-1 | 1-1 | `//go:build test` の env キー定数・欠落検出ヘルパー・常時実行ユニットテストを追加する。 |
-| PR-2 | 1-2 | `//go:build slack_notify` の統合テストドライバを追加し、本番パース・通知経路で実 Slack アラートを送信できるようにする。 |
-| PR-3 | 2-1 | `Makefile` に手動実行専用の `test-slack-notify` ターゲットを追加する。 |
-| PR-4 | 3-1 | 実 Webhook での手動送信、Slack 表示、永続ファイル非作成を確認して PR に記録する。 |
+| PR-2 | 1-2 | `//go:build test && slack_notify` の統合テストドライバを追加し、本番パース・通知経路で実 Slack アラートを送信できるようにする。 |
+| PR-3 | 2-1 / 3-1 | `Makefile` に手動実行専用の `test-slack-notify` ターゲットを追加し、実 Webhook での手動送信・Slack 表示・永続ファイル非作成を同じ PR の検証として記録する。 |
 
 ---
 
@@ -201,9 +187,9 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 | リスク | 影響 | 緩和策 |
 |---|---|---|
-| 実 Slack への送信が CI や `make test` で誤発火する | スパム送信・レート消費 | `//go:build slack_notify` で隔離し、`make test` / `make test-integration` のタグに含めない。env 未設定時は skip。 |
+| 実 Slack への送信が CI や `make test` で誤発火する | スパム送信・レート消費 | `//go:build test && slack_notify` で隔離し、`make test` / `make test-integration` のタグに含めない。env 未設定時は skip。 |
 | Webhook URL のホストが `hooks.slack.com` 以外（プロキシ等） | `AllowedHost` 不一致で常に失敗 | `AllowedHost` を Webhook URL の `Hostname()` から動的に導出し、本番検証経路を通しつつ任意ホストに対応。 |
-| パッケージ内の `//go:build test` ファイル（`test_helpers.go` の `SpyNotificationSink` 等）に依存する定義が `slack_notify` 単独タグでは欠けコンパイル不整合 | ビルド失敗 | `-tags test,slack_notify` を併用（[`02_architecture.md`](02_architecture.md) §7.3）。完了基準のコンパイルチェックで検出。 |
+| パッケージ内の `//go:build test` ファイル（`test_helpers.go` の `SpyNotificationSink` 等）に依存する定義が `slack_notify` 単独タグでは欠ける | 意図しないタグ組み合わせで統合テストが対象外になる | 統合テストファイルの build constraint を `//go:build test && slack_notify` にし、実行コマンドも `-tags test,slack_notify` に統一する（[`02_architecture.md`](02_architecture.md) §7.3）。完了基準のコンパイルチェックで検出。 |
 | 繰り返し送信時に Slack 上でメッセージが区別できない | 目視確認が困難 | `runID` を実行ごとに一意（`ulid.Make()`）にし、メッセージに含める。 |
 
 ---
@@ -212,8 +198,7 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 - [ ] PR-1 マージ済み（対象ステップ: 1-1）
 - [ ] PR-2 マージ済み（対象ステップ: 1-2）
-- [ ] PR-3 マージ済み（対象ステップ: 2-1）
-- [ ] PR-4 マージ済み（対象ステップ: 3-1）
+- [ ] PR-3 マージ済み（対象ステップ: 2-1 / 3-1）
 
 ---
 
@@ -225,14 +210,14 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 |---|---|---|
 | AC-01 | test | `cmd/tlsrpt-digest/slack_notify_integration_test.go::TestSlackNotify_FailureAlert_Integration`（`parseTLSRPTAttachment` で `*tlsrpt.Report` 取得を `require`）。常時実行の補強として `internal/tlsrpt/tlsrpt_test.go::TestParseRealReport`（`tlsrpt_failure.eml` を含む）。 |
 | AC-02 | test | `internal/tlsrpt/tlsrpt_test.go::TestParseRealReport`（`HasFailure()==true` をアサート、常時実行）。加えて `…::TestSlackNotify_FailureAlert_Integration` がレポートのフィールド値（org=`Google Inc.`、policy-type=`sts`、failure=2、期間 2026-02-08／09）を自動アサート。 |
-| AC-03 | test | `…::TestSlackNotify_FailureAlert_Integration`（failure ポリシー 1 件を確認後 `logAlerts`→`Flush()==nil` を `require`）。manual: Slack 受信を §7.2 で目視。 |
-| AC-04 | test | `internal/notify/format_test.go::TestFormatAlerts_Fields`（`notify.Alert` から Slack 送信本文に org／policy-type／failure-count／期間が出力されることをアサート、`make test` で常時実行）。加えて `…::TestSlackNotify_FailureAlert_Integration` が送信元レポートの該当フィールド値を自動アサート。manual: Slack 表示を §7.2 で目視。 |
+| AC-03 | test | `…::TestSlackNotify_FailureAlert_Integration`（failure ポリシー 1 件を確認後 `logAlerts`→`Flush()==nil` を `require`）。manual: Slack 受信をステップ 3-1 で目視。 |
+| AC-04 | test | `internal/notify/format_test.go::TestFormatAlerts_Fields`（`notify.Alert` から Slack 送信本文に org／policy-type／failure-count／期間が出力されることをアサート、`make test` で常時実行）。加えて `…::TestSlackNotify_FailureAlert_Integration` が送信元レポートの該当フィールド値を自動アサート。manual: Slack 表示をステップ 3-1 で目視。 |
 | AC-05 | test | `…::TestSlackNotify_FailureAlert_Integration`（`Flush()` の戻り値を `require.NoError`。非 nil で失敗）。 |
 | AC-06 | static | `rg -n 'setupNotifyHandlers|logAlerts' cmd/tlsrpt-digest/slack_notify_integration_test.go` 期待: 両シンボルが一致（本番経路を再利用し独自送信を実装しない）。 |
 | AC-07 | static | `rg -n 'TLSRPT_SLACK_WEBHOOK_URL_ERROR' cmd/tlsrpt-digest/slack_notify_env_test.go cmd/tlsrpt-digest/boot.go` 期待: 両ファイルで一致（テストと本番が同一の error チャネル環境変数名を使用）。 |
 | AC-08 | test | `cmd/tlsrpt-digest/slack_notify_env_test.go::TestSlackNotify_EnvRequirements`（空マップで欠落を返し、設定時に空を返すことをアサート、`//go:build test` で `make test` 常時実行）。 |
-| AC-09 | static | `rg -n 'go:build slack_notify' cmd/tlsrpt-digest/slack_notify_integration_test.go` 期待: 1 件一致（テストが `slack_notify` タグで隔離される）。かつ `rg -n 'slack_notify' Makefile` 期待: 一致行がすべて `test-slack-notify` ターゲット内のみ（`test:` および `test-integration:` のレシピには `slack_notify` が出現しない）。 |
-| AC-10 | static | `rg -n 'slackNotifyWebhookEnvKey' cmd/tlsrpt-digest/slack_notify_env_test.go cmd/tlsrpt-digest/slack_notify_integration_test.go` 期待: env_test.go で定数定義、integration_test.go の `loadSlackNotifyTestEnv` が同定数で `os.Getenv` し URL を取得。かつ `rg -n 'test-slack-notify' Makefile` 期待: ターゲット存在。manual: `TLSRPT_SLACK_WEBHOOK_URL_ERROR=… make test-slack-notify` で送信成功（§7.2）。 |
+| AC-09 | static | `rg -n 'go:build test && slack_notify' cmd/tlsrpt-digest/slack_notify_integration_test.go` 期待: 1 件一致（テストが `test,slack_notify` タグ併用時のみ対象化される）。かつ `rg -n 'slack_notify' Makefile` 期待: 一致行がすべて `test-slack-notify` ターゲット内のみ（`test:` および `test-integration:` のレシピには `slack_notify` が出現しない）。 |
+| AC-10 | static | `rg -n 'slackNotifyWebhookEnvKey' cmd/tlsrpt-digest/slack_notify_env_test.go cmd/tlsrpt-digest/slack_notify_integration_test.go` 期待: env_test.go で定数定義、integration_test.go の `loadSlackNotifyTestEnv` が同定数で `os.Getenv` し URL を取得。かつ `rg -n 'test-slack-notify' Makefile` 期待: ターゲット存在。manual: `TLSRPT_SLACK_WEBHOOK_URL_ERROR=… make test-slack-notify` で送信成功（ステップ 3-1）。 |
 | AC-11 | static | `rg -n 'SaveReports|fetchRunner|store\.Open|Bootstrap' cmd/tlsrpt-digest/slack_notify_integration_test.go` 期待: 一致なし（store／fetch 経路を呼ばない）。manual: 実行後 `git status --porcelain` が空。 |
 | AC-12 | static | 本テストはストレージを使わない設計のため、固定パスの store を導入していないことを確認する: `rg -n 'store\.Open|RootDir|tlsrpt\.json' cmd/tlsrpt-digest/slack_notify_integration_test.go` 期待: 一致なし。これにより並列・繰り返し実行でのファイル競合が構造的に発生しない（AC-11 と同じ不在確認を AC-12 の前提充足としても用いる）。将来ストレージが必要になった場合に `t.TempDir` を用いる方針は [`02_architecture.md`](02_architecture.md) §5.2 に記載。 |
 
@@ -256,12 +241,12 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 - **品質**: `make fmt` 適用済み。`golangci-lint run --build-tags test`（`make lint` 既定）と `golangci-lint run --build-tags test,slack_notify` の双方が 0 issues。`go test -run '^$' -tags test,slack_notify ./cmd/tlsrpt-digest/...` がコンパイル成功。
 - **隔離**: `make test` および `make test-integration` で本統合テストが実行されない（build タグ除外）。
 - **無副作用**: 実行後に作業ツリーへ未追跡ファイルが残らない（`git status --porcelain` が空）。
-- **手動検証**: 実 Webhook 指定時に Slack へアラートが届き、書式が期待どおり（§7.2）。
+- **手動検証**: 実 Webhook 指定時に Slack へアラートが届き、書式が期待どおり（ステップ 3-1、および [`02_architecture.md`](02_architecture.md) §7.2）。
 
 ---
 
 ## 10. 次のステップ
 
 - 本計画書のレビューと承認（ステータスを `approved` に更新）。
-- 承認後、ステップ 1-1〜3-1 を PR-1〜PR-4 の順に実装する。
+- 承認後、ステップ 1-1〜3-1 を PR-1〜PR-3 の順に実装する。
 - 実装完了後、実 Webhook での目視確認結果を PR に記録する。
