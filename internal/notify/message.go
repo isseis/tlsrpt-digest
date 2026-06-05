@@ -3,21 +3,27 @@ package notify
 import "fmt"
 
 // formatWarning builds a slackMessage for a single fetch warning.
-// Only kind, uid, uidvalidity, message_id, and run_id are included.
+// Per-message fields (UID, UIDValidity, Message-ID) are omitted when zero/empty
+// so that mailbox-level warnings (e.g. WarningKindMailboxReadOnly) do not render
+// misleading "UID: 0" or blank "Message-ID" fields.
 func formatWarning(w Warning, runID string) slackMessage {
+	fields := []slackField{
+		{Title: "Kind", Value: string(w.Kind), Short: true},
+	}
+	if w.UID != 0 && w.UIDValidity != 0 {
+		fields = append(fields,
+			slackField{Title: "UID", Value: fmt.Sprintf("%d", w.UID), Short: true},
+			slackField{Title: "UIDValidity", Value: fmt.Sprintf("%d", w.UIDValidity), Short: true},
+		)
+	}
+	if w.MessageID != "" {
+		fields = append(fields, slackField{Title: "Message-ID", Value: w.MessageID, Short: false})
+	}
+	fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: true})
 	return slackMessage{
 		Text: fmt.Sprintf("%s Fetch Warning: %s", emojiAlert, string(w.Kind)),
 		Attachments: []slackAttachment{
-			{
-				Color: colorWarning,
-				Fields: []slackField{
-					{Title: "Kind", Value: string(w.Kind), Short: true},
-					{Title: "UID", Value: fmt.Sprintf("%d", w.UID), Short: true},
-					{Title: "UIDValidity", Value: fmt.Sprintf("%d", w.UIDValidity), Short: true},
-					{Title: "Message-ID", Value: w.MessageID, Short: false},
-					{Title: "Run ID", Value: runID, Short: true},
-				},
-			},
+			{Color: colorWarning, Fields: fields},
 		},
 	}
 }

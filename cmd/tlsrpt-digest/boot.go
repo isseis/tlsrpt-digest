@@ -196,8 +196,14 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 		return boot, nil
 	}
 
-	if err = validateAndEnsureRootDir(cfg.Store.RootDir); err != nil {
-		return nil, fmt.Errorf("prepare store root: %w", err)
+	// Dry-run opens the store read-only, so directory creation and exclusive
+	// locking are not needed and would themselves be unwanted side effects.
+	// validateAndEnsureRootDir must run before BuildNotifier to avoid building
+	// a notifier when the root dir is invalid (symlink, bad permissions, etc.).
+	if !opts.DryRun {
+		if err = validateAndEnsureRootDir(cfg.Store.RootDir); err != nil {
+			return nil, fmt.Errorf("prepare store root: %w", err)
+		}
 	}
 
 	if subcmd == subcommandRecover {
@@ -209,23 +215,17 @@ func Bootstrap(subcmd SubcommandName, configPath string, runID string, opts Boot
 		}
 	}
 
-	boot.LockHandle, err = opts.AcquireWriterLock(cfg.Store.RootDir)
-	if err != nil {
-		kind := notify.SystemErrorKindStorePermission
-		if errors.Is(err, storelock.ErrLockHeld) {
-			kind = notify.SystemErrorKindLockHeld
+	if !opts.DryRun {
+		if err = bootstrapAcquireWriterLock(boot, opts, cfg); err != nil {
+			return nil, err
 		}
-		if notifyErr := notifySystemError(context.Background(), boot.Notifier, kind, cfg); notifyErr != nil {
-			slog.Warn("bootstrap: notify lock error", "error", notifyErr)
-		}
-		return nil, fmt.Errorf("acquire store writer lock: %w", err)
 	}
 
 	var mode store.OpenMode
 	if opts.StoreOpenModeOverride != nil {
 		mode = *opts.StoreOpenModeOverride
 	} else {
-		mode = storeOpenMode(subcmd)
+		mode = storeOpenMode(opts.DryRun)
 	}
 	boot.Store, err = opts.OpenStore(cfg.Store.RootDir, identity, mode)
 	if err != nil {
@@ -279,8 +279,26 @@ func notifySystemError(ctx context.Context, notifier NotificationSink, kind noti
 	return errors.Join(err, notifier.Flush(ctx))
 }
 
-func storeOpenMode(subcmd SubcommandName) store.OpenMode {
-	if subcmd == subcommandSummary {
+// bootstrapAcquireWriterLock acquires the exclusive store writer lock and stores
+// the handle in boot. On failure it notifies via boot.Notifier before returning.
+func bootstrapAcquireWriterLock(boot *BootContext, opts BootstrapOptions, cfg *config.Config) error {
+	lh, err := opts.AcquireWriterLock(cfg.Store.RootDir)
+	if err != nil {
+		kind := notify.SystemErrorKindStorePermission
+		if errors.Is(err, storelock.ErrLockHeld) {
+			kind = notify.SystemErrorKindLockHeld
+		}
+		if notifyErr := notifySystemError(context.Background(), boot.Notifier, kind, cfg); notifyErr != nil {
+			slog.Warn("bootstrap: notify lock error", "error", notifyErr)
+		}
+		return fmt.Errorf("acquire store writer lock: %w", err)
+	}
+	boot.LockHandle = lh
+	return nil
+}
+
+func storeOpenMode(dryRun bool) store.OpenMode {
+	if dryRun {
 		return store.OpenReadOnly
 	}
 	return store.OpenReadWrite

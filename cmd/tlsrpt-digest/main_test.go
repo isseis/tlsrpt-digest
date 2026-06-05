@@ -152,6 +152,34 @@ func TestRunCLI_UsageErrorsExit2(t *testing.T) {
 	}
 }
 
+func TestParseCLI_DryRunSupportedSubcommands(t *testing.T) {
+	for _, subcmd := range []SubcommandName{subcommandFetch, subcommandSummary} {
+		t.Run(string(subcmd), func(t *testing.T) {
+			inv, err := parseCLI([]string{"--config", "c.toml", string(subcmd), "--dry-run"}, io.Discard)
+			require.NoError(t, err)
+			assert.True(t, inv.Options.DryRun)
+		})
+	}
+}
+
+func TestParseCLI_DryRunUnsupportedSubcommands(t *testing.T) {
+	for _, subcmd := range []SubcommandName{subcommandGC, subcommandReprocess, subcommandRecover} {
+		t.Run(string(subcmd), func(t *testing.T) {
+			_, err := parseCLI([]string{"--config", "c.toml", string(subcmd), "--dry-run"}, io.Discard)
+			require.ErrorIs(t, err, errDryRunNotSupported)
+		})
+	}
+}
+
+func TestRunCLI_DryRunUnsupportedSubcommandExits2(t *testing.T) {
+	for _, subcmd := range []SubcommandName{subcommandGC, subcommandReprocess, subcommandRecover} {
+		t.Run(string(subcmd), func(t *testing.T) {
+			exitCode := runCLI(context.Background(), []string{"--config", "c.toml", string(subcmd), "--dry-run"}, io.Discard, BootstrapOptions{})
+			assert.Equal(t, exitUsage, exitCode)
+		})
+	}
+}
+
 func TestRunCLI_BootstrapFailureExits1(t *testing.T) {
 	exitCode := runCLI(context.Background(), []string{"--config", "missing.toml", "fetch"}, io.Discard, BootstrapOptions{
 		LoadConfig: func(string) (*config.Config, error) {
