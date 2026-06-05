@@ -487,7 +487,7 @@ func TestExtractAttachments_Security_PathTraversalFilenamePassedThrough(t *testi
 // Integration test
 
 func TestExtractAttachments_Integration(t *testing.T) {
-	data, err := os.ReadFile("../../testdata/tlsrpt_google.eml")
+	data, err := os.ReadFile("../../testdata/tlsrpt_success.eml")
 	require.NoError(t, err)
 
 	msg, err := mail.ReadMessage(bytes.NewReader(data))
