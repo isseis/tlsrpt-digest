@@ -414,9 +414,9 @@ func TestReprocess_FlushFailureLogsWarn(t *testing.T) {
 // (gzip-compressed JSON attachment in a realistic multipart structure) is fully
 // parsed and its report saved to the store.
 func TestReprocess_RealEML_RoundTrip(t *testing.T) {
-	emlPath := filepath.Join("..", "..", "testdata", "tlsrpt_google.eml")
+	emlPath := filepath.Join("..", "..", "testdata", "tlsrpt_success.eml")
 	rawEML, err := os.ReadFile(emlPath) //nolint:gosec // G304: path is a hardcoded testdata literal
-	require.NoError(t, err, "testdata/tlsrpt_google.eml must be readable")
+	require.NoError(t, err, "testdata/tlsrpt_success.eml must be readable")
 
 	st := storetestutil.NewFakeStore()
 	internalDate := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
