@@ -627,6 +627,26 @@ func TestFetchWarning_DistinctSlackMessage(t *testing.T) {
 	assert.Equal(t, "fetch_warning", spy.records[0].Message)
 }
 
+// TestFormatWarning_MailboxLevel_OmitsPerMessageFields verifies that a mailbox-level
+// warning (UID=0, UIDValidity=0, MessageID="") does not render misleading zero fields.
+func TestFormatWarning_MailboxLevel_OmitsPerMessageFields(t *testing.T) {
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
+	defer cleanup()
+
+	ctx := context.Background()
+	require.NoError(t, notify.LogWarning(ctx, h, notify.Warning{
+		Kind: notify.WarningKindMailboxReadOnly,
+	}))
+	require.NoError(t, h.Flush(ctx))
+
+	body := string(recv)
+	assert.Contains(t, body, "mailbox_read_only", "kind field should appear in payload")
+	assert.NotContains(t, body, `"UID"`, "UID field must be absent for mailbox-level warning")
+	assert.NotContains(t, body, `"UIDValidity"`, "UIDValidity field must be absent for mailbox-level warning")
+	assert.NotContains(t, body, `"Message-ID"`, "Message-ID field must be absent for mailbox-level warning")
+}
+
 // TestFormatWarning_SlackPayloadFields verifies that LogWarning+Flush produces a Slack
 // JSON payload containing all expected fields: kind, uid, uidvalidity, message_id, run_id.
 func TestFormatWarning_SlackPayloadFields(t *testing.T) {

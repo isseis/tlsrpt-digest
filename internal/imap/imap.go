@@ -3,10 +3,16 @@ package imap
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/isseis/tlsrpt-digest/internal/config"
 )
+
+// ErrMailboxReadOnly is returned by MarkSeen when the IMAP server grants only
+// read-only access to the mailbox (SELECT responded with [READ-ONLY]). Messages
+// cannot be flagged \Seen in this case.
+var ErrMailboxReadOnly = errors.New("imap: mailbox is read-only")
 
 // Config is the IMAP connection configuration.
 type Config struct {

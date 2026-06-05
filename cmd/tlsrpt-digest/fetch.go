@@ -160,10 +160,8 @@ func (r *fetchRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 	}
 
 	// Step 13: Mark UNSEEN messages as seen.
-	if unseenUIDs := collectUnseenUIDs(states); len(unseenUIDs) > 0 {
-		if err := fetcher.MarkSeen(ctx, unseenUIDs); err != nil {
-			return exitError, fmt.Errorf("fetch: mark seen: %w", err)
-		}
+	if err := fetchMarkSeen(ctx, boot.Notifier, fetcher, states); err != nil {
+		return exitError, err
 	}
 
 	// Step 14: Idempotent final UIDVALIDITY save.
@@ -395,6 +393,26 @@ func logFetchDryRunSummary(states []fetchMsgState) {
 		"would_download_count", len(wouldDownload),
 		"would_download_uids_sample", sample,
 		"would_download_uids_truncated", truncated)
+}
+
+// fetchMarkSeen marks UNSEEN messages as seen. If the mailbox is read-only,
+// it sends a warning notification and returns nil so the rest of the run is
+// not aborted. Messages will be re-fetched only if their InternalDate still
+// falls within the configured fetch window on the next run.
+func fetchMarkSeen(ctx context.Context, notifier NotificationSink, fetcher imap.MailFetcher, states []fetchMsgState) error {
+	unseenUIDs := collectUnseenUIDs(states)
+	if len(unseenUIDs) == 0 {
+		return nil
+	}
+	if err := fetcher.MarkSeen(ctx, unseenUIDs); err != nil {
+		if errors.Is(err, imap.ErrMailboxReadOnly) {
+			logWarn(ctx, notifier, notify.WarningKindMailboxReadOnly, 0, 0, "", "fetch")
+			logNotifyError("fetch: flush mailbox-read-only warning", notifier.Flush(ctx))
+			return nil
+		}
+		return fmt.Errorf("fetch: mark seen: %w", err)
+	}
+	return nil
 }
 
 // collectUnseenUIDs returns the UIDs of all messages that were UNSEEN at fetch time.

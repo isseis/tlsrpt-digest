@@ -271,8 +271,12 @@ func (c *imapClient) MarkSeen(ctx context.Context, uids []uint32) error {
 		return nil
 	}
 
-	if _, err := c.session.Select(c.cfg.Mailbox, false); err != nil {
+	status, err := c.session.Select(c.cfg.Mailbox, false)
+	if err != nil {
 		return fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
+	}
+	if status.ReadOnly {
+		return ErrMailboxReadOnly
 	}
 	c.lastSelectReadOnly = false
 

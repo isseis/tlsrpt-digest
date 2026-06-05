@@ -42,6 +42,10 @@ const (
 	WarningKindSizeMismatch WarningKind = "size_mismatch"
 	// WarningKindParseFailure indicates a TLSRPT attachment could not be parsed.
 	WarningKindParseFailure WarningKind = "parse_failure"
+	// WarningKindMailboxReadOnly indicates the IMAP server granted only read-only access to
+	// the mailbox; messages cannot be flagged \Seen and may be re-fetched on subsequent runs
+	// if they still fall within the configured fetch window.
+	WarningKindMailboxReadOnly WarningKind = "mailbox_read_only"
 )
 
 // Warning is the notification payload for a non-failure fetch warning event.

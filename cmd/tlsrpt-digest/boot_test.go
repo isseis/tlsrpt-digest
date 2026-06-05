@@ -222,6 +222,7 @@ func TestBootstrap_FetchDryRun_OpensStoreReadOnly(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { require.NoError(t, boot.Close()) }()
 	assert.Equal(t, store.OpenReadOnly, gotMode, "dry-run fetch must open the store read-only to prevent side effects")
+	assert.Nil(t, boot.LockHandle, "dry-run fetch must not acquire writer lock")
 }
 
 func TestBootstrap_Summary_ExistingStore(t *testing.T) {

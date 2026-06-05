@@ -745,6 +745,34 @@ func TestFetch_MarkSeenFails_SaveUIDValidityNotCalled(t *testing.T) {
 	assert.Equal(t, 0, cs.saveUIDValidityCount, "final SaveUIDValidity must not be called after MarkSeen failure")
 }
 
+func TestFetch_MarkSeenMailboxReadOnly_ExitsOKAndSavesUIDValidity(t *testing.T) {
+	bed := newFetchTestBed(t) // UIDValidity=42 already stored
+	bed.fetcher.FetchMetaResult.Messages = []imap.MessageMeta{
+		{UID: testUID1, Size: 100, Date: testDate, Seen: false},
+	}
+	bed.fetcher.DownloadResult[testUID1] = simpleRawEML()
+	bed.fetcher.MarkSeenErr = imap.ErrMailboxReadOnly
+
+	cs := &countingStore{FakeStore: storetestutil.NewFakeStore()}
+	uid := testUIDValidity
+	cs.UIDValidity = &uid
+	bed.boot.Store = cs
+
+	code, err := bed.runner.Run(context.Background(), bed.boot)
+	require.NoError(t, err)
+	assert.Equal(t, exitOK, code)
+	assert.Equal(t, 1, cs.saveUIDValidityCount, "step 14 (SaveUIDValidity) must still run when mailbox is read-only")
+	var readOnlyWarnings []notify.Warning
+	for _, w := range bed.notif.Warnings {
+		if w.Kind == notify.WarningKindMailboxReadOnly {
+			readOnlyWarnings = append(readOnlyWarnings, w)
+		}
+	}
+	require.Len(t, readOnlyWarnings, 1, "exactly one WarningKindMailboxReadOnly must be recorded")
+	assert.Equal(t, uint32(0), readOnlyWarnings[0].UID, "mailbox-level warning must not carry a message UID")
+	assert.GreaterOrEqual(t, bed.notif.FlushCount, 1, "warning must be flushed before run exits")
+}
+
 func TestFetch_FinalSaveUIDValidityFails_Exits(t *testing.T) {
 	bed := newFetchTestBed(t)
 	cs := &countingStore{FakeStore: storetestutil.NewFakeStore()}
