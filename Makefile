@@ -21,8 +21,8 @@ test-slack-notify:
 lint:
 	golangci-lint run --build-tags test --timeout=5m
 	golangci-lint run --config .golangci-security.yml --build-tags test --timeout=5m
-	golangci-lint run --build-tags test,slack_notify --timeout=5m ./cmd/tlsrpt-digest/...
-	golangci-lint run --config .golangci-security.yml --build-tags test,slack_notify --timeout=5m ./cmd/tlsrpt-digest/...
+	golangci-lint run --build-tags test,slack_notify --timeout=5m
+	golangci-lint run --config .golangci-security.yml --build-tags test,slack_notify --timeout=5m
 
 fmt:
 	gofumpt -w .
