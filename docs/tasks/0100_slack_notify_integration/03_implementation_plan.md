@@ -123,9 +123,9 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
   # connectivity and message formatting. Requires
   # TLSRPT_SLACK_WEBHOOK_URL_ERROR; skipped when unset.
   test-slack-notify:
-  	go test -v -count=1 -tags test,slack_notify -run TestSlackNotify ./cmd/tlsrpt-digest/...
+  	go test -v -count=1 -tags test,slack_notify -run ^TestSlackNotify ./cmd/tlsrpt-digest/...
   ```
-  - `-run TestSlackNotify` は統合テストと環境変数ユニットテストの両方（`TestSlackNotify_*`）に一致し、それ以外のパッケージ内テストを除外する。
+  - `-run ^TestSlackNotify` は統合テストと環境変数ユニットテストの両方（`TestSlackNotify_*`）に一致し、それ以外のパッケージ内テストを除外する。先頭アンカー（`^`）により将来追加される同名プレフィックスの別テストへの意図しないマッチを防ぐ。
 
 **完了基準**:
 - [x] `TLSRPT_SLACK_WEBHOOK_URL_ERROR` 未設定で `make test-slack-notify` を実行すると、統合テストは skip、環境変数ユニットテストは pass する（実送信は発生しない）。
