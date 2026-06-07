@@ -4,8 +4,10 @@ package main
 
 import (
 	"os"
-	"slices"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const slackNotifyWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"
@@ -32,15 +34,15 @@ func missingSlackNotifyEnv(env map[string]string) []string {
 func TestSlackNotify_EnvRequirements(t *testing.T) {
 	t.Run("webhook_url_missing", func(t *testing.T) {
 		got := missingSlackNotifyEnv(map[string]string{})
-		if !slices.Contains(got, slackNotifyWebhookEnvKey+" (empty)") {
-			t.Errorf("expected %q in missing list, got %v", slackNotifyWebhookEnvKey+" (empty)", got)
-		}
+		assert.Contains(t, got, slackNotifyWebhookEnvKey+" (empty)")
+	})
+	t.Run("webhook_url_empty_value", func(t *testing.T) {
+		got := missingSlackNotifyEnv(map[string]string{slackNotifyWebhookEnvKey: ""})
+		assert.Contains(t, got, slackNotifyWebhookEnvKey+" (empty)")
 	})
 	t.Run("webhook_url_set", func(t *testing.T) {
 		env := map[string]string{slackNotifyWebhookEnvKey: "https://hooks.slack.com/services/test"}
 		got := missingSlackNotifyEnv(env)
-		if len(got) != 0 {
-			t.Errorf("expected empty missing list, got %v", got)
-		}
+		require.Empty(t, got)
 	})
 }
