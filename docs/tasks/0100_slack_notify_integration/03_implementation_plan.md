@@ -144,7 +144,7 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 **レビュー観点**: 通常 test 経路からの隔離 / 手動実行コマンドの最小性 / 実 Webhook 送信結果と作業ツリー無副作用の確認
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
