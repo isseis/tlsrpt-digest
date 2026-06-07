@@ -16,11 +16,13 @@ test-integration:
 # connectivity and message formatting. Requires
 # TLSRPT_SLACK_WEBHOOK_URL_ERROR; skipped when unset.
 test-slack-notify:
-	go test -v -count=1 -tags test,slack_notify -run TestSlackNotify ./cmd/tlsrpt-digest/...
+	go test -v -count=1 -tags test,slack_notify -run ^TestSlackNotify ./cmd/tlsrpt-digest/...
 
 lint:
 	golangci-lint run --build-tags test --timeout=5m
 	golangci-lint run --config .golangci-security.yml --build-tags test --timeout=5m
+	golangci-lint run --build-tags test,slack_notify --timeout=5m ./cmd/tlsrpt-digest/...
+	golangci-lint run --config .golangci-security.yml --build-tags test,slack_notify --timeout=5m ./cmd/tlsrpt-digest/...
 
 fmt:
 	gofumpt -w .
