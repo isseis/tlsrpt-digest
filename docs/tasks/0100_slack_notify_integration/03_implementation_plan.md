@@ -74,30 +74,30 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+- [x] PR がマージされた
+- [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ### ステップ 1-2: 統合テストドライバの実装（手動実行）
 
 **対象ファイル**: `cmd/tlsrpt-digest/slack_notify_integration_test.go`（新規、`//go:build test && slack_notify`、`package main`）
 
-- [ ] スキップラッパー `loadSlackNotifyTestEnv(t *testing.T) string` を実装する。`missingSlackNotifyEnv(nil)`（ステップ 1-1 で定義、`test,slack_notify` 併用時に可視）が非空なら `t.Skip` し、設定済みなら `os.Getenv(slackNotifyWebhookEnvKey)` の Webhook URL 文字列を返す。
-- [ ] 統合テスト `TestSlackNotify_FailureAlert_Integration(t *testing.T)` を実装する。処理フローは [`02_architecture.md`](02_architecture.md) §6 に従う。
-  - [ ] `loadSlackNotifyTestEnv(t)` で Webhook URL を取得（未設定なら skip）。
-  - [ ] `../../testdata/tlsrpt_failure.eml`（`filepath.Join("..", "..", "testdata", "tlsrpt_failure.eml")`）を `os.ReadFile` で読み込む。`//nolint:gosec` は既存 `reprocess_test.go:418` と同様にハードコードパス前提で付与する。
-  - [ ] `mail.ReadMessage` → `mailparse.ExtractAttachments(msg, 10<<20)` → `parseTLSRPTAttachment` で `*tlsrpt.Report` を得る（`require.NoError`、`require.NotNil`）。
-  - [ ] `report.HasFailure()` が `true` であることを `require` する。
-  - [ ] 送信元レポートの値を自動アサートする: `OrganizationName == "Google Inc."`、failure を持つポリシーが 1 件・その `Policy.PolicyType == "sts"`・`Summary.TotalFailureSessionCount == int64(2)`、`DateRange.StartDatetime` / `EndDatetime` が 2026-02-08 / 2026-02-09（UTC）。
-  - [ ] `cfg := &config.Config{}` を作り、`cfg.Notify.Slack.AllowedHost` に Webhook URL のホストを設定する。`url.Parse` は `(*url.URL, error)` を返すため、戻り値を個別に受け取ってエラーチェックを行った後（`require.NoError`）、`u.Hostname()` を取得する。
-  - [ ] `runID` を `ulid.Make().String()` で生成する（繰り返し実行時に Slack 上でメッセージを区別するため）。
-  - [ ] `setupNotifyHandlers(config.Secret(""), config.Secret(webhookURL), cfg, runID, false)` で `NotificationSink` を構築する（`require.NoError`）。success URL は空でよい（`ValidateEnvCombination` は success のみ設定を禁じるが、error のみ設定は許容する）。
-  - [ ] `logAlerts(ctx, sink, report, "slack-notify-test")` を呼ぶ。
-  - [ ] `sink.Flush(ctx)` の戻り値が `nil` であることを `require.NoError` する。
+- [x] スキップラッパー `loadSlackNotifyTestEnv(t *testing.T) string` を実装する。`missingSlackNotifyEnv(nil)`（ステップ 1-1 で定義、`test,slack_notify` 併用時に可視）が非空なら `t.Skip` し、設定済みなら `os.Getenv(slackNotifyWebhookEnvKey)` の Webhook URL 文字列を返す。
+- [x] 統合テスト `TestSlackNotify_FailureAlert_Integration(t *testing.T)` を実装する。処理フローは [`02_architecture.md`](02_architecture.md) §6 に従う。
+  - [x] `loadSlackNotifyTestEnv(t)` で Webhook URL を取得（未設定なら skip）。
+  - [x] `../../testdata/tlsrpt_failure.eml`（`filepath.Join("..", "..", "testdata", "tlsrpt_failure.eml")`）を `os.ReadFile` で読み込む。`//nolint:gosec` は既存 `reprocess_test.go:418` と同様にハードコードパス前提で付与する。
+  - [x] `mail.ReadMessage` → `mailparse.ExtractAttachments(msg, 10<<20)` → `parseTLSRPTAttachment` で `*tlsrpt.Report` を得る（`require.NoError`、`require.NotNil`）。
+  - [x] `report.HasFailure()` が `true` であることを `require` する。
+  - [x] 送信元レポートの値を自動アサートする: `OrganizationName == "Google Inc."`、failure を持つポリシーが 1 件・その `Policy.PolicyType == "sts"`・`Summary.TotalFailureSessionCount == int64(2)`、`DateRange.StartDatetime` / `EndDatetime` が 2026-02-08 / 2026-02-09（UTC）。
+  - [x] `cfg := &config.Config{}` を作り、`cfg.Notify.Slack.AllowedHost` に Webhook URL のホストを設定する。`url.Parse` は `(*url.URL, error)` を返すため、戻り値を個別に受け取ってエラーチェックを行った後（`require.NoError`）、`u.Hostname()` を取得する。
+  - [x] `runID` を `ulid.Make().String()` で生成する（繰り返し実行時に Slack 上でメッセージを区別するため）。
+  - [x] `setupNotifyHandlers(config.Secret(""), config.Secret(webhookURL), cfg, runID, false)` で `NotificationSink` を構築する（`require.NoError`）。success URL は空でよい（`ValidateEnvCombination` は success のみ設定を禁じるが、error のみ設定は許容する）。
+  - [x] `logAlerts(ctx, sink, report, "slack-notify-test")` を呼ぶ。
+  - [x] `sink.Flush(ctx)` の戻り値が `nil` であることを `require.NoError` する。
 
 **完了基準**:
-- [ ] `go test -run '^$' -tags test,slack_notify ./cmd/tlsrpt-digest/...` がコンパイル成功する（型・シグネチャ検証。実送信なし）。
-- [ ] `gofumpt -l cmd/tlsrpt-digest/slack_notify_env_test.go cmd/tlsrpt-digest/slack_notify_integration_test.go` が差分を出力しない（`make fmt` 適用後）。
-- [ ] `golangci-lint run --build-tags test,slack_notify ./cmd/tlsrpt-digest/...` が 0 issues。
+- [x] `go test -run '^$' -tags test,slack_notify ./cmd/tlsrpt-digest/...` がコンパイル成功する（型・シグネチャ検証。実送信なし）。
+- [x] `gofumpt -l cmd/tlsrpt-digest/slack_notify_env_test.go cmd/tlsrpt-digest/slack_notify_integration_test.go` が差分を出力しない（`make fmt` 適用後）。
+- [x] `golangci-lint run --build-tags test,slack_notify ./cmd/tlsrpt-digest/...` が 0 issues。
 
 ### PR-2 作成ポイント: Slack notify integration driver
 
@@ -107,8 +107,8 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 **レビュー観点**: 本番パース・通知経路の再利用 / 実 Slack 送信の build tag 隔離 / Webhook host 検証と永続ファイル非作成
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
