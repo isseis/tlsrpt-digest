@@ -146,8 +146,8 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+- [x] PR がマージされた
+- [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ---
 
@@ -196,9 +196,9 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 ## 6. 実装チェックリスト
 
-- [ ] PR-1 マージ済み（対象ステップ: 1-1）
-- [ ] PR-2 マージ済み（対象ステップ: 1-2）
-- [ ] PR-3 マージ済み（対象ステップ: 2-1 / 3-1）
+- [x] PR-1 マージ済み（対象ステップ: 1-1）
+- [x] PR-2 マージ済み（対象ステップ: 1-2）
+- [x] PR-3 マージ済み（対象ステップ: 2-1 / 3-1）
 
 ---
 
@@ -227,11 +227,11 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 本タスクは加算的で削除・改名する既存概念はないが、命名衝突と本番との整合を以下で確認する。
 
-- [ ] `rg -n 'slack_notify' Makefile cmd/ internal/` — 期待: 新規テストファイルの build タグと `Makefile` の `test-slack-notify` ターゲットのみに出現。既存コードと衝突しない。
-- [ ] `rg -n 'TestSlackNotify' cmd/tlsrpt-digest/` — 期待: 新規 2 テスト（`TestSlackNotify_FailureAlert_Integration`、`TestSlackNotify_EnvRequirements`）のみ。
-- [ ] `rg -n 'TLSRPT_SLACK_WEBHOOK_URL_ERROR' cmd/tlsrpt-digest/boot.go` — 期待: 本番が同名を使用（テストの環境変数名と一致）。
-- [ ] `rg -n 'test-slack-notify' Makefile` — 期待: `.PHONY` とターゲット定義の 2 箇所。
-- [ ] ドキュメント・用語集の更新対象なし（新規環境変数名・タグ名は本タスク 3 文書内で完結）。
+- [x] `rg -n 'slack_notify' Makefile cmd/ internal/` — 期待: 新規テストファイルの build タグ（`cmd/tlsrpt-digest/slack_notify_integration_test.go:1`）と `Makefile` の `test-slack-notify` ターゲット・`lint:` ターゲットのみに出現。既存コードと衝突しない。（`lint:` への追加は意図的: PR-3 で `make lint` カバレッジ拡張のため追加）
+- [x] `rg -n 'TestSlackNotify' cmd/tlsrpt-digest/` — 新規 2 テスト（`TestSlackNotify_FailureAlert_Integration`、`TestSlackNotify_EnvRequirements`）のみ一致。
+- [x] `rg -n 'TLSRPT_SLACK_WEBHOOK_URL_ERROR' cmd/tlsrpt-digest/boot.go` — `boot.go:262` で一致。本番が同名を使用（テストの環境変数名と一致）。
+- [x] `rg -n 'test-slack-notify' Makefile` — `.PHONY`（行 1）とターゲット定義（行 18）の 2 箇所で一致。
+- [x] ドキュメント・用語集の更新対象なし（新規環境変数名・タグ名は本タスク 3 文書内で完結）。
 
 ---
 
