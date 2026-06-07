@@ -132,9 +132,9 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 ### ステップ 3-1: ローカル実行と目視確認（手動）
 
-- [ ] 実 Webhook URL を指定して `TLSRPT_SLACK_WEBHOOK_URL_ERROR=https://hooks.slack.com/services/... make test-slack-notify` を実行する。
-- [ ] Slack チャンネルにアラートが届き、組織名（`Google Inc.`）・ポリシー種別（`sts`）・失敗セッション数（`2`）・レポート期間（2026-02-08〜2026-02-09）が表示されることを目視確認する（[`02_architecture.md`](02_architecture.md) §7.2）。
-- [ ] 実行後に `git status --porcelain` が空である（`tlsrpt.json` 等の永続ファイルが残らない）ことを確認する。
+- [x] 実 Webhook URL を指定して `TLSRPT_SLACK_WEBHOOK_URL_ERROR=https://hooks.slack.com/services/... make test-slack-notify` を実行する。
+- [x] Slack チャンネルにアラートが届き、組織名（`Google Inc.`）・ポリシー種別（`sts`）・失敗セッション数（`2`）・レポート期間（2026-02-08〜2026-02-09）が表示されることを目視確認する（[`02_architecture.md`](02_architecture.md) §7.2）。
+- [x] 実行後に `git status --porcelain` が空である（`tlsrpt.json` 等の永続ファイルが残らない）ことを確認する。
 
 ### PR-3 作成ポイント: manual Slack notify target and verification
 
