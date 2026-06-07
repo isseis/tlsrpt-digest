@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"net/mail"
 	"net/url"
@@ -42,7 +43,7 @@ func TestSlackNotify_FailureAlert_Integration(t *testing.T) {
 	raw, err := os.ReadFile(emlPath) //nolint:gosec // G304: path is a hardcoded testdata literal
 	require.NoError(t, err, "testdata/tlsrpt_failure.eml must be readable")
 
-	msg, err := mail.ReadMessage(strings.NewReader(string(raw)))
+	msg, err := mail.ReadMessage(bytes.NewReader(raw))
 	require.NoError(t, err)
 
 	atts, err := mailparse.ExtractAttachments(msg, 10<<20)
@@ -50,6 +51,8 @@ func TestSlackNotify_FailureAlert_Integration(t *testing.T) {
 
 	var report *tlsrpt.Report
 	for _, att := range atts {
+		// parseTLSRPTAttachment returns (nil, nil) for non-TLSRPT attachments;
+		// a non-nil error here means a real TLSRPT parse failure.
 		r, parseErr := parseTLSRPTAttachment(att)
 		require.NoError(t, parseErr)
 		if r != nil {
