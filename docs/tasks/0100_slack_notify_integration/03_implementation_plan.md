@@ -109,32 +109,32 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+- [x] PR がマージされた
+- [x] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ### ステップ 2-1: Makefile ターゲットの追加
 
 **対象ファイル**: `Makefile`
 
-- [ ] `.PHONY` 行に `test-slack-notify` を追加する（現状: `.PHONY: build test test-integration lint fmt deadcode clean`）。
-- [ ] `test-slack-notify` ターゲットを追加する。レシピは次のとおり（環境変数はシェルから継承される）:
+- [x] `.PHONY` 行に `test-slack-notify` を追加する（現状: `.PHONY: build test test-integration lint fmt deadcode clean`）。
+- [x] `test-slack-notify` ターゲットを追加する。レシピは次のとおり（環境変数はシェルから継承される）:
   ```
   # Manually send a real Slack alert from testdata to verify webhook
   # connectivity and message formatting. Requires
   # TLSRPT_SLACK_WEBHOOK_URL_ERROR; skipped when unset.
   test-slack-notify:
-  	go test -v -count=1 -tags test,slack_notify -run TestSlackNotify ./cmd/tlsrpt-digest/...
+  	go test -v -count=1 -tags test,slack_notify -run ^TestSlackNotify ./cmd/tlsrpt-digest/...
   ```
-  - `-run TestSlackNotify` は統合テストと環境変数ユニットテストの両方（`TestSlackNotify_*`）に一致し、それ以外のパッケージ内テストを除外する。
+  - `-run ^TestSlackNotify` は統合テストと環境変数ユニットテストの両方（`TestSlackNotify_*`）に一致し、それ以外のパッケージ内テストを除外する。先頭アンカー（`^`）により将来追加される同名プレフィックスの別テストへの意図しないマッチを防ぐ。
 
 **完了基準**:
-- [ ] `TLSRPT_SLACK_WEBHOOK_URL_ERROR` 未設定で `make test-slack-notify` を実行すると、統合テストは skip、環境変数ユニットテストは pass する（実送信は発生しない）。
+- [x] `TLSRPT_SLACK_WEBHOOK_URL_ERROR` 未設定で `make test-slack-notify` を実行すると、統合テストは skip、環境変数ユニットテストは pass する（実送信は発生しない）。
 
 ### ステップ 3-1: ローカル実行と目視確認（手動）
 
-- [ ] 実 Webhook URL を指定して `TLSRPT_SLACK_WEBHOOK_URL_ERROR=https://hooks.slack.com/services/... make test-slack-notify` を実行する。
-- [ ] Slack チャンネルにアラートが届き、組織名（`Google Inc.`）・ポリシー種別（`sts`）・失敗セッション数（`2`）・レポート期間（2026-02-08〜2026-02-09）が表示されることを目視確認する（[`02_architecture.md`](02_architecture.md) §7.2）。
-- [ ] 実行後に `git status --porcelain` が空である（`tlsrpt.json` 等の永続ファイルが残らない）ことを確認する。
+- [x] 実 Webhook URL を指定して `TLSRPT_SLACK_WEBHOOK_URL_ERROR=https://hooks.slack.com/services/... make test-slack-notify` を実行する。
+- [x] Slack チャンネルにアラートが届き、組織名（`Google Inc.`）・ポリシー種別（`sts`）・失敗セッション数（`2`）・レポート期間（2026-02-08〜2026-02-09）が表示されることを目視確認する（[`02_architecture.md`](02_architecture.md) §7.2）。
+- [x] 実行後に `git status --porcelain` が空である（`tlsrpt.json` 等の永続ファイルが残らない）ことを確認する。
 
 ### PR-3 作成ポイント: manual Slack notify target and verification
 
@@ -144,8 +144,8 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 **レビュー観点**: 通常 test 経路からの隔離 / 手動実行コマンドの最小性 / 実 Webhook 送信結果と作業ツリー無副作用の確認
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
