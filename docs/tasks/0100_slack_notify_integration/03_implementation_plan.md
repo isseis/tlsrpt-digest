@@ -54,15 +54,15 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 なお `t.Skip` を行うラッパー `loadSlackNotifyTestEnv` は、唯一の呼び出し元が統合テスト（`slack_notify` タグ側）であるためステップ 1-2 の `slack_notify` ファイルに置く。これを `test` タグ側に置くと、`make lint`（`golangci-lint run --build-tags test`、`slack_notify` を含まない）で呼び出し元ゼロとなり `unused` 違反になるため避ける。`test` タグ側に置く純粋ヘルパー `missingSlackNotifyEnv` は自身のユニットテストから呼ばれるため `unused` にならない。
 
-- [ ] 環境変数キー定数 `slackNotifyWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"` を定義する。
-- [ ] 純粋ヘルパー `missingSlackNotifyEnv(env map[string]string) []string` を実装する。`env` が nil のときはプロセス環境を、非 nil のときは注入マップを参照し、`slackNotifyWebhookEnvKey` が空なら `"<key> (empty)"` を返す（`missingRecoveryEnv` と同型）。
-- [ ] ユニットテスト `TestSlackNotify_EnvRequirements(t *testing.T)` を実装する。
-  - [ ] 空マップ `map[string]string{}` で `missingSlackNotifyEnv` を呼び、結果が `slackNotifyWebhookEnvKey` の欠落（`"<key> (empty)"`）を含むことをアサートする。
-  - [ ] `slackNotifyWebhookEnvKey` を設定したマップで呼び、結果が空であることをアサートする。
+- [x] 環境変数キー定数 `slackNotifyWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"` を定義する。
+- [x] 純粋ヘルパー `missingSlackNotifyEnv(env map[string]string) []string` を実装する。`env` が nil のときはプロセス環境を、非 nil のときは注入マップを参照し、`slackNotifyWebhookEnvKey` が空なら `"<key> (empty)"` を返す（`missingRecoveryEnv` と同型）。
+- [x] ユニットテスト `TestSlackNotify_EnvRequirements(t *testing.T)` を実装する。
+  - [x] 空マップ `map[string]string{}` で `missingSlackNotifyEnv` を呼び、結果が `slackNotifyWebhookEnvKey` の欠落（`"<key> (empty)"`）を含むことをアサートする。
+  - [x] `slackNotifyWebhookEnvKey` を設定したマップで呼び、結果が空であることをアサートする。
 
 **完了基準**:
-- [ ] `go test -tags test -run TestSlackNotify_EnvRequirements ./cmd/tlsrpt-digest/...` が pass する（`make test` 経路で常時実行されることの確認。実送信なし）。
-- [ ] `golangci-lint run --build-tags test ./cmd/tlsrpt-digest/...` が 0 issues（`slack_notify` を含まないタグで `unused` 等が出ないことの確認）。
+- [x] `go test -tags test -run TestSlackNotify_EnvRequirements ./cmd/tlsrpt-digest/...` が pass する（`make test` 経路で常時実行されることの確認。実送信なし）。
+- [x] `golangci-lint run --build-tags test ./cmd/tlsrpt-digest/...` が 0 issues（`slack_notify` を含まないタグで `unused` 等が出ないことの確認）。
 
 ### PR-1 作成ポイント: env helper unit coverage
 
