@@ -107,7 +107,7 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 **レビュー観点**: 本番パース・通知経路の再利用 / 実 Slack 送信の build tag 隔離 / Webhook host 検証と永続ファイル非作成
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
