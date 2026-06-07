@@ -72,7 +72,7 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 **レビュー観点**: env 欠落判定の純粋性 / `make test` 経路での常時実行 / `slack_notify` 非指定 lint で unused が出ない構成
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
