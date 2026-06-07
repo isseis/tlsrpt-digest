@@ -88,7 +88,7 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
   - [ ] `mail.ReadMessage` → `mailparse.ExtractAttachments(msg, 10<<20)` → `parseTLSRPTAttachment` で `*tlsrpt.Report` を得る（`require.NoError`、`require.NotNil`）。
   - [ ] `report.HasFailure()` が `true` であることを `require` する。
   - [ ] 送信元レポートの値を自動アサートする: `OrganizationName == "Google Inc."`、failure を持つポリシーが 1 件・その `Policy.PolicyType == "sts"`・`Summary.TotalFailureSessionCount == int64(2)`、`DateRange.StartDatetime` / `EndDatetime` が 2026-02-08 / 2026-02-09（UTC）。
-  - [ ] `cfg := &config.Config{}` を作り、`cfg.Notify.Slack.AllowedHost` に Webhook URL のホスト（`url.Parse(webhookURL)` の `Hostname()`）を設定する。
+  - [ ] `cfg := &config.Config{}` を作り、`cfg.Notify.Slack.AllowedHost` に Webhook URL のホストを設定する。`url.Parse` は `(*url.URL, error)` を返すため、戻り値を個別に受け取ってエラーチェックを行った後（`require.NoError`）、`u.Hostname()` を取得する。
   - [ ] `runID` を `ulid.Make().String()` で生成する（繰り返し実行時に Slack 上でメッセージを区別するため）。
   - [ ] `setupNotifyHandlers(config.Secret(""), config.Secret(webhookURL), cfg, runID, false)` で `NotificationSink` を構築する（`require.NoError`）。success URL は空でよい（`ValidateEnvCombination` は success のみ設定を禁じるが、error のみ設定は許容する）。
   - [ ] `logAlerts(ctx, sink, report, "slack-notify-test")` を呼ぶ。
