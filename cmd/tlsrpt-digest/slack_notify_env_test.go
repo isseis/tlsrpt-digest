@@ -45,4 +45,14 @@ func TestSlackNotify_EnvRequirements(t *testing.T) {
 		got := missingSlackNotifyEnv(env)
 		require.Empty(t, got)
 	})
+	t.Run("nil_env_fallback_present", func(t *testing.T) {
+		t.Setenv(slackNotifyWebhookEnvKey, "https://hooks.slack.com/services/test")
+		got := missingSlackNotifyEnv(nil)
+		assert.Empty(t, got)
+	})
+	t.Run("nil_env_fallback_missing", func(t *testing.T) {
+		t.Setenv(slackNotifyWebhookEnvKey, "")
+		got := missingSlackNotifyEnv(nil)
+		assert.Contains(t, got, slackNotifyWebhookEnvKey+" (empty)")
+	})
 }
