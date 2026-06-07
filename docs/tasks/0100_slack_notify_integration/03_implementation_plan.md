@@ -116,8 +116,8 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
 
 **対象ファイル**: `Makefile`
 
-- [ ] `.PHONY` 行に `test-slack-notify` を追加する（現状: `.PHONY: build test test-integration lint fmt deadcode clean`）。
-- [ ] `test-slack-notify` ターゲットを追加する。レシピは次のとおり（環境変数はシェルから継承される）:
+- [x] `.PHONY` 行に `test-slack-notify` を追加する（現状: `.PHONY: build test test-integration lint fmt deadcode clean`）。
+- [x] `test-slack-notify` ターゲットを追加する。レシピは次のとおり（環境変数はシェルから継承される）:
   ```
   # Manually send a real Slack alert from testdata to verify webhook
   # connectivity and message formatting. Requires
@@ -128,7 +128,7 @@ failure を含む TLS-RPT メール（`testdata/tlsrpt_failure.eml`）から fai
   - `-run TestSlackNotify` は統合テストと環境変数ユニットテストの両方（`TestSlackNotify_*`）に一致し、それ以外のパッケージ内テストを除外する。
 
 **完了基準**:
-- [ ] `TLSRPT_SLACK_WEBHOOK_URL_ERROR` 未設定で `make test-slack-notify` を実行すると、統合テストは skip、環境変数ユニットテストは pass する（実送信は発生しない）。
+- [x] `TLSRPT_SLACK_WEBHOOK_URL_ERROR` 未設定で `make test-slack-notify` を実行すると、統合テストは skip、環境変数ユニットテストは pass する（実送信は発生しない）。
 
 ### ステップ 3-1: ローカル実行と目視確認（手動）
 

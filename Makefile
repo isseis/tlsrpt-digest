@@ -1,4 +1,4 @@
-.PHONY: build test test-integration lint fmt deadcode clean
+.PHONY: build test test-integration test-slack-notify lint fmt deadcode clean
 
 build:
 	mkdir -p build
@@ -11,6 +11,12 @@ test:
 # Covers internal/imap and cmd/tlsrpt-digest integration tests.
 test-integration:
 	go test -v -count=1 -tags test,integration ./internal/imap/... ./cmd/tlsrpt-digest/...
+
+# Manually send a real Slack alert from testdata to verify webhook
+# connectivity and message formatting. Requires
+# TLSRPT_SLACK_WEBHOOK_URL_ERROR; skipped when unset.
+test-slack-notify:
+	go test -v -count=1 -tags test,slack_notify -run TestSlackNotify ./cmd/tlsrpt-digest/...
 
 lint:
 	golangci-lint run --build-tags test --timeout=5m
