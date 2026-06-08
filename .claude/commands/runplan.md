@@ -51,6 +51,24 @@ Work in order.
 
 6. Run `make deadcode`. Remove functions made unreachable by this phase group; keep intentional scaffolding for future phases or tasks. If changes were made, run `make fmt && make test && make lint` and commit.
 
+6.5. Run programmatic pre-checks on the changed Go files before spawning the review agent. These checks are deterministic and cheaper than AI review — catch them here rather than in the review loop.
+
+   ```bash
+   # Files changed in this phase group (adjust range as needed)
+   CHANGED=$(git diff origin/main...HEAD --name-only | grep '\.go$')
+
+   # Check 1: no planning-doc identifiers in source
+   echo "$CHANGED" | xargs rg -ln '\bAC-[0-9]+\b|\bF-[0-9]+\b' 2>/dev/null \
+     && echo "FAIL: planning-doc references found" || echo "OK: no planning-doc references"
+
+   # Check 2: no non-ASCII characters in Go source
+   echo "$CHANGED" | xargs rg -Pn '[^\x00-\x7F]' 2>/dev/null \
+     && echo "REVIEW: non-ASCII found — verify each is intentional" || echo "OK: all ASCII"
+   ```
+
+   - If Check 1 has any matches: fix them before continuing (these are never intentional in source).
+   - If Check 2 has matches: inspect each — test-data literals and error strings may legitimately contain non-ASCII, but identifiers and non-test comments must not.
+
 7. Spawn a review subagent using the Agent tool to critically evaluate this phase group's changes.
    Construct a self-contained prompt that includes all of the following:
    - **Persona**: act as an experienced senior Go engineer and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface bugs, missing test coverage, architecture drift, and unclear code. Do not soften findings.
@@ -73,11 +91,7 @@ Phase-group review checklist (use verbatim as evaluation criteria in the subagen
 - [ ] No tests are so trivial that they add no verification value.
 - [ ] No logic is reimplemented when an existing function in the codebase can be used.
 - [ ] Newly authored artifacts (runbooks, command examples, tables, prose, translations) are verified against ground truth, not only by absence-search.
-- [ ] All source comments and identifiers are in English.
-- [ ] No planning document references (e.g. `AC-01`, `F-001`) remain in source comments or string literals.
-- [ ] `make fmt` produces no diff.
-- [ ] `make lint` passes with no errors.
-- [ ] `make test` passes with no errors.
+- [ ] All source comments and identifiers are in English. (Non-ASCII flagged by step 6.5 Check 2 has been reviewed and is intentional.)
 
 8. Decide whether to continue or finish.
 - If implementation ran this iteration: summarize implementation, verified ACs, assumptions, and deferred items.
