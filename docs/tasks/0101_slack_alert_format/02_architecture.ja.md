@@ -141,7 +141,6 @@ sequenceDiagram
     SH->>TR: 各 section/text を制限内へ切り詰め（送信前・常時）
     TR-->>SH: 制限内に収めた slackMessage
     SH->>W: POST
-    Note over CMD,W: Legend: sequence participants are components; no color-coded node classes are used.
 ```
 
 > 矢印 A → B は「A から B への呼び出し・データ受け渡し」を表す。
