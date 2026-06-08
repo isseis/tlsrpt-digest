@@ -41,7 +41,7 @@ what changes under which condition:
 | Document status values | `draft` → `approved` |
 | Document language | Japanese |
 | Translation glossary | `docs/translation_glossary.md` |
-| Default translation direction | Japanese (primary) ⇄ English |
+| Translation language pair | Japanese (primary) ⇄ English *(reference only — `mktrans.md` determines direction from file extension, not this value)* |
 
 ### PR marker conventions
 

@@ -58,8 +58,11 @@ in one place.
 **Layer 1 (copy as-is):**
 - `fixpr.md` — entire PR review-thread workflow. Only the build-check command
   names (`make lint`, `make test`) come from `_context.md`.
-- `mktrans.md` — entire translation workflow. Only the glossary path and default
-  translation direction come from `_context.md`.
+- `mktrans.md` — entire translation workflow. Only the glossary path comes from
+  `_context.md`. Translation direction is determined by the source file extension
+  (`.ja.md` → EN output, `.md` → JA output); `_context.md` records the project's
+  language-pair convention for reference but `mktrans.md` does not read it at
+  runtime.
 - `_lib/review-subagent-pattern.md` — the persona / files / criteria / output /
   three-pass review loop shared by `mkarch`, `mkplan`, `mkplan2`, `mktrans`, and
   `runplan`.
