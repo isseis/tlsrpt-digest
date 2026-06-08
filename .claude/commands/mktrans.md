@@ -1,3 +1,10 @@
+> **Project context**: this command refers to "the translation glossary" and a
+> default translation direction. Their values are defined in
+> `.claude/commands/_context.md` (Process convention: "Translation glossary",
+> "Default translation direction"). Read that file and use its values. The review
+> step follows the shared pattern in `.claude/commands/_lib/review-subagent-pattern.md`.
+> The rest of this command is project-independent.
+
 ## Preparation
 
 Get the source file path from the argument.
@@ -92,18 +99,17 @@ Skip this step if no new terms were introduced.
 
 ## Review the Translation (via Subagent)
 
-Spawn a review subagent using the Agent tool to critically evaluate the translation.
-Construct a self-contained prompt that includes all of the following:
-- **Persona**: act as an experienced technical translator and editor whose job is to find real problems — not to approve. Be thorough and unsparing. Surface omissions, additions not in the source, mistranslations, and inconsistent terminology. Do not soften findings.
-- **Files to read**: embed the resolved absolute path of each of the following as a literal string in the prompt so the subagent can read them without relying on your context: the source file, the translated output file, and `docs/translation_glossary.md` (resolve to its absolute path as well).
-- **Evaluation criteria**: every item from the Accuracy checklist and the Readability checklist below, copied verbatim.
-- **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (section heading or paragraph), Problem (what is wrong), and Suggestion (concrete fix). If a checklist category has no issues, state that explicitly.
+Run the critical-review subagent procedure in
+`.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
 
-After receiving findings:
-- Fix all Critical and Major issues.
-- Apply Minor fixes at your discretion.
-- If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat, subject to the three-pass limit below, until the subagent reports no Critical or Major issues.
-- After three review passes, continue only if the remaining Critical or Major issues are concrete, scoped to this document, and clearly fixable without expanding the translation scope. Otherwise, stop and report the remaining issues instead of continuing automatically.
+- **ARTIFACT**: the translation.
+- **PERSONA**: an experienced technical translator and editor. Direct it to
+  surface omissions, additions not in the source, mistranslations, and
+  inconsistent terminology.
+- **FILES**: the source file, the translated output file, and the translation
+  glossary (path in `_context.md`) — all as resolved absolute-path strings.
+- **CRITERIA**: every item from the Accuracy checklist and the Readability
+  checklist below, copied verbatim.
 
 **Accuracy checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] No content from the source is missing in the translation.

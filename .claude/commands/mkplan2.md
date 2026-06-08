@@ -1,3 +1,12 @@
+> **Project context (read first)**: Read `.claude/commands/_context.md`. It is the
+> single source of truth for every project-specific value below — the task root,
+> document names, status values, the green gate (`make test && make lint`), source
+> layout (`internal/`/`cmd/`), and the PR marker label/format conventions. Where
+> this command names such a value, treat the entry in `_context.md` as canonical.
+> When porting to another project, edit `_context.md` — not this command. The
+> review step uses the shared procedure in
+> `.claude/commands/_lib/review-subagent-pattern.md`.
+
 Your goal is to design PR boundaries for an existing `03_implementation_plan.md` and embed them directly into the document.
 
 Work in the following order.
@@ -72,19 +81,13 @@ Work in the following order.
 
 9. Commit `03_implementation_plan.md` with a message that explains the PR grouping rationale.
 
-10. Spawn a review subagent using the Agent tool to critically evaluate the PR boundary design.
-    Construct a self-contained prompt that includes all of the following:
-    - **Persona**: act as an experienced senior engineer and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface PRs that are too large to review, PRs that cannot be built independently, missing risk isolation, and cross-references that were not updated after renumbering. Do not soften findings.
-    - **Files to read**: embed the resolved absolute paths of `03_implementation_plan.md`, `02_architecture.md`, and `01_requirements.md` as literal strings in the prompt so the subagent can read them without relying on your context.
-    - **Evaluation criteria**: every item from the PR boundary review checklist below, copied verbatim.
-    - **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (PR number or section), Problem (what is wrong), and Suggestion (concrete fix). If a checklist item has no issues, state that explicitly.
+10. Run the critical-review subagent procedure in `.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
+    - **ARTIFACT**: the PR boundary design.
+    - **PERSONA**: an experienced senior engineer and senior SRE. Direct it to surface PRs that are too large to review, PRs that cannot be built independently, missing risk isolation, and cross-references that were not updated after renumbering.
+    - **FILES**: `03_implementation_plan.md`, `02_architecture.md`, and `01_requirements.md`, as resolved absolute-path strings.
+    - **CRITERIA**: every item from the PR boundary review checklist below, copied verbatim.
 
-    After receiving findings:
-    - Fix all Critical and Major issues.
-    - Apply Minor fixes at your discretion.
-    - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat, subject to the three-pass limit below, until the subagent reports no Critical or Major issues.
-    - After three review passes, continue only if the remaining Critical or Major issues are concrete, scoped to this document, and clearly fixable without expanding the design scope. Otherwise, stop and report the remaining issues.
-    - Commit after all Critical and Major issues are resolved.
+    Extra rule: commit after all Critical and Major issues are resolved.
 
 **PR boundary review checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] Every `### PR-N 作成ポイント` section appears after all steps it covers.

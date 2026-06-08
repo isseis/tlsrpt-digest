@@ -1,3 +1,14 @@
+> **Project context (read first)**: Read `.claude/commands/_context.md`. It is the
+> single source of truth for every project-specific value below — the task root,
+> guide paths, document names, status values (`draft`/`approved`), build checks,
+> source layout (`cmd/`/`internal/`, `testutil/`), and document language. Where
+> this command names such a path or value, treat the entry in `_context.md` as
+> canonical. The domain-specific examples in step 5 and the checklists (ULID test
+> IDs, `recover --mode`, mailbox length, `systemErrorHint`, etc.) are illustrative
+> for this project; see `_context.md` (Domain-specific) before reusing them
+> elsewhere. When porting, edit `_context.md` — not this command. The review step
+> uses the shared procedure in `.claude/commands/_lib/review-subagent-pattern.md`.
+
 Your goal is to create `03_implementation_plan.md` for one task under `docs/tasks/`.
 
 Work in the following order.
@@ -53,19 +64,13 @@ Work in the following order.
 - If package-internal helpers are needed, plan them as `test_helpers.go` or `test_helpers_<category>.go` with `//go:build test`.
 - Do not add helper files in the plan unless they are actually needed.
 
-8. Spawn a review subagent using the Agent tool to critically evaluate the created document.
-   Construct a self-contained prompt that includes all of the following:
-   - **Persona**: act as an experienced senior engineer and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface gaps, missing test coverage, vague task descriptions, and AC traceability holes. Do not soften findings.
-   - **Files to read**: embed the resolved absolute paths of `03_implementation_plan.md`, `02_architecture.md`, `01_requirements.md`, `docs/dev/developer_guide/requirements_process.md`, and `docs/dev/developer_guide/test_organization.md` as literal strings in the prompt so the subagent can read them without relying on your context.
-   - **Evaluation criteria**: every item from the Technical correctness checklist, the Conditional checks section, and the Readability and consistency checklist below, copied verbatim. For Conditional checks, evaluate each item that applies to the plan; mark inapplicable items N/A (N/A is not a finding).
-   - **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (section name or checklist item), Problem (what is wrong or missing), and Suggestion (concrete fix). If a checklist category has no issues, state that explicitly.
+8. Run the critical-review subagent procedure in `.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
+   - **ARTIFACT**: the created `03_implementation_plan.md`.
+   - **PERSONA**: an experienced senior engineer and senior SRE. Direct it to surface gaps, missing test coverage, vague task descriptions, and AC traceability holes.
+   - **FILES**: `03_implementation_plan.md`, `02_architecture.md`, `01_requirements.md`, the requirements process guide, and the test organization guide (paths in `_context.md`), as resolved absolute-path strings.
+   - **CRITERIA**: every item from the Technical correctness checklist, the Conditional checks section, and the Readability and consistency checklist below, copied verbatim. For Conditional checks, evaluate each item that applies to the plan; mark inapplicable items N/A (N/A is not a finding).
 
-   After receiving findings:
-   - Fix all Critical and Major issues.
-   - Apply Minor fixes at your discretion.
-   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat until no Critical or Major issues remain, up to three passes total.
-   - After three passes, continue only if remaining Critical or Major issues are concrete, scoped to this document, and clearly fixable without expanding the planning scope. Otherwise, stop and report the remaining issues.
-   - Commit `03_implementation_plan.md` only after all review passes are complete and all Critical and Major issues are resolved.
+   Extra rule: commit `03_implementation_plan.md` only after all review passes are complete and all Critical and Major issues are resolved.
 
 **Technical correctness checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] `02_architecture.md` is `approved`.

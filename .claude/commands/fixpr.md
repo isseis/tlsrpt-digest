@@ -1,3 +1,8 @@
+> **Project context**: this command refers to "the build checks" (e.g. `make lint`,
+> `make test`). Their exact values are defined in `.claude/commands/_context.md`
+> under "Tech-stack convention". Read that file and use its values; the rest of
+> this command is project-independent.
+
 ## Preparation
 
 Check the PR for the current branch.

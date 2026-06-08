@@ -1,3 +1,12 @@
+> **Project context (read first)**: Read `.claude/commands/_context.md`. It is the
+> single source of truth for every project-specific value below — the task root,
+> guide paths, document names (`01_requirements.md`, `02_architecture.md`, …),
+> status values (`draft`/`approved`), source layout (`cmd/`/`internal/`), and
+> document language. Where this command names such a path or value, treat the
+> entry in `_context.md` as canonical. When porting to another project, edit
+> `_context.md` — not this command. The review step uses the shared procedure in
+> `.claude/commands/_lib/review-subagent-pattern.md`.
+
 Your goal is to create `02_architecture.md` for one task under `docs/tasks/`.
 
 Work in the following order.
@@ -38,19 +47,13 @@ Work in the following order.
 - Do not include implementation details, pseudocode, step-by-step algorithms, or low-level code.
 - Write the body for an engineer meeting the current system for the first time: describe how it works now. Confine the rationale for removed or superseded designs, and cross-task decision history, to a bounded "decision history" appendix or a short blockquote pointing to git history — do not interleave it with current-state description. When editing a design document that earlier tasks have appended to, preserve this separation so the body does not become a changelog.
 
-8. Spawn a review subagent using the Agent tool to critically evaluate the created document.
-   Construct a self-contained prompt that includes all of the following:
-   - **Persona**: act as an experienced software architect and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface gaps, ambiguities, and design risks. Do not soften findings.
-   - **Files to read**: embed the resolved absolute paths of `02_architecture.md`, `01_requirements.md`, `docs/dev/developer_guide/requirements_process.md`, and `docs/dev/developer_guide/mermaid_reference.md` as literal strings in the prompt so the subagent can read them without relying on your context. If the feature sends notifications or handles notification destinations, also embed the resolved absolute path of `docs/dev/developer_guide/notification_security.md`.
-   - **Evaluation criteria**: every item from the Technical correctness checklist and the Readability and consistency checklist below, copied verbatim.
-   - **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (section name or checklist item), Problem (what is wrong or missing), and Suggestion (concrete fix). If a checklist category has no issues, state that explicitly.
+8. Run the critical-review subagent procedure in `.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
+   - **ARTIFACT**: the created `02_architecture.md`.
+   - **PERSONA**: an experienced software architect and senior SRE. Direct it to surface gaps, ambiguities, and design risks.
+   - **FILES**: `02_architecture.md`, `01_requirements.md`, the requirements process guide, and the Mermaid reference guide (paths in `_context.md`), as resolved absolute-path strings. If the feature sends notifications or handles notification destinations, also include the conditional security guide (`_context.md`, Domain-specific).
+   - **CRITERIA**: every item from the Technical correctness checklist and the Readability and consistency checklist below, copied verbatim.
 
-   After receiving findings:
-   - Fix all Critical and Major issues.
-   - Apply Minor fixes at your discretion.
-   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat, subject to the three-pass limit below, until the subagent reports no Critical or Major issues.
-   - After three review passes, continue only if the remaining Critical or Major issues are concrete, scoped to this document, and clearly fixable without expanding the design scope. Otherwise, stop and report the remaining issues instead of continuing automatically.
-   - Commit only after all review passes are complete and all Critical and Major issues are resolved.
+   Extra rule: commit only after all review passes are complete and all Critical and Major issues are resolved.
 
 **Technical correctness checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] `01_requirements.md` is `approved`.
