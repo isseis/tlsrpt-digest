@@ -10,7 +10,7 @@
 | レビュアー | - |
 | コメント | - |
 
-関連文書: [01_requirements.ja.md](01_requirements.ja.md)
+関連文書: [01_requirements.md](01_requirements.md)
 
 ---
 
