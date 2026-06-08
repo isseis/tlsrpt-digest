@@ -1,3 +1,17 @@
+> **Project context (read first)**: Read `.claude/commands/_context.md`. It is the
+> single source of truth for every project-specific value below — the task root,
+> guide paths, document/status conventions, build checks (`make fmt`/`make test`/
+> `make lint`/`make deadcode`), the green gate, source layout, and test-helper
+> placement (`testutil/`, `test_helpers.go`, `//go:build test`). Where this command
+> names such a path or command, treat the entry in `_context.md` as canonical. The
+> domain-specific invariant examples in step 5 (ULID test IDs, `--dry-run`
+> side-effects, IMAP CLOSE/SELECT teardown) are illustrative for this project; see
+> `_context.md` (Domain-specific) before reusing them elsewhere. When porting,
+> follow the porting steps in `_context.md`: that includes editing this command body
+> for domain-specific examples (step 5) and for Go-specific rules (`testutil/`,
+> `test_helpers.go`, `//go:build test`) when changing tech stacks. The review step
+> uses the shared procedure in `.claude/commands/_lib/review-subagent-pattern.md`.
+
 Your goal is to implement one task under `docs/tasks/` by following its `03_implementation_plan.md`.
 
 Work in order.
@@ -7,9 +21,9 @@ Work in order.
 2. Read `03_implementation_plan.md`. If the document status is not `approved`, stop and report.
 
 2.5. Check whether PR boundary design is needed.
-- Count `### フェーズ` headers in the plan. If there are 2 or more and no `### PR-` sections exist, invoke the `/mkpr` skill to design PR boundaries before proceeding.
-- After `/mkpr` completes, re-read `03_implementation_plan.md` so the updated content (with PR markers) is in context.
-- If PR markers already exist, skip this step and continue.
+   - Count `### フェーズ` headers in the plan. If there are 2 or more and no `### PR-` sections exist, invoke the `/mkplan2` skill to design PR boundaries before proceeding.
+   - After `/mkplan2` completes, re-read the implementation plan document so the updated content (with PR markers) is in context.
+   - If PR markers already exist, skip this step and continue.
 
 3. Read `01_requirements.md`, `02_architecture.md` (both in the target task directory), and `docs/dev/developer_guide/test_organization.md`.
 
@@ -39,8 +53,8 @@ Work in order.
 - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
 
 5a. **PR checkpoint** (reached when step 4 directed you here instead of step 5).
-- Verify `make test && make lint` is green. Fix any failures before continuing.
-- Mark the first PR checkpoint checkbox (`make test && make lint がグリーンであることを確認した`) as `[x]` and commit.
+- Verify the green gate (defined in `_context.md`) passes. Fix any failures before continuing.
+- Mark the first PR checkpoint checkbox (the green gate confirmation line) as `[x]` and commit.
 - Run `gh pr create --title "<推奨タイトル>" --body "<レビュー観点を含む本文>"`, using the `推奨タイトル` value from the `### PR-N 作成ポイント` section as `--title` and including the `レビュー観点` items in `--body`. Use explicit flags to avoid interactive prompts.
 - Output the PR URL and mark the second checkbox (`PR を作成した`) as `[x]` and commit.
 - Pause and ask the user: "PR-N を作成しました: <URL>。マージされたらお知らせください。"
@@ -80,19 +94,13 @@ Work in order.
    - If Check 1 has any matches: fix them, run `make fmt && make test && make lint`, commit, then continue (these are never intentional in source).
    - If Check 2 has matches: inspect each — test-data literals and error strings may legitimately contain non-ASCII, but identifiers and non-test comments must not. Fix any unintentional occurrences, run `make fmt && make test && make lint`, and commit before continuing.
 
-7. Spawn a review subagent using the Agent tool to critically evaluate this phase group's changes.
-   Construct a self-contained prompt that includes all of the following:
-   - **Persona**: act as an experienced senior Go engineer and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface bugs, missing test coverage, architecture drift, and unclear code. Do not soften findings.
-   - **Context**: the task directory path; instruct the subagent to read `02_architecture.md` and `03_implementation_plan.md` in full before evaluating the code.
-   - **Files changed**: list the source files added or modified in this phase group and instruct the subagent to read them in full. Also provide the specific commit range for this phase group (e.g., `HEAD~N..HEAD`) and instruct the subagent to run `git diff <range>` to see exactly what changed.
-   - **Evaluation criteria**: every item from the phase-group review checklist below, copied verbatim.
-   - **Output format**: for each issue found, report Severity (Critical / Major / Minor), File and line, Problem, and Suggestion. If a checklist item has no issues, state that explicitly.
+7. Run the critical-review subagent procedure in `.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
+   - **ARTIFACT**: this phase group's code changes.
+   - **PERSONA**: an experienced senior Go engineer and senior SRE. Direct it to surface bugs, missing test coverage, architecture drift, and unclear code.
+   - **FILES**: the architecture document and the implementation plan document (paths in `_context.md`), as resolved absolute-path strings; instruct the subagent to read both in full before evaluating the code. Also list the source files added or modified in this phase group as resolved absolute-path strings (read in full). Provide the specific commit range for this phase group (e.g., `HEAD~N..HEAD`) and instruct the subagent to run `git diff <range>` to see exactly what changed.
+   - **CRITERIA**: every item from the phase-group review checklist below, copied verbatim.
 
-   After receiving findings:
-   - Fix all Critical and Major issues, then run `make fmt && make test && make lint` and commit.
-   - Apply Minor fixes at your discretion.
-   - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat, subject to the three-pass limit below, until the subagent reports no Critical or Major issues.
-   - After three review passes, continue only if the remaining Critical or Major issues are concrete, scoped to this phase group, and clearly fixable without expanding the phase scope. Otherwise, stop and report the remaining issues instead of continuing automatically.
+   Extra rule: when fixing Critical and Major issues, run the build checks (defined in `_context.md`) and commit before spawning the verification pass.
 
 Phase-group review checklist (use verbatim as evaluation criteria in the subagent prompt above):
 - [ ] Implementation is consistent with `02_architecture.md`.

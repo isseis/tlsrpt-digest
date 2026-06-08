@@ -209,6 +209,7 @@
 
 | 日本語 | English | 備考 |
 |--------|---------|------|
+| 層 | layer | 再利用のための内容分類（プロジェクト非依存・規約依存・ドメイン固有など） |
 | 漏洩 | exposure / leakage | 機密情報漏洩の文脈 |
 | 活用 | leverage / leveraging | |
 | 学習 | learn / learning | |
@@ -380,6 +381,8 @@
 | セキュアデフォルト | secure default | |
 | 分離 | separation | |
 | シリアライズ | serialize / serialization | |
+| 単一の信頼できる情報源 | single source of truth | ある値の定義を 1 か所に集約する設計方針 |
+| スモークテスト | smoke test | 最小限の動作確認 |
 | セットアップ | setup | |
 | シェル | shell | |
 | サイレントに | silently | |

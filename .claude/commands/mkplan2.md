@@ -1,3 +1,14 @@
+> **Project context (read first)**: Read `.claude/commands/_context.md`. It is the
+> single source of truth for every project-specific value below — the task root,
+> document names, status values, the green gate (see `_context.md`), source
+> layout (`internal/`/`cmd/`), and the PR marker label/format conventions. Where
+> this command names such a value, treat the entry in `_context.md` as canonical.
+> When porting, follow the porting steps in `_context.md`. Note that this command
+> body also contains Go-specific design principles (`internal/`→`cmd/` ordering
+> rule, build-independence gate) that must be updated when porting to a non-Go or
+> non-`cmd/`/`internal/` layout. The review step uses the shared procedure in
+> `.claude/commands/_lib/review-subagent-pattern.md`.
+
 Your goal is to design PR boundaries for an existing `03_implementation_plan.md` and embed them directly into the document.
 
 Work in the following order.
@@ -14,7 +25,7 @@ Work in the following order.
 
    Apply the following principles:
    - **Reviewability**: Each PR should have a single, coherent concern that a reviewer can evaluate independently (e.g. "all internal API changes", "cmd-layer wiring", "one high-risk subcommand").
-   - **Buildability**: Every PR must leave `make test && make lint` green. Never split a tightly coupled unit (interface + implementation + test) across PRs.
+   - **Buildability**: Every PR must pass the green gate (defined in `_context.md`) independently. Never split a tightly coupled unit (interface + implementation + test) across PRs.
    - **Risk isolation**: Place high-risk or complex steps (e.g. recovery flows, concurrency) in their own PRs so they can be reviewed in detail without unrelated noise.
    - **Internal-before-cmd**: Changes to `internal/` packages should land before the `cmd/` layer that depends on them.
    - **Small over large**: Prefer more, smaller PRs over fewer large ones; 3–6 PRs is a reasonable target for a medium-sized feature.
@@ -37,7 +48,7 @@ Work in the following order.
 
    **レビュー観点**: <key1> / <key2> / <key3>
 
-   - [ ] `make test && make lint` がグリーンであることを確認した
+   - [ ] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
    - [ ] PR を作成した
    - [ ] PR がマージされた
    - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
@@ -70,27 +81,21 @@ Work in the following order.
    …
    ```
 
-9. Commit `03_implementation_plan.md` with a message that explains the PR grouping rationale.
+9. Commit the implementation plan document with a message that explains the PR grouping rationale.
 
-10. Spawn a review subagent using the Agent tool to critically evaluate the PR boundary design.
-    Construct a self-contained prompt that includes all of the following:
-    - **Persona**: act as an experienced senior engineer and senior SRE whose job is to find real problems — not to approve. Be thorough and unsparing. Surface PRs that are too large to review, PRs that cannot be built independently, missing risk isolation, and cross-references that were not updated after renumbering. Do not soften findings.
-    - **Files to read**: embed the resolved absolute paths of `03_implementation_plan.md`, `02_architecture.md`, and `01_requirements.md` as literal strings in the prompt so the subagent can read them without relying on your context.
-    - **Evaluation criteria**: every item from the PR boundary review checklist below, copied verbatim.
-    - **Output format**: for each issue found, report Severity (Critical / Major / Minor), Location (PR number or section), Problem (what is wrong), and Suggestion (concrete fix). If a checklist item has no issues, state that explicitly.
+10. Run the critical-review subagent procedure in `.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
+    - **ARTIFACT**: the PR boundary design.
+    - **PERSONA**: an experienced senior engineer and senior SRE. Direct it to surface PRs that are too large to review, PRs that cannot be built independently, missing risk isolation, and cross-references that were not updated after renumbering.
+    - **FILES**: the implementation plan document, the architecture document, and the requirements document (paths in `_context.md`), as resolved absolute-path strings.
+    - **CRITERIA**: every item from the PR boundary review checklist below, copied verbatim.
 
-    After receiving findings:
-    - Fix all Critical and Major issues.
-    - Apply Minor fixes at your discretion.
-    - If any Critical or Major issue required a fix, spawn a second review subagent to verify the fixes. Repeat, subject to the three-pass limit below, until the subagent reports no Critical or Major issues.
-    - After three review passes, continue only if the remaining Critical or Major issues are concrete, scoped to this document, and clearly fixable without expanding the design scope. Otherwise, stop and report the remaining issues.
-    - Commit after all Critical and Major issues are resolved.
+    Extra rule: commit after all Critical and Major issues are resolved.
 
 **PR boundary review checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] Every `### PR-N 作成ポイント` section appears after all steps it covers.
 - [ ] Every step belongs to exactly one PR.
 - [ ] No step that modifies an `internal/` interface lands in a later PR than the `cmd/` step that depends on it.
-- [ ] Each PR group can pass `make test && make lint` on its own without stubs from future steps.
+- [ ] Each PR group can pass the green gate (defined in `_context.md`) on its own without stubs from future steps.
 - [ ] High-risk or complex steps (recovery, concurrency, state machines) are isolated in their own PR or placed last in a PR so they do not block review of simpler changes.
 - [ ] The `**対象ステップ**` field in each PR marker lists exactly the steps in that group and no others.
 - [ ] The `### 3.2 PR 構成` table is present and consistent with the PR marker sections.
