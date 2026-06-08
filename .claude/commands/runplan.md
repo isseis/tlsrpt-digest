@@ -60,7 +60,7 @@ Work in order.
 
    if [ -n "$CHANGED" ]; then
      # Check 1: no planning-doc identifiers in source
-     if echo "$CHANGED" | xargs rg -l '\bAC-[0-9]+\b|\bF-[0-9]+\b' 2>/dev/null; then
+     if echo "$CHANGED" | xargs rg -l '\bAC-[0-9]+[a-z]?\b|\bF-[0-9]+[a-z]?\b' 2>/dev/null; then
        echo "FAIL: planning-doc references found — fix before continuing"
      else
        echo "OK: no planning-doc references"
