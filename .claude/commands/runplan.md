@@ -34,7 +34,7 @@ Work in order.
   - Reuse existing utilities before writing new ones (e.g. `ulid.Make()`); consolidate duplicate regexes/constants.
   - Test-only behavior stays in test packages; don't branch production code for tests.
   - A Go test file importing a `testutil` that imports the package under test uses `package foo_test` to avoid an import cycle.
-  - Any new file with build tags beyond `//go:build test` alone (e.g. `//go:build test && foo`): confirm it is reached by at least one `make lint` invocation, or explicitly document the gap. Ask: "does `make lint` compile this file?"
+  - Any new or modified file with build tags beyond `//go:build test` alone (e.g. `//go:build test && foo`): confirm it is reached by at least one `make lint` invocation, or explicitly document the gap. Ask: "does `make lint` compile this file?"
 
 - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
 
@@ -54,17 +54,24 @@ Work in order.
 6.5. Run programmatic pre-checks on the changed Go files before spawning the review agent. These checks are deterministic and cheaper than AI review — catch them here rather than in the review loop.
 
    ```bash
-   # Files changed in this phase group (adjust range as needed)
-   CHANGED=$(git diff origin/main...HEAD --name-only | grep '\.go$' || true)
+   # Files changed in this phase group — exclude deleted files so rg never
+   # receives a path that no longer exists (which would exit 2, masking matches)
+   CHANGED=$(git diff origin/main...HEAD --diff-filter=d --name-only | grep '\.go$' || true)
 
    if [ -n "$CHANGED" ]; then
      # Check 1: no planning-doc identifiers in source
-     echo "$CHANGED" | xargs rg -ln '\bAC-[0-9]+\b|\bF-[0-9]+\b' 2>/dev/null \
-       && echo "FAIL: planning-doc references found" || echo "OK: no planning-doc references"
+     if echo "$CHANGED" | xargs rg -l '\bAC-[0-9]+\b|\bF-[0-9]+\b' 2>/dev/null; then
+       echo "FAIL: planning-doc references found — fix before continuing"
+     else
+       echo "OK: no planning-doc references"
+     fi
 
      # Check 2: no non-ASCII characters in Go source
-     echo "$CHANGED" | xargs rg -Pn '[^\x00-\x7F]' 2>/dev/null \
-       && echo "REVIEW: non-ASCII found — verify each is intentional" || echo "OK: all ASCII"
+     if echo "$CHANGED" | xargs rg -Pn '[^\x00-\x7F]' 2>/dev/null; then
+       echo "REVIEW: non-ASCII found — verify each is intentional"
+     else
+       echo "OK: all ASCII"
+     fi
    else
      echo "OK: no Go files changed"
    fi
