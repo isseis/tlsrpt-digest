@@ -81,8 +81,9 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 - [ ] `types.go`: `Alert` に `ReportID string`・`FailureDetails []FailureDetail` を追加する（アーキテクチャ §3.1 のコード定義に一致させる）。
 - [ ] `types.go`: `FailureDetail` 型（`ResultType string`・`FailedSessionCount int64`・`ReceivingMXHostname string`・`FailureReasonCode string`）を新設する。IP・`additional-information` に相当するフィールドは設けない。
-- [ ] `helpers.go` `LogAlert`: `report_id` 文字列属性を常に追加する。`failure_details` を `failed_session_count` 降順で最大 10 件に絞り、インデックス名（`"0"`,`"1"`,…）の子グループとして追加する。各子グループのキーは `result_type`・`failed_session_count`・`receiving_mx_hostname`・`failure_reason_code` の 4 つ。これはアーキテクチャ §3.4 の定数サイズ方針に従う。
-- [ ] `format.go` `extractAlert`: `report_id` と `failure_details` グループを復元する。`failure_details` の子グループは `attr.Value.Group()` が返すスライス順で `[]FailureDetail` に戻す（既存 `extractSummary` の `organization_stats` 処理と同方式・format.go:200-208）。スライス順が `LogAlert` の追加順＝降順を保持するため、キーの文字列ソートには依存しない。想定外キーは既存どおり `warnUnknownKey` で警告する（アーキテクチャ §3.4）。
+- [ ] `types.go`: `Alert` に `FailureDetailsTotalCount int64`・`FailureDetailsTotalSessions int64` を追加する（`LogAlert` がエンコード前に集計した元の総エントリ数・総失敗セッション数。`formatAlerts` が `Other N entries (M sessions total)` の正確な値に使う）。
+- [ ] `helpers.go` `LogAlert`: `report_id` 文字列属性を常に追加する。`failure_details` の全エントリから先に `failure_details_total_count int64`（元の総エントリ数）と `failure_details_total_sessions int64`（元の総失敗セッション数）を集計し slog 属性として格納する。その後 `failed_session_count` 降順で最大 10 件に絞り、インデックス名（`"0"`,`"1"`,…）の子グループとして追加する。各子グループのキーは `result_type`・`failed_session_count`・`receiving_mx_hostname`・`failure_reason_code` の 4 つ。事前集計によって、>10 件のレポートでも `Other N entries (M sessions total)` が正確な元データの件数・セッション数を反映できる（アーキテクチャ §3.4 の定数サイズ方針に従いつつ AC-09 の正確な集計を維持する）。
+- [ ] `format.go` `extractAlert`: `report_id`・`failure_details_total_count`・`failure_details_total_sessions`・`failure_details` グループを復元する。`failure_details` の子グループは `attr.Value.Group()` が返すスライス順で `[]FailureDetail` に戻す（既存 `extractSummary` の `organization_stats` 処理と同方式・format.go:200-208）。スライス順が `LogAlert` の追加順＝降順を保持するため、キーの文字列ソートには依存しない。`failure_details` の子グループ内に想定外キーがあった場合も `warnUnknownKey` で警告する（アーキテクチャ §3.4）。想定外のトップレベル属性は既存どおり警告する。
 - [ ] `cmd/tlsrpt-digest/notify_helpers.go` `logAlerts`: `Alert` 構築に `ReportID: report.ReportID` を追加し、`policy.FailureDetails` を公開 4 項目のみで `[]notify.FailureDetail` へ写像する。`SendingMTAIP`・`ReceivingIP`・`AdditionalInformation` は参照しない。
 
 完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通り、`formatAlerts` は新フィールドを無視したまま従来どおり `fields` を出力するため既存アラートテストは緑のまま。ビルドタグ付きテストヘルパーもこの時点でコンパイル確認する。
@@ -96,18 +97,18 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - [ ] `format.go` `formatAlerts`: `fields` 生成を廃止し、`Attachments[0].Color = "warning"` の単一 attachment に、ポリシーごとの `section` ブロック群＋末尾 `context`（Run ID）を生成する（アーキテクチャ §3.3）。
 - [ ] `format.go`: 各ポリシー `section.text` を `plain_text` で構築する。組織名・ポリシータイプ・失敗セッション総数・レポート期間（`.UTC()` 整形）・Report ID・失敗詳細を所定の行レイアウトで配置する（アーキテクチャ §3.3 の行テーブル）。
 - [ ] `format.go`: 失敗詳細を `failed_session_count` 降順に並べ、上位 3 件を詳細表示、4 件以上は残りを `Other N entries (M sessions total)` として要約する。空の場合は失敗詳細行を出力しない。
-- [ ] `format.go`: 外部由来文字列（組織名・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code`）を `plain_text` へ入れる前に、`\n`・`\r`・`\t` を含む制御文字を空白へ正規化する。セクション内の項目間改行は実装テンプレート側で付加する（アーキテクチャ §3.3・§5.2）。
+- [ ] `format.go`: 外部由来文字列（組織名・`policy-type`・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code`）を `plain_text` へ入れる前に、`\n`・`\r`・`\t` を含む制御文字を空白へ正規化する。`policy-type` は `policyTypeStr` が文字列のまま出力するため外部入力として扱い、値ごとの上限（`maxAlertPolicyTypeRunes` として定数を Phase 3 で追加）でも切り詰める。セクション内の項目間改行は実装テンプレート側で付加する（アーキテクチャ §3.3・§5.2）。
 - [ ] `format.go`: `maxAlertFields` 定数とその参照を削除する。
 
-完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通る。なお既存アラートテストの多くは生 JSON 本文への部分文字列マッチ（`Contains`）であり、刷新後も同じ文字列が `section.text` 内に現れるため**自動的には赤化しない**。`TestFormatAlerts_AttachmentFields` のみ `fields` の `title`/`value` を直接前提とするため赤化する。Phase 4 では、これら部分文字列テストを「壊れた blocks 実装では緑にならない」構造検証（`sectionTexts` 経由）へ強化する（§2 Phase 4・§3 参照）。
+完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通る。なお既存アラートテストの多くは生 JSON 本文への部分文字列マッチ（`Contains`）であり、刷新後も同じ文字列が `section.text` 内に現れるため**自動的には赤化しない**。赤化するのは以下の 2 テスト:（1）`TestFormatAlerts_AttachmentFields`（`fields` の `title`/`value` を直接前提とする）、（2）`TestSlackAttachment_FieldsEncoding`（`captureWarnPayload` が `LogAlert` 経由でアラートペイロードを生成し `attachment["fields"]` を検証する）。Phase 4 では、これら 2 テストを `blocks` 構造検証へ書き換え、部分文字列マッチの既存テストも `sectionTexts` 経由の構造検証へ強化する（§2 Phase 4・§3 参照）。
 
 ### Phase 3: サイズ制限と切り詰め
 
 対象ファイル: `internal/notify/format.go`
 
-- [ ] `format.go`: §1.4 の公式 Slack 仕様確認結果に基づき、`maxAlertBlocksPerMessage=50`・`maxAlertSectionRunes=3000`・`maxAlertContextRunes=300`・`maxAlertOrganizationRunes=120`・`maxAlertReportIDRunes=160`・`maxAlertResultTypeRunes=80`・`maxAlertMXHostnameRunes=120`・`maxAlertReasonCodeRunes=80` を定義する。
+- [ ] `format.go`: §1.4 の公式 Slack 仕様確認結果に基づき、`maxAlertBlocksPerMessage=50`・`maxAlertSectionRunes=3000`・`maxAlertContextRunes=300`・`maxAlertOrganizationRunes=120`・`maxAlertPolicyTypeRunes=80`・`maxAlertReportIDRunes=160`・`maxAlertResultTypeRunes=80`・`maxAlertMXHostnameRunes=120`・`maxAlertReasonCodeRunes=80` を定義する。`policy-type` は外部 JSON 由来のため制御文字正規化と切り詰めの対象に含める（Phase 2 の正規化タスクと一貫）。
 - [ ] `format.go` `formatAlerts`: 外部由来値を section 組み立て前に値ごとの上限で切り詰める（`TruncateText` を流用）。期間・ポリシータイプ・失敗数・静的ラベルは切り詰めない。
-- [ ] `format.go` `formatAlerts`: ブロック数を `maxAlertBlocksPerMessage` 以内に収める。Run ID `context` と overflow summary `section` の 2 ブロックを予約し、上限超過時は詳細表示するポリシーを打ち切り、overflow summary `section`（`plain_text`）に `N additional policies omitted; organizations: X; failed sessions: Y` を表示する（アーキテクチャ §6.2-3）。
+- [ ] `format.go` `formatAlerts`: ブロック数を `maxAlertBlocksPerMessage` 以内に収める。常に Run ID `context` の 1 ブロックを末尾に確保する。ポリシー数が 49 件以下の場合は overflow summary なしで全ポリシーを表示する（50 ブロック以内）。49 件を超える場合のみ overflow summary `section` の 1 ブロックを追加確保し、上位 48 件を詳細表示した後 overflow summary `section`（`plain_text`）に `N additional policies omitted; organizations: X; failed sessions: Y` を表示する（アーキテクチャ §6.2-3）。overflow summary は overflow が必要な場合にのみ追加し、49 件以下のときに不要なブロックを予約して AC-03 を早期違反しない。
 - [ ] `format.go` `truncateMessage`: `Attachments[].Blocks[]` を走査し、`section.text`（`maxAlertSectionRunes`）と `context.elements[].text`（`maxAlertContextRunes`）を `TruncateText` で切り詰める。`slackBlock.Text` が `nil`（`divider` 等）の場合はスキップし、`Elements` は長さチェックの上で走査する（アーキテクチャ §6.2-4）。
 
 完了条件: 過大入力でも単一 `slackMessage` のブロック数が 50 以内、各 `section.text` が 3000 rune 以内に収まる。
@@ -130,7 +131,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - [ ] `format_test.go` `TestFormatAlerts_NoPolicyFound`: 出力先を該当 `section` テキストへ更新する（`policyTypeStr` の挙動は不変）。
 - [ ] `format_test.go` `TestFormatAlerts_PolicyTypeUnknown`: 同上。
 - [ ] `format_test.go` `TestFormatAlerts_Color`: `attachment.color = "warning"` の検証をブロック構成変更後も成立するよう確認する（維持見込み）。
-- [ ] `format_test.go` `TestExtract_UnknownAttrKeyLogged`: `report_id`・`failure_details` が既知キーとして警告されないことと、未知キー `unexpected_field` はキー名のみ警告されることを検証する。
+- [ ] `format_test.go` `TestExtract_UnknownAttrKeyLogged`: `report_id`・`failure_details` が既知キーとして警告されないことと、未知トップレベルキー `unexpected_field` はキー名のみ警告されることを検証する。また `failure_details` 子グループ内に想定外キーを注入した場合もキー名のみが警告され属性値がログ出力されないことを同テストで検証する（アーキテクチャ §3.4・AC-13）。
 - [ ] `message_test.go` `TestSlackAttachment_FieldsEncoding`: ヘルパー `captureWarnPayload` がアラートを生成するため、`attachment.blocks`（`section`/`text`）検証へ書き換える。名称と実体が乖離した `captureWarnPayload` を `captureAlertPayload` へ改名する。
 - [ ] `message_test.go` `TestSlackMessage_JSONShape`: `text`・`attachments` の存在検証は維持。`captureWarnPayload` 改名に追従する。
 
@@ -146,7 +147,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - [ ] `TestFormatAlerts_FailureDetails_Empty`: `failure-details` 空でもエラー・不自然な空欄なく成立し、識別情報のみの `section` になる（AC-10）。
 - [ ] `TestFormatAlerts_ReportID`: Report ID が `section` に表示される（AC-11）。
 - [ ] `TestFormatAlerts_NormalizesControlChars`: 外部由来値に `\n`/`\r`/`\t` を含めても、`plain_text` 出力に偽の行が差し込まれず制御文字が空白化される（AC-13 表示無害化）。
-- [ ] `TestFormatAlerts_ValueTruncation`: 上限超の組織名・Report ID が値ごとの上限で切り詰められ、必須ラベルと識別情報が残る（AC-14）。
+- [ ] `TestFormatAlerts_ValueTruncation`: 上限超の組織名・`policy-type`・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code` のそれぞれが値ごとの上限で切り詰められ、必須ラベルと識別情報が残ることを検証する（AC-14）。各 failure-detail フィールドの過大値が 3 件並んでも section が 3000 rune 以内に収まることも確認する。
 - [ ] `TestFormatAlerts_OverflowSummary`: ブロック上限を超える件数の失敗ポリシーで、単一メッセージのブロック数が 50 以内に収まり、overflow summary `section` に省略ポリシー数・対象組織数・合計失敗セッション数が表示される（AC-03 overflow・AC-14）。
 - [ ] `format_test.go` `TestTruncateMessage_Blocks`: `section.text` が 3000 rune 超で切り詰められ、`Text==nil` の `divider` ブロックでパニックしない（AC-14）。
 
@@ -182,8 +183,8 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 | マイルストーン | 含むフェーズ | 内容 | 緑ゲート時の状態 |
 |---|---|---|---|
-| PR-1 | Phase 1 | データ構造・slog 往復・写像。`formatAlerts` は未変更で従来 `fields` を出力 | 既存アラートテストは緑のまま。追加: `TestLogAlert_StructuredPayloadOnly` 強化、`TestLogAlert_FailureDetailsRoundTrip`、`TestLogAlerts_MapsPublicFailureFields`、`TestSlackNotify_EnvRequirements` |
-| PR-2 | Phase 2・Phase 3・Phase 4 | Block Kit 整形・切り詰め・overflow と、それに伴う全テスト更新/追加 | `TestFormatAlerts_AttachmentFields` は刷新で赤化するため同一 PR で更新。部分文字列マッチの既存テストは赤化しないが、誤レイアウトを検出できるよう同一 PR で構造検証へ強化してから緑で出す |
+| PR-1 | Phase 1 | データ構造・slog 往復・写像。`formatAlerts` は未変更で従来 `fields` を出力 | 既存アラートテストは緑のまま。追加: `TestLogAlert_StructuredPayloadOnly` 強化、`TestLogAlert_FailureDetailsRoundTrip`、`TestLogAlerts_MapsPublicFailureFields`（`TestSlackNotify_EnvRequirements` は既存・変更不要） |
+| PR-2 | Phase 2・Phase 3・Phase 4 | Block Kit 整形・切り詰め・overflow と、それに伴う全テスト更新/追加 | `TestFormatAlerts_AttachmentFields`・`TestSlackAttachment_FieldsEncoding` は刷新で赤化するため同一 PR で更新。部分文字列マッチの既存テストは赤化しないが、誤レイアウトを検出できるよう同一 PR で構造検証へ強化してから緑で出す |
 
 `formatAlerts` の刷新（Phase 2）と既存アラートテストの構造検証化（Phase 4）は不可分のため、PR-2 にまとめる。部分文字列マッチのテストは刷新後も偶然緑になりうるが、それは「壊れた blocks 実装を見逃す」弱いテストであり、PR-2 内で `sectionTexts` 経由の構造検証へ強化する（§2 Phase 4 の注意書き参照）。Phase 1 は単独で緑を保てるため PR-1 として独立させ、レビュー単位を小さくする。
 
@@ -251,7 +252,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 | AC-06 | test | `formatAlerts` の `receiving-mx-hostname` 表示条件 | `internal/notify/format_test.go::TestFormatAlerts_FailureDetails_MXHostname` で有無の組合せを検証 |
 | AC-07 | test | `formatAlerts` の `failure-reason-code` 表示条件 | `internal/notify/format_test.go::TestFormatAlerts_FailureDetails_ReasonCode` で有無の組合せを検証 |
 | AC-08 | test | `formatAlerts` の 3 件以下 detail 展開 | `internal/notify/format_test.go::TestFormatAlerts_FailureDetails_AllWhenLE3` で 3 件以下は全件詳細表示されることを検証 |
-| AC-09 | test | `LogAlert` の最大 10 件保持、`extractAlert` の順序復元、`formatAlerts` の 4 件以上要約 | `internal/notify/format_test.go::TestFormatAlerts_FailureDetails_SummaryWhenGT3` と `internal/notify/format_internal_test.go::TestLogAlert_FailureDetailsRoundTrip` で上位 3 件＋残件数・残セッション数の要約を検証 |
+| AC-09 | test | `LogAlert` の事前集計＋最大 10 件保持、`extractAlert` の順序復元、`formatAlerts` の 4 件以上要約 | `internal/notify/format_test.go::TestFormatAlerts_FailureDetails_SummaryWhenGT3` と `internal/notify/format_internal_test.go::TestLogAlert_FailureDetailsRoundTrip` で上位 3 件＋元データに基づく正確な残件数・残セッション数の要約を検証（>10 件のケースを含む） |
 | AC-10 | test | `formatAlerts` の空 failure-details 処理 | `internal/notify/format_test.go::TestFormatAlerts_FailureDetails_Empty` で空配列でも識別情報 section が成立することを検証 |
 | AC-11 | test | `LogAlert`/`extractAlert` の `report_id` 往復、`formatAlerts` の Report ID 表示 | `internal/notify/format_test.go::TestFormatAlerts_ReportID` と `internal/notify/format_internal_test.go::TestLogAlert_FailureDetailsRoundTrip` で検証 |
 | AC-12 | test | `formatAlerts` の期間 UTC 表示 | `internal/notify/format_test.go::TestFormatAlerts_PolicySection` で期間が UTC で表示されることを併せて検証 |
