@@ -1,6 +1,6 @@
 > **Project context (read first)**: Read `.claude/commands/_context.md`. It is the
 > single source of truth for every project-specific value below — the task root,
-> document names, status values, the green gate (`make test && make lint`), source
+> document names, status values, the green gate (see `_context.md`), source
 > layout (`internal/`/`cmd/`), and the PR marker label/format conventions. Where
 > this command names such a value, treat the entry in `_context.md` as canonical.
 > When porting to another project, edit `_context.md` — not this command. The

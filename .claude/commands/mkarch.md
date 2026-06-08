@@ -25,7 +25,7 @@ Work in the following order.
 - `docs/dev/developer_guide/mermaid_reference.md`
 
 5. Read conditional guidance only when relevant.
-- Read `docs/dev/developer_guide/notification_security.md` if the feature sends notifications or handles notification destinations.
+- Read the conditional guide (path in `_context.md`, Domain-specific) if the conditional-guide trigger applies (trigger also in `_context.md`, Domain-specific).
 - Read `docs/dev/developer_guide/package_reference.md` if that file exists and the task introduces new packages or modifies existing packages.
 
 6. Inspect the current codebase before writing the design.
@@ -50,7 +50,7 @@ Work in the following order.
 8. Run the critical-review subagent procedure in `.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
    - **ARTIFACT**: the created architecture document (path in `_context.md`).
    - **PERSONA**: an experienced software architect and senior SRE. Direct it to surface gaps, ambiguities, and design risks.
-   - **FILES**: the architecture document, the requirements document, the requirements process guide, and the Mermaid reference guide (paths in `_context.md`), as resolved absolute-path strings. If the feature sends notifications or handles notification destinations, also include the conditional security guide (`_context.md`, Domain-specific).
+   - **FILES**: the architecture document, the requirements document, the requirements process guide, and the Mermaid reference guide (paths in `_context.md`), as resolved absolute-path strings. If the conditional-guide trigger applies (`_context.md`, Domain-specific), also include the conditional guide.
    - **CRITERIA**: every item from the Technical correctness checklist and the Readability and consistency checklist below, copied verbatim.
 
    Extra rule: commit only after all review passes are complete and all Critical and Major issues are resolved.

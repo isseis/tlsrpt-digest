@@ -1,8 +1,10 @@
-> **Project context**: this command refers to "the translation glossary" and a
-> default translation direction. Their values are defined in
-> `.claude/commands/_context.md` (Process convention: "Translation glossary",
-> "Default translation direction"). Read that file and use its values. The review
-> step follows the shared pattern in `.claude/commands/_lib/review-subagent-pattern.md`.
+> **Project context**: this command refers to "the translation glossary". Its path
+> is defined in `.claude/commands/_context.md` (Process convention: "Translation
+> glossary"). Read that file and use its value. The translation direction is
+> determined by the source file extension (see Preparation below), not by a
+> runtime value from `_context.md` — `_context.md` describes the project's
+> language-pair convention for reference only. The review step follows the shared
+> pattern in `.claude/commands/_lib/review-subagent-pattern.md`.
 > The rest of this command is project-independent.
 
 ## Preparation
@@ -94,7 +96,7 @@ Apply these changes to the output file. Do not touch sections that are not in th
 
 ## Update Glossary
 
-If any terms were used during translation that are not in the glossary, add them to the translation glossary (path in `.claude/commands/_context.md`).
+If any terms were used during translation that are not in the glossary, add them to the translation glossary (path in `.claude/commands/_context.md`, Process convention).
 Skip this step if no new terms were introduced.
 
 ## Review the Translation (via Subagent)
