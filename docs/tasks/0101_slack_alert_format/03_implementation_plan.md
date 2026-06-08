@@ -107,7 +107,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 対象ファイル: `internal/notify/format.go`
 
 - [ ] `format.go`: §1.4 の公式 Slack 仕様確認結果に基づき、`maxAlertBlocksPerMessage=50`・`maxAlertSectionRunes=3000`・`maxAlertContextRunes=300`・`maxAlertOrganizationRunes=120`・`maxAlertPolicyTypeRunes=80`・`maxAlertReportIDRunes=160`・`maxAlertResultTypeRunes=80`・`maxAlertMXHostnameRunes=120`・`maxAlertReasonCodeRunes=80` を定義する。`policy-type` は外部 JSON 由来のため制御文字正規化と切り詰めの対象に含める（Phase 2 の正規化タスクと一貫）。
-- [ ] `format.go` `formatAlerts`: 外部由来値を section 組み立て前に値ごとの上限で切り詰める（`TruncateText` を流用）。期間・ポリシータイプ・失敗数・静的ラベルは切り詰めない。
+- [ ] `format.go` `formatAlerts`: 外部由来値を section 組み立て前に値ごとの上限で切り詰める（`TruncateText` を流用）。対象は組織名・`policy-type`・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code`。期間・失敗数・静的ラベルは切り詰めない。
 - [ ] `format.go` `formatAlerts`: ブロック数を `maxAlertBlocksPerMessage` 以内に収める。常に Run ID `context` の 1 ブロックを末尾に確保する。ポリシー数が 49 件以下の場合は overflow summary なしで全ポリシーを表示する（50 ブロック以内）。49 件を超える場合のみ overflow summary `section` の 1 ブロックを追加確保し、上位 48 件を詳細表示した後 overflow summary `section`（`plain_text`）に `N additional policies omitted; organizations: X; failed sessions: Y` を表示する（アーキテクチャ §6.2-3）。overflow summary は overflow が必要な場合にのみ追加し、49 件以下のときに不要なブロックを予約して AC-03 を早期違反しない。
 - [ ] `format.go` `truncateMessage`: `Attachments[].Blocks[]` を走査し、`section.text`（`maxAlertSectionRunes`）と `context.elements[].text`（`maxAlertContextRunes`）を `TruncateText` で切り詰める。`slackBlock.Text` が `nil`（`divider` 等）の場合はスキップし、`Elements` は長さチェックの上で走査する（アーキテクチャ §6.2-4）。
 
@@ -131,7 +131,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - [ ] `format_test.go` `TestFormatAlerts_NoPolicyFound`: 出力先を該当 `section` テキストへ更新する（`policyTypeStr` の挙動は不変）。
 - [ ] `format_test.go` `TestFormatAlerts_PolicyTypeUnknown`: 同上。
 - [ ] `format_test.go` `TestFormatAlerts_Color`: `attachment.color = "warning"` の検証をブロック構成変更後も成立するよう確認する（維持見込み）。
-- [ ] `format_test.go` `TestExtract_UnknownAttrKeyLogged`: `report_id`・`failure_details` が既知キーとして警告されないことと、未知トップレベルキー `unexpected_field` はキー名のみ警告されることを検証する。また `failure_details` 子グループ内に想定外キーを注入した場合もキー名のみが警告され属性値がログ出力されないことを同テストで検証する（アーキテクチャ §3.4・AC-13）。
+- [ ] `format_test.go` `TestExtract_UnknownAttrKeyLogged`: `report_id`・`failure_details` が既知キーとして警告されないことと、未知トップレベルキー `unexpected_field` はキー名のみ警告されることを検証する。また以下の 2 つの不正ケースを同テストで検証する（アーキテクチャ §3.4・AC-13）。（a）`failure_details` の有効な子グループ内に想定外キーを注入した場合、キー名のみが警告され属性値がログ出力されない。（b）`failure_details["0"]` が非グループ値（例: 文字列）の場合でも `Flush` がパニックせず、当該エントリをスキップして残りのアラートが正常送信される（`extractAlert` は `Value.Group()` を呼ぶ前に `KindGroup` チェックを行う実装を要求する）。
 - [ ] `message_test.go` `TestSlackAttachment_FieldsEncoding`: ヘルパー `captureWarnPayload` がアラートを生成するため、`attachment.blocks`（`section`/`text`）検証へ書き換える。名称と実体が乖離した `captureWarnPayload` を `captureAlertPayload` へ改名する。
 - [ ] `message_test.go` `TestSlackMessage_JSONShape`: `text`・`attachments` の存在検証は維持。`captureWarnPayload` 改名に追従する。
 
@@ -152,7 +152,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - [ ] `format_test.go` `TestTruncateMessage_Blocks`: `section.text` が 3000 rune 超で切り詰められ、`Text==nil` の `divider` ブロックでパニックしない（AC-14）。
 
 **slog 往復・許可リスト（`internal/notify/helpers_test.go`、`internal/notify/format_internal_test.go`）**
-- [ ] `TestLogAlert_StructuredPayloadOnly`: 既存の存在検証を、他ヘルパーの `security_test.go` と同じ**許可リスト方式**へ強化する。トップレベル許可キーは `organization_name`・`policy_type`・`failure_count`・`date_start`・`date_end`・`report_id`・`failure_details`。`failure_details` グループ内へ再帰し、子グループのキーが `result_type`・`failed_session_count`・`receiving_mx_hostname`・`failure_reason_code` の 4 つのみであることを検証する（AC-13）。
+- [ ] `TestLogAlert_StructuredPayloadOnly`: 既存の存在検証を、他ヘルパーの `security_test.go` と同じ**許可リスト方式**へ強化する。トップレベル許可キーは `organization_name`・`policy_type`・`failure_count`・`date_start`・`date_end`・`report_id`・`failure_details`・`failure_details_total_count`・`failure_details_total_sessions`（合計 9 キー）。`failure_details` グループ内へ再帰し、子グループのキーが `result_type`・`failed_session_count`・`receiving_mx_hostname`・`failure_reason_code` の 4 つのみであることを検証する（AC-13）。
 - [ ] `format_internal_test.go` `TestLogAlert_FailureDetailsRoundTrip`（新規・`package notify`）: `LogAlert` → `extractAlert` の往復で、`ReportID` と `failure_details` の `failed_session_count` 降順・最大 10 件・順序保持が成り立つことを検証する。`extractAlert` は未公開関数のため、同じ `notify` パッケージの `_test.go` から直接検証する。
 
 **機微情報非混入（`internal/notify/security_test.go`）**
