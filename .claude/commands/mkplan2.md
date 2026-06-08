@@ -3,8 +3,10 @@
 > document names, status values, the green gate (see `_context.md`), source
 > layout (`internal/`/`cmd/`), and the PR marker label/format conventions. Where
 > this command names such a value, treat the entry in `_context.md` as canonical.
-> When porting to another project, edit `_context.md` — not this command. The
-> review step uses the shared procedure in
+> When porting, follow the porting steps in `_context.md`. Note that this command
+> body also contains Go-specific design principles (`internal/`→`cmd/` ordering
+> rule, build-independence gate) that must be updated when porting to a non-Go or
+> non-`cmd/`/`internal/` layout. The review step uses the shared procedure in
 > `.claude/commands/_lib/review-subagent-pattern.md`.
 
 Your goal is to design PR boundaries for an existing `03_implementation_plan.md` and embed them directly into the document.

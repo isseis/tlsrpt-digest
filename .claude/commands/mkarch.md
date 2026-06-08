@@ -3,8 +3,11 @@
 > guide paths, document names (`01_requirements.md`, `02_architecture.md`, …),
 > status values (`draft`/`approved`), source layout (`cmd/`/`internal/`), and
 > document language. Where this command names such a path or value, treat the
-> entry in `_context.md` as canonical. When porting to another project, edit
-> `_context.md` — not this command. The review step uses the shared procedure in
+> entry in `_context.md` as canonical. When porting, follow the porting steps in
+> `_context.md`. Note that this command body also contains Go/project-specific
+> references (`cmd/`/`internal/` layout inspection in step 6) that may need
+> updating when porting to a different tech stack or project structure. The review
+> step uses the shared procedure in
 > `.claude/commands/_lib/review-subagent-pattern.md`.
 
 Your goal is to create `02_architecture.md` for one task under `docs/tasks/`.

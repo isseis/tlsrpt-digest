@@ -21,9 +21,9 @@ Work in order.
 2. Read `03_implementation_plan.md`. If the document status is not `approved`, stop and report.
 
 2.5. Check whether PR boundary design is needed.
-- Count `### フェーズ` headers in the plan. If there are 2 or more and no `### PR-` sections exist, invoke the `/mkplan2` skill to design PR boundaries before proceeding.
-- After `/mkplan2` completes, re-read the implementation plan document so the updated content (with PR markers) is in context.
-- If PR markers already exist, skip this step and continue.
+   - Count `### フェーズ` headers in the plan. If there are 2 or more and no `### PR-` sections exist, invoke the `/mkplan2` skill to design PR boundaries before proceeding.
+   - After `/mkplan2` completes, re-read the implementation plan document so the updated content (with PR markers) is in context.
+   - If PR markers already exist, skip this step and continue.
 
 3. Read `01_requirements.md`, `02_architecture.md` (both in the target task directory), and `docs/dev/developer_guide/test_organization.md`.
 
@@ -97,7 +97,7 @@ Work in order.
 7. Run the critical-review subagent procedure in `.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
    - **ARTIFACT**: this phase group's code changes.
    - **PERSONA**: an experienced senior Go engineer and senior SRE. Direct it to surface bugs, missing test coverage, architecture drift, and unclear code.
-   - **FILES**: the architecture document and the implementation plan document (paths in `_context.md`; instruct the subagent to read both in full before evaluating the code), plus the source files added or modified in this phase group (read in full). Also provide the specific commit range for this phase group (e.g., `HEAD~N..HEAD`) and instruct the subagent to run `git diff <range>` to see exactly what changed.
+   - **FILES**: the architecture document and the implementation plan document (paths in `_context.md`), as resolved absolute-path strings; instruct the subagent to read both in full before evaluating the code. Also list the source files added or modified in this phase group as resolved absolute-path strings (read in full). Provide the specific commit range for this phase group (e.g., `HEAD~N..HEAD`) and instruct the subagent to run `git diff <range>` to see exactly what changed.
    - **CRITERIA**: every item from the phase-group review checklist below, copied verbatim.
 
    Extra rule: when fixing Critical and Major issues, run the build checks (defined in `_context.md`) and commit before spawning the verification pass.
