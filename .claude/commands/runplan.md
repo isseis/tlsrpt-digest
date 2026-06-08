@@ -55,15 +55,19 @@ Work in order.
 
    ```bash
    # Files changed in this phase group (adjust range as needed)
-   CHANGED=$(git diff origin/main...HEAD --name-only | grep '\.go$')
+   CHANGED=$(git diff origin/main...HEAD --name-only | grep '\.go$' || true)
 
-   # Check 1: no planning-doc identifiers in source
-   echo "$CHANGED" | xargs rg -ln '\bAC-[0-9]+\b|\bF-[0-9]+\b' 2>/dev/null \
-     && echo "FAIL: planning-doc references found" || echo "OK: no planning-doc references"
+   if [ -n "$CHANGED" ]; then
+     # Check 1: no planning-doc identifiers in source
+     echo "$CHANGED" | xargs rg -ln '\bAC-[0-9]+\b|\bF-[0-9]+\b' 2>/dev/null \
+       && echo "FAIL: planning-doc references found" || echo "OK: no planning-doc references"
 
-   # Check 2: no non-ASCII characters in Go source
-   echo "$CHANGED" | xargs rg -Pn '[^\x00-\x7F]' 2>/dev/null \
-     && echo "REVIEW: non-ASCII found — verify each is intentional" || echo "OK: all ASCII"
+     # Check 2: no non-ASCII characters in Go source
+     echo "$CHANGED" | xargs rg -Pn '[^\x00-\x7F]' 2>/dev/null \
+       && echo "REVIEW: non-ASCII found — verify each is intentional" || echo "OK: all ASCII"
+   else
+     echo "OK: no Go files changed"
+   fi
    ```
 
    - If Check 1 has any matches: fix them before continuing (these are never intentional in source).
