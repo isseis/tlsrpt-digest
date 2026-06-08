@@ -67,7 +67,7 @@ Based on this assessment, classify the thread as one of:
 ### When the comment is valid and the fix is clear
 
 1. Fix the code as indicated by the comment.
-2. Run `make lint` and `make test` to confirm no errors.
+2. Run the build checks (defined in `.claude/commands/_context.md`, Tech-stack convention) to confirm no errors.
 3. Commit.
 4. Reply to the PR comment thread with a description of the fix (in English).
 

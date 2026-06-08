@@ -19,8 +19,8 @@ Work in order.
 2. Read `03_implementation_plan.md`. If the document status is not `approved`, stop and report.
 
 2.5. Check whether PR boundary design is needed.
-- Count `### フェーズ` headers in the plan. If there are 2 or more and no `### PR-` sections exist, invoke the `/mkpr` skill to design PR boundaries before proceeding.
-- After `/mkpr` completes, re-read `03_implementation_plan.md` so the updated content (with PR markers) is in context.
+- Count `### フェーズ` headers in the plan. If there are 2 or more and no `### PR-` sections exist, invoke the `/mkplan2` skill to design PR boundaries before proceeding.
+- After `/mkplan2` completes, re-read the implementation plan document so the updated content (with PR markers) is in context.
 - If PR markers already exist, skip this step and continue.
 
 3. Read `01_requirements.md`, `02_architecture.md` (both in the target task directory), and `docs/dev/developer_guide/test_organization.md`.
@@ -51,8 +51,8 @@ Work in order.
 - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
 
 5a. **PR checkpoint** (reached when step 4 directed you here instead of step 5).
-- Verify `make test && make lint` is green. Fix any failures before continuing.
-- Mark the first PR checkpoint checkbox (`make test && make lint がグリーンであることを確認した`) as `[x]` and commit.
+- Verify the green gate (defined in `_context.md`) passes. Fix any failures before continuing.
+- Mark the first PR checkpoint checkbox (the green gate confirmation line) as `[x]` and commit.
 - Run `gh pr create --title "<推奨タイトル>" --body "<レビュー観点を含む本文>"`, using the `推奨タイトル` value from the `### PR-N 作成ポイント` section as `--title` and including the `レビュー観点` items in `--body`. Use explicit flags to avoid interactive prompts.
 - Output the PR URL and mark the second checkbox (`PR を作成した`) as `[x]` and commit.
 - Pause and ask the user: "PR-N を作成しました: <URL>。マージされたらお知らせください。"
@@ -95,10 +95,10 @@ Work in order.
 7. Run the critical-review subagent procedure in `.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
    - **ARTIFACT**: this phase group's code changes.
    - **PERSONA**: an experienced senior Go engineer and senior SRE. Direct it to surface bugs, missing test coverage, architecture drift, and unclear code.
-   - **FILES**: `02_architecture.md` and `03_implementation_plan.md` (instruct the subagent to read both in full before evaluating the code), plus the source files added or modified in this phase group (read in full). Also provide the specific commit range for this phase group (e.g., `HEAD~N..HEAD`) and instruct the subagent to run `git diff <range>` to see exactly what changed.
+   - **FILES**: the architecture document and the implementation plan document (paths in `_context.md`; instruct the subagent to read both in full before evaluating the code), plus the source files added or modified in this phase group (read in full). Also provide the specific commit range for this phase group (e.g., `HEAD~N..HEAD`) and instruct the subagent to run `git diff <range>` to see exactly what changed.
    - **CRITERIA**: every item from the phase-group review checklist below, copied verbatim.
 
-   Extra rule: when fixing Critical and Major issues, run the build checks (`make fmt && make test && make lint`) and commit before spawning the verification pass.
+   Extra rule: when fixing Critical and Major issues, run the build checks (defined in `_context.md`) and commit before spawning the verification pass.
 
 Phase-group review checklist (use verbatim as evaluation criteria in the subagent prompt above):
 - [ ] Implementation is consistent with `02_architecture.md`.

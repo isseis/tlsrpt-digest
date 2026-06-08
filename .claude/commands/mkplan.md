@@ -65,12 +65,12 @@ Work in the following order.
 - Do not add helper files in the plan unless they are actually needed.
 
 8. Run the critical-review subagent procedure in `.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
-   - **ARTIFACT**: the created `03_implementation_plan.md`.
+   - **ARTIFACT**: the created implementation plan document (path in `_context.md`).
    - **PERSONA**: an experienced senior engineer and senior SRE. Direct it to surface gaps, missing test coverage, vague task descriptions, and AC traceability holes.
-   - **FILES**: `03_implementation_plan.md`, `02_architecture.md`, `01_requirements.md`, the requirements process guide, and the test organization guide (paths in `_context.md`), as resolved absolute-path strings.
+   - **FILES**: the implementation plan document, the architecture document, the requirements document, the requirements process guide, and the test organization guide (paths in `_context.md`), as resolved absolute-path strings.
    - **CRITERIA**: every item from the Technical correctness checklist, the Conditional checks section, and the Readability and consistency checklist below, copied verbatim. For Conditional checks, evaluate each item that applies to the plan; mark inapplicable items N/A (N/A is not a finding).
 
-   Extra rule: commit `03_implementation_plan.md` only after all review passes are complete and all Critical and Major issues are resolved.
+   Extra rule: commit the implementation plan document only after all review passes are complete and all Critical and Major issues are resolved.
 
 **Technical correctness checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] `02_architecture.md` is `approved`.

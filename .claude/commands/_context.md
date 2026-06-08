@@ -1,11 +1,18 @@
 # Project Context for Claude Commands
 
-This file is the single source of truth for every project-specific value the
-commands in this directory depend on. Commands reference the **names** defined
-here (e.g. "the task root", "the build checks") instead of hard-coding paths.
+This file is the single source of truth for project-specific configuration values
+the commands in this directory depend on. Commands reference the **names** defined
+here (e.g. "the task root", "the build checks") so those values are configured in
+one place rather than scattered across command files.
 
-**To port these commands to another project, edit only this file** (plus the
-guide documents it points to). The command bodies should not need changes.
+**To port these commands to another project:**
+1. Edit this file — update all three sections (Process convention, Tech-stack
+   convention, Domain-specific) for the new project.
+2. Edit the command bodies for Domain-specific content — the illustrative examples
+   embedded in `mkplan.md` and `runplan.md` (e.g. ULID test IDs, IMAP teardown,
+   `recover --mode`) are drawn from this project's domain and must be replaced or
+   removed. See the "Domain-specific" section below for where each example lives.
+3. Edit or replace the guide documents this file points to.
 
 The values are grouped by the layer they belong to, so you can see at a glance
 what changes under which condition:

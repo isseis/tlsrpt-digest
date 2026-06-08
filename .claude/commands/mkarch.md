@@ -48,9 +48,9 @@ Work in the following order.
 - Write the body for an engineer meeting the current system for the first time: describe how it works now. Confine the rationale for removed or superseded designs, and cross-task decision history, to a bounded "decision history" appendix or a short blockquote pointing to git history — do not interleave it with current-state description. When editing a design document that earlier tasks have appended to, preserve this separation so the body does not become a changelog.
 
 8. Run the critical-review subagent procedure in `.claude/commands/_lib/review-subagent-pattern.md` with these inputs:
-   - **ARTIFACT**: the created `02_architecture.md`.
+   - **ARTIFACT**: the created architecture document (path in `_context.md`).
    - **PERSONA**: an experienced software architect and senior SRE. Direct it to surface gaps, ambiguities, and design risks.
-   - **FILES**: `02_architecture.md`, `01_requirements.md`, the requirements process guide, and the Mermaid reference guide (paths in `_context.md`), as resolved absolute-path strings. If the feature sends notifications or handles notification destinations, also include the conditional security guide (`_context.md`, Domain-specific).
+   - **FILES**: the architecture document, the requirements document, the requirements process guide, and the Mermaid reference guide (paths in `_context.md`), as resolved absolute-path strings. If the feature sends notifications or handles notification destinations, also include the conditional security guide (`_context.md`, Domain-specific).
    - **CRITERIA**: every item from the Technical correctness checklist and the Readability and consistency checklist below, copied verbatim.
 
    Extra rule: commit only after all review passes are complete and all Critical and Major issues are resolved.

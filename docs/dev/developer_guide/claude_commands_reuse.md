@@ -88,15 +88,19 @@ Follow these steps to reuse the commands in a new repository.
    commands as-is. If not, adjust them, but most teams keep the pipeline and only
    change values.
 
-3. **Rewrite `_context.md`.**
+3. **Rewrite `_context.md` and remove domain examples from commands.**
    - **Process convention**: set the task root, guide paths, document names,
      status values, document language, glossary path, and PR-marker conventions.
    - **Tech-stack convention**: set the build checks, source layout, and
      test-helper placement. If the new project is not Go, replace the Go-specific
      entries (e.g. `make` targets, `//go:build test`, `cmd/`/`internal/`) with the
      new stack's equivalents.
-   - **Domain-specific**: replace the conditional-guide entry and the domain
-     examples with ones from the new project's domain, or remove them.
+   - **Domain-specific in `_context.md`**: replace the conditional-guide entry
+     with one from the new project's domain, or remove it.
+   - **Domain-specific in command bodies**: the illustrative examples embedded in
+     `mkplan.md` and `runplan.md` (ULID test IDs, `--dry-run` side effects, IMAP
+     teardown, `recover --mode`, etc.) are specific to tlsrpt-digest and must be
+     replaced or removed. `_context.md` lists exactly where each example lives.
 
 4. **Create the guide documents the commands reference.** `_context.md` points to
    guides such as the requirements process guide, task identification guide, test
@@ -107,9 +111,9 @@ Follow these steps to reuse the commands in a new repository.
    translation glossary at the path you set in `_context.md`. If you keep the
    `docs/tasks/` pipeline, create the task template directory.
 
-6. **Fix the `/mkpr` reference if needed.** `runplan.md` invokes a PR-boundary
-   skill by name; confirm that name matches the actual command file in your setup
-   (in this repository the command file is `mkplan2.md`).
+6. **Verify the PR-boundary skill name.** `runplan.md` invokes `/mkplan2` to
+   design PR boundaries. If the new project uses a different command name for this
+   step, update the reference in `runplan.md` step 2.5 accordingly.
 
 7. **Smoke-test one command.** Run a single command (e.g. `/mkarch`) on a trial
    task and confirm it reads `_context.md`, resolves the paths, and behaves as

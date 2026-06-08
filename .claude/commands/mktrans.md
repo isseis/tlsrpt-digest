@@ -35,7 +35,7 @@ Translate the entire source file from scratch.
 
 ### Load Glossary
 
-Read `docs/translation_glossary.md`.
+Read the translation glossary (path in `.claude/commands/_context.md`, Process convention).
 Use the terms listed there consistently throughout the translation.
 
 ### Translate
@@ -76,7 +76,7 @@ If the diff is empty, the output file is already up to date. Stop and report thi
 
 ### Load Glossary
 
-Read `docs/translation_glossary.md`.
+Read the translation glossary (path in `.claude/commands/_context.md`, Process convention).
 Use the terms listed there consistently throughout the translation.
 
 ### Translate Only Changed Sections
@@ -94,7 +94,7 @@ Apply these changes to the output file. Do not touch sections that are not in th
 
 ## Update Glossary
 
-If any terms were used during translation that are not in the glossary, add them to `docs/translation_glossary.md`.
+If any terms were used during translation that are not in the glossary, add them to the translation glossary (path in `.claude/commands/_context.md`).
 Skip this step if no new terms were introduced.
 
 ## Review the Translation (via Subagent)
