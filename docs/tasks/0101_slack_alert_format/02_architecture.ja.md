@@ -225,7 +225,7 @@ type slackTextObject struct {
 
 失敗詳細は `failed-session-count` の降順に並べ、上位 3 件を詳細表示する。4 件以上ある場合は残りを「他 N 件（合計 M セッション）」と要約する（AC-08, AC-09）。`FailureDetails` が空のポリシーでは失敗詳細行を出力せず、識別情報のみのセクションとなる（AC-10）。
 
-外部由来文字列（組織名、Report ID、`result-type`、`receiving-mx-hostname`、`failure-reason-code`）は `mrkdwn` に挿入しない。ポリシーごとの `section.text` は `plain_text` とし、静的ラベルと値を同じプレーンテキスト内に配置する。`context` の Run ID も `plain_text` とする。これにより、`@channel`、`@here`、`<@U...>`、`<!subteam^...>`、`<#C...>`、リンク、バッククォート、`*bold*`、`_italic_` は Slack のメンションや書式として解釈されず、表示文字列に留まる。`plain_text` へ渡す前に制御文字（改行を除く）を空白へ正規化し、値ごとの上限で切り詰める。
+外部由来文字列（組織名、Report ID、`result-type`、`receiving-mx-hostname`、`failure-reason-code`）は `mrkdwn` に挿入しない。ポリシーごとの `section.text` は `plain_text` とし、静的ラベルと値を同じプレーンテキスト内に配置する。`context` の Run ID も `plain_text` とする。これにより、`@channel`、`@here`、`<@U...>`、`<!subteam^...>`、`<#C...>`、リンク、バッククォート、`*bold*`、`_italic_` は Slack のメンションや書式として解釈されず、表示文字列に留まる。外部由来値を `plain_text` に埋め込む前に、`\n`・`\r`・`\t` を含むすべての制御文字を空白へ正規化する。`plain_text` はメンションや書式を解釈しないが改行は表示するため、外部由来の改行を残すとレポート送信者が `"org\nFailure sessions: 0"` のように偽の行を差し込める。外部由来値の制御文字を正規化してから、セクション内の構造的な改行（項目間）は実装側のテンプレートで付加する。正規化後に値ごとの上限で切り詰める。
 
 ### 3.4 失敗詳細の slog 受け渡し
 
