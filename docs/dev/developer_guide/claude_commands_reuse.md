@@ -37,9 +37,14 @@ by name instead of hard-coding them, so porting is mostly a matter of rewriting
   runplan.md                        # Layer 2: implement the plan phase by phase
 ```
 
-`_context.md` and `_lib/*.md` are not invocable commands; they are data and
-library files that the commands read at runtime. The leading underscore marks
-them as non-command helpers.
+`_context.md` and `_lib/*.md` are helper files that the commands read at
+runtime rather than entry points meant to be invoked directly. However, in
+Claude Code all `.md` files under `.claude/commands/` appear in the slash
+command list regardless of naming conventions — the leading underscore signals
+intent to readers but does not hide the files from the list. If you want to
+keep them out of the command list entirely, move them to a different directory
+(e.g. `.claude/helpers/`) and update every path reference inside the six
+command files accordingly.
 
 ### How the indirection works
 
