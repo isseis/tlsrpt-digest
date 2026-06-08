@@ -20,9 +20,10 @@ Work in order.
 
 5. Implement the selected phase group.
 - Follow the design in `02_architecture.md`.
+- Before writing new files in a package, read at least one existing file of the same kind (e.g. a `_test.go` in the target package) to confirm assertion library, import style, and helper conventions in use. Mismatches with the established style will be caught in review — reading first avoids the rework.
 - **State invariants before coding.** For any generated value (IDs/names), flag/mode, or side-effecting operation, write its contract in one line as a code comment above the implementation and implement to that — not to the first approach that compiles. Examples that would have prevented real bugs: a test ID → *unique per call, within the protocol length limit* (a bare ULID, no test-name prefix); `--dry-run` → *no external side effects* (skip every write and network send, not just notifications); a teardown → *never mutates data it didn't create* (no IMAP CLOSE after a read-write SELECT — it expunges other clients' `\Deleted`).
 - Place test helpers per `docs/dev/developer_guide/test_organization.md`: cross-package helpers under `testutil/`; package-internal helpers in `test_helpers.go` (or `test_helpers_<category>.go`) with `//go:build test`.
-- After each Go file change, run `make fmt && make test && make lint`; fix errors before continuing. Exception: errors caused by the phase group's incomplete state (e.g. build or test failures from missing implementations that stubs depend on) need not be fixed until the group is complete; fix only errors unrelated to the in-progress group.
+- After each file change (Go or otherwise), run `make test && make lint`; for Go file changes also run `make fmt` first. Fix errors before continuing. Exception: errors caused by the phase group's incomplete state (e.g. build or test failures from missing implementations that stubs depend on) need not be fixed until the group is complete; fix only errors unrelated to the in-progress group.
 - When removing multiple scattered code sites (e.g. several test functions), delete them one at a time using the exact text read from the file. Do not script bulk deletion (e.g. a brace-counting loop); nested literals make such heuristics over-consume adjacent code. After each removal, check IDE diagnostics for unintended breakage.
 - For any newly authored or substantially rewritten artifact in this group (runbook, command example, table, prose, translation, design-doc section), confirm it is correct before committing — do not rely on absence-search of removed terms. Run any documented command and check its exit code and output; cite the source implementation that prose describes; diff a translation against its source. For a design document such as an ADR, also keep the body on the current system and confine removed-design rationale to a bounded history note rather than interleaving it.
 - **Before committing each group, self-check** (catches common defects before the step 7 review):
@@ -33,6 +34,7 @@ Work in order.
   - Reuse existing utilities before writing new ones (e.g. `ulid.Make()`); consolidate duplicate regexes/constants.
   - Test-only behavior stays in test packages; don't branch production code for tests.
   - A Go test file importing a `testutil` that imports the package under test uses `package foo_test` to avoid an import cycle.
+  - Any new or modified file with build tags beyond `//go:build test` alone (e.g. `//go:build test && foo`): confirm it is reached by at least one `make lint` invocation, or explicitly document the gap. Ask: "does `make lint` compile this file?"
 
 - When complete, update checkboxes (`[x]` done, `[-]` skipped with a note) and commit.
 
@@ -48,6 +50,35 @@ Work in order.
 - Return to step 4.
 
 6. Run `make deadcode`. Remove functions made unreachable by this phase group; keep intentional scaffolding for future phases or tasks. If changes were made, run `make fmt && make test && make lint` and commit.
+
+6.5. Run programmatic pre-checks on the changed Go files before spawning the review agent. These checks are deterministic and cheaper than AI review — catch them here rather than in the review loop.
+
+   ```bash
+   # Files changed in this phase group — exclude deleted files so rg never
+   # receives a path that no longer exists (which would exit 2, masking matches)
+   CHANGED=$(git diff origin/main...HEAD --diff-filter=d --name-only | grep '\.go$' || true)
+
+   if [ -n "$CHANGED" ]; then
+     # Check 1: no planning-doc identifiers in source
+     if echo "$CHANGED" | xargs rg -l '\bAC-[0-9]+[a-z]?\b|\bF-[0-9]+[a-z]?\b' 2>/dev/null; then
+       echo "FAIL: planning-doc references found — fix before continuing"
+     else
+       echo "OK: no planning-doc references"
+     fi
+
+     # Check 2: no non-ASCII characters in Go source
+     if echo "$CHANGED" | xargs rg -Pn '[^\x00-\x7F]' 2>/dev/null; then
+       echo "REVIEW: non-ASCII found — verify each is intentional"
+     else
+       echo "OK: all ASCII"
+     fi
+   else
+     echo "OK: no Go files changed"
+   fi
+   ```
+
+   - If Check 1 has any matches: fix them, run `make fmt && make test && make lint`, commit, then continue (these are never intentional in source).
+   - If Check 2 has matches: inspect each — test-data literals and error strings may legitimately contain non-ASCII, but identifiers and non-test comments must not. Fix any unintentional occurrences, run `make fmt && make test && make lint`, and commit before continuing.
 
 7. Spawn a review subagent using the Agent tool to critically evaluate this phase group's changes.
    Construct a self-contained prompt that includes all of the following:
@@ -71,11 +102,7 @@ Phase-group review checklist (use verbatim as evaluation criteria in the subagen
 - [ ] No tests are so trivial that they add no verification value.
 - [ ] No logic is reimplemented when an existing function in the codebase can be used.
 - [ ] Newly authored artifacts (runbooks, command examples, tables, prose, translations) are verified against ground truth, not only by absence-search.
-- [ ] All source comments and identifiers are in English.
-- [ ] No planning document references (e.g. `AC-01`, `F-001`) remain in source comments or string literals.
-- [ ] `make fmt` produces no diff.
-- [ ] `make lint` passes with no errors.
-- [ ] `make test` passes with no errors.
+- [ ] All source comments and identifiers are in English. (Non-ASCII flagged by step 6.5 Check 2 has been reviewed and is intentional.)
 
 8. Decide whether to continue or finish.
 - If implementation ran this iteration: summarize implementation, verified ACs, assumptions, and deferred items.
