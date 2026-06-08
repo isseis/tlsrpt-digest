@@ -6,9 +6,11 @@
 > names such a path or command, treat the entry in `_context.md` as canonical. The
 > domain-specific invariant examples in step 5 (ULID test IDs, `--dry-run`
 > side-effects, IMAP CLOSE/SELECT teardown) are illustrative for this project; see
-> `_context.md` (Domain-specific) before reusing them elsewhere. When porting, edit
-> `_context.md` — not this command. The review step uses the shared procedure in
-> `.claude/commands/_lib/review-subagent-pattern.md`.
+> `_context.md` (Domain-specific) before reusing them elsewhere. When porting,
+> follow the porting steps in `_context.md`: that includes editing this command body
+> for domain-specific examples (step 5) and for Go-specific rules (`testutil/`,
+> `test_helpers.go`, `//go:build test`) when changing tech stacks. The review step
+> uses the shared procedure in `.claude/commands/_lib/review-subagent-pattern.md`.
 
 Your goal is to implement one task under `docs/tasks/` by following its `03_implementation_plan.md`.
 

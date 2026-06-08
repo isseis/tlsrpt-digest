@@ -6,8 +6,11 @@
 > canonical. The domain-specific examples in step 5 and the checklists (ULID test
 > IDs, `recover --mode`, mailbox length, `systemErrorHint`, etc.) are illustrative
 > for this project; see `_context.md` (Domain-specific) before reusing them
-> elsewhere. When porting, edit `_context.md` — not this command. The review step
-> uses the shared procedure in `.claude/commands/_lib/review-subagent-pattern.md`.
+> elsewhere. When porting, follow the porting steps in `_context.md`: that includes
+> editing this command body for domain-specific examples (step 5, checklists) and
+> for Go-specific test-helper rules (`testutil/`, `test_helpers.go`,
+> `//go:build test`) when changing tech stacks. The review step uses the shared
+> procedure in `.claude/commands/_lib/review-subagent-pattern.md`.
 
 Your goal is to create `03_implementation_plan.md` for one task under `docs/tasks/`.
 
