@@ -39,7 +39,7 @@
 | `cmd/tlsrpt-digest/boot.go` | 259, 262 | `os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS/ERROR")` — 環境変数の読み取り |
 | `internal/notify/validate.go` | 17 | エラーメッセージ内の文字列リテラル |
 | `cmd/tlsrpt-digest/slack_notify_env_test.go` | 13 | `slackNotifyWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"` — テスト用定数 |
-| フェーズ 1 追加予定 | — | `slackSummaryWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"` — テスト用定数 |
+| フェーズ 1 追加予定 | — | `missingSlackSummaryEnv` 内で `notify.EnvSlackWebhookURLSuccess` を直接参照（定数エイリアスは追加しない） |
 
 フェーズ 0 で `internal/notify` に exported 定数を定義し、上記のすべてを定数参照に置き換える。`internal/notify` は `boot.go` がすでに import しており、テストファイルからも import 可能であるため、循環依存は発生しない。
 
@@ -62,7 +62,7 @@
 | `internal/notify/validate.go` | 変更 | 0 | `EnvSlackWebhookURLSuccess`・`EnvSlackWebhookURLError` 定数を追加し、エラーメッセージをこれらの定数参照に変更 |
 | `cmd/tlsrpt-digest/boot.go` | 変更 | 0 | `withDefaults()` 内の `os.Getenv` 引数を `notify.EnvSlackWebhookURLSuccess`・`notify.EnvSlackWebhookURLError` に変更 |
 | `cmd/tlsrpt-digest/slack_notify_env_test.go` | 変更 | 0 | `internal/notify` import を追加し、`slackNotifyWebhookEnvKey` の定義を `= notify.EnvSlackWebhookURLError` に変更 |
-| `cmd/tlsrpt-digest/slack_notify_env_test.go` | 追記 | 1 | `slackSummaryWebhookEnvKey` 定数と `missingSlackSummaryEnv` 関数、`TestSlackSummary_EnvRequirements` テストを追加 |
+| `cmd/tlsrpt-digest/slack_notify_env_test.go` | 追記 | 1 | `missingSlackSummaryEnv` 関数と `TestSlackSummary_EnvRequirements` テストを追加（`notify.EnvSlackWebhookURLSuccess` を直接参照。定数エイリアスは追加しない） |
 | `cmd/tlsrpt-digest/slack_summary_integration_test.go` | 新規作成 | 2 | `loadSlackSummaryTestEnv`・`TestSlackSummary_Summary_Integration` |
 | `Makefile` | 追記 | 2 | `test-slack-summary` ターゲットと `.PHONY` 追加 |
 
@@ -130,25 +130,21 @@
 
 **対象ファイル**: `cmd/tlsrpt-digest/slack_notify_env_test.go`
 
-- [ ] **1.1** `slackSummaryWebhookEnvKey` 定数を追加する。
-  - 定義: `const slackSummaryWebhookEnvKey = notify.EnvSlackWebhookURLSuccess`
-  - 既存の `slackNotifyWebhookEnvKey` 定数の直後に追加する。
-
-- [ ] **1.2** `missingSlackSummaryEnv(env map[string]string) []string` 関数を実装する。
-  - `slackSummaryWebhookEnvKey`（`notify.EnvSlackWebhookURLSuccess`）と `slackNotifyWebhookEnvKey`（`notify.EnvSlackWebhookURLError`）の**両方**を確認する。
+- [ ] **1.1** `missingSlackSummaryEnv(env map[string]string) []string` 関数を実装する。
+  - `notify.EnvSlackWebhookURLSuccess` と `slackNotifyWebhookEnvKey`（`notify.EnvSlackWebhookURLError`）の**両方**を確認する。定数エイリアスは追加しない。
   - `env == nil` のとき `os.Getenv` にフォールバックする（`missingSlackNotifyEnv` と同パターン）。
   - 値が空文字列のキーは `"<KEY> (empty)"` 形式で missing リストに追加する。
   - `missingSlackNotifyEnv` の直後に配置する。
 
-- [ ] **1.3** `TestSlackSummary_EnvRequirements` テスト関数を実装する。
+- [ ] **1.2** `TestSlackSummary_EnvRequirements` テスト関数を実装する。
   - `TestSlackNotify_EnvRequirements` の直後に追加する。
   - 以下の 6 サブテストを実装する（`02_architecture.md` § 7.1 の 5 ケースに `error_webhook_url_missing` を追加）:
 
     | サブテスト名 | 入力 | 期待 |
     |---|---|---|
-    | `webhook_url_missing` | `map[string]string{}` | missing リストに `slackSummaryWebhookEnvKey+" (empty)"` が含まれる |
-    | `webhook_url_empty_value` | `map[string]string{slackSummaryWebhookEnvKey: ""}` | missing リストに `slackSummaryWebhookEnvKey+" (empty)"` が含まれる |
-    | `error_webhook_url_missing` | `map[string]string{slackSummaryWebhookEnvKey: "https://hooks.slack.com/services/test"}` | missing リストに `slackNotifyWebhookEnvKey+" (empty)"` が含まれる |
+    | `webhook_url_missing` | `map[string]string{}` | missing リストに `notify.EnvSlackWebhookURLSuccess+" (empty)"` が含まれる |
+    | `webhook_url_empty_value` | `map[string]string{notify.EnvSlackWebhookURLSuccess: ""}` | missing リストに `notify.EnvSlackWebhookURLSuccess+" (empty)"` が含まれる |
+    | `error_webhook_url_missing` | `map[string]string{notify.EnvSlackWebhookURLSuccess: "https://hooks.slack.com/services/test"}` | missing リストに `slackNotifyWebhookEnvKey+" (empty)"` が含まれる |
     | `webhook_url_set` | 両方のキーに `"https://hooks.slack.com/services/test"` を設定 | missing リストが空 |
     | `nil_env_fallback_present` | `nil`（`t.Setenv` で両方設定） | missing リストが空 |
     | `nil_env_fallback_missing` | `nil`（`t.Setenv` で両方を空文字列に設定） | missing リストに両キーのエントリが含まれる |
@@ -307,8 +303,7 @@
 
 ### フェーズ 1
 
-- [ ] `slackSummaryWebhookEnvKey` 定数追加（`= notify.EnvSlackWebhookURLSuccess`、`slack_notify_env_test.go`）
-- [ ] `missingSlackSummaryEnv` 関数実装（両 URL チェック）
+- [ ] `missingSlackSummaryEnv` 関数実装（両 URL チェック。`notify.EnvSlackWebhookURLSuccess` を直接参照）
 - [ ] `TestSlackSummary_EnvRequirements` テスト実装（6 ケース）
   - [ ] `webhook_url_missing`: success URL 欠落を確認
   - [ ] `webhook_url_empty_value`: success URL が空文字列であることを確認
@@ -345,7 +340,7 @@
 
 ### 機能完全性
 
-- [ ] `EnvSlackWebhookURLSuccess` / `EnvSlackWebhookURLError` が `internal/notify/validate.go` に定義され、`boot.go`・`validate.go`・テストファイルがすべて定数参照している。
+- [ ] `EnvSlackWebhookURLSuccess` / `EnvSlackWebhookURLError` が `internal/notify/validate.go` に定義され、`boot.go`・`validate.go`・`slack_notify_env_test.go` がすべて定数参照している（`missingSlackSummaryEnv` は `notify.EnvSlackWebhookURLSuccess` を直接参照）。
 - [ ] `TestSlackSummary_EnvRequirements` が 6 ケースすべて通過する。
 - [ ] `TestSlackSummary_Summary_Integration` が環境変数設定時に通過し、未設定時にスキップされる。
 - [ ] `make test-slack-summary` で `TestSlackSummary` プレフィックスのテストのみが実行される。

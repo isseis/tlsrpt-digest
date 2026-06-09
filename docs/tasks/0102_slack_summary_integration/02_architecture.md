@@ -152,10 +152,8 @@ sequenceDiagram
 タスク 0100 の `missingSlackNotifyEnv` パターンを踏襲し、success Webhook URL 用の対称的な純粋ヘルパーを追加する。
 
 ```go
-// 追加する定数（フェーズ 0 で internal/notify に定義される EnvSlackWebhookURLSuccess を参照する）
-const slackSummaryWebhookEnvKey = notify.EnvSlackWebhookURLSuccess
-// 注: error URL は既存の slackNotifyWebhookEnvKey (= notify.EnvSlackWebhookURLError) を再利用する。
-// 同一ファイル・同一パッケージ内で同値の定数を重複定義しないこと（03_implementation_plan.md §1 参照）。
+// 注: success URL は notify.EnvSlackWebhookURLSuccess を直接参照する（定数エイリアス不要）。
+// error URL は既存の slackNotifyWebhookEnvKey (= notify.EnvSlackWebhookURLError) を再利用する。
 
 // 追加する純粋関数（env == nil のとき os.Getenv にフォールバック）
 // 両方の URL が設定されているかを確認する。
