@@ -1137,10 +1137,11 @@ func TestFormatAlerts_ValueTruncation(t *testing.T) {
 	assert.Contains(t, sec, "Failure Details")
 }
 
-// TestFormatAlerts_OverflowSummary verifies that when there are more than 49
-// failure policies, a single message with ≤50 blocks is produced and an overflow
-// summary section is added.
-func TestFormatAlerts_OverflowSummary(t *testing.T) {
+// TestFormatAlerts_AllPoliciesSpanMultipleAttachments verifies that a large
+// number of failing policies are all shown across multiple attachments — none
+// are silently moved to an overflow summary — and that all arrive in a single
+// Slack POST.
+func TestFormatAlerts_AllPoliciesSpanMultipleAttachments(t *testing.T) {
 	var recv []byte
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
 	defer cleanup()
@@ -1156,25 +1157,34 @@ func TestFormatAlerts_OverflowSummary(t *testing.T) {
 	require.NoError(t, h.Flush(context.Background()))
 
 	msg := decodeSlackMessage(t, recv)
-	require.Len(t, msg.Attachments, 1)
-	fields := msg.Attachments[0].Fields
-	assert.LessOrEqual(t, len(fields), 50, "field count should stay bounded")
 
+	// All 60 policies must appear as "Organization / Policy / Failures / Period"
+	// fields, distributed across multiple attachments (3 per attachment).
 	var policyFieldCount int
-	var overflowText string
-	for _, f := range fields {
-		switch f.Title {
-		case "Organization / Policy / Failures / Period":
-			policyFieldCount++
-		case "Additional Policies":
-			overflowText = f.Value
+	var hasAdditionalPolicies bool
+	for _, att := range msg.Attachments {
+		for _, f := range att.Fields {
+			switch f.Title {
+			case "Organization / Policy / Failures / Period":
+				policyFieldCount++
+			case "Additional Policies":
+				hasAdditionalPolicies = true
+			}
 		}
 	}
-	assert.NotEmpty(t, overflowText, "overflow summary section must be present")
-	assert.Equal(t, 20, policyFieldCount, "20 policy fields should be shown before overflow")
+	assert.Equal(t, total, policyFieldCount, "all policies must have a visible summary field")
+	assert.False(t, hasAdditionalPolicies, "no policies should be hidden in an overflow summary")
 
-	// Overflow summary must describe omitted policies.
-	assert.Contains(t, overflowText, fmt.Sprintf("%d additional policies omitted", total-20))
+	// Verify chunking: each attachment has at most 3 policy summary fields.
+	for i, att := range msg.Attachments {
+		var count int
+		for _, f := range att.Fields {
+			if f.Title == "Organization / Policy / Failures / Period" {
+				count++
+			}
+		}
+		assert.LessOrEqual(t, count, 3, "attachment[%d] must have at most 3 policy summary fields", i)
+	}
 }
 
 // TestTruncateMessage_Blocks verifies truncateMessage handles section text > 3000

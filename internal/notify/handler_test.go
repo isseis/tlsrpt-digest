@@ -373,7 +373,7 @@ func TestFlush_MultipleAlerts_SinglePost(t *testing.T) {
 	require.NoError(t, h.Flush(context.Background()))
 	assert.Equal(t, int32(1), calls.Load(), "multiple alerts must be sent as a single POST")
 
-	// Buffer more than 49 alerts (overflow case) — must still be a single POST.
+	// Buffer 60 alerts (chunked across multiple attachments) — must still be a single POST.
 	calls.Store(0)
 	h2, err := notify.NewSlackHandler(opts)
 	require.NoError(t, err)

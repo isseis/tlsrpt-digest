@@ -299,74 +299,72 @@ func normalizeControlChars(s string) string {
 }
 
 // formatAlerts builds a single aggregated slackMessage for TLS failure alerts.
-// Slack renders the primary view as a warning-colored legacy attachment with
-// fields, matching the original alert appearance. The attachment fallback
-// contains the full body for clients and surfaces that do not render attachments.
+// Slack renders the primary view as warning-colored legacy attachment fields,
+// matching the original alert appearance. Policies are chunked across multiple
+// attachments (at most maxAlertPoliciesPerChunk each) so that the field count
+// per attachment stays within Slack's recommended limit; the Run ID field is
+// appended to the final attachment.
+// The first attachment's fallback contains the full text for clients that do
+// not render attachments.
 // No truncation is applied here; the caller (Flush) applies truncateMessage.
 func formatAlerts(alerts []Alert, runID string) slackMessage {
 	orgCount := uniqueOrgCount(alerts)
 	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, orgCount)
 
-	// Keep the single attachment compact: one summary field per policy, plus
-	// optional report/detail fields, overflow summary, and Run ID.
-	const (
-		maxAlertPoliciesInFields = 20
-		alertFieldsPerPolicy     = 3
-		alertFixedFields         = 2
-	)
-
-	shown := alerts
-	var overflowAlerts []Alert
-	if len(alerts) > maxAlertPoliciesInFields {
-		shown = alerts[:maxAlertPoliciesInFields]
-		overflowAlerts = alerts[maxAlertPoliciesInFields:]
-	}
+	// Each policy occupies at most 3 fields (summary + report ID + failure
+	// details). Chunking at 3 policies per attachment keeps the field count
+	// to at most 9 alert fields + 1 Run ID = 10 total, matching the original
+	// per-attachment budget.
+	const maxAlertPoliciesPerChunk = 3
 
 	var fallbackParts []string
 	fallbackParts = append(fallbackParts, title)
 
-	fields := make([]slackField, 0, len(shown)*alertFieldsPerPolicy+alertFixedFields)
-	for _, a := range shown {
-		summary := buildPolicySummaryText(a)
-		fields = append(fields, slackField{
-			Title: "Organization / Policy / Failures / Period",
-			Value: summary,
-			Short: false,
-		})
-		fallbackParts = append(fallbackParts, "Organization / Policy / Failures / Period\n"+summary)
+	var attachments []slackAttachment
+	for i := 0; i < len(alerts); i += maxAlertPoliciesPerChunk {
+		end := min(i+maxAlertPoliciesPerChunk, len(alerts))
+		chunk := alerts[i:end]
+		isLast := end == len(alerts)
 
-		if a.ReportID != "" {
-			reportID := TruncateText(normalizeControlChars(a.ReportID), maxAlertReportIDRunes)
-			fields = append(fields, slackField{Title: "Report ID", Value: reportID, Short: false})
-			fallbackParts = append(fallbackParts, "Report ID\n"+reportID)
+		fields := make([]slackField, 0, len(chunk)*3+1)
+		for _, a := range chunk {
+			summary := buildPolicySummaryText(a)
+			fields = append(fields, slackField{
+				Title: "Organization / Policy / Failures / Period",
+				Value: summary,
+				Short: false,
+			})
+			fallbackParts = append(fallbackParts, "Organization / Policy / Failures / Period\n"+summary)
+
+			if a.ReportID != "" {
+				reportID := TruncateText(normalizeControlChars(a.ReportID), maxAlertReportIDRunes)
+				fields = append(fields, slackField{Title: "Report ID", Value: reportID, Short: false})
+				fallbackParts = append(fallbackParts, "Report ID\n"+reportID)
+			}
+
+			if details := buildFailureDetailsText(a); details != "" {
+				fields = append(fields, slackField{Title: "Failure Details", Value: details, Short: false})
+				fallbackParts = append(fallbackParts, "Failure Details\n"+details)
+			}
 		}
 
-		if details := buildFailureDetailsText(a); details != "" {
-			fields = append(fields, slackField{Title: "Failure Details", Value: details, Short: false})
-			fallbackParts = append(fallbackParts, "Failure Details\n"+details)
+		if isLast {
+			fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: false})
+			fallbackParts = append(fallbackParts, "Run ID\n"+runID)
 		}
+
+		attachments = append(attachments, slackAttachment{Color: colorWarning, Fields: fields})
 	}
 
-	if len(overflowAlerts) > 0 {
-		overflowOrgs := uniqueOrgCount(overflowAlerts)
-		var overflowSessions int64
-		for _, a := range overflowAlerts {
-			overflowSessions += a.FailureCount
-		}
-		overflowText := fmt.Sprintf("%d additional policies omitted; organizations: %d; failed sessions: %d",
-			len(overflowAlerts), overflowOrgs, overflowSessions)
-		fields = append(fields, slackField{Title: "Additional Policies", Value: overflowText, Short: false})
-		fallbackParts = append(fallbackParts, overflowText)
+	// Store the full text in the first attachment's fallback so clients that
+	// cannot render attachments still receive the complete message.
+	if len(attachments) > 0 {
+		attachments[0].Fallback = strings.Join(fallbackParts, "\n\n")
 	}
-
-	fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: false})
-	fallbackParts = append(fallbackParts, "Run ID\n"+runID)
 
 	return slackMessage{
-		Text: title,
-		Attachments: []slackAttachment{
-			{Color: colorWarning, Fallback: strings.Join(fallbackParts, "\n\n"), Fields: fields},
-		},
+		Text:        title,
+		Attachments: attachments,
 	}
 }
 
