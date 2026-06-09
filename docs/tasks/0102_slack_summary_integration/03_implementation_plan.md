@@ -271,7 +271,7 @@
 **レビュー観点**: `//go:build test && slack_notify` による `make test` からの隔離 / ULID runID による再実行安全性 / `FakeStore` 使用（永続ファイル非作成、AC-14） / 3 通の `os.ReadFile` 呼び出しすべてに `//nolint:gosec // G304` が付与されていること
 
 - [x] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
