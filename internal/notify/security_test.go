@@ -286,6 +286,10 @@ func TestSecretNotInMessage_JSONCheck(t *testing.T) {
 
 // TestAlertPayload_NoSensitiveData verifies the Block Kit alert payload does not
 // contain IP addresses, additional-information text, or the Webhook URL.
+// The IP and additional-information strings are injected as unknown slog attrs on
+// a raw record (simulating an accidental or future-extension leak path) to make
+// the assertions meaningful — they verify that unknown attr values are suppressed
+// by the notification layer and never forwarded to Slack.
 func TestAlertPayload_NoSensitiveData(t *testing.T) {
 	const sensitiveIP = "203.0.113.42"
 	const sensitiveAdditional = "supersecret-freetext"
@@ -309,29 +313,26 @@ func TestAlertPayload_NoSensitiveData(t *testing.T) {
 	h, err := notify.NewSlackHandler(opts)
 	require.NoError(t, err)
 
-	alert := notify.Alert{
-		OrganizationName:            "public.example",
-		PolicyType:                  notify.PolicyTypeSTS,
-		FailureCount:                5,
-		ReportID:                    "rpt-security-test",
-		FailureDetailsTotalCount:    1,
-		FailureDetailsTotalSessions: 5,
-		FailureDetails: []notify.FailureDetail{
-			// IP and additional-information are intentionally NOT fields of FailureDetail;
-			// they are structurally excluded from the type.
-			{
-				ResultType:          strings.Repeat("a", 80),
-				FailedSessionCount:  5,
-				ReceivingMXHostname: strings.Repeat("m", 120),
-				FailureReasonCode:   strings.Repeat("r", 80),
-			},
-		},
-	}
-	require.NoError(t, notify.LogAlert(context.Background(), h, alert))
+	// Build a raw slog.Record that includes the sensitive values as unexpected attrs
+	// alongside valid alert fields. extractAlert calls warnUnknownKey (key-only) for
+	// unrecognised attrs, so the values must not propagate to the Slack payload.
+	r := slog.NewRecord(time.Now(), slog.LevelWarn, "tls_failure_alert", 0)
+	r.AddAttrs(
+		slog.String("organization_name", "public.example"),
+		slog.String("policy_type", "sts"),
+		slog.Int64("failure_count", 5),
+		slog.String("report_id", "rpt-security-test"),
+		slog.Int64("failure_details_total_count", 0),
+		slog.Int64("failure_details_total_sessions", 0),
+		// Simulate attrs that should never reach Slack (no matching case in extractAlert).
+		slog.String("sending_mta_ip", sensitiveIP),
+		slog.String("additional_information", sensitiveAdditional),
+	)
+	require.NoError(t, h.Handle(context.Background(), r))
 	require.NoError(t, h.Flush(context.Background()))
 
 	body := string(recv)
-	assert.NotContains(t, body, sensitiveIP, "IP address must not appear in alert payload")
-	assert.NotContains(t, body, sensitiveAdditional, "additional-information must not appear in alert payload")
+	assert.NotContains(t, body, sensitiveIP, "IP address value must not appear in alert payload")
+	assert.NotContains(t, body, sensitiveAdditional, "additional-information value must not appear in alert payload")
 	assert.NotContains(t, body, sampleWebhookSuffix, "webhook URL must not appear in alert payload")
 }

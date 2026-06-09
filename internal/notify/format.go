@@ -50,7 +50,11 @@ func TruncateText(s string, maxLen int) string {
 }
 
 // truncateMessage applies Slack length limits to m in place.
-// This must be called after DebugLogger logging so the debug output is untruncated.
+// It is called after DebugLogger logging. Note that per-field truncation
+// (org name, report ID, etc.) already occurs inside buildPolicySectionText
+// during formatAlerts, so the debug log may already contain truncated values;
+// truncateMessage is a final hard-limit pass that guards against section-level
+// overrun (e.g. a section text exceeding maxAlertSectionRunes).
 func truncateMessage(m *slackMessage) {
 	m.Text = TruncateText(m.Text, maxTextRunes)
 	for i := range m.Attachments {
