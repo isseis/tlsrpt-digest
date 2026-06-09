@@ -6,6 +6,14 @@ import (
 	"strings"
 )
 
+// EnvSlackWebhookURLSuccess is the environment variable name for the Slack
+// success (summary) webhook URL.
+const EnvSlackWebhookURLSuccess = "TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"
+
+// EnvSlackWebhookURLError is the environment variable name for the Slack
+// error (alert) webhook URL.
+const EnvSlackWebhookURLError = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"
+
 // ValidateEnvCombination checks whether the combination of successURL and
 // errorURL is valid.
 //   - success-only: returns WebhookValidationError (error notifications would be missed)
@@ -14,8 +22,8 @@ import (
 func ValidateEnvCombination(successURL, errorURL string) error {
 	if successURL != "" && errorURL == "" {
 		return &WebhookValidationError{
-			Msg: "TLSRPT_SLACK_WEBHOOK_URL_SUCCESS is set but TLSRPT_SLACK_WEBHOOK_URL_ERROR is not; " +
-				"error notifications must be enabled to prevent silent failures",
+			Msg: EnvSlackWebhookURLSuccess + " is set but " + EnvSlackWebhookURLError +
+				" is not; error notifications must be enabled to prevent silent failures",
 		}
 	}
 	return nil

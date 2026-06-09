@@ -88,7 +88,7 @@
 
 #### 0-A: `internal/notify/validate.go` への定数追加
 
-- [ ] **0.1** `validate.go` の先頭（`package notify` 直下）に以下の定数を追加する。
+- [x] **0.1** `validate.go` の先頭（`package notify` 直下）に以下の定数を追加する。
   ```go
   // EnvSlackWebhookURLSuccess is the environment variable name for the Slack
   // success (summary) webhook URL.
@@ -99,13 +99,13 @@
   const EnvSlackWebhookURLError = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"
   ```
 
-- [ ] **0.2** `validate.go` のエラーメッセージを定数参照に変更する。
+- [x] **0.2** `validate.go` のエラーメッセージを定数参照に変更する。
   - 変更前の `Msg` 値: `"TLSRPT_SLACK_WEBHOOK_URL_SUCCESS is set but TLSRPT_SLACK_WEBHOOK_URL_ERROR is not; error notifications must be enabled to prevent silent failures"`
   - 変更後の `Msg` 値: `EnvSlackWebhookURLSuccess + " is set but " + EnvSlackWebhookURLError + " is not; error notifications must be enabled to prevent silent failures"`
 
 #### 0-B: `cmd/tlsrpt-digest/boot.go` の更新
 
-- [ ] **0.3** `withDefaults()` 内の `os.Getenv` 呼び出しを定数参照に変更する。
+- [x] **0.3** `withDefaults()` 内の `os.Getenv` 呼び出しを定数参照に変更する。
   - 変更前: `config.Secret(os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"))`
   - 変更後: `config.Secret(os.Getenv(notify.EnvSlackWebhookURLSuccess))`
   - 変更前: `config.Secret(os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR"))`
@@ -113,9 +113,9 @@
 
 #### 0-C: `cmd/tlsrpt-digest/slack_notify_env_test.go` の更新
 
-- [ ] **0.4** import ブロックに `"github.com/isseis/tlsrpt-digest/internal/notify"` を追加する。
+- [x] **0.4** import ブロックに `"github.com/isseis/tlsrpt-digest/internal/notify"` を追加する。
 
-- [ ] **0.5** `slackNotifyWebhookEnvKey` の定義を文字列リテラルから定数参照に変更する。
+- [x] **0.5** `slackNotifyWebhookEnvKey` の定義を文字列リテラルから定数参照に変更する。
   - 変更前: `const slackNotifyWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"`
   - 変更後: `const slackNotifyWebhookEnvKey = notify.EnvSlackWebhookURLError`
   - `TestSlackNotify_EnvRequirements` の既存テストは `slackNotifyWebhookEnvKey` を名前で参照しているため変更不要。
