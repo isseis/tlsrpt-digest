@@ -1,0 +1,181 @@
+Return-Path: <38EoDahoKAOkYZcPaWj-dXea-eWd-cPaZceTYRRZZRWP.NZX@smtp-tls-reporting.bounces.google.com>
+Received: from mail.example.com (mail.example.com [192.0.2.1])
+	 by mail.example.com (Cyrus 3.13.4-37-g2300d1b35-fm-20260511.001-g2300d1b3) with LMTPA;
+	 Tue, 12 May 2026 11:44:50 -0400
+X-Cyrus-Session-Id: mail.example.com-1778600690-3933697-2-10321304703710841510
+X-Sieve: CMU Sieve 3.0
+X-Spam-known-sender: no
+X-Spam-sender-reputation: 1000 (domain)
+X-Spam-score: 0.0
+X-Spam-hits: BAYES_50 0.8, ME_SC_SENDERREP -100, ME_SENDERREP_ALLOW -4,
+  RCVD_IN_DNSWL_NONE -0.0001, RCVD_IN_MSPIKE_H3 0.001,
+  RCVD_IN_MSPIKE_WL 0.001, SHORTCIRCUIT -0.0001, SPF_HELO_NONE 0.001,
+  SPF_PASS -0.001, LANGUAGES unknown, BAYES_USED user, SA_VERSION 4.0.1
+X-Spam-source: IP='209.85.210.71', Host='mail-ot1-f71.google.com', Country='US',
+  FromHeader='com', MailFrom='com'
+X-Spam-charsets: plain='UTF-8'
+X-Attached: google.com!example.com!1778457600!1778543999!001.json.gz
+X-Resolved-to: tls-report@example.com
+X-Delivered-to: tls-report@example.com
+X-Mail-from: 38EoDahoKAOkYZcPaWj-dXea-eWd-cPaZceTYRRZZRWP.NZX@smtp-tls-reporting.bounces.google.com
+Received: from phl-mx-04 ([192.0.2.1])
+  by mail.example.com (LMTPProxy); Tue, 12 May 2026 11:44:50 -0400
+Received: from mail.example.com (localhost [127.0.0.1])
+	by mail.example.com (Postfix) with ESMTP id E7D31138020F
+	for <tls-report@example.com>; Tue, 12 May 2026 11:44:49 -0400 (EDT)
+Received: from mail.example.com (localhost [127.0.0.1])
+    by mail.example.com (Authentication Milter) with ESMTP
+    id E2B02EC4222.C474213801FE;
+    Tue, 12 May 2026 11:44:49 -0400
+ARC-Seal: i=1; a=rsa-sha256; cv=none; d=messagingengine.com; s=fm3; t=
+    1778600689; b=DfGJLm2o1KHIaUdihUXek6PaUIm5BTJkenzWgp4k8YXmVQr34T
+    tQmHMjOlRgI09HtKznGOvc5sdkvYy2QaEbisdLA3NQ58F6BdeWv2wIrFkdZPcVs4
+    RMCwH+Hczj/k78sXp4Qs6kkAdgLzKQsv8kGKGJ5dBzrPeYx9VYcW+dytUzx6RumS
+    chLJeReMHPg+fAkiy+MZqPMo0BRqL8eNrZKxidsFn0kTVPfg096qfPV8JbTHlYd3
+    NzGXShWxfSxvHkNdODLnqAa5AKhOMKCibuOiS59Z1SQWbltptEoWbA9UAGjAhx4r
+    a+G+4gym9cXAs8Op1x8lQWjItquyZx56uk/w==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=
+    messagingengine.com; h=mime-version:date:message-id:subject:from
+    :to:content-type; s=fm3; t=1778600689; bh=+QzjuVVP97wp86396GIY5R
+    IeD8R9JtHOewEtyfHq/9Q=; b=lg7bqtz/hOatXponw87ppJD8uCtZUSbffE54sa
+    3vByxwJVDsLMZrAvsjuxAWl6yRnpy5GjSNE9c/RDk0GJnSpAjJg5lub8ejsfHxrg
+    pOfn26ReyigZ1yc5u9shqd1MeY4AMEKvnA+ZU3TeodHS2DquxTubgt04AP4NonYO
+    Ic5h+H7Ing7M0lj00dpaLJNcJBV5IX/KDJyCRkQ6ZB1UwZrKZpFH8lgk8Yl8SEMI
+    tvhtPj8H503GqcDsy5zRL3j7YpOWhI3jy6qY68KOjTgwGsEMbk0z0/L9QGbM+Hav
+    5KwyrApPtFfcPT35Fs7A/ti9JZ2lFBl0BdEIA+sBWwr1sZEw==
+ARC-Authentication-Results: i=1; mail.example.com;
+    x-csa=none;
+    x-me-sender=none;
+    x-ptr=pass smtp.helo=mail-ot1-f71.google.com
+    policy.ptr=mail-ot1-f71.google.com;
+    bimi=none (No BIMI records found);
+    arc=none (no signatures found);
+    dkim=pass (2048-bit rsa key sha256) header.d=google.com
+    header.i=@google.com header.b=hpRPacZ3 header.a=rsa-sha256
+    header.s=20251104;
+    dmarc=pass policy.published-domain-policy=reject
+    policy.applied-disposition=none policy.evaluated-disposition=none
+    (p=reject,d=none,d.eval=none) policy.policy-from=p
+    header.from=google.com;
+    iprev=pass smtp.remote-ip=209.85.210.71 (mail-ot1-f71.google.com);
+    spf=pass
+    smtp.mailfrom=
+    38EoDahoKAOkYZcPaWj-dXea-eWd-cPaZceTYRRZZRWP.NZX@smtp-tls-reporting.bounces.google.com
+    smtp.helo=mail-ot1-f71.google.com
+X-ME-Authentication-Results: mail.example.com;
+    x-tls=pass smtp.version=TLSv1.3 smtp.cipher=TLS_AES_256_GCM_SHA384
+      smtp.bits=256/256;
+    x-vs=clean score=40 state=0
+Authentication-Results: mail.example.com;
+    x-csa=none;
+    x-me-sender=none;
+    x-ptr=pass smtp.helo=mail-ot1-f71.google.com
+      policy.ptr=mail-ot1-f71.google.com
+Authentication-Results: mail.example.com;
+    bimi=none (No BIMI records found)
+Authentication-Results: mail.example.com;
+    arc=none (no signatures found)
+Authentication-Results: mail.example.com;
+    dkim=pass (2048-bit rsa key sha256) header.d=google.com
+      header.i=@google.com header.b=hpRPacZ3 header.a=rsa-sha256
+      header.s=20251104;
+    dmarc=pass policy.published-domain-policy=reject
+      policy.applied-disposition=none policy.evaluated-disposition=none
+      (p=reject,d=none,d.eval=none) policy.policy-from=p
+      header.from=google.com;
+    iprev=pass smtp.remote-ip=209.85.210.71 (mail-ot1-f71.google.com);
+    spf=pass
+      smtp.mailfrom=
+      38EoDahoKAOkYZcPaWj-dXea-eWd-cPaZceTYRRZZRWP.NZX@smtp-tls-reporting.bounces.google.com
+      smtp.helo=mail-ot1-f71.google.com
+X-ME-VSCause: gggruggvucftvghtrhhoucdtuddrgeefhedrtddtgdduvddvudelucetufdoteggodetrf
+    dotffvucfrrhhofhhilhgvmecuhfgrshhtofgrihhlpdfurfetoffkrfgpnffqhgenuceu
+    rghilhhouhhtmecufedttdenucgotffhvedqqdfouhhlthhiphgrrhhttfgvphhorhhtqd
+    fpohftvghpohhrthculdegtddmnecujfgurhepggffkffuhffvtgesphdtreertddtjeen
+    ucfhrhhomhepnhhorhgvphhlhidqshhmthhpqdhtlhhsqdhrvghpohhrthhinhhgsehgoh
+    hoghhlvgdrtghomhenucggtffrrghtthgvrhhnpeejuddvfedvkeetueegjeeffeffffev
+    ieefvdelvdfgfefffeekudejvefggeeltdenucfkphepvddtledrkeehrddvuddtrdejud
+    enucevlhhushhtvghrufhiiigvpedtnecurfgrrhgrmhepihhnvghtpedvtdelrdekhedr
+    vddutddrjedupdhhvghlohepmhgrihhlqdhothduqdhfjedurdhgohhoghhlvgdrtghomh
+    dpmhgrihhlfhhrohhmpeeofeekgfhoffgrhhhomfetqfhkjggktgfrrgghjhdquggivggr
+    qdgvhgguqdgtrfgrkggtvgfvjgfttfgkkgfthgfrrdfpkggisehsmhhtphdqthhlshdqrh
+    gvphhorhhtihhnghdrsghouhhntggvshdrghhoohhglhgvrdgtohhmqedpnhgspghrtghp
+    thhtohepuddprhgtphhtthhopeeothhlshdqrhgvphhorhhtsehishhsvghirdhorhhgqe
+X-ME-VSScore: 40
+X-ME-VSCategory: clean
+X-ME-CSA: none
+X-ME-Received: <xmx:8UoDagbYI6rYgFEX-JTbEx9-hT0AS_G8F-HZQgFbvLyII6sRg-lVOg>
+X-ME-Received: <xmx:8UoDasYefRhjqIOjY0RkWHHReQd2F4Oh4yo5i1TCbXDu9fO0NLOJQQ>
+Received-SPF: pass
+    (smtp-tls-reporting.bounces.google.com ... _spf.google.com: 209.85.210.71 is authorized to use '38EoDahoKAOkYZcPaWj-dXea-eWd-cPaZceTYRRZZRWP.NZX@smtp-tls-reporting.bounces.google.com' in 'mfrom' identity (mechanism 'ip4:209.85.128.0/17' matched))
+    receiver=mail.example.com;
+    identity=mailfrom;
+    envelope-from="38EoDahoKAOkYZcPaWj-dXea-eWd-cPaZceTYRRZZRWP.NZX@smtp-tls-reporting.bounces.google.com";
+    helo=mail-ot1-f71.google.com;
+    client-ip=209.85.210.71
+Received: from mail-ot1-f71.google.com (mail-ot1-f71.google.com [209.85.210.71])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange X25519 server-signature RSA-PSS (2048 bits) server-digest SHA256)
+	(No client certificate requested)
+	by mail.example.com (Postfix) with ESMTPS id C474213801FE
+	for <tls-report@example.com>; Tue, 12 May 2026 11:44:49 -0400 (EDT)
+Received: by mail-ot1-f71.google.com with SMTP id 46e09a7af769-7dbc09d4e43so14045616a34.1
+        for <tls-report@example.com>; Tue, 12 May 2026 08:44:49 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=google.com; s=20251104; t=1778600688; x=1779205488; darn=example.com;
+        h=to:from:subject:message-id:tls-report-submitter:tls-report-domain
+         :date:mime-version:from:to:cc:subject:date:message-id:reply-to;
+        bh=+QzjuVVP97wp86396GIY5RIeD8R9JtHOewEtyfHq/9Q=;
+        b=hpRPacZ3oYktl8+6z5kUX+ycDu1ynzV8gXeJ7fwlB5wuDW1H6xKaPHs4Xss7j8Aku7
+         X+WD4Nda4v0tUjzL5HF3/jL5dS2qdEccaTc3qB6LOk0WhCYaG8E+v2wh01p7pgu2SK9d
+         3zJYxoWGOOpHtLxO/Zu6m/zgOCOkmRPoDkTkEhLtJePJEiIfPKxGtLX4dKjLh+7gYKo7
+         ELS1W6FRuXytFfnK+lyjX39BvEyjlRorPJp2VxjqMxR5H3XhvW0+QuI7NXMk9nHhLf6v
+         ONzqrza8U1xshaFITkur4HHmnkwST4aghud32m+wOkXjZhZQgVDCqL9wbLvXFC7wiuFv
+         U47g==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1778600688; x=1779205488;
+        h=to:from:subject:message-id:tls-report-submitter:tls-report-domain
+         :date:mime-version:x-gm-message-state:from:to:cc:subject:date
+         :message-id:reply-to;
+        bh=+QzjuVVP97wp86396GIY5RIeD8R9JtHOewEtyfHq/9Q=;
+        b=WI7N6Mba3OA6u8Lu69rj7gtNuJdMtwBgt9PY3BpsoID8dvQuQPd/MDL2UeBiZGGfaN
+         Zlsm9Wt42+233RWdISsNUaZrDaB0kQ4YBLxePleLyT3+NDuM+wNLAb5LYa/1RmhQMsWA
+         wXfdqEJdUu4NNzI+FxHfJzVephW7G2uNKh9urUZrQhvbETye3pAh6vREQtJZ18NfmwzP
+         UgCixIhBA9CbZiiTO+YvB6qxHaCvEmfdUDXctwxfEkB8eQgjRGZGXQtV2xI/sR/bjaQz
+         CITDPrOf37ssqwrNCTMQy2N5CuPiUim7XjgciVLlB7PCkq8O/1qMN9/MZcp3DzEfzDJ/
+         cYjg==
+X-Gm-Message-State: AOJu0YxjCsdGpNBYuPJWdgeaVS+P5oJPyEx2FHJKshrJdhlCjqY2jO+P
+	v9rhFA9IMHr0M0gLyBIHRwIG1IDlfQGYY2dF81KvJxVWPAQqMO2wtiktL5bDalaAxxdYZV9+DMH
+	P9WIqyjcjX2sVxYXErs2gTrBLSDtk1Yjgqua0TUtqxHZwuS0gAab54WNs03/iW5aJhswtaQ==
+MIME-Version: 1.0
+X-Received: by 2002:a05:6830:4885:b0:7dc:d725:fdb with SMTP id
+ 46e09a7af769-7e3bd1ad821mr2810624a34.8.1778600688163; Tue, 12 May 2026
+ 08:44:48 -0700 (PDT)
+Date: Tue, 12 May 2026 08:44:48 -0700
+TLS-Report-Domain: example.com
+TLS-Report-Submitter: google.com
+Message-ID: <6a034af0.00000000.3a4de4.4c68tls@google.com>
+Subject: Report Domain: example.com Submitter: google.com Report-ID: <2026.05.11T00.00.00Z+example.com@google.com>
+From: noreply-smtp-tls-reporting@google.com
+To: tls-report@example.com
+Content-Type: multipart/report; boundary="0000000000003729310651a0be19"; report-type=tlsrpt
+
+--0000000000003729310651a0be19
+Content-Type: text/plain; charset="UTF-8"; format=flowed; delsp=yes
+
+This is an aggregate TLS report from google.com
+
+--0000000000003729310651a0be19
+Content-Type: application/tlsrpt+gzip; 
+	name="google.com!example.com!1778457600!1778543999!001.json.gz"
+Content-Disposition: attachment; 
+	filename="google.com!example.com!1778457600!1778543999!001.json.gz"
+Content-Transfer-Encoding: base64
+
+H4sIAAAAAAACA4WSUWvDIBDHv0rwuRaTrWXL097GntunjlIOY50QvaCXkq7ku+9M1sIG3UDU09/5
+/9/hRWC0ENwnkMMgA3gjavGKaFtTvAW9FAvRABkZIVi+uohEEEnmM3ITXKlqLdVKluVWqXoaO84y
+oblDVQ/16pnHTowLoTEQaJIuHJGx5KmT1CYZTYeRXLAvdjKz1Oj51flYuuaO8MEM4Lsb3mHrtDNJ
+1O+XOTjnGuadpHOXrSVKV/QsE0UWZV6cTEzck7rYbDenkgmPjakLw0ajNjke6sKFUmbPS29SAsup
+JvB81Z+R6k8EhgNYfnitHp+UEvublQY9uMAGf9bkB/mBibLFf9T/VN5z81PvPcSpJYQErUy91swe
+e97ymr+Exj6wWLn4Ro7g2j6a3/dqHPfjF7JWmgtOAgAA
+--0000000000003729310651a0be19--
