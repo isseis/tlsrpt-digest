@@ -44,6 +44,9 @@ func TestLogAlert_FailureDetailsRoundTrip(t *testing.T) {
 		require.Len(t, spy.records, 1)
 		got := extractAlert(spy.records[0], nil)
 		assert.Equal(t, "rpt-abc-123", got.ReportID)
+		assert.Nil(t, got.FailureDetails, "empty FailureDetails should round-trip as nil")
+		assert.Equal(t, int64(0), got.FailureDetailsTotalCount)
+		assert.Equal(t, int64(0), got.FailureDetailsTotalSessions)
 	})
 
 	t.Run("failure_details sorted descending and order preserved", func(t *testing.T) {
@@ -72,6 +75,27 @@ func TestLogAlert_FailureDetailsRoundTrip(t *testing.T) {
 		assert.Equal(t, int64(5), got.FailureDetails[1].FailedSessionCount)
 		assert.Equal(t, int64(2), got.FailureDetails[2].FailedSessionCount)
 		assert.Equal(t, "mx1.example.com", got.FailureDetails[2].ReceivingMXHostname)
+	})
+
+	t.Run("failure_details exactly at cap boundary preserved", func(t *testing.T) {
+		details := make([]FailureDetail, maxFailureDetails)
+		for i := range details {
+			details[i] = FailureDetail{ResultType: "error", FailedSessionCount: int64(i + 1)}
+		}
+		var spy internalSpyHandler
+		require.NoError(t, LogAlert(context.Background(), &spy, Alert{
+			OrganizationName: "example.com",
+			PolicyType:       PolicyTypeSTS,
+			FailureCount:     55,
+			DateRange:        period,
+			ReportID:         "rpt-boundary",
+			FailureDetails:   details,
+		}))
+		require.Len(t, spy.records, 1)
+		got := extractAlert(spy.records[0], nil)
+		// All 10 entries should be preserved — none dropped at the boundary.
+		assert.Len(t, got.FailureDetails, maxFailureDetails)
+		assert.Equal(t, int64(maxFailureDetails), got.FailureDetailsTotalCount)
 	})
 
 	t.Run("failure_details capped at 10 with accurate totals", func(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 // logAlerts logs one alert per failing policy in the report.
 // component is used as the slog prefix (e.g. "fetch", "reprocess").
 // Only the public 4 fields of each failure-detail entry are copied; IP addresses
-// and additional-information are intentionally excluded (AC-13).
+// and additional-information are intentionally excluded to avoid leaking sensitive data.
 func logAlerts(ctx context.Context, notifier NotificationSink, report *tlsrpt.Report, component string) {
 	for _, policy := range report.Policies {
 		if policy.Summary.TotalFailureSessionCount <= 0 {

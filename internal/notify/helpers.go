@@ -18,6 +18,8 @@ const maxFailureDetails = 10
 // It checks h.Enabled before calling h.Handle so LevelMode filtering is correct.
 // FailureDetails are sorted by FailedSessionCount descending and capped at maxFailureDetails
 // before encoding; total count and sessions are aggregated from the full slice first.
+// Alert.FailureDetailsTotalCount and Alert.FailureDetailsTotalSessions are ignored on
+// input — totals are always computed directly from Alert.FailureDetails.
 func LogAlert(ctx context.Context, h slog.Handler, alert Alert) error {
 	if !h.Enabled(ctx, slog.LevelWarn) {
 		return nil

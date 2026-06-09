@@ -192,9 +192,11 @@ func TestLogAlert_StructuredPayloadOnly(t *testing.T) {
 		"failure_reason_code":   true,
 	}
 
+	seenKeys := make(map[string]bool)
 	r.Attrs(func(attr slog.Attr) bool {
 		assert.True(t, allowedTopLevel[attr.Key],
 			"unexpected top-level attr key %q in LogAlert record", attr.Key)
+		seenKeys[attr.Key] = true
 		if attr.Key == "failure_details" && attr.Value.Kind() == slog.KindGroup {
 			for _, child := range attr.Value.Group() {
 				require.Equal(t, slog.KindGroup, child.Value.Kind(),
@@ -207,6 +209,10 @@ func TestLogAlert_StructuredPayloadOnly(t *testing.T) {
 		}
 		return true
 	})
+	// Every expected top-level key must be present (bidirectional check).
+	for key := range allowedTopLevel {
+		assert.True(t, seenKeys[key], "expected top-level attr key %q missing from LogAlert record", key)
+	}
 }
 
 func TestSummaryFlow_Integration(t *testing.T) {

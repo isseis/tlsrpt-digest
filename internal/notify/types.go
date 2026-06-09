@@ -32,7 +32,7 @@ type Alert struct {
 	PolicyType       PolicyType
 	FailureCount     int64
 	DateRange        DateRange
-	ReportID         string          // source report identifier (AC-11)
+	ReportID         string          // source report identifier
 	FailureDetails   []FailureDetail // up to 10 entries, sorted by FailedSessionCount descending
 	// FailureDetailsTotalCount is the total number of failure-detail entries before
 	// the 10-entry cap applied in LogAlert. Used to compute "Other N entries" summary.
@@ -44,7 +44,7 @@ type Alert struct {
 
 // FailureDetail holds the public fields from an RFC 8460 failure-details entry.
 // IP addresses (sending-mta-ip / receiving-ip) and free-form text
-// (additional-information) are intentionally excluded (AC-13).
+// (additional-information) are intentionally excluded to avoid leaking sensitive data.
 type FailureDetail struct {
 	ResultType          string // result-type (required display)
 	FailedSessionCount  int64  // failed-session-count (required display)
