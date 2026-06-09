@@ -270,7 +270,7 @@
 
 **レビュー観点**: `//go:build test && slack_notify` による `make test` からの隔離 / ULID runID による再実行安全性 / `FakeStore` 使用（永続ファイル非作成、AC-14） / 3 通の `os.ReadFile` 呼び出しすべてに `//nolint:gosec // G304` が付与されていること
 
-- [ ] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
+- [x] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
@@ -363,7 +363,7 @@
   - [ ] `TestSlackSummary_Summary_Integration` テスト実装
     - [ ] 60s タイムアウト付きコンテキストと `defer cancel()`
     - [ ] ULID 生成による runID
-    - [ ] 3 通 EML 読み込み（各 `os.ReadFile` に `//nolint:gosec // G304` コメント、計 3 箇所）
+    - [ ] 3 通 EML 読み込み（ループ内の `os.ReadFile` に `//nolint:gosec // G304` コメントを 1 箇所付与）
     - [ ] 各 EML で `require.NotNil(t, report)` を実行（計 3 回）
     - [ ] 各 EML で `assert.False(t, report.HasFailure())` を実行（計 3 回）
     - [ ] `FakeStore` への `SaveReports` と `require.NoError`
