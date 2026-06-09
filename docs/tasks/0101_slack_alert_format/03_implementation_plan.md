@@ -89,7 +89,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - [ ] **1-8** `format_internal_test.go` `TestLogAlert_FailureDetailsRoundTrip`（新規・`package notify`）: `LogAlert` → `extractAlert` の往復で、`ReportID` と `failure_details` の `failed_session_count` 降順・最大 10 件・順序保持が成り立つことを検証する。`extractAlert` は未公開関数のため、同じ `notify` パッケージの `_test.go` から直接検証する。
 - [ ] **1-9** `notify_helpers_test.go` `TestLogAlerts_MapsPublicFailureFields`（新規）: `policy.FailureDetails` に IP・`additional-information` を含む `tlsrpt.Report` を `logAlerts` に渡し、`SpyNotificationSink.Alerts[0]` の `ReportID` と各 `FailureDetail` の公開 4 項目が期待値に一致することを検証する（IP・自由記述は `notify.FailureDetail` 型に存在しないため構造的に非複写）（AC-13）。
 
-完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通る。`formatAlerts` は新フィールドを無視したまま従来どおり `fields` を出力するため既存アラートテストは緑のまま。`TestLogAlert_StructuredPayloadOnly`（許可リスト強化）・`TestLogAlert_FailureDetailsRoundTrip`・`TestLogAlerts_MapsPublicFailureFields` が緑。
+完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通る。`formatAlerts` は新フィールドを無視したまま従来どおり `fields` を出力するため既存アラートテストは引き続き合格。`TestLogAlert_StructuredPayloadOnly`（許可リスト強化）・`TestLogAlert_FailureDetailsRoundTrip`・`TestLogAlerts_MapsPublicFailureFields` が合格。
 
 ### PR-1 作成ポイント: data path for report-id and failure-details
 
@@ -118,7 +118,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通る。なお既存アラートテストの多くは生 JSON 本文への部分文字列マッチ（`Contains`）であり、刷新後も同じ文字列が `section.text` 内に現れるため**自動的にはテスト失敗にならない**。テストが失敗するのは以下の 2 テスト:（1）`TestFormatAlerts_AttachmentFields`（`fields` の `title`/`value` を直接前提とする）、（2）`TestSlackAttachment_FieldsEncoding`（`captureWarnPayload` が `LogAlert` 経由でアラートペイロードを生成し `attachment["fields"]` を検証する）。Phase 4 では、これら 2 テストを `blocks` 構造検証へ書き換え、部分文字列マッチの既存テストも `sectionTexts` 経由の構造検証へ強化する（§2 Phase 4・§3 参照）。
 
-> **PR-2 開発上の注意**: Phase 2 完了時点でテストが赤になり、Phase 4（ステップ 4-3・4-10）で修正されるまで緑に戻らない。`make test && make lint` は Phase 2〜4 のすべてが完了して初めて通る。フィーチャーブランチへの中間 push は Phase 4 の全テスト修正が終わるまで行わないこと。
+> **PR-2 開発上の注意**: Phase 2 完了時点でテストが失敗し、Phase 4（ステップ 4-3・4-10）で修正されるまで合格状態に戻らない。`make test && make lint` は Phase 2〜4 のすべてが完了して初めて通る。フィーチャーブランチへの中間 push は Phase 4 の全テスト修正が終わるまで行わないこと。
 
 ### Phase 3: サイズ制限と切り詰め
 
@@ -171,7 +171,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 **機微情報非混入（`internal/notify/security_test.go`）**
 - [ ] **4-26** `TestAlertPayload_NoSensitiveData`（新規）: 公開 4 項目に最大長・記号入りの値を持つアラートを Block Kit で送信し、生成ペイロード本文に IP・`additional-information` 由来文字列・Webhook URL が含まれないことを検証する（AC-13）。
-- [ ] **4-27** 既存の secret 非混入・Webhook URL 非ログ・Flush エラー secret 非混入・Debug/Slack 分離・通知 logger 非公開の回帰テストは削除・弱体化しない（実行して緑を確認）。
+- [ ] **4-27** 既存の secret 非混入・Webhook URL 非ログ・Flush エラー secret 非混入・Debug/Slack 分離・通知 logger 非公開の回帰テストは削除・弱体化しない（実行して合格を確認）。
 
 **集約・overflow の単一 POST（`internal/notify/handler_test.go`）**
 - [ ] **4-28** `TestFlush_MultipleAlerts_SinglePost`（既存・`handler_test.go:345`）を拡張する。小規模な複数アラートが単一 POST に集約される既存検証は維持し、overflow が必要な大量アラートでも overflow summary を含む単一 POST として送信されることを追加検証する（AC-03、AC-14）。新規の集約テストは作らない（重複防止）。
@@ -180,10 +180,10 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - [ ] **4-29** `TestSlackNotify_FailureAlert_Integration`: 実 Webhook 送信による smoke/transport/目視確認として維持する。JSON 構造の厳密検証は追加せず（`internal/notify` 側に置く）、新表示が目視確認できる範囲に留める。`//go:build test && slack_notify` と環境変数スキップ（`loadSlackNotifyTestEnv`）は変更しない。
 
 **統合テスト環境ヘルパー（`cmd/tlsrpt-digest/slack_notify_env_test.go`）**
-- [ ] **4-30** `slack_notify_env_test.go` はすでに存在し、`missingSlackNotifyEnv(env map[string]string) []string` 純粋関数と `TestSlackNotify_EnvRequirements`（欠落・空文字・有効 URL・nil の各ケース）が実装済みである。本タスクでは変更不要であることを確認する（`go test -tags test ./cmd/tlsrpt-digest/...` で `TestSlackNotify_EnvRequirements` が緑であること）。
+- [ ] **4-30** `slack_notify_env_test.go` はすでに存在し、`missingSlackNotifyEnv(env map[string]string) []string` 純粋関数と `TestSlackNotify_EnvRequirements`（欠落・空文字・有効 URL・nil の各ケース）が実装済みである。本タスクでは変更不要であることを確認する（`go test -tags test ./cmd/tlsrpt-digest/...` で `TestSlackNotify_EnvRequirements` が合格であること）。
 
 **完了ゲート**
-- [ ] **4-31** `make fmt && make test && make lint` が緑。
+- [ ] **4-31** `make fmt && make test && make lint` が通ること。
 - [ ] **4-32** `go test -tags test,slack_notify -run '^$' ./cmd/tlsrpt-digest/...` でビルドタグ付き統合テストファイルがコンパイルされる（型・シグネチャ不整合の早期検出）。
 
 ### PR-2 作成ポイント: Block Kit alert rendering
@@ -203,14 +203,14 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 ## 3. 実装順序とマイルストーン
 
-緑ゲート（`make test && make lint`）は **PR 境界**で担保する。フェーズ内の中間状態で一時的にテストが赤になることは許容するが、PR は緑で出す。
+`make test && make lint` の合格は **PR 境界**で担保する。フェーズ内の中間状態で一時的にテストが失敗することは許容するが、PR はすべてのテストが通った状態で提出する。
 
 ### 3.1 マイルストーン
 
-| マイルストーン | 含むステップ | 内容 | 緑ゲート時の状態 |
+| マイルストーン | 含むステップ | 内容 | PR 提出時のテスト状態 |
 |---|---|---|---|
-| PR-1 | 1-1〜1-9 | データ構造・slog 往復・写像。`formatAlerts` は未変更で従来 `fields` を出力 | 既存アラートテストは緑のまま。追加: `TestLogAlert_StructuredPayloadOnly` 強化（1-7）、`TestLogAlert_FailureDetailsRoundTrip`（1-8）、`TestLogAlerts_MapsPublicFailureFields`（1-9）（`TestSlackNotify_EnvRequirements` は既存・変更不要） |
-| PR-2 | 2-1〜2-7 / 3-1〜3-4 / 4-1〜4-32 | Block Kit 整形・切り詰め・overflow と、それに伴う全テスト更新/追加 | `TestFormatAlerts_AttachmentFields`・`TestSlackAttachment_FieldsEncoding` は刷新後に失敗するため同一 PR で更新。部分文字列マッチの既存テストは失敗しないが、誤レイアウトを検出できるよう同一 PR で構造検証へ強化してから緑で出す |
+| PR-1 | 1-1〜1-9 | データ構造・slog 往復・写像。`formatAlerts` は未変更で従来 `fields` を出力 | 既存アラートテストは引き続き合格。追加: `TestLogAlert_StructuredPayloadOnly` 強化（1-7）、`TestLogAlert_FailureDetailsRoundTrip`（1-8）、`TestLogAlerts_MapsPublicFailureFields`（1-9）（`TestSlackNotify_EnvRequirements` は既存・変更不要） |
+| PR-2 | 2-1〜2-7 / 3-1〜3-4 / 4-1〜4-32 | Block Kit 整形・切り詰め・overflow と、それに伴う全テスト更新/追加 | `TestFormatAlerts_AttachmentFields`・`TestSlackAttachment_FieldsEncoding` は刷新後に失敗するため同一 PR で更新。部分文字列マッチの既存テストは失敗しないが、誤レイアウトを検出できるよう同一 PR で構造検証へ強化して全テストが通る状態で提出する |
 
 ### 3.2 PR 構成
 
@@ -219,7 +219,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 | PR-1 | 1-1〜1-9 | `Alert`/`FailureDetail` 型拡張、`LogAlert`/`extractAlert` slog 往復、`logAlerts` 写像、往復・写像境界テスト |
 | PR-2 | 2-1〜2-7 / 3-1〜3-4 / 4-1〜4-32 | Block Kit 整形、切り詰め・overflow summary、全テスト更新/追加 |
 
-`formatAlerts` の刷新（Phase 2）と既存アラートテストの構造検証化（Phase 4）は不可分のため、PR-2 にまとめる。部分文字列マッチのテストは刷新後も偶然緑になりうるが、それは「壊れた blocks 実装を見逃す」弱いテストであり、PR-2 内で `sectionTexts` 経由の構造検証へ強化する（§2 Phase 4 の注意書き参照）。Phase 1 は単独で緑を保てるため PR-1 として独立させ、レビュー単位を小さくする。
+`formatAlerts` の刷新（Phase 2）と既存アラートテストの構造検証化（Phase 4）は不可分のため、PR-2 にまとめる。部分文字列マッチのテストは刷新後も偶然通過しうるが、それは「壊れた blocks 実装を見逃す」弱いテストであり、PR-2 内で `sectionTexts` 経由の構造検証へ強化する（§2 Phase 4 の注意書き参照）。Phase 1 は単独で全テストを通せるため PR-1 として独立させ、レビュー単位を小さくする。
 
 ---
 
@@ -230,7 +230,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - **セキュリティテスト**: `security_test.go` で Block Kit ペイロードの機微情報非混入と既存回帰の維持（アーキテクチャ §7.2）。
 - **写像境界テスト**: `cmd/tlsrpt-digest/notify_helpers_test.go` で公開 4 項目のみ写像（アーキテクチャ §5.2）。
 - **統合テスト**: 実 Webhook 送信は smoke/目視のみ。JSON 構造検証は持ち込まない（アーキテクチャ §7.3）。
-- **後方互換**: 警告・サマリー・システムエラーの `fields` 整形は不変であり、`flattenSlackFields` を使う既存テスト（`TestSummaryFlow_Integration` 他）が緑のまま維持されることで担保する。
+- **後方互換**: 警告・サマリー・システムエラーの `fields` 整形は不変であり、`flattenSlackFields` を使う既存テスト（`TestSummaryFlow_Integration` 他）が引き続き合格することで担保する。
 
 ---
 
@@ -242,10 +242,10 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 | `failure_details` の上限処理で表示対象の順序が崩れる | AC-09 の上位 3 件と残件要約が、上位 10 件の降順というアーキテクチャ §3.4 の前提から外れる | `LogAlert` は `failed_session_count` 降順で最大 10 件を保持し、`TestLogAlert_FailureDetailsRoundTrip`（ステップ 1-8）と `TestFormatAlerts_FailureDetails_SummaryWhenGT3`（ステップ 4-19）で順序と 4 件以上の要約を検証。 |
 | `truncateMessage` の blocks 走査で `nil` ポインタ参照 | 送信時パニック | `Text != nil` ガードを実装し、`TestTruncateMessage_Blocks`（ステップ 4-25）の `divider` ケースで検証。 |
 | overflow 時にブロック数が 50 を超える | Slack が 400 を返し送信失敗（AC-14 違反） | Run ID・overflow summary の 2 ブロック予約（アーキテクチャ §6.2-3）。`TestFormatAlerts_OverflowSummary`（ステップ 4-24）でブロック数 ≤ 50 を検証。 |
-| 部分文字列マッチの弱いテストが、誤った blocks 実装でも偶然緑になる | 誤レイアウトを CI が見逃す | 該当テストを `sectionTexts` 経由の構造検証へ強化（§2 Phase 4 注意書き）。新規 AC テストでレイアウトを明示検証。 |
-| 旧 `fields` 前提テストの取りこぼし | PR-2 に赤テストが残る | §3.5 由来の改修対象テストを Phase 4 に網羅列挙し、完了ゲート（ステップ 4-31）で `make test` を確認。 |
+| 部分文字列マッチの弱いテストが、誤った blocks 実装でも偶然通過する | 誤レイアウトを CI が見逃す | 該当テストを `sectionTexts` 経由の構造検証へ強化（§2 Phase 4 注意書き）。新規 AC テストでレイアウトを明示検証。 |
+| 旧 `fields` 前提テストの取りこぼし | PR-2 に失敗するテストが残る | §3.5 由来の改修対象テストを Phase 4 に網羅列挙し、完了ゲート（ステップ 4-31）で `make test` を確認。 |
 | Slack 仕様の解釈差異が実装中に見つかる | 定数・payload shape の再設計で PR-2 が遅れる | §1.4 の公式仕様確認結果を PR-2 開始前に再確認し、差異があれば実装前にアーキテクチャ追補を 0.5 日分のバッファとして扱う。 |
-| PR-1/PR-2 の境界をまたぐテスト更新が増える | PR-1 単独緑の前提が崩れレビューが大きくなる | PR-1 はデータ経路と round-trip に限定し、Block Kit 構造検証は PR-2 に閉じる。境界調整が必要な場合は PR-2 側へ寄せ、PR-1 には 0.5 日分の再分割バッファを置く。 |
+| PR-1/PR-2 の境界をまたぐテスト更新が増える | PR-1 単独で全テストが通る前提が崩れレビューが大きくなる | PR-1 はデータ経路と round-trip に限定し、Block Kit 構造検証は PR-2 に閉じる。境界調整が必要な場合は PR-2 側へ寄せ、PR-1 には 0.5 日分の再分割バッファを置く。 |
 
 ---
 
@@ -253,7 +253,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 - [ ] PR-1 マージ済み（対象ステップ: 1-1〜1-9）
 - [ ] PR-2 マージ済み（対象ステップ: 2-1〜2-7 / 3-1〜3-4 / 4-1〜4-32）
-- [ ] 完了ゲート: `make fmt && make test && make lint` 緑、ビルドタグ付き統合テストのコンパイル確認
+- [ ] 完了ゲート: `make fmt && make test && make lint` が通ること、ビルドタグ付き統合テストのコンパイル確認
 
 ---
 
@@ -293,11 +293,11 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 ## 9. 完了基準・成功基準
 
-- **機能完了**: 全 AC（AC-01〜AC-14）が §7 の `test`／`static` 検証で緑。
-- **品質**: `make fmt && make test && make lint` が緑。`go test -tags test,slack_notify -run '^$' ./cmd/tlsrpt-digest/...` がコンパイル成功。
-- **セキュリティ**: AC-13 の許可リスト・機微情報非混入・制御文字正規化テストが緑で、既存の secret 回帰テストが削除・弱体化されていない。
+- **機能完了**: 全 AC（AC-01〜AC-14）が §7 の `test`／`static` 検証で合格。
+- **品質**: `make fmt && make test && make lint` が通ること。`go test -tags test,slack_notify -run '^$' ./cmd/tlsrpt-digest/...` がコンパイル成功。
+- **セキュリティ**: AC-13 の許可リスト・機微情報非混入・制御文字正規化テストが合格で、既存の secret 回帰テストが削除・弱体化されていない。
 - **ドキュメント**: PR-1/PR-2 の説明に §7 の AC 検証結果、§1.4 の Slack 仕様確認根拠、未更新のタスク文書参照がないことの確認結果を記載する。
-- 警告・サマリー・システムエラーの既存 `fields` 整形テストが緑のまま（後方互換）。
+- 警告・サマリー・システムエラーの既存 `fields` 整形テストが引き続き合格（後方互換）。
 
 ---
 
@@ -305,4 +305,4 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 - PR-1（Phase 1、ステップ 1-1〜1-9）から実装に着手する。
 - 実装中は各ステップのチェックボックスをリアルタイムに更新する。
-- PR-1・PR-2 をそれぞれ緑で提出し、§7 の AC 検証結果を PR 説明に添える。
+- PR-1・PR-2 をそれぞれ全テストが通った状態で提出し、§7 の AC 検証結果を PR 説明に添える。
