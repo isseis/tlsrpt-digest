@@ -270,11 +270,10 @@ func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 	return s
 }
 
-// Block Kit size limits for alert messages.
+// Size limits for alert messages.
 const (
-	maxAlertBlocksPerMessage  = 50   // Slack limit: 50 blocks per message
-	maxAlertSectionRunes      = 3000 // Slack section text limit
-	maxAlertContextRunes      = 300  // conservative limit for Run ID context
+	maxAlertSectionRunes      = 3000 // truncateBlock limit for section/context text
+	maxAlertContextRunes      = 300  // conservative limit for context element text
 	maxAlertOrganizationRunes = 120
 	maxAlertPolicyTypeRunes   = 80
 	maxAlertReportIDRunes     = 160
