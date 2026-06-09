@@ -134,6 +134,39 @@ func extractAlert(r slog.Record, debugLogger *slog.Logger) Alert {
 			if t, ok := attr.Value.Any().(time.Time); ok {
 				a.DateRange.End = t
 			}
+		case "report_id":
+			a.ReportID = attr.Value.String()
+		case "failure_details_total_count":
+			a.FailureDetailsTotalCount = attr.Value.Int64()
+		case "failure_details_total_sessions":
+			a.FailureDetailsTotalSessions = attr.Value.Int64()
+		case "failure_details":
+			if attr.Value.Kind() != slog.KindGroup {
+				break
+			}
+			for _, child := range attr.Value.Group() {
+				// Each child must be a named group (index "0", "1", ...).
+				if child.Value.Kind() != slog.KindGroup {
+					warnUnknownKey(debugLogger, "failure_details."+child.Key, r.Message)
+					continue
+				}
+				var fd FailureDetail
+				for _, field := range child.Value.Group() {
+					switch field.Key {
+					case "result_type":
+						fd.ResultType = field.Value.String()
+					case "failed_session_count":
+						fd.FailedSessionCount = field.Value.Int64()
+					case "receiving_mx_hostname":
+						fd.ReceivingMXHostname = field.Value.String()
+					case "failure_reason_code":
+						fd.FailureReasonCode = field.Value.String()
+					default:
+						warnUnknownKey(debugLogger, "failure_details."+child.Key+"."+field.Key, r.Message)
+					}
+				}
+				a.FailureDetails = append(a.FailureDetails, fd)
+			}
 		default:
 			warnUnknownKey(debugLogger, attr.Key, r.Message)
 		}

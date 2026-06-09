@@ -159,26 +159,54 @@ func TestLogAlert_StructuredPayloadOnly(t *testing.T) {
 		OrganizationName: "example.com",
 		PolicyType:       notify.PolicyTypeSTS,
 		FailureCount:     2,
+		ReportID:         "report-id-1",
+		FailureDetails: []notify.FailureDetail{
+			{
+				ResultType:          "certificate-expired",
+				FailedSessionCount:  5,
+				ReceivingMXHostname: "mx.example.com",
+				FailureReasonCode:   "X509_V_ERR_CERT_HAS_EXPIRED",
+			},
+		},
 	}))
 	require.Len(t, spy.records, 1)
 	r := spy.records[0]
 
-	// Record must contain Alert fields only — no raw strings, no config fields.
-	var foundOrgName, foundPolicyType, foundFailureCount bool
+	// Allowlist: only these top-level keys are permitted (AC-13).
+	allowedTopLevel := map[string]bool{
+		"organization_name":              true,
+		"policy_type":                    true,
+		"failure_count":                  true,
+		"date_start":                     true,
+		"date_end":                       true,
+		"report_id":                      true,
+		"failure_details":                true,
+		"failure_details_total_count":    true,
+		"failure_details_total_sessions": true,
+	}
+	// Allowlist: only these keys are permitted inside each failure_details child group.
+	allowedDetailKeys := map[string]bool{
+		"result_type":           true,
+		"failed_session_count":  true,
+		"receiving_mx_hostname": true,
+		"failure_reason_code":   true,
+	}
+
 	r.Attrs(func(attr slog.Attr) bool {
-		switch attr.Key {
-		case "organization_name":
-			foundOrgName = true
-		case "policy_type":
-			foundPolicyType = true
-		case "failure_count":
-			foundFailureCount = true
+		assert.True(t, allowedTopLevel[attr.Key],
+			"unexpected top-level attr key %q in LogAlert record", attr.Key)
+		if attr.Key == "failure_details" && attr.Value.Kind() == slog.KindGroup {
+			for _, child := range attr.Value.Group() {
+				require.Equal(t, slog.KindGroup, child.Value.Kind(),
+					"failure_details child %q must be a group", child.Key)
+				for _, field := range child.Value.Group() {
+					assert.True(t, allowedDetailKeys[field.Key],
+						"unexpected key %q in failure_details[%s]", field.Key, child.Key)
+				}
+			}
 		}
 		return true
 	})
-	assert.True(t, foundOrgName)
-	assert.True(t, foundPolicyType)
-	assert.True(t, foundFailureCount)
 }
 
 func TestSummaryFlow_Integration(t *testing.T) {

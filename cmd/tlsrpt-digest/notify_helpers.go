@@ -10,10 +10,21 @@ import (
 
 // logAlerts logs one alert per failing policy in the report.
 // component is used as the slog prefix (e.g. "fetch", "reprocess").
+// Only the public 4 fields of each failure-detail entry are copied; IP addresses
+// and additional-information are intentionally excluded (AC-13).
 func logAlerts(ctx context.Context, notifier NotificationSink, report *tlsrpt.Report, component string) {
 	for _, policy := range report.Policies {
 		if policy.Summary.TotalFailureSessionCount <= 0 {
 			continue
+		}
+		details := make([]notify.FailureDetail, 0, len(policy.FailureDetails))
+		for _, fd := range policy.FailureDetails {
+			details = append(details, notify.FailureDetail{
+				ResultType:          fd.ResultType,
+				FailedSessionCount:  fd.FailedSessionCount,
+				ReceivingMXHostname: fd.ReceivingMXHostname,
+				FailureReasonCode:   fd.FailureReasonCode,
+			})
 		}
 		if err := notifier.LogAlert(ctx, notify.Alert{
 			OrganizationName: report.OrganizationName,
@@ -23,6 +34,8 @@ func logAlerts(ctx context.Context, notifier NotificationSink, report *tlsrpt.Re
 				Start: report.DateRange.StartDatetime,
 				End:   report.DateRange.EndDatetime,
 			},
+			ReportID:       report.ReportID,
+			FailureDetails: details,
 		}); err != nil {
 			slog.Warn(component+": log alert", "error", err)
 		}
