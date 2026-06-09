@@ -88,3 +88,46 @@ func TestLogWarn_NoLogWhenNoError(t *testing.T) {
 
 	assert.Empty(t, buf.String(), "expected no log output on success")
 }
+
+// TestLogAlerts_MapsPublicFailureFields verifies that logAlerts correctly maps
+// ReportID and the four public FailureDetail fields from a tlsrpt.Report to Alert.
+func TestLogAlerts_MapsPublicFailureFields(t *testing.T) {
+	report := &tlsrpt.Report{
+		ReportID:         "report-xyz",
+		OrganizationName: "example.com",
+		DateRange:        tlsrpt.DateRange{},
+		Policies: []tlsrpt.PolicyRecord{
+			{
+				Policy: tlsrpt.Policy{PolicyType: "sts"},
+				Summary: tlsrpt.Summary{
+					TotalFailureSessionCount: 10,
+				},
+				FailureDetails: []tlsrpt.FailureDetail{
+					{
+						ResultType:            "certificate-expired",
+						FailedSessionCount:    7,
+						ReceivingMXHostname:   "mx.example.com",
+						FailureReasonCode:     "X509_V_ERR_CERT_HAS_EXPIRED",
+						SendingMTAIP:          "192.0.2.1",
+						ReceivingIP:           "198.51.100.1",
+						AdditionalInformation: "some raw text",
+					},
+				},
+			},
+		},
+	}
+
+	spy := &SpyNotificationSink{}
+	logAlerts(context.Background(), spy, report, "test")
+
+	require.Len(t, spy.Alerts, 1)
+	a := spy.Alerts[0]
+
+	assert.Equal(t, "report-xyz", a.ReportID)
+	require.Len(t, a.FailureDetails, 1)
+	fd := a.FailureDetails[0]
+	assert.Equal(t, "certificate-expired", fd.ResultType)
+	assert.Equal(t, int64(7), fd.FailedSessionCount)
+	assert.Equal(t, "mx.example.com", fd.ReceivingMXHostname)
+	assert.Equal(t, "X509_V_ERR_CERT_HAS_EXPIRED", fd.FailureReasonCode)
+}

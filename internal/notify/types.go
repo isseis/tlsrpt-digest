@@ -32,6 +32,24 @@ type Alert struct {
 	PolicyType       PolicyType
 	FailureCount     int64
 	DateRange        DateRange
+	ReportID         string          // source report identifier
+	FailureDetails   []FailureDetail // up to 10 entries, sorted by FailedSessionCount descending
+	// FailureDetailsTotalCount is the total number of failure-detail entries before
+	// the 10-entry cap applied in LogAlert. Used to compute "Other N entries" summary.
+	FailureDetailsTotalCount int64
+	// FailureDetailsTotalSessions is the sum of FailedSessionCount across all entries
+	// before the cap. Used to compute "Other M sessions total" summary.
+	FailureDetailsTotalSessions int64
+}
+
+// FailureDetail holds the public fields from an RFC 8460 failure-details entry.
+// IP addresses (sending-mta-ip / receiving-ip) and free-form text
+// (additional-information) are intentionally excluded to avoid leaking sensitive data.
+type FailureDetail struct {
+	ResultType          string // result-type (required display)
+	FailedSessionCount  int64  // failed-session-count (required display)
+	ReceivingMXHostname string // receiving-mx-hostname (display if non-empty)
+	FailureReasonCode   string // failure-reason-code (display if non-empty)
 }
 
 // WarningKind classifies a non-failure fetch warning.
