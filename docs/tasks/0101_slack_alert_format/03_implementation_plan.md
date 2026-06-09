@@ -97,7 +97,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 **推奨タイトル**: `feat(0101): carry report-id and failure-details through the alert data path`
 
-**レビュー観点**: `Alert`/`FailureDetail` 型の公開フィールド設計と機微フィールド非保持 / `LogAlert`→`extractAlert` の slog 往復と `failed_session_count` 降順保持 / `logAlerts` 写像での IP・`additional-information` 非複写
+**レビュー観点**: `Alert`/`FailureDetail` 型の公開フィールド設計と機微フィールド非保持 / `LogAlert`→`extractAlert` の slog 往復と `failed_session_count` 降順保持 / `logAlerts` 写像での IP・`additional-information` 非複写 / `LogAlert` で `failure_details_total_count`/`failure_details_total_sessions` が 10 件上限適用*前*の全エントリから集計されていること
 
 - [ ] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
 - [ ] PR を作成した
@@ -113,10 +113,12 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - [ ] **2-3** `format.go` `formatAlerts`: `fields` 生成を廃止し、`Attachments[0].Color = "warning"` の単一 attachment に、ポリシーごとの `section` ブロック群＋末尾 `context`（Run ID）を生成する（アーキテクチャ §3.3）。
 - [ ] **2-4** `format.go`: 各ポリシー `section.text` を `plain_text` で構築する。組織名・ポリシータイプ・失敗セッション総数・レポート期間（`.UTC()` 整形）・Report ID・失敗詳細を所定の行レイアウトで配置する（アーキテクチャ §3.3 の行テーブル）。
 - [ ] **2-5** `format.go`: 失敗詳細を `failed_session_count` 降順に並べ、上位 3 件を詳細表示、4 件以上は残りを `Other N entries (M sessions total)` として要約する。空の場合は失敗詳細行を出力しない。
-- [ ] **2-6** `format.go`: 外部由来文字列（組織名・`policy-type`・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code`）を `plain_text` へ入れる前に、`\n`・`\r`・`\t` を含む制御文字を空白へ正規化する。`policy-type` は `policyTypeStr` が文字列のまま出力するため外部入力として扱い、値ごとの上限（`maxAlertPolicyTypeRunes` として定数を Phase 3 で追加）でも切り詰める。セクション内の項目間改行は実装テンプレート側で付加する（アーキテクチャ §3.3・§5.2）。
+- [ ] **2-6** `format.go`: 外部由来文字列（組織名・`policy-type`・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code`）を `plain_text` へ入れる前に、`\n`・`\r`・`\t` を含む制御文字を空白へ正規化する。`policy-type` は `policyTypeStr` が文字列のまま出力するため外部入力として扱い、値ごとの上限（ステップ 3-1 で定義する `maxAlertPolicyTypeRunes`）でも切り詰める。本ステップの切り詰め実装はステップ 3-1 の定数定義後に行うこと。セクション内の項目間改行は実装テンプレート側で付加する（アーキテクチャ §3.3・§5.2）。
 - [ ] **2-7** `format.go`: `maxAlertFields` 定数とその参照を削除する。
 
 完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通る。なお既存アラートテストの多くは生 JSON 本文への部分文字列マッチ（`Contains`）であり、刷新後も同じ文字列が `section.text` 内に現れるため**自動的には赤化しない**。赤化するのは以下の 2 テスト:（1）`TestFormatAlerts_AttachmentFields`（`fields` の `title`/`value` を直接前提とする）、（2）`TestSlackAttachment_FieldsEncoding`（`captureWarnPayload` が `LogAlert` 経由でアラートペイロードを生成し `attachment["fields"]` を検証する）。Phase 4 では、これら 2 テストを `blocks` 構造検証へ書き換え、部分文字列マッチの既存テストも `sectionTexts` 経由の構造検証へ強化する（§2 Phase 4・§3 参照）。
+
+> **PR-2 開発上の注意**: Phase 2 完了時点でテストが赤になり、Phase 4（ステップ 4-3・4-10）で修正されるまで緑に戻らない。PR-2 のグリーンゲート（`make test && make lint`）は Phase 2〜4 のすべてが完了して初めて確認できる。フィーチャーブランチへの中間 push は Phase 4 の全テスト修正が終わるまで行わないこと。
 
 ### Phase 3: サイズ制限と切り詰め
 
@@ -186,11 +188,11 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 ### PR-2 作成ポイント: Block Kit alert rendering
 
-**対象ステップ**: 2-1 / 2-2 / 2-3 / 2-4 / 2-5 / 2-6 / 2-7 / 3-1 / 3-2 / 3-3 / 3-4 / 4-1 / 4-2 / 4-3 / 4-4 / 4-5 / 4-6 / 4-7 / 4-8 / 4-9 / 4-10 / 4-11 / 4-12 / 4-13 / 4-14 / 4-15 / 4-16 / 4-17 / 4-18 / 4-19 / 4-20 / 4-21 / 4-22 / 4-23 / 4-24 / 4-25 / 4-26 / 4-27 / 4-28 / 4-29 / 4-30 / 4-31 / 4-32
+**対象ステップ**: 2-1〜2-7 / 3-1〜3-4 / 4-1〜4-32
 
 **推奨タイトル**: `feat(0101): render TLS failure alerts with Block Kit sections`
 
-**レビュー観点**: ポリシー単位 `section` の自己完結性と旧 `fields` 撤廃 / `plain_text` 無害化（制御文字正規化・メンション抑制） / 値ごと・section・ブロック数の切り詰めと overflow summary の正確性 / AC 別テストの網羅と許可リスト・機微情報テストの維持
+**レビュー観点**: ポリシー単位 `section` の自己完結性と旧 `fields` 撤廃 / `plain_text` 無害化（制御文字正規化・メンション抑制） / ステップ 3-3：overflow 時は policy section 最大 48・通常時は最大 49 という 48/49 件分岐と block 数 ≤ 50 の invariant；`FailureDetailsTotalCount`/`FailureDetailsTotalSessions` が PR-1 の事前集計値（>10 件でも正確な元総数）を参照していること / ステップ 3-4：`divider` 等 `Text==nil` ブロックでパニックしない nil ガードの実装 / AC 別テストの網羅と許可リスト・機微情報テストの維持
 
 - [ ] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
 - [ ] PR を作成した
@@ -261,7 +263,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 | AC | 区分 | 実装対象 | 検証方法 |
 |---|---|---|---|
-| AC-01 | test | `formatAlerts` の概要見出し、`uniqueOrgCount` | `internal/notify/format_test.go::TestFormatAlerts_TitleOrgCount`（維持）・`::TestFormatAlerts_TitleOrgCountDedup`（維持）で概要見出しの組織数を検証 |
+| AC-01 | test | `formatAlerts` の概要見出し、`uniqueOrgCount` | `internal/notify/format_test.go::TestFormatAlerts_TitleOrgCount`（維持）・`::TestFormatAlerts_TitleOrgCountDedup`（維持）で概要見出しの組織数を検証（グリーンゲートはステップ 4-31 で確認） |
 | AC-02 | test | `formatAlerts` のポリシー別 `section.text` | `internal/notify/format_test.go::TestFormatAlerts_PolicySection`（ステップ 4-12）で組織名・ポリシータイプ・失敗数・期間を同一 section 内に表示することを検証 |
 | AC-03 | test | `formatAlerts` の複数ポリシー section、`SlackHandler.Flush` の単一 POST | `internal/notify/format_test.go::TestFormatAlerts_AllPoliciesIncluded`（ステップ 4-13、通常系）・`::TestFormatAlerts_OverflowSummary`（ステップ 4-24、overflow 時の要約）・`internal/notify/handler_test.go::TestFlush_MultipleAlerts_SinglePost`（ステップ 4-28、単一 POST 集約）で検証 |
 | AC-04 | test | `formatAlerts` の旧 `fields` 見出し削除と section 分離 | `internal/notify/format_test.go::TestFormatAlerts_NoDuplicateHeaders`（ステップ 4-14）で旧見出し非出力と独立 section を検証 |
