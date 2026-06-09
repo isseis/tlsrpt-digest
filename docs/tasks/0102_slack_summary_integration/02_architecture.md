@@ -104,7 +104,7 @@ sequenceDiagram
     loop 3 通の EML
         Test->>MP: ExtractAttachments(msg, maxBytes)
         MP-->>Test: []Attachment
-        Note over Test: parseTLSRPTAttachment(att)<br>fetch.go のローカル関数
+        Note over Test: parseTLSRPTAttachment(att)<br>fetch.go（package main）内の関数
         Test-->>Test: *tlsrpt.Report
     end
 
@@ -217,7 +217,7 @@ func TestSlackSummary_Summary_Integration(t *testing.T)
 
 ## 5. セキュリティ考慮事項
 
-本タスクはテストコードのみを追加するが、[Notification Security Guidelines](../dev/developer_guide/notification_security.md) に従い以下を守る。
+本タスクはテストコードのみを追加するが、[Notification Security Guidelines](../../dev/developer_guide/notification_security.md) に従い以下を守る。
 
 ### 5.1 Webhook URL の保護
 
