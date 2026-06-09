@@ -51,11 +51,9 @@ func TruncateText(s string, maxLen int) string {
 }
 
 // truncateMessage applies Slack length limits to m in place.
-// It is called after DebugLogger logging. Note that per-field truncation
-// (org name, report ID, etc.) already occurs during alert formatting
-// during formatAlerts, so the debug log may already contain truncated values;
-// truncateMessage is a final hard-limit pass for top-level text, attachment
-// fallback text, and attachment fields.
+// Must be called after DebugLogger logging so the debug output is unaffected.
+// Per-field truncation already occurs in formatAlerts, so the debug output
+// may already contain some shortened values.
 func truncateMessage(m *slackMessage) {
 	m.Text = TruncateText(m.Text, maxTextRunes)
 	for i := range m.Attachments {
@@ -270,11 +268,8 @@ const (
 	maxAlertDetailDisplay = 3
 )
 
-// normalizeControlChars replaces Unicode control characters (as defined by
-// unicode.IsControl, which covers C0 U+0000–U+001F, DEL U+007F, and C1
-// U+0080–U+009F) with a space. This prevents external values from injecting
-// fake line breaks or other control sequences into attachment field values and
-// fallback text.
+// normalizeControlChars replaces Unicode control characters with a space to
+// prevent external values from injecting fake line breaks into attachment fields.
 func normalizeControlChars(s string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) {
@@ -285,36 +280,18 @@ func normalizeControlChars(s string) string {
 }
 
 // formatAlerts builds a single aggregated slackMessage for TLS failure alerts.
-// Slack renders the primary view as warning-colored legacy attachment fields,
-// matching the original alert appearance. Policies are chunked across multiple
-// attachments (at most maxAlertPoliciesPerChunk each) so that the field count
-// per attachment stays within Slack's recommended limit; the Run ID field is
-// appended to the final attachment.
-// When the number of policy chunks would exceed maxAlertAttachments, the
-// remaining policies are summarised in an "Additional Policies" overflow field
-// on the last attachment so the total stays within Slack's attachment limit.
-// The first attachment's fallback contains the full text for clients that do
-// not render attachments.
 // No truncation is applied here; the caller (Flush) applies truncateMessage.
 func formatAlerts(alerts []Alert, runID string) slackMessage {
 	orgCount := uniqueOrgCount(alerts)
 	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, orgCount)
 
-	// Each policy occupies at most 3 fields (summary + report ID + failure
-	// details). Chunking at 3 policies per attachment keeps the field count
-	// to at most 9 alert fields + 1 Run ID = 10 total, matching the original
-	// per-attachment budget.
-	// Slack allows at most 100 attachments per message; cap the shown policies
-	// accordingly and summarise any remainder in an overflow field.
 	const (
 		maxAlertPoliciesPerChunk = 3
 		maxAlertAttachments      = 100 // Slack per-message attachment limit
-		// alertExtraFields is the number of extra fields on the last attachment:
-		// optional overflow summary + Run ID.
+		// alertExtraFields: overflow summary (optional) + Run ID on the last attachment.
 		alertExtraFields = 2
-		// maxPoliciesInLastChunkWithOverflow: when overflow occurs the last attachment
-		// also carries overflow summary + Run ID (alertExtraFields). With 3 fields per
-		// policy, floor((10 - alertExtraFields) / 3) = 2 keeps the attachment at ≤10.
+		// maxPoliciesInLastChunkWithOverflow: caps the last chunk when overflow occurs,
+		// leaving room for alertExtraFields without exceeding 10 fields per attachment.
 		maxPoliciesInLastChunkWithOverflow = 2
 	)
 	maxPoliciesShown := maxAlertAttachments * maxAlertPoliciesPerChunk
