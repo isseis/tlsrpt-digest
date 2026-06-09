@@ -331,6 +331,7 @@ func TestAlertPayload_NoSensitiveData(t *testing.T) {
 	require.NoError(t, h.Handle(context.Background(), r))
 	require.NoError(t, h.Flush(context.Background()))
 
+	require.NotEmpty(t, recv, "Flush must have sent a payload — without this check all NotContains assertions would be vacuously true")
 	body := string(recv)
 	assert.NotContains(t, body, sensitiveIP, "IP address value must not appear in alert payload")
 	assert.NotContains(t, body, sensitiveAdditional, "additional-information value must not appear in alert payload")

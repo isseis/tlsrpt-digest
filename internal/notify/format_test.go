@@ -79,8 +79,7 @@ func flushSummary(t *testing.T, summary notify.Summary) []byte {
 	return recv
 }
 
-// TestFormatAlerts_Fields verifies core alert fields appear in the rendered Block Kit payload.
-// The values live in section.text after the Block Kit rewrite.
+// TestFormatAlerts_Fields verifies core alert values appear in the attachment fields.
 func TestFormatAlerts_Fields(t *testing.T) {
 	msg := decodeSlackMessage(t, flushAlert(t, sampleAlert()))
 	texts := sectionTexts(msg)
@@ -93,7 +92,7 @@ func TestFormatAlerts_Fields(t *testing.T) {
 	assert.Contains(t, combined, "2024-01-07")
 }
 
-// TestFormatAlerts_RunID verifies the Run ID appears in the context block.
+// TestFormatAlerts_RunID verifies the Run ID appears in the attachment field of the last chunk.
 func TestFormatAlerts_RunID(t *testing.T) {
 	msg := decodeSlackMessage(t, flushAlert(t, sampleAlert()))
 	fields := flattenSlackFields(msg)

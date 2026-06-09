@@ -39,8 +39,8 @@ type slackMessage struct {
 type slackAttachment struct {
 	Color    string       `json:"color,omitempty"`
 	Fallback string       `json:"fallback,omitempty"`
-	Blocks   []slackBlock `json:"blocks,omitempty"` // legacy attachment blocks; alerts use top-level Blocks
-	Fields   []slackField `json:"fields,omitempty"` // used for warnings / errors / summary
+	Blocks   []slackBlock `json:"blocks,omitempty"` // reserved for future use; not currently used by any formatter
+	Fields   []slackField `json:"fields,omitempty"` // used for alerts, warnings, errors, and summary
 }
 
 // slackBlock is a minimal Slack Block Kit block: section, divider, or context.

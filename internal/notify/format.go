@@ -288,7 +288,7 @@ const (
 
 // normalizeControlChars replaces ASCII control characters (< U+0020 or == U+007F)
 // with a space. This prevents external values from injecting fake line breaks or
-// other control sequences into plain_text block content.
+// other control sequences into attachment field values and fallback text.
 func normalizeControlChars(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
@@ -401,7 +401,9 @@ func buildFailureDetailsText(a Alert) string {
 	totalSessions := max(a.FailureDetailsTotalSessions, detailsSessions)
 
 	var sb strings.Builder
+	var topSessions int64
 	for i, fd := range shown {
+		topSessions += fd.FailedSessionCount
 		resultType := TruncateText(normalizeControlChars(fd.ResultType), maxAlertResultTypeRunes)
 		line := fmt.Sprintf("[%d] %s: %d sessions", i+1, resultType, fd.FailedSessionCount)
 		if fd.ReceivingMXHostname != "" {
@@ -418,10 +420,6 @@ func buildFailureDetailsText(a Alert) string {
 		}
 	}
 	if totalCount > maxAlertDetailDisplay {
-		var topSessions int64
-		for _, fd := range shown {
-			topSessions += fd.FailedSessionCount
-		}
 		otherCount := totalCount - maxAlertDetailDisplay
 		otherSessions := max(totalSessions-topSessions, 0)
 		fmt.Fprintf(&sb, "Other %d entries (%d sessions total)", otherCount, otherSessions)
