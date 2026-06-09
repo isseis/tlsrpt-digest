@@ -144,7 +144,9 @@
 ### 手動実行手順
 
 ```
-TLSRPT_SLACK_WEBHOOK_URL_SUCCESS=<webhook-url> make test-slack-summary
+TLSRPT_SLACK_WEBHOOK_URL_SUCCESS=<success-webhook-url> \
+TLSRPT_SLACK_WEBHOOK_URL_ERROR=<error-webhook-url> \
+make test-slack-summary
 ```
 
 実行後、指定した Slack チャンネルに以下の内容を含むサマリが届いていることを目視確認する。

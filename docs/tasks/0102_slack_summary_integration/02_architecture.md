@@ -153,13 +153,17 @@ sequenceDiagram
 
 ```go
 // 追加する定数
-const slackSummaryWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"
+const slackSummaryWebhookEnvKey        = "TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"
+const slackSummaryErrorWebhookEnvKey   = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"
 
 // 追加する純粋関数（env == nil のとき os.Getenv にフォールバック）
+// 両方の URL が設定されているかを確認する。
 func missingSlackSummaryEnv(env map[string]string) []string
 ```
 
-`loadSlackSummaryTestEnv(t *testing.T) string` は統合テストファイル内に定義し、env ヘルパーを呼んで未設定時に `t.Skip` する薄いラッパーとする。
+`notify.ValidateEnvCombination` は success URL が設定されているのに error URL が空の場合にエラーを返す。したがって、`missingSlackSummaryEnv` は `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` と `TLSRPT_SLACK_WEBHOOK_URL_ERROR` の**両方**の設定を必須とする。
+
+`loadSlackSummaryTestEnv(t *testing.T) (successURL, errorURL string)` は統合テストファイル内に定義し、env ヘルパーを呼んで未設定時に `t.Skip` する薄いラッパーとする。
 
 ### 3.3 統合テスト関数の設計
 
@@ -170,20 +174,20 @@ func TestSlackSummary_Summary_Integration(t *testing.T)
 
 処理の骨格：
 
-1. `loadSlackSummaryTestEnv(t)` で URL を取得（未設定なら `t.Skip`）
+1. `loadSlackSummaryTestEnv(t)` で success URL と error URL を取得（いずれか未設定なら `t.Skip`）
 2. `ulid.Make().String()` で runID を生成
 3. 3 つの EML を読み込み → `mailparse.ExtractAttachments` → `parseTLSRPTAttachment` でレポート取得
 4. `storetestutil.NewFakeStore()` にレポートを保存
 5. サマリ期間を `2026-05-11T00:00:00Z` ～ `2026-05-14T00:00:00Z` に設定（3 レポートすべての EndDatetime を包含）
 6. `notify.GenerateSummary(ctx, fakeStore, start, end, nil)` でサマリ生成
 7. `ReportCount`・`OrganizationStats` をアサート（AC-04〜07 の確認）
-8. `setupNotifyHandlers(config.Secret(webhookURL), config.Secret(""), cfg, runID, false)` でノーティファイア構築
+8. `setupNotifyHandlers(config.Secret(successURL), config.Secret(errorURL), cfg, runID, false)` でノーティファイア構築
 9. `notifier.LogSummary(ctx, summary)` → `notifier.Flush(ctx)` でサマリ送信
 10. `require.NoError` で送信成功を確認
 
 **サマリ期間の設定根拠**: 3 レポートの `EndDatetime` はそれぞれ 2026-05-11T23:59:59Z、2026-05-12T23:59:59Z、2026-05-13T23:59:59Z。`GenerateSummary` の包含条件は `start <= EndDatetime < end` であるため、`start = 2026-05-11T00:00:00Z`、`end = 2026-05-14T00:00:00Z` とすれば 3 件すべてが対象となる。
 
-**`setupNotifyHandlers` 呼び出し時の引数**: success URL のみ設定し、error URL は `config.Secret("")` を渡す。`setupNotifyHandlers` は `successURL == ""` かつ `errorURL == ""` のときのみ `errSlackWebhookURLRequired` を返すため（`boot.go:348`）、success URL だけを設定した場合はエラーにならない。
+**`setupNotifyHandlers` への両 URL 要件**: `notify.ValidateEnvCombination` は `successURL != "" && errorURL == ""` の組み合わせを拒否する（`silent failures` を防ぐためのガード）。そのため、テストでは `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` と `TLSRPT_SLACK_WEBHOOK_URL_ERROR` の両方を渡す必要がある。
 
 ### 3.4 Makefile ターゲット設計
 
@@ -192,6 +196,7 @@ func TestSlackSummary_Summary_Integration(t *testing.T)
 - ビルドタグ `test,slack_notify` を指定し、`TestSlackSummary` プレフィックスのテストのみを実行するフィルタを適用する。
 - `-v -count=1` を渡してテスト出力を詳細に表示し、キャッシュを無効化する。
 - `./cmd/tlsrpt-digest/...` を対象パターンとする。
+- 実行には `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` と `TLSRPT_SLACK_WEBHOOK_URL_ERROR` の両方が必要（`ValidateEnvCombination` の制約による）。
 
 `.PHONY` に `test-slack-summary` を追加する。`test-integration` のビルドタグには `slack_notify` を含まないため、本テストは `make test-integration` では実行されない（AC-13）。
 
