@@ -1200,7 +1200,7 @@ func TestFormatAlerts_AttachmentOverflow(t *testing.T) {
 	assert.True(t, hasOverflow, "overflow summary must appear in the last attachment")
 	assert.True(t, hasRunID, "Run ID must appear in the last attachment")
 
-	// Total policy summary fields across all attachments must be exactly 300 (= 100×3).
+	// With maxPoliciesInLastChunkWithOverflow=2, shown = 99×3+2 = 299 policies.
 	var policyFieldCount int
 	for _, att := range msg.Attachments {
 		for _, f := range att.Fields {
@@ -1209,5 +1209,9 @@ func TestFormatAlerts_AttachmentOverflow(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, 300, policyFieldCount, "exactly 300 policies shown; 1 overflows to summary")
+	assert.Equal(t, 299, policyFieldCount, "299 policies shown (last chunk capped at 2); 2 overflow to summary")
+
+	// Also verify that the last attachment's field count stays within the 10-field budget.
+	// Worst case: 2 policies × 3 fields (summary+reportID+details) + overflow + Run ID = 8.
+	assert.LessOrEqual(t, len(lastAtt.Fields), 10, "last attachment must not exceed 10 fields")
 }

@@ -309,18 +309,42 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 		// alertExtraFields is the number of extra fields on the last attachment:
 		// optional overflow summary + Run ID.
 		alertExtraFields = 2
+		// maxPoliciesInLastChunkWithOverflow: when overflow occurs the last attachment
+		// also carries overflow summary + Run ID (alertExtraFields). With 3 fields per
+		// policy, floor((10 - alertExtraFields) / 3) = 2 keeps the attachment at ≤10.
+		maxPoliciesInLastChunkWithOverflow = 2
 	)
 	maxPoliciesShown := maxAlertAttachments * maxAlertPoliciesPerChunk
 
 	shown := alerts
 	var overflowAlerts []Alert
 	if len(alerts) > maxPoliciesShown {
-		shown = alerts[:maxPoliciesShown]
-		overflowAlerts = alerts[maxPoliciesShown:]
+		// When overflow is needed, cap the last chunk at 2 policies so the last
+		// attachment stays within the 10-field budget despite overflow + Run ID.
+		maxWithOverflow := (maxAlertAttachments-1)*maxAlertPoliciesPerChunk + maxPoliciesInLastChunkWithOverflow
+		shown = alerts[:maxWithOverflow]
+		overflowAlerts = alerts[maxWithOverflow:]
+	}
+
+	// Pre-compute overflow text before building fallbackParts so it appears near
+	// the top of the fallback (right after the title), ensuring non-attachment
+	// clients see it even after truncateMessage caps the fallback at 4000 runes.
+	var overflowText string
+	if len(overflowAlerts) > 0 {
+		overflowOrgs := uniqueOrgCount(overflowAlerts)
+		var overflowSessions int64
+		for _, a := range overflowAlerts {
+			overflowSessions += a.FailureCount
+		}
+		overflowText = fmt.Sprintf("%d additional policies omitted; organizations: %d; failed sessions: %d",
+			len(overflowAlerts), overflowOrgs, overflowSessions)
 	}
 
 	var fallbackParts []string
 	fallbackParts = append(fallbackParts, title)
+	if overflowText != "" {
+		fallbackParts = append(fallbackParts, overflowText)
+	}
 
 	var attachments []slackAttachment
 	for i := 0; i < len(shown); i += maxAlertPoliciesPerChunk {
@@ -352,16 +376,9 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 		}
 
 		if isLast {
-			if len(overflowAlerts) > 0 {
-				overflowOrgs := uniqueOrgCount(overflowAlerts)
-				var overflowSessions int64
-				for _, a := range overflowAlerts {
-					overflowSessions += a.FailureCount
-				}
-				overflowText := fmt.Sprintf("%d additional policies omitted; organizations: %d; failed sessions: %d",
-					len(overflowAlerts), overflowOrgs, overflowSessions)
+			if overflowText != "" {
 				fields = append(fields, slackField{Title: "Additional Policies", Value: overflowText, Short: false})
-				fallbackParts = append(fallbackParts, overflowText)
+				// overflowText already added to fallbackParts before the loop.
 			}
 			fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: false})
 			fallbackParts = append(fallbackParts, "Run ID\n"+runID)
