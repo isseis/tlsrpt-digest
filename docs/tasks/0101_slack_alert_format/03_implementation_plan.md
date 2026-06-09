@@ -99,7 +99,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 **レビュー観点**: `Alert`/`FailureDetail` 型の公開フィールド設計と機微フィールド非保持 / `LogAlert`→`extractAlert` の slog 往復と `failed_session_count` 降順保持 / `logAlerts` 写像での IP・`additional-information` 非複写 / `LogAlert` で `failure_details_total_count`/`failure_details_total_sessions` が 10 件上限適用*前*の全エントリから集計されていること
 
-- [ ] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
+- [ ] `make test && make lint` が通っていることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
@@ -118,7 +118,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通る。なお既存アラートテストの多くは生 JSON 本文への部分文字列マッチ（`Contains`）であり、刷新後も同じ文字列が `section.text` 内に現れるため**自動的にはテスト失敗にならない**。テストが失敗するのは以下の 2 テスト:（1）`TestFormatAlerts_AttachmentFields`（`fields` の `title`/`value` を直接前提とする）、（2）`TestSlackAttachment_FieldsEncoding`（`captureWarnPayload` が `LogAlert` 経由でアラートペイロードを生成し `attachment["fields"]` を検証する）。Phase 4 では、これら 2 テストを `blocks` 構造検証へ書き換え、部分文字列マッチの既存テストも `sectionTexts` 経由の構造検証へ強化する（§2 Phase 4・§3 参照）。
 
-> **PR-2 開発上の注意**: Phase 2 完了時点でテストが赤になり、Phase 4（ステップ 4-3・4-10）で修正されるまで緑に戻らない。PR-2 のグリーンゲート（`make test && make lint`）は Phase 2〜4 のすべてが完了して初めて確認できる。フィーチャーブランチへの中間 push は Phase 4 の全テスト修正が終わるまで行わないこと。
+> **PR-2 開発上の注意**: Phase 2 完了時点でテストが赤になり、Phase 4（ステップ 4-3・4-10）で修正されるまで緑に戻らない。`make test && make lint` は Phase 2〜4 のすべてが完了して初めて通る。フィーチャーブランチへの中間 push は Phase 4 の全テスト修正が終わるまで行わないこと。
 
 ### Phase 3: サイズ制限と切り詰め
 
@@ -194,7 +194,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 **レビュー観点**: ポリシー単位 `section` の自己完結性と旧 `fields` 撤廃 / `plain_text` 無害化（制御文字正規化・メンション抑制） / ステップ 3-3：overflow 時は policy section 最大 48・通常時は最大 49 という 48/49 件分岐と block 数 ≤ 50 の invariant；`FailureDetailsTotalCount`/`FailureDetailsTotalSessions` が PR-1 の事前集計値（>10 件でも正確な元総数）を参照していること / ステップ 3-4：`divider` 等 `Text==nil` ブロックでパニックしない nil ガードの実装 / AC 別テストの網羅と許可リスト・機微情報テストの維持
 
-- [ ] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
+- [ ] `make test && make lint` が通っていることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
@@ -263,7 +263,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 | AC | 区分 | 実装対象 | 検証方法 |
 |---|---|---|---|
-| AC-01 | test | `formatAlerts` の概要見出し、`uniqueOrgCount` | `internal/notify/format_test.go::TestFormatAlerts_TitleOrgCount`（維持）・`::TestFormatAlerts_TitleOrgCountDedup`（維持）で概要見出しの組織数を検証（グリーンゲートはステップ 4-31 で確認） |
+| AC-01 | test | `formatAlerts` の概要見出し、`uniqueOrgCount` | `internal/notify/format_test.go::TestFormatAlerts_TitleOrgCount`（維持）・`::TestFormatAlerts_TitleOrgCountDedup`（維持）で概要見出しの組織数を検証（`make test && make lint` の合格はステップ 4-31 で確認） |
 | AC-02 | test | `formatAlerts` のポリシー別 `section.text` | `internal/notify/format_test.go::TestFormatAlerts_PolicySection`（ステップ 4-12）で組織名・ポリシータイプ・失敗数・期間を同一 section 内に表示することを検証 |
 | AC-03 | test | `formatAlerts` の複数ポリシー section、`SlackHandler.Flush` の単一 POST | `internal/notify/format_test.go::TestFormatAlerts_AllPoliciesIncluded`（ステップ 4-13、通常系）・`::TestFormatAlerts_OverflowSummary`（ステップ 4-24、overflow 時の要約）・`internal/notify/handler_test.go::TestFlush_MultipleAlerts_SinglePost`（ステップ 4-28、単一 POST 集約）で検証 |
 | AC-04 | test | `formatAlerts` の旧 `fields` 見出し削除と section 分離 | `internal/notify/format_test.go::TestFormatAlerts_NoDuplicateHeaders`（ステップ 4-14）で旧見出し非出力と独立 section を検証 |
