@@ -64,13 +64,6 @@ func intDefault(value *int, fallback int) int {
 	return *value
 }
 
-func int64Value(value *int64) int64 {
-	if value == nil {
-		return 0
-	}
-	return *value
-}
-
 func int64Default(value *int64, fallback int64) int64 {
 	if value == nil {
 		return fallback

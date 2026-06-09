@@ -145,6 +145,17 @@ func TestLoad_DefaultMaxMessageBytes1MiB(t *testing.T) {
 	assert.Equal(t, int64(1<<20), cfg.IMAP.MaxMessageBytes)
 }
 
+func TestLoad_ExplicitZeroMaxMessageBytesUnlimited(t *testing.T) {
+	data := []byte(`[imap]
+host = "imap.example.com"
+port = 993
+max_message_bytes = 0
+`)
+	cfg, err := config.Load(data)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), cfg.IMAP.MaxMessageBytes)
+}
+
 func TestLoad_IMAPHostValidation(t *testing.T) {
 	tests := []struct {
 		name string
