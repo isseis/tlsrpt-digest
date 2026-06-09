@@ -135,15 +135,16 @@ sequenceDiagram
 
 | ファイル | 変更種別 | 責務 |
 |---|---|---|
-| `cmd/tlsrpt-digest/slack_notify_env_test.go` | 変更 | success Webhook URL 欠落判定ヘルパー（`missingSlackSummaryEnv`）とユニットテスト（`TestSlackSummary_EnvRequirements`）を追加 |
-| `cmd/tlsrpt-digest/slack_summary_integration_test.go` | 新規 | EML パース → FakeStore 保存 → サマリ生成 → Slack 送信の統合テスト（`TestSlackSummary_Summary_Integration`） |
-| `Makefile` | 変更 | `test-slack-summary` ターゲットを追加（`.PHONY` も更新） |
+| `internal/notify/validate.go` | 変更 | `EnvSlackWebhookURLSuccess` / `EnvSlackWebhookURLError` 定数を追加し、エラーメッセージを定数参照に変更（フェーズ 0） |
+| `cmd/tlsrpt-digest/boot.go` | 変更 | `withDefaults()` 内の `os.Getenv` 引数を `notify.EnvSlackWebhookURLSuccess` / `notify.EnvSlackWebhookURLError` に変更（フェーズ 0） |
+| `cmd/tlsrpt-digest/slack_notify_env_test.go` | 変更 | フェーズ 0: `internal/notify` import 追加・`slackNotifyWebhookEnvKey` を定数参照に変更。フェーズ 1: `missingSlackSummaryEnv` と `TestSlackSummary_EnvRequirements` を追加 |
+| `cmd/tlsrpt-digest/slack_summary_integration_test.go` | 新規 | EML パース → FakeStore 保存 → サマリ生成 → Slack 送信の統合テスト（`TestSlackSummary_Summary_Integration`、フェーズ 2） |
+| `Makefile` | 変更 | `test-slack-summary` ターゲットを追加（`.PHONY` も更新、フェーズ 2） |
 
 既存ファイルで変更が **不要** なもの：
 
 | ファイル | 変更不要の理由 |
 |---|---|
-| `cmd/tlsrpt-digest/boot.go` | `setupNotifyHandlers` はそのまま再利用可能 |
 | `internal/notify/aggregate.go` | `GenerateSummary` はそのまま再利用可能 |
 | `internal/store/testutil/mocks.go` | `FakeStore` はそのまま再利用可能 |
 
