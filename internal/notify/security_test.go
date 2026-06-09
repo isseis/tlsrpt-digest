@@ -284,8 +284,8 @@ func TestSecretNotInMessage_JSONCheck(t *testing.T) {
 	assert.NotContains(t, raw, sampleWebhookSuffix)
 }
 
-// TestAlertPayload_NoSensitiveData verifies the Block Kit alert payload does not
-// contain IP addresses, additional-information text, or the Webhook URL.
+// TestAlertPayload_NoSensitiveData verifies the alert payload does not contain
+// IP addresses, additional-information text, or the Webhook URL.
 // The IP and additional-information strings are injected as unknown slog attrs on
 // a raw record (simulating an accidental or future-extension leak path) to make
 // the assertions meaningful — they verify that unknown attr values are suppressed

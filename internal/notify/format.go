@@ -267,11 +267,16 @@ const (
 	maxAlertDetailDisplay = 3
 )
 
-// normalizeControlChars replaces Unicode control characters with a space to
-// prevent external values from injecting fake line breaks into attachment fields.
+// normalizeControlChars replaces characters that render as line breaks with a
+// space to prevent external values from injecting fake line breaks into fields.
+// Covers Unicode control characters (unicode.IsControl), line separator
+// U+2028, and paragraph separator U+2029 which Slack-compatible clients may
+// render as line breaks despite not being control-category runes.
 func normalizeControlChars(s string) string {
 	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		// U+2028 line separator and U+2029 paragraph separator are not control
+		// characters per unicode.IsControl but may render as line breaks.
+		if unicode.IsControl(r) || r == 0x2028 || r == 0x2029 {
 			return ' '
 		}
 		return r
@@ -279,7 +284,9 @@ func normalizeControlChars(s string) string {
 }
 
 // formatAlerts builds a single aggregated slackMessage for TLS failure alerts.
-// No truncation is applied here; the caller (Flush) applies truncateMessage.
+// Per-field truncation (org name, report ID, failure detail strings) is applied
+// here before building fields. truncateMessage applies the final hard-limit pass
+// on field values and top-level text after DebugLogger logging.
 func formatAlerts(alerts []Alert, runID string) slackMessage {
 	orgCount := uniqueOrgCount(alerts)
 	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, orgCount)
@@ -387,10 +394,19 @@ func buildFailureDetailsText(a Alert) string {
 	totalCount := max(a.FailureDetailsTotalCount, int64(len(details)))
 	totalSessions := max(a.FailureDetailsTotalSessions, detailsSessions)
 
+	// Emit the "Other N entries" summary first so truncateMessage cannot cut it
+	// before the detail lines even when session counts are large.
 	var sb strings.Builder
-	var topSessions int64
+	if totalCount > maxAlertDetailDisplay {
+		var topSessions int64
+		for _, fd := range shown {
+			topSessions += fd.FailedSessionCount
+		}
+		otherCount := totalCount - maxAlertDetailDisplay
+		otherSessions := max(totalSessions-topSessions, 0)
+		fmt.Fprintf(&sb, "Other %d entries (%d sessions total)\n", otherCount, otherSessions)
+	}
 	for i, fd := range shown {
-		topSessions += fd.FailedSessionCount
 		resultType := TruncateText(normalizeControlChars(fd.ResultType), maxAlertResultTypeRunes)
 		line := fmt.Sprintf("[%d] %s: %d sessions", i+1, resultType, fd.FailedSessionCount)
 		if fd.ReceivingMXHostname != "" {
@@ -402,14 +418,9 @@ func buildFailureDetailsText(a Alert) string {
 			line += " | Reason: " + reason
 		}
 		sb.WriteString(line)
-		if i < len(shown)-1 || totalCount > maxAlertDetailDisplay {
+		if i < len(shown)-1 {
 			sb.WriteByte('\n')
 		}
-	}
-	if totalCount > maxAlertDetailDisplay {
-		otherCount := totalCount - maxAlertDetailDisplay
-		otherSessions := max(totalSessions-topSessions, 0)
-		fmt.Fprintf(&sb, "Other %d entries (%d sessions total)", otherCount, otherSessions)
 	}
 	return sb.String()
 }

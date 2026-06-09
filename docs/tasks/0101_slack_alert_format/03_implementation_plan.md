@@ -41,7 +41,7 @@
 | `internal/notify/helpers.go` | `LogAlert` が基本 5 属性を出力 | Report ID、FailureDetails、FailureDetails の総件数・総セッション数を slog 属性へ追加 |
 | `internal/notify/format.go` `extractAlert` | 基本 5 属性を復元 | 新属性を復元し、未知キーは値を出さず DebugLogger にキー名のみ警告 |
 | `internal/notify/format.go` `formatAlerts` | `maxAlertFields` で fields を生成 | warning attachment fields を生成。top-level `text` はタイトルのみ |
-| `internal/notify/format.go` `truncateMessage` | `Text` と field values を切り詰め | `Text` と field values を切り詰め |
+| `internal/notify/format.go` `truncateMessage` | `Text` と field values を切り詰め | `Text` と field values を切り詰める（field title は対象外） |
 | `cmd/tlsrpt-digest/notify_helpers.go` | TLSRPT report から基本 4 項目を写像 | `report.ReportID` と `policy.FailureDetails` の公開 4 項目のみを写像。IP と自由記述は写像しない |
 
 ---
@@ -103,7 +103,7 @@
 - [x] **3-1** attachment fields に表示するポリシー数の上限を定義する。
 - [x] **3-2** 上限を超えるポリシーは `Additional Policies` field に、省略ポリシー数・組織数・失敗セッション数として要約する。
 - [x] **3-3** 組織名、policy type、Report ID、result type、MX hostname、reason code を値ごとの上限で切り詰める。
-- [x] **3-4** `truncateMessage` で top-level `Text`、attachment `Fallback`、field title/value を切り詰める。
+- [x] **3-4** `truncateMessage` で top-level `Text` と field value を切り詰める（field title は対象外）。
 
 完了条件: 過大入力でも単一 Slack message として送信でき、Slack 側の文字数制限に対して保守的に収まる。
 

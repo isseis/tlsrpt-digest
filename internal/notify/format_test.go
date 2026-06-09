@@ -580,7 +580,10 @@ func TestExtract_UnknownAttrKeyLogged(t *testing.T) {
 	// Known keys must not generate warnings.
 	assert.NotContains(t, debugBuf.String(), "report_id",
 		"report_id is a known key and must not be warned")
-	assert.NotContains(t, debugBuf.String(), "failure_details\"",
+	// "key=failure_details " (with trailing space) would appear only if failure_details
+	// itself were warned as an unknown top-level key; child-key warnings use
+	// "key=failure_details.N.childkey" which does not match this pattern.
+	assert.NotContains(t, debugBuf.String(), "key=failure_details ",
 		"failure_details is a known key and must not be warned")
 	// Unknown top-level key must be warned.
 	assert.Contains(t, debugBuf.String(), "unexpected_field",
