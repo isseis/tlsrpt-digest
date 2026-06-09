@@ -350,10 +350,9 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 // buildPolicySectionText constructs the plain_text content for one policy section.
 // External-origin strings are control-char-normalized and per-field truncated
 // before being assembled into the final text.
-// Invariant: a.FailureDetailsTotalCount >= int64(len(a.FailureDetails)) — both are
-// set by LogAlert from the same slice, with FailureDetailsTotalCount computed before
-// the 10-entry cap. Direct Alert construction must respect this invariant for the
-// "Other N entries" summary to be accurate.
+// FailureDetailsTotalCount and FailureDetailsTotalSessions are set by LogAlert
+// to the pre-cap totals. When an Alert is constructed directly (e.g., in tests)
+// and those fields are left at zero, the function falls back to the slice values.
 func buildPolicySectionText(a Alert) string {
 	orgName := TruncateText(normalizeControlChars(a.OrganizationName), maxAlertOrganizationRunes)
 	policyType := TruncateText(normalizeControlChars(policyTypeStr(a.PolicyType)), maxAlertPolicyTypeRunes)
@@ -378,6 +377,17 @@ func buildPolicySectionText(a Alert) string {
 		if len(shown) > maxAlertDetailDisplay {
 			shown = shown[:maxAlertDetailDisplay]
 		}
+
+		// Compute effective totals defensively: use the pre-cap values set by LogAlert,
+		// but fall back to the slice length/sum when the Alert is constructed directly
+		// (e.g. in tests) and those fields are left at their zero values.
+		var detailsSessions int64
+		for _, fd := range details {
+			detailsSessions += fd.FailedSessionCount
+		}
+		totalCount := max(a.FailureDetailsTotalCount, int64(len(details)))
+		totalSessions := max(a.FailureDetailsTotalSessions, detailsSessions)
+
 		sb.WriteByte('\n')
 		for i, fd := range shown {
 			resultType := TruncateText(normalizeControlChars(fd.ResultType), maxAlertResultTypeRunes)
@@ -391,17 +401,17 @@ func buildPolicySectionText(a Alert) string {
 				line += " | Reason: " + reason
 			}
 			sb.WriteString(line)
-			if i < len(shown)-1 || a.FailureDetailsTotalCount > maxAlertDetailDisplay {
+			if i < len(shown)-1 || totalCount > maxAlertDetailDisplay {
 				sb.WriteByte('\n')
 			}
 		}
-		if a.FailureDetailsTotalCount > maxAlertDetailDisplay {
+		if totalCount > maxAlertDetailDisplay {
 			var topSessions int64
 			for _, fd := range shown {
 				topSessions += fd.FailedSessionCount
 			}
-			otherCount := a.FailureDetailsTotalCount - maxAlertDetailDisplay
-			otherSessions := a.FailureDetailsTotalSessions - topSessions
+			otherCount := totalCount - maxAlertDetailDisplay
+			otherSessions := max(totalSessions-topSessions, 0)
 			fmt.Fprintf(&sb, "Other %d entries (%d sessions total)", otherCount, otherSessions)
 		}
 	}
