@@ -113,7 +113,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - [ ] **2-3** `format.go` `formatAlerts`: `fields` 生成を廃止し、`Attachments[0].Color = "warning"` の単一 attachment に、ポリシーごとの `section` ブロック群＋末尾 `context`（Run ID）を生成する（アーキテクチャ §3.3）。
 - [ ] **2-4** `format.go`: 各ポリシー `section.text` を `plain_text` で構築する。組織名・ポリシータイプ・失敗セッション総数・レポート期間（`.UTC()` 整形）・Report ID・失敗詳細を所定の行レイアウトで配置する（アーキテクチャ §3.3 の行テーブル）。
 - [ ] **2-5** `format.go`: 失敗詳細を `failed_session_count` 降順に並べ、上位 3 件を詳細表示、4 件以上は残りを `Other N entries (M sessions total)` として要約する。空の場合は失敗詳細行を出力しない。
-- [ ] **2-6** `format.go`: 外部由来文字列（組織名・`policy-type`・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code`）を `plain_text` へ入れる前に、`\n`・`\r`・`\t` を含む制御文字を空白へ正規化する。`policy-type` は `policyTypeStr` が文字列のまま出力するため外部入力として扱い、値ごとの上限（ステップ 3-1 で定義する `maxAlertPolicyTypeRunes`）でも切り詰める。本ステップの切り詰め実装はステップ 3-1 の定数定義後に行うこと。セクション内の項目間改行は実装テンプレート側で付加する（アーキテクチャ §3.3・§5.2）。
+- [ ] **2-6** `format.go`: 外部由来文字列（組織名・`policy-type`・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code`）を `plain_text` へ入れる前に、`\n`・`\r`・`\t` を含む制御文字を空白へ正規化する。セクション内の項目間改行は実装テンプレート側で付加する（アーキテクチャ §3.3・§5.2）。値ごとの切り詰めは、定数定義を含むステップ 3-2 で行う。
 - [ ] **2-7** `format.go`: `maxAlertFields` 定数とその参照を削除する。
 
 完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通る。なお既存アラートテストの多くは生 JSON 本文への部分文字列マッチ（`Contains`）であり、刷新後も同じ文字列が `section.text` 内に現れるため**自動的には赤化しない**。赤化するのは以下の 2 テスト:（1）`TestFormatAlerts_AttachmentFields`（`fields` の `title`/`value` を直接前提とする）、（2）`TestSlackAttachment_FieldsEncoding`（`captureWarnPayload` が `LogAlert` 経由でアラートペイロードを生成し `attachment["fields"]` を検証する）。Phase 4 では、これら 2 テストを `blocks` 構造検証へ書き換え、部分文字列マッチの既存テストも `sectionTexts` 経由の構造検証へ強化する（§2 Phase 4・§3 参照）。
@@ -125,7 +125,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 対象ファイル: `internal/notify/format.go`
 
 - [ ] **3-1** `format.go`: §1.4 の公式 Slack 仕様確認結果に基づき、`maxAlertBlocksPerMessage=50`・`maxAlertSectionRunes=3000`・`maxAlertContextRunes=300`・`maxAlertOrganizationRunes=120`・`maxAlertPolicyTypeRunes=80`・`maxAlertReportIDRunes=160`・`maxAlertResultTypeRunes=80`・`maxAlertMXHostnameRunes=120`・`maxAlertReasonCodeRunes=80` を定義する。`policy-type` は外部 JSON 由来のため制御文字正規化と切り詰めの対象に含める（Phase 2 の正規化タスクと一貫）。
-- [ ] **3-2** `format.go` `formatAlerts`: 外部由来値を section 組み立て前に値ごとの上限で切り詰める（`TruncateText` を流用）。対象は組織名・`policy-type`・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code`。期間・失敗数・静的ラベルは切り詰めない。
+- [ ] **3-2** `format.go` `formatAlerts`: ステップ 3-1 で定義した定数を使い、外部由来値を section 組み立て前に値ごとの上限で切り詰める（`TruncateText` を流用）。対象は組織名・`policy-type`・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code`（ステップ 2-6 で制御文字正規化済みの値に適用する）。期間・失敗数・静的ラベルは切り詰めない。
 - [ ] **3-3** `format.go` `formatAlerts`: ブロック数を `maxAlertBlocksPerMessage` 以内に収める。常に Run ID `context` の 1 ブロックを末尾に確保する。ポリシー数が 49 件以下の場合は overflow summary なしで全ポリシーを表示する（50 ブロック以内）。49 件を超える場合のみ overflow summary `section` の 1 ブロックを追加確保し、上位 48 件を詳細表示した後 overflow summary `section`（`plain_text`）に `N additional policies omitted; organizations: X; failed sessions: Y` を表示する（アーキテクチャ §6.2-3）。overflow summary は overflow が必要な場合にのみ追加し、49 件以下のときに不要なブロックを予約して AC-03 を早期違反しない。
 - [ ] **3-4** `format.go` `truncateMessage`: `Attachments[].Blocks[]` を走査し、`section.text`（`maxAlertSectionRunes`）と `context.elements[].text`（`maxAlertContextRunes`）を `TruncateText` で切り詰める。`slackBlock.Text` が `nil`（`divider` 等）の場合はスキップし、`Elements` は長さチェックの上で走査する（アーキテクチャ §6.2-4）。
 
