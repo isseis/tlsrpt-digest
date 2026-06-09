@@ -116,7 +116,7 @@ sequenceDiagram
     FS-->>GS: []tlsrpt.Report
     GS-->>Test: Summary{ReportCount:3, OrganizationStats:{...}}
 
-    Test->>NH: setupNotifyHandlers(successURL, config.Secret(""), cfg, runID, false)
+    Test->>NH: setupNotifyHandlers(successURL, errorURL, cfg, runID, false)
     NH-->>Test: NotificationSink
 
     Test->>SH: notifier.LogSummary(ctx, summary)
@@ -152,9 +152,9 @@ sequenceDiagram
 タスク 0100 の `missingSlackNotifyEnv` パターンを踏襲し、success Webhook URL 用の対称的な純粋ヘルパーを追加する。
 
 ```go
-// 追加する定数
-const slackSummaryWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"
-// 注: error URL は既存の slackNotifyWebhookEnvKey ("TLSRPT_SLACK_WEBHOOK_URL_ERROR") を再利用する。
+// 追加する定数（フェーズ 0 で internal/notify に定義される EnvSlackWebhookURLSuccess を参照する）
+const slackSummaryWebhookEnvKey = notify.EnvSlackWebhookURLSuccess
+// 注: error URL は既存の slackNotifyWebhookEnvKey (= notify.EnvSlackWebhookURLError) を再利用する。
 // 同一ファイル・同一パッケージ内で同値の定数を重複定義しないこと（03_implementation_plan.md §1 参照）。
 
 // 追加する純粋関数（env == nil のとき os.Getenv にフォールバック）

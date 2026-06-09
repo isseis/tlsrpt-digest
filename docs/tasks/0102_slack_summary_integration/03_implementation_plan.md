@@ -72,7 +72,7 @@
 - `setupNotifyHandlers` シグネチャ: `(successURL, errorURL config.Secret, cfg *config.Config, runID string, dryRun bool) (NotificationSink, error)`。
 - `notify.BuildHandlers` は `successURL` と `errorURL` の**両方**を `allowedHost` と照合する。テストでは `successURL` のホスト名を `cfg.Notify.Slack.AllowedHost` に設定するが、`errorURL` も同じホストを使用している前提となる（§5 リスク参照）。
 - アーキテクチャ設計書 `02_architecture.md` には以下の 3 箇所に誤りがあり、本計画書の記述が正しい:
-  - §2.2 シーケンス図: `setupNotifyHandlers(successURL, config.Secret(""), ...)` → 正しくは `config.Secret(errorURL)` を渡す。
+  - §2.2 シーケンス図: `setupNotifyHandlers(successURL, config.Secret(""), ...)` → 正しくは両方渡す。訂正済み（`config.Secret("")` → `errorURL`）。
   - §3.2 コードスニペット: `slackSummaryErrorWebhookEnvKey` を新規定数として宣言しているが、フェーズ 0 で `internal/notify` に定義する `EnvSlackWebhookURLError` を参照するため追加不要。
   - §6.2 フローチャートノード G: `"setupNotifyHandlers successURL のみ設定"` → 正しくは `successURL + errorURL` の両方を渡す。
   上記の誤りは `02_architecture.md` 自体でも訂正済み。
@@ -213,7 +213,8 @@
      - `assert.Contains(t, summary.OrganizationStats, "Microsoft Corporation")` (AC-05)
      - `assert.Equal(t, int64(5), summary.OrganizationStats["Google Inc."])` (AC-06)
      - `assert.Equal(t, int64(2), summary.OrganizationStats["Microsoft Corporation"])` (AC-07)
-  10. `AllowedHost` を `successURL` のホスト名から設定する（`TestSlackNotify_FailureAlert_Integration` と同パターン、`errorURL` も同じホストであることが前提）:
+  10. `cfg` を初期化し、`AllowedHost` を `successURL` のホスト名から設定する（`TestSlackNotify_FailureAlert_Integration` と同パターン、`errorURL` も同じホストであることが前提）:
+      - `cfg := &config.Config{}`
       - `u, err := url.Parse(successURL)` / `require.NoError` / `cfg.Notify.Slack.AllowedHost = u.Hostname()`
   11. `notifier, err := setupNotifyHandlers(config.Secret(successURL), config.Secret(errorURL), cfg, runID, false)` でノーティファイアを構築し `require.NoError` でエラーを確認する。
   12. `require.NoError(t, notifier.LogSummary(ctx, summary))` でサマリをバッファリングする。
