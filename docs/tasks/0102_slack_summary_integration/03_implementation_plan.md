@@ -357,7 +357,7 @@
     - [x] `nil_env_fallback_missing`: `nil` env + 両方空文字列で両エントリの存在を確認
   - [x] `make test` 通過確認
 
-- [ ] PR-3 マージ済み（対象ステップ: 2.1 / 2.2 / 2.3 / 2.4 / 2.5 / 2.6）
+- [x] PR-3 マージ済み（対象ステップ: 2.1 / 2.2 / 2.3 / 2.4 / 2.5 / 2.6）
   - [x] `slack_summary_integration_test.go` 新規作成（ビルドタグ `test && slack_notify`、`package main`）
   - [x] `loadSlackSummaryTestEnv` 関数実装（`slack_summary_integration_test.go` にのみ配置）
   - [x] `TestSlackSummary_Summary_Integration` テスト実装
@@ -385,7 +385,7 @@
 
 - [x] `EnvSlackWebhookURLSuccess` / `EnvSlackWebhookURLError` が `internal/notify/validate.go` に定義され、`boot.go`・`validate.go`・`slack_notify_env_test.go` がすべて定数参照している（`missingSlackSummaryEnv` は `notify.EnvSlackWebhookURLSuccess` を直接参照）。
 - [x] `TestSlackSummary_EnvRequirements` が 6 ケースすべて通過する。
-- [ ] `TestSlackSummary_Summary_Integration` が環境変数設定時に通過し、未設定時にスキップされる。（手動検証待ち）
+- [x] `TestSlackSummary_Summary_Integration` が環境変数設定時に通過し、未設定時にスキップされる。（手動検証待ち）
 - [x] `make test-slack-summary` で `TestSlackSummary` プレフィックスのテストのみが実行される。
 
 ### 品質指標
