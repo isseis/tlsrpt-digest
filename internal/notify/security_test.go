@@ -283,3 +283,55 @@ func TestSecretNotInMessage_JSONCheck(t *testing.T) {
 	raw := string(recv)
 	assert.NotContains(t, raw, sampleWebhookSuffix)
 }
+
+// TestAlertPayload_NoSensitiveData verifies the Block Kit alert payload does not
+// contain IP addresses, additional-information text, or the Webhook URL (AC-13).
+func TestAlertPayload_NoSensitiveData(t *testing.T) {
+	const sensitiveIP = "203.0.113.42"
+	const sensitiveAdditional = "supersecret-freetext"
+
+	var recv []byte
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recv, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	webhookURL := srv.URL + "/" + sampleWebhookSuffix + "/webhook"
+	opts := notify.SlackHandlerOptions{
+		WebhookURL:    config.Secret(webhookURL),
+		AllowedHost:   "127.0.0.1",
+		RunID:         "test",
+		LevelMode:     notify.LevelModeWarnAndAbove,
+		HTTPClient:    srv.Client(),
+		BackoffConfig: notify.DefaultBackoffConfig,
+	}
+	h, err := notify.NewSlackHandler(opts)
+	require.NoError(t, err)
+
+	alert := notify.Alert{
+		OrganizationName:            "public.example",
+		PolicyType:                  notify.PolicyTypeSTS,
+		FailureCount:                5,
+		ReportID:                    "rpt-security-test",
+		FailureDetailsTotalCount:    1,
+		FailureDetailsTotalSessions: 5,
+		FailureDetails: []notify.FailureDetail{
+			// IP and additional-information are intentionally NOT fields of FailureDetail;
+			// they are structurally excluded from the type (AC-13 Principle 1).
+			{
+				ResultType:          strings.Repeat("a", 80),
+				FailedSessionCount:  5,
+				ReceivingMXHostname: strings.Repeat("m", 120),
+				FailureReasonCode:   strings.Repeat("r", 80),
+			},
+		},
+	}
+	require.NoError(t, notify.LogAlert(context.Background(), h, alert))
+	require.NoError(t, h.Flush(context.Background()))
+
+	body := string(recv)
+	assert.NotContains(t, body, sensitiveIP, "IP address must not appear in alert payload")
+	assert.NotContains(t, body, sensitiveAdditional, "additional-information must not appear in alert payload")
+	assert.NotContains(t, body, sampleWebhookSuffix, "webhook URL must not appear in alert payload")
+}

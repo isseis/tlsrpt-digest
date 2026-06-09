@@ -37,7 +37,21 @@ type slackMessage struct {
 // slackAttachment is a Slack message attachment with optional colour and fields.
 type slackAttachment struct {
 	Color  string       `json:"color,omitempty"`
-	Fields []slackField `json:"fields,omitempty"`
+	Blocks []slackBlock `json:"blocks,omitempty"` // used for alerts (Block Kit)
+	Fields []slackField `json:"fields,omitempty"` // used for warnings / errors / summary
+}
+
+// slackBlock is a minimal Slack Block Kit block: section, divider, or context.
+type slackBlock struct {
+	Type     string            `json:"type"`
+	Text     *slackTextObject  `json:"text,omitempty"`     // section
+	Elements []slackTextObject `json:"elements,omitempty"` // context
+}
+
+// slackTextObject is a plain_text or mrkdwn text composition object.
+type slackTextObject struct {
+	Type string `json:"type"` // "plain_text" or "mrkdwn"
+	Text string `json:"text"`
 }
 
 // slackField is a single key-value field within a Slack attachment.

@@ -15,7 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func captureWarnPayload(t *testing.T) []byte {
+// captureAlertPayload sends one alert through a real SlackHandler and returns
+// the raw POST body.
+func captureAlertPayload(t *testing.T) []byte {
 	t.Helper()
 
 	var recv []byte
@@ -53,7 +55,7 @@ func captureWarnPayload(t *testing.T) []byte {
 }
 
 func TestSlackMessage_JSONShape(t *testing.T) {
-	raw := captureWarnPayload(t)
+	raw := captureAlertPayload(t)
 
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(raw, &payload))
@@ -67,8 +69,10 @@ func TestSlackMessage_JSONShape(t *testing.T) {
 	require.NotEmpty(t, attachments)
 }
 
+// TestSlackAttachment_FieldsEncoding verifies that alerts use Block Kit blocks
+// (not legacy fields) within the attachment.
 func TestSlackAttachment_FieldsEncoding(t *testing.T) {
-	raw := captureWarnPayload(t)
+	raw := captureAlertPayload(t)
 
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(raw, &payload))
@@ -80,13 +84,24 @@ func TestSlackAttachment_FieldsEncoding(t *testing.T) {
 	attachment, ok := attachments[0].(map[string]any)
 	require.True(t, ok)
 
-	fields, ok := attachment["fields"].([]any)
-	require.True(t, ok)
-	require.NotEmpty(t, fields)
+	blocks, ok := attachment["blocks"].([]any)
+	require.True(t, ok, "alert attachment must have blocks, not fields")
+	require.NotEmpty(t, blocks)
 
-	firstField, ok := fields[0].(map[string]any)
-	require.True(t, ok)
-	assert.Contains(t, firstField, "title")
-	assert.Contains(t, firstField, "value")
-	assert.Contains(t, firstField, "short")
+	// At least one block must be a section with a text object.
+	var hasSectionText bool
+	for _, blockAny := range blocks {
+		block, ok := blockAny.(map[string]any)
+		if !ok {
+			continue
+		}
+		if block["type"] == "section" {
+			if textObj, ok := block["text"].(map[string]any); ok {
+				if textObj["type"] == "plain_text" && textObj["text"] != "" {
+					hasSectionText = true
+				}
+			}
+		}
+	}
+	assert.True(t, hasSectionText, "at least one section block must have a plain_text text object")
 }

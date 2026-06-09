@@ -49,7 +49,7 @@ func TruncateText(s string, maxLen int) string {
 	return string(runes[:maxLen-suffixLen]) + truncSuffix
 }
 
-// truncateMessage applies Slack field-length limits to m in place.
+// truncateMessage applies Slack length limits to m in place.
 // This must be called after DebugLogger logging so the debug output is untruncated.
 func truncateMessage(m *slackMessage) {
 	m.Text = TruncateText(m.Text, maxTextRunes)
@@ -58,6 +58,15 @@ func truncateMessage(m *slackMessage) {
 			m.Attachments[i].Fields[j].Value = TruncateText(
 				m.Attachments[i].Fields[j].Value, maxFieldRunes,
 			)
+		}
+		for j := range m.Attachments[i].Blocks {
+			b := &m.Attachments[i].Blocks[j]
+			if b.Text != nil {
+				b.Text.Text = TruncateText(b.Text.Text, maxAlertSectionRunes)
+			}
+			for k := range b.Elements {
+				b.Elements[k].Text = TruncateText(b.Elements[k].Text, maxAlertContextRunes)
+			}
 		}
 	}
 }
@@ -250,49 +259,150 @@ func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 	return s
 }
 
-// maxAlertFields caps alert fields per Slack attachment.
-// Slack Incoming Webhooks allow at most 10 fields per attachment; one slot is
-// reserved for the Run ID field appended to the last attachment.
-const maxAlertFields = 9
+// Block Kit size limits for alert messages.
+const (
+	maxAlertBlocksPerMessage  = 50   // Slack limit: 50 blocks per message
+	maxAlertSectionRunes      = 3000 // Slack section text limit
+	maxAlertContextRunes      = 300  // conservative limit for Run ID context
+	maxAlertOrganizationRunes = 120
+	maxAlertPolicyTypeRunes   = 80
+	maxAlertReportIDRunes     = 160
+	maxAlertResultTypeRunes   = 80
+	maxAlertMXHostnameRunes   = 120
+	maxAlertReasonCodeRunes   = 80
 
-// formatAlerts builds a single aggregated slackMessage for TLS failure alerts.
-// Alerts are chunked across multiple attachments (≤9 alert fields each) to
-// stay within Slack's 10-field-per-attachment limit.
-// No truncation is applied here; the caller (Flush) truncates before sending.
+	// maxAlertDetailDisplay is the number of failure-detail entries shown in full;
+	// additional entries are summarised as "Other N entries (M sessions total)".
+	maxAlertDetailDisplay = 3
+
+	// alertBlocksOverhead is the number of non-policy blocks reserved in
+	// formatAlerts: 1 context + 1 overflow summary (when overflow occurs).
+	alertBlocksOverhead = 2
+)
+
+// normalizeControlChars replaces ASCII control characters (< U+0020 or == U+007F)
+// with a space. This prevents external values from injecting fake line breaks or
+// other control sequences into plain_text block content.
+func normalizeControlChars(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
+// formatAlerts builds a single aggregated slackMessage for TLS failure alerts
+// using Block Kit sections. Each policy gets its own section block.
+// No truncation is applied here; the caller (Flush) applies truncateMessage.
 func formatAlerts(alerts []Alert, runID string) slackMessage {
 	orgCount := uniqueOrgCount(alerts)
 	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, orgCount)
 
-	var attachments []slackAttachment
-	for i := 0; i < len(alerts); i += maxAlertFields {
-		end := min(i+maxAlertFields, len(alerts))
-		chunk := alerts[i:end]
+	// 1 block reserved for context; when overflow is needed, also 1 for summary.
+	const maxWithoutOverflow = maxAlertBlocksPerMessage - 1 // 49 policies + 1 context
+	const maxWithOverflow = maxAlertBlocksPerMessage - 2    // 48 policies + 1 summary + 1 context
 
-		var fields []slackField
-		for _, a := range chunk {
-			fields = append(fields, slackField{
-				Title: "Organization / Policy / Failures / Period",
-				Value: fmt.Sprintf("%s | %s | %d | %s – %s",
-					a.OrganizationName,
-					policyTypeStr(a.PolicyType),
-					a.FailureCount,
-					a.DateRange.Start.Format(time.DateOnly),
-					a.DateRange.End.Format(time.DateOnly),
-				),
-				Short: false,
-			})
-		}
-		if end == len(alerts) {
-			// Append Run ID only to the last attachment.
-			fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: true})
-		}
-		attachments = append(attachments, slackAttachment{Color: colorWarning, Fields: fields})
+	shown := alerts
+	var overflowAlerts []Alert
+	if len(alerts) > maxWithoutOverflow {
+		shown = alerts[:maxWithOverflow]
+		overflowAlerts = alerts[maxWithOverflow:]
 	}
+
+	blocks := make([]slackBlock, 0, len(shown)+alertBlocksOverhead)
+	for _, a := range shown {
+		text := buildPolicySectionText(a)
+		blocks = append(blocks, slackBlock{
+			Type: "section",
+			Text: &slackTextObject{Type: "plain_text", Text: text},
+		})
+	}
+
+	if len(overflowAlerts) > 0 {
+		overflowOrgs := uniqueOrgCount(overflowAlerts)
+		var overflowSessions int64
+		for _, a := range overflowAlerts {
+			overflowSessions += a.FailureCount
+		}
+		overflowText := fmt.Sprintf("%d additional policies omitted; organizations: %d; failed sessions: %d",
+			len(overflowAlerts), overflowOrgs, overflowSessions)
+		blocks = append(blocks, slackBlock{
+			Type: "section",
+			Text: &slackTextObject{Type: "plain_text", Text: overflowText},
+		})
+	}
+
+	// Append Run ID context block.
+	blocks = append(blocks, slackBlock{
+		Type:     "context",
+		Elements: []slackTextObject{{Type: "plain_text", Text: "Run ID: " + runID}},
+	})
 
 	return slackMessage{
-		Text:        title,
-		Attachments: attachments,
+		Text: title,
+		Attachments: []slackAttachment{
+			{Color: colorWarning, Blocks: blocks},
+		},
 	}
+}
+
+// buildPolicySectionText constructs the plain_text content for one policy section.
+// External-origin strings are control-char-normalized and per-field truncated
+// before being assembled into the final text.
+func buildPolicySectionText(a Alert) string {
+	orgName := TruncateText(normalizeControlChars(a.OrganizationName), maxAlertOrganizationRunes)
+	policyType := TruncateText(normalizeControlChars(policyTypeStr(a.PolicyType)), maxAlertPolicyTypeRunes)
+	reportID := TruncateText(normalizeControlChars(a.ReportID), maxAlertReportIDRunes)
+
+	var sb strings.Builder
+	// Line 1: org | policy type
+	fmt.Fprintf(&sb, "%s | %s\n", orgName, policyType)
+	// Line 2: failed sessions | period (UTC)
+	fmt.Fprintf(&sb, "Failed sessions: %d | Period: %s – %s\n",
+		a.FailureCount,
+		a.DateRange.Start.UTC().Format(time.DateOnly),
+		a.DateRange.End.UTC().Format(time.DateOnly),
+	)
+	// Line 3: Report ID
+	fmt.Fprintf(&sb, "Report ID: %s", reportID)
+
+	// Failure details (sorted descending by FailedSessionCount, already done in LogAlert).
+	details := a.FailureDetails
+	if len(details) > 0 {
+		shown := details
+		if len(shown) > maxAlertDetailDisplay {
+			shown = shown[:maxAlertDetailDisplay]
+		}
+		sb.WriteByte('\n')
+		for i, fd := range shown {
+			resultType := TruncateText(normalizeControlChars(fd.ResultType), maxAlertResultTypeRunes)
+			line := fmt.Sprintf("[%d] %s: %d sessions", i+1, resultType, fd.FailedSessionCount)
+			if fd.ReceivingMXHostname != "" {
+				mx := TruncateText(normalizeControlChars(fd.ReceivingMXHostname), maxAlertMXHostnameRunes)
+				line += " | MX: " + mx
+			}
+			if fd.FailureReasonCode != "" {
+				reason := TruncateText(normalizeControlChars(fd.FailureReasonCode), maxAlertReasonCodeRunes)
+				line += " | Reason: " + reason
+			}
+			sb.WriteString(line)
+			if i < len(shown)-1 || a.FailureDetailsTotalCount > maxAlertDetailDisplay {
+				sb.WriteByte('\n')
+			}
+		}
+		if a.FailureDetailsTotalCount > maxAlertDetailDisplay {
+			var topSessions int64
+			for _, fd := range shown {
+				topSessions += fd.FailedSessionCount
+			}
+			otherCount := a.FailureDetailsTotalCount - maxAlertDetailDisplay
+			otherSessions := a.FailureDetailsTotalSessions - topSessions
+			fmt.Fprintf(&sb, "Other %d entries (%d sessions total)", otherCount, otherSessions)
+		}
+	}
+
+	return sb.String()
 }
 
 // formatSystemError builds a slackMessage for a single system error.
