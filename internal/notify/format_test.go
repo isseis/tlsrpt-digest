@@ -770,8 +770,6 @@ func TestFormatWarning_SlackPayloadFields(t *testing.T) {
 	assert.Contains(t, body, "run-001", "run_id should appear in payload")
 }
 
-// ---- New AC tests (Phase 4) ----
-
 // TestFormatAlerts_PolicyField verifies each policy's org name, policy type,
 // failure count, and period (UTC) appear in the same field.
 func TestFormatAlerts_PolicyField(t *testing.T) {
