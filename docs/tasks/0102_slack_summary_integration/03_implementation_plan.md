@@ -189,11 +189,11 @@
 
 **対象ファイル**: `cmd/tlsrpt-digest/slack_summary_integration_test.go`
 
-- [ ] **2.1** ファイルを新規作成し、ビルドタグと `package main` 宣言を追加する。
+- [x] **2.1** ファイルを新規作成し、ビルドタグと `package main` 宣言を追加する。
   - 先頭行: `//go:build test && slack_notify`
   - パッケージ: `package main`
 
-- [ ] **2.2** 必要な import を追加する（`TestSlackNotify_FailureAlert_Integration` の import を参考に以下を含める）。
+- [x] **2.2** 必要な import を追加する（`TestSlackNotify_FailureAlert_Integration` の import を参考に以下を含める）。
   - `bytes`, `context`, `net/mail`, `net/url`, `os`, `path/filepath`, `strings`, `testing`, `time`
   - `github.com/oklog/ulid/v2`
   - `github.com/stretchr/testify/assert`, `github.com/stretchr/testify/require`
@@ -203,23 +203,22 @@
   - `github.com/isseis/tlsrpt-digest/internal/store`
   - `storetestutil "github.com/isseis/tlsrpt-digest/internal/store/testutil"`
 
-- [ ] **2.3** `loadSlackSummaryTestEnv(t *testing.T) (successURL, errorURL string)` 関数を実装する。
+- [x] **2.3** `loadSlackSummaryTestEnv(t *testing.T) (successURL, errorURL string)` 関数を実装する。
   - この関数は `slack_summary_integration_test.go`（ビルドタグ `test && slack_notify`）にのみ定義し、`slack_notify_env_test.go` には追加しないこと（`test` のみのビルドで参照されないよう隔離するため）。
   - `t.Helper()` を呼び出す。
   - `missingSlackSummaryEnv(nil)` で欠落確認し、欠落がある場合は `t.Skip("Slack summary env not configured: " + strings.Join(missing, ", "))` でスキップする。
   - `os.Getenv(notify.EnvSlackWebhookURLSuccess)` と `os.Getenv(notify.EnvSlackWebhookURLError)` の両方を返す。
 
-- [ ] **2.4** `TestSlackSummary_Summary_Integration(t *testing.T)` 関数を実装する。
+- [x] **2.4** `TestSlackSummary_Summary_Integration(t *testing.T)` 関数を実装する。
   処理の骨格（`02_architecture.md` § 3.3 参照）:
 
   1. `ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)` でタイムアウト付きコンテキストを作成し `defer cancel()` する。
   2. `successURL, errorURL := loadSlackSummaryTestEnv(t)` で環境変数を取得（未設定ならスキップ）。
   3. `runID := ulid.Make().String()` で実行ごとに一意な runID を生成する。
-  4. 以下の 3 通の EML を順番に読み込み、それぞれからレポートをパースする:
+  4. 以下の 3 通の EML を順番に読み込み、それぞれからレポートをパースする。実装では `emlPaths` スライスをループして DRY に処理し、`os.ReadFile` 呼び出しは 1 箇所（ループ内）に `//nolint:gosec // G304: path is a hardcoded testdata literal` コメントを付与する（計 1 箇所。lint は呼び出し行単位のため問題なし）:
      - `filepath.Join("..", "..", "testdata", "tlsrpt_success_google_1.eml")`
      - `filepath.Join("..", "..", "testdata", "tlsrpt_success_google_2.eml")`
      - `filepath.Join("..", "..", "testdata", "tlsrpt_success_microsoft.eml")`
-     - 各 `os.ReadFile` 呼び出しに `//nolint:gosec // G304: path is a hardcoded testdata literal` コメントを付与する（計 3 箇所すべてに必要）。
      - `mail.ReadMessage` → `mailparse.ExtractAttachments(msg, 10<<20)` → `parseTLSRPTAttachment` でレポートを取得する。
      - 各 EML について `require.NotNil(t, report)` で nil チェックする（計 3 回）。
      - 各 EML について `assert.False(t, report.HasFailure())` で failure ゼロを確認する（計 3 回）。
@@ -246,11 +245,11 @@
 
 **対象ファイル**: `Makefile`
 
-- [ ] **2.5** `.PHONY` 行に `test-slack-summary` を追加する。
+- [x] **2.5** `.PHONY` 行に `test-slack-summary` を追加する。
   - 変更前: `.PHONY: build test test-integration test-slack-notify lint fmt deadcode clean`
   - 変更後: `.PHONY: build test test-integration test-slack-notify test-slack-summary lint fmt deadcode clean`
 
-- [ ] **2.6** `test-slack-summary` ターゲットを追加する。
+- [x] **2.6** `test-slack-summary` ターゲットを追加する。
   - `test-slack-notify` ターゲットの直後に追加する。
   - コメントと make コマンドを以下の内容で記述する:
     ```makefile
