@@ -116,7 +116,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 - [ ] **2-6** `format.go`: 外部由来文字列（組織名・`policy-type`・Report ID・`result-type`・`receiving-mx-hostname`・`failure-reason-code`）を `plain_text` へ入れる前に、`\n`・`\r`・`\t` を含む制御文字を空白へ正規化する。セクション内の項目間改行は実装テンプレート側で付加する（アーキテクチャ §3.3・§5.2）。値ごとの切り詰めは、定数定義を含むステップ 3-2 で行う。
 - [ ] **2-7** `format.go`: `maxAlertFields` 定数とその参照を削除する。
 
-完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通る。なお既存アラートテストの多くは生 JSON 本文への部分文字列マッチ（`Contains`）であり、刷新後も同じ文字列が `section.text` 内に現れるため**自動的には赤化しない**。赤化するのは以下の 2 テスト:（1）`TestFormatAlerts_AttachmentFields`（`fields` の `title`/`value` を直接前提とする）、（2）`TestSlackAttachment_FieldsEncoding`（`captureWarnPayload` が `LogAlert` 経由でアラートペイロードを生成し `attachment["fields"]` を検証する）。Phase 4 では、これら 2 テストを `blocks` 構造検証へ書き換え、部分文字列マッチの既存テストも `sectionTexts` 経由の構造検証へ強化する（§2 Phase 4・§3 参照）。
+完了条件: `go test -tags test ./internal/notify/... ./cmd/tlsrpt-digest/...` が通る。なお既存アラートテストの多くは生 JSON 本文への部分文字列マッチ（`Contains`）であり、刷新後も同じ文字列が `section.text` 内に現れるため**自動的にはテスト失敗にならない**。テストが失敗するのは以下の 2 テスト:（1）`TestFormatAlerts_AttachmentFields`（`fields` の `title`/`value` を直接前提とする）、（2）`TestSlackAttachment_FieldsEncoding`（`captureWarnPayload` が `LogAlert` 経由でアラートペイロードを生成し `attachment["fields"]` を検証する）。Phase 4 では、これら 2 テストを `blocks` 構造検証へ書き換え、部分文字列マッチの既存テストも `sectionTexts` 経由の構造検証へ強化する（§2 Phase 4・§3 参照）。
 
 > **PR-2 開発上の注意**: Phase 2 完了時点でテストが赤になり、Phase 4（ステップ 4-3・4-10）で修正されるまで緑に戻らない。PR-2 のグリーンゲート（`make test && make lint`）は Phase 2〜4 のすべてが完了して初めて確認できる。フィーチャーブランチへの中間 push は Phase 4 の全テスト修正が終わるまで行わないこと。
 
@@ -140,10 +140,10 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 **既存アラートテストの改修（旧 `fields` 前提・部分文字列マッチ → `blocks` 構造検証）**
 
-> 注意: 以下のうち `TestFormatAlerts_Fields`／`_NoTruncation`／`_RunID`／`_NoPolicyFound`／`_PolicyTypeUnknown`／`_Color` は生 JSON 本文への `Contains` 検証であり、刷新後も同じ文字列が `section.text` 内に出現するため**自動的には赤化しない**。これらは「壊れた blocks 実装でも緑になりうる」弱いテストなので、`sectionTexts(msg)` で取り出した特定 `section`/`context` のテキストを対象とする構造検証へ書き換え、誤レイアウトで確実に赤化するよう強化する。
+> 注意: 以下のうち `TestFormatAlerts_Fields`／`_NoTruncation`／`_RunID`／`_NoPolicyFound`／`_PolicyTypeUnknown`／`_Color` は生 JSON 本文への `Contains` 検証であり、刷新後も同じ文字列が `section.text` 内に出現するため**自動的にはテスト失敗にならない**。これらは「壊れた blocks 実装でも通過しうる」弱いテストなので、`sectionTexts(msg)` で取り出した特定 `section`/`context` のテキストを対象とする構造検証へ書き換え、誤レイアウトで確実にテストが失敗するよう強化する。
 
 - [ ] **4-2** `format_test.go` `TestFormatAlerts_Fields`: 組織・ポリシー・失敗数・期間の検証を、`sectionTexts` で取得した該当ポリシー `section` テキストに対する検証へ強化する（テスト名も `TestFormatAlerts_PolicySection` 等へ見直す）。
-- [ ] **4-3** `format_test.go` `TestFormatAlerts_AttachmentFields`: `fields` の `title`/`value` を直接前提とし赤化する。`blocks` の `section`/`text` 構造検証へ書き換える。
+- [ ] **4-3** `format_test.go` `TestFormatAlerts_AttachmentFields`: `fields` の `title`/`value` を直接前提とするため Phase 2 適用後に失敗する。`blocks` の `section`/`text` 構造検証へ書き換える。
 - [ ] **4-4** `format_test.go` `TestFormatAlerts_NoTruncation`: 切り詰め対象を `section`/`context` テキストへ変え、`sectionTexts` 経由で長文が上限内に収まることを検証する。
 - [ ] **4-5** `format_test.go` `TestFormatAlerts_RunID`: Run ID を末尾 `context` ブロックの `elements[].text` から取得して検証する。
 - [ ] **4-6** `format_test.go` `TestFormatAlerts_NoPolicyFound`: 出力先を該当 `section` テキストへ更新する（`policyTypeStr` の挙動は不変）。
@@ -210,7 +210,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 | マイルストーン | 含むステップ | 内容 | 緑ゲート時の状態 |
 |---|---|---|---|
 | PR-1 | 1-1〜1-9 | データ構造・slog 往復・写像。`formatAlerts` は未変更で従来 `fields` を出力 | 既存アラートテストは緑のまま。追加: `TestLogAlert_StructuredPayloadOnly` 強化（1-7）、`TestLogAlert_FailureDetailsRoundTrip`（1-8）、`TestLogAlerts_MapsPublicFailureFields`（1-9）（`TestSlackNotify_EnvRequirements` は既存・変更不要） |
-| PR-2 | 2-1〜2-7 / 3-1〜3-4 / 4-1〜4-32 | Block Kit 整形・切り詰め・overflow と、それに伴う全テスト更新/追加 | `TestFormatAlerts_AttachmentFields`・`TestSlackAttachment_FieldsEncoding` は刷新で赤化するため同一 PR で更新。部分文字列マッチの既存テストは赤化しないが、誤レイアウトを検出できるよう同一 PR で構造検証へ強化してから緑で出す |
+| PR-2 | 2-1〜2-7 / 3-1〜3-4 / 4-1〜4-32 | Block Kit 整形・切り詰め・overflow と、それに伴う全テスト更新/追加 | `TestFormatAlerts_AttachmentFields`・`TestSlackAttachment_FieldsEncoding` は刷新後に失敗するため同一 PR で更新。部分文字列マッチの既存テストは失敗しないが、誤レイアウトを検出できるよう同一 PR で構造検証へ強化してから緑で出す |
 
 ### 3.2 PR 構成
 
