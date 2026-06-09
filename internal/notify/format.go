@@ -286,13 +286,10 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, orgCount)
 
 	const (
-		maxAlertPoliciesPerChunk = 3
-		maxAlertAttachments      = 100 // Slack per-message attachment limit
-		// alertExtraFields: overflow summary (optional) + Run ID on the last attachment.
-		alertExtraFields = 2
-		// maxPoliciesInLastChunkWithOverflow: caps the last chunk when overflow occurs,
-		// leaving room for alertExtraFields without exceeding 10 fields per attachment.
-		maxPoliciesInLastChunkWithOverflow = 2
+		maxAlertPoliciesPerChunk           = 3
+		maxAlertAttachments                = 100 // Slack per-message attachment limit
+		alertExtraFields                   = 2   // overflow summary (optional) + Run ID
+		maxPoliciesInLastChunkWithOverflow = 2   // keeps last attachment ≤ 10 fields when overflow occurs
 	)
 	maxPoliciesShown := maxAlertAttachments * maxAlertPoliciesPerChunk
 
