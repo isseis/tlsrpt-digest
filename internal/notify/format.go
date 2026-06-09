@@ -57,7 +57,6 @@ func TruncateText(s string, maxLen int) string {
 func truncateMessage(m *slackMessage) {
 	m.Text = TruncateText(m.Text, maxTextRunes)
 	for i := range m.Attachments {
-		m.Attachments[i].Fallback = TruncateText(m.Attachments[i].Fallback, maxTextRunes)
 		for j := range m.Attachments[i].Fields {
 			m.Attachments[i].Fields[j].Value = TruncateText(
 				m.Attachments[i].Fields[j].Value, maxFieldRunes,
@@ -303,9 +302,6 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 		overflowAlerts = alerts[maxWithOverflow:]
 	}
 
-	// Pre-compute overflow text before building fallbackParts so it appears near
-	// the top of the fallback (right after the title), ensuring non-attachment
-	// clients see it even after truncateMessage caps the fallback at 4000 runes.
 	var overflowText string
 	if len(overflowAlerts) > 0 {
 		overflowOrgs := uniqueOrgCount(overflowAlerts)
@@ -315,12 +311,6 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 		}
 		overflowText = fmt.Sprintf("%d additional policies omitted; organizations: %d; failed sessions: %d",
 			len(overflowAlerts), overflowOrgs, overflowSessions)
-	}
-
-	var fallbackParts []string
-	fallbackParts = append(fallbackParts, title)
-	if overflowText != "" {
-		fallbackParts = append(fallbackParts, overflowText)
 	}
 
 	var attachments []slackAttachment
@@ -338,36 +328,25 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 				Value: summary,
 				Short: false,
 			})
-			fallbackParts = append(fallbackParts, "Organization / Policy / Failures / Period\n"+summary)
 
 			if a.ReportID != "" {
 				reportID := TruncateText(normalizeControlChars(a.ReportID), maxAlertReportIDRunes)
 				fields = append(fields, slackField{Title: "Report ID", Value: reportID, Short: false})
-				fallbackParts = append(fallbackParts, "Report ID\n"+reportID)
 			}
 
 			if details := buildFailureDetailsText(a); details != "" {
 				fields = append(fields, slackField{Title: "Failure Details", Value: details, Short: false})
-				fallbackParts = append(fallbackParts, "Failure Details\n"+details)
 			}
 		}
 
 		if isLast {
 			if overflowText != "" {
 				fields = append(fields, slackField{Title: "Additional Policies", Value: overflowText, Short: false})
-				// overflowText already added to fallbackParts before the loop.
 			}
 			fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: false})
-			fallbackParts = append(fallbackParts, "Run ID\n"+runID)
 		}
 
 		attachments = append(attachments, slackAttachment{Color: colorWarning, Fields: fields})
-	}
-
-	// Store the full text in the first attachment's fallback so clients that
-	// cannot render attachments still receive the complete message.
-	if len(attachments) > 0 {
-		attachments[0].Fallback = strings.Join(fallbackParts, "\n\n")
 	}
 
 	return slackMessage{

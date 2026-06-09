@@ -86,11 +86,7 @@ func TestSlackAttachment_FieldsEncoding(t *testing.T) {
 	attachment, ok := attachments[0].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "warning", attachment["color"])
-	fallback, ok := attachment["fallback"].(string)
-	require.True(t, ok)
-	assert.Contains(t, fallback, "Organization / Policy / Failures / Period")
-	assert.Contains(t, fallback, "example.com | sts | 1 | 2026-01-01 – 2026-01-02")
-	assert.Contains(t, fallback, "Run ID\nrun-msg-test")
+	assert.Nil(t, attachment["fallback"], "fallback field must not be present")
 
 	fields, ok := attachment["fields"].([]any)
 	require.True(t, ok, "alert attachment must have fields")

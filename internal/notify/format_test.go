@@ -103,17 +103,6 @@ func TestFormatAlerts_TitleOrgCount(t *testing.T) {
 	assert.Contains(t, string(flushAlert(t, sampleAlert())), "1 organizations affected")
 }
 
-func TestFormatAlerts_AttachmentFallbackIncludesBody(t *testing.T) {
-	msg := decodeSlackMessage(t, flushAlert(t, sampleAlert()))
-	assert.Equal(t, "⚠️ TLS Failures – 1 organizations affected", msg.Text)
-	require.Len(t, msg.Attachments, 1)
-	fallback := msg.Attachments[0].Fallback
-	assert.Contains(t, fallback, "⚠️ TLS Failures – 1 organizations affected")
-	assert.Contains(t, fallback, "Organization / Policy / Failures / Period")
-	assert.Contains(t, fallback, "example.com | sts | 5 | 2024-01-01 – 2024-01-07")
-	assert.Contains(t, fallback, "Run ID\nrun-001")
-}
-
 // TestFormatAlerts_TitleOrgCountDedup verifies that duplicate OrganizationName
 // values are counted only once in the title.
 func TestFormatAlerts_TitleOrgCountDedup(t *testing.T) {
@@ -631,9 +620,8 @@ type capturedSlackMessage struct {
 }
 
 type capturedSlackAttachment struct {
-	Color    string               `json:"color"`
-	Fallback string               `json:"fallback"`
-	Fields   []capturedSlackField `json:"fields"`
+	Color  string               `json:"color"`
+	Fields []capturedSlackField `json:"fields"`
 }
 
 type capturedSlackField struct {

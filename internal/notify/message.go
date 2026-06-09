@@ -36,9 +36,8 @@ type slackMessage struct {
 
 // slackAttachment is a Slack message attachment with optional colour and fields.
 type slackAttachment struct {
-	Color    string       `json:"color,omitempty"`
-	Fallback string       `json:"fallback,omitempty"`
-	Fields   []slackField `json:"fields,omitempty"` // used for alerts, warnings, errors, and summary
+	Color  string       `json:"color,omitempty"`
+	Fields []slackField `json:"fields,omitempty"`
 }
 
 // slackField is a single key-value field within a Slack attachment.
