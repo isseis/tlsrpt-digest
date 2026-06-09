@@ -99,7 +99,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 
 **レビュー観点**: `Alert`/`FailureDetail` 型の公開フィールド設計と機微フィールド非保持 / `LogAlert`→`extractAlert` の slog 往復と `failed_session_count` 降順保持 / `logAlerts` 写像での IP・`additional-information` 非複写 / `LogAlert` で `failure_details_total_count`/`failure_details_total_sessions` が 10 件上限適用*前*の全エントリから集計されていること
 
-- [ ] `make test && make lint` が通っていることを確認した
+- [x] `make test && make lint` が通っていることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
