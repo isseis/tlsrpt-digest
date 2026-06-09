@@ -62,15 +62,17 @@ func TestSlackMessage_JSONShape(t *testing.T) {
 
 	text, ok := payload["text"].(string)
 	require.True(t, ok)
-	assert.NotEmpty(t, text)
+	assert.Contains(t, text, "⚠️ TLS Failures")
+	assert.NotContains(t, text, "Organization / Policy / Failures / Period")
+	assert.NotContains(t, text, "Run ID\nrun-msg-test")
 
 	attachments, ok := payload["attachments"].([]any)
 	require.True(t, ok)
 	require.NotEmpty(t, attachments)
 }
 
-// TestSlackAttachment_FieldsEncoding verifies that alerts use Block Kit blocks
-// (not legacy fields) within the attachment.
+// TestSlackAttachment_FieldsEncoding verifies that alerts keep the warning
+// attachment field layout used by Slack's yellow block.
 func TestSlackAttachment_FieldsEncoding(t *testing.T) {
 	raw := captureAlertPayload(t)
 
@@ -83,25 +85,14 @@ func TestSlackAttachment_FieldsEncoding(t *testing.T) {
 
 	attachment, ok := attachments[0].(map[string]any)
 	require.True(t, ok)
+	assert.Equal(t, "warning", attachment["color"])
+	fallback, ok := attachment["fallback"].(string)
+	require.True(t, ok)
+	assert.Contains(t, fallback, "Organization / Policy / Failures / Period")
+	assert.Contains(t, fallback, "example.com | sts | 1 | 2026-01-01 – 2026-01-02")
+	assert.Contains(t, fallback, "Run ID\nrun-msg-test")
 
-	blocks, ok := attachment["blocks"].([]any)
-	require.True(t, ok, "alert attachment must have blocks, not fields")
-	require.NotEmpty(t, blocks)
-
-	// At least one block must be a section with a text object.
-	var hasSectionText bool
-	for _, blockAny := range blocks {
-		block, ok := blockAny.(map[string]any)
-		if !ok {
-			continue
-		}
-		if block["type"] == "section" {
-			if textObj, ok := block["text"].(map[string]any); ok {
-				if textObj["type"] == "plain_text" && textObj["text"] != "" {
-					hasSectionText = true
-				}
-			}
-		}
-	}
-	assert.True(t, hasSectionText, "at least one section block must have a plain_text text object")
+	fields, ok := attachment["fields"].([]any)
+	require.True(t, ok, "alert attachment must have fields")
+	require.NotEmpty(t, fields)
 }

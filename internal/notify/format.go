@@ -51,27 +51,34 @@ func TruncateText(s string, maxLen int) string {
 
 // truncateMessage applies Slack length limits to m in place.
 // It is called after DebugLogger logging. Note that per-field truncation
-// (org name, report ID, etc.) already occurs inside buildPolicySectionText
+// (org name, report ID, etc.) already occurs during alert formatting
 // during formatAlerts, so the debug log may already contain truncated values;
 // truncateMessage is a final hard-limit pass that guards against section-level
 // overrun (e.g. a section text exceeding maxAlertSectionRunes).
 func truncateMessage(m *slackMessage) {
 	m.Text = TruncateText(m.Text, maxTextRunes)
+	for i := range m.Blocks {
+		truncateBlock(&m.Blocks[i])
+	}
 	for i := range m.Attachments {
+		m.Attachments[i].Fallback = TruncateText(m.Attachments[i].Fallback, maxTextRunes)
 		for j := range m.Attachments[i].Fields {
 			m.Attachments[i].Fields[j].Value = TruncateText(
 				m.Attachments[i].Fields[j].Value, maxFieldRunes,
 			)
 		}
 		for j := range m.Attachments[i].Blocks {
-			b := &m.Attachments[i].Blocks[j]
-			if b.Text != nil {
-				b.Text.Text = TruncateText(b.Text.Text, maxAlertSectionRunes)
-			}
-			for k := range b.Elements {
-				b.Elements[k].Text = TruncateText(b.Elements[k].Text, maxAlertContextRunes)
-			}
+			truncateBlock(&m.Attachments[i].Blocks[j])
 		}
+	}
+}
+
+func truncateBlock(b *slackBlock) {
+	if b.Text != nil {
+		b.Text.Text = TruncateText(b.Text.Text, maxAlertSectionRunes)
+	}
+	for k := range b.Elements {
+		b.Elements[k].Text = TruncateText(b.Elements[k].Text, maxAlertContextRunes)
 	}
 }
 
@@ -278,10 +285,6 @@ const (
 	// maxAlertDetailDisplay is the number of failure-detail entries shown in full;
 	// additional entries are summarised as "Other N entries (M sessions total)".
 	maxAlertDetailDisplay = 3
-
-	// alertBlocksOverhead is the number of non-policy blocks reserved in
-	// formatAlerts: 1 context + 1 overflow summary (when overflow occurs).
-	alertBlocksOverhead = 2
 )
 
 // normalizeControlChars replaces ASCII control characters (< U+0020 or == U+007F)
@@ -296,31 +299,53 @@ func normalizeControlChars(s string) string {
 	}, s)
 }
 
-// formatAlerts builds a single aggregated slackMessage for TLS failure alerts
-// using Block Kit sections. Each policy gets its own section block.
+// formatAlerts builds a single aggregated slackMessage for TLS failure alerts.
+// Slack renders the primary view as a warning-colored legacy attachment with
+// fields, matching the original alert appearance. The attachment fallback
+// contains the full body for clients and surfaces that do not render attachments.
 // No truncation is applied here; the caller (Flush) applies truncateMessage.
 func formatAlerts(alerts []Alert, runID string) slackMessage {
 	orgCount := uniqueOrgCount(alerts)
 	title := fmt.Sprintf("%s TLS Failures – %d organizations affected", emojiAlert, orgCount)
 
-	// 1 block reserved for context; when overflow is needed, also 1 for summary.
-	const maxWithoutOverflow = maxAlertBlocksPerMessage - 1 // 49 policies + 1 context
-	const maxWithOverflow = maxAlertBlocksPerMessage - 2    // 48 policies + 1 summary + 1 context
+	// Keep the single attachment compact: one summary field per policy, plus
+	// optional report/detail fields, overflow summary, and Run ID.
+	const (
+		maxAlertPoliciesInFields = 20
+		alertFieldsPerPolicy     = 3
+		alertFixedFields         = 2
+	)
 
 	shown := alerts
 	var overflowAlerts []Alert
-	if len(alerts) > maxWithoutOverflow {
-		shown = alerts[:maxWithOverflow]
-		overflowAlerts = alerts[maxWithOverflow:]
+	if len(alerts) > maxAlertPoliciesInFields {
+		shown = alerts[:maxAlertPoliciesInFields]
+		overflowAlerts = alerts[maxAlertPoliciesInFields:]
 	}
 
-	blocks := make([]slackBlock, 0, len(shown)+alertBlocksOverhead)
+	var fallbackParts []string
+	fallbackParts = append(fallbackParts, title)
+
+	fields := make([]slackField, 0, len(shown)*alertFieldsPerPolicy+alertFixedFields)
 	for _, a := range shown {
-		text := buildPolicySectionText(a)
-		blocks = append(blocks, slackBlock{
-			Type: "section",
-			Text: &slackTextObject{Type: "plain_text", Text: text},
+		summary := buildPolicySummaryText(a)
+		fields = append(fields, slackField{
+			Title: "Organization / Policy / Failures / Period",
+			Value: summary,
+			Short: false,
 		})
+		fallbackParts = append(fallbackParts, "Organization / Policy / Failures / Period\n"+summary)
+
+		if a.ReportID != "" {
+			reportID := TruncateText(normalizeControlChars(a.ReportID), maxAlertReportIDRunes)
+			fields = append(fields, slackField{Title: "Report ID", Value: reportID, Short: false})
+			fallbackParts = append(fallbackParts, "Report ID\n"+reportID)
+		}
+
+		if details := buildFailureDetailsText(a); details != "" {
+			fields = append(fields, slackField{Title: "Failure Details", Value: details, Short: false})
+			fallbackParts = append(fallbackParts, "Failure Details\n"+details)
+		}
 	}
 
 	if len(overflowAlerts) > 0 {
@@ -331,95 +356,79 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 		}
 		overflowText := fmt.Sprintf("%d additional policies omitted; organizations: %d; failed sessions: %d",
 			len(overflowAlerts), overflowOrgs, overflowSessions)
-		blocks = append(blocks, slackBlock{
-			Type: "section",
-			Text: &slackTextObject{Type: "plain_text", Text: overflowText},
-		})
+		fields = append(fields, slackField{Title: "Additional Policies", Value: overflowText, Short: false})
+		fallbackParts = append(fallbackParts, overflowText)
 	}
 
-	// Append Run ID context block.
-	blocks = append(blocks, slackBlock{
-		Type:     "context",
-		Elements: []slackTextObject{{Type: "plain_text", Text: "Run ID: " + runID}},
-	})
+	fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: false})
+	fallbackParts = append(fallbackParts, "Run ID\n"+runID)
 
 	return slackMessage{
 		Text: title,
 		Attachments: []slackAttachment{
-			{Color: colorWarning, Blocks: blocks},
+			{Color: colorWarning, Fallback: strings.Join(fallbackParts, "\n\n"), Fields: fields},
 		},
 	}
 }
 
-// buildPolicySectionText constructs the plain_text content for one policy section.
-// External-origin strings are control-char-normalized and per-field truncated
-// before being assembled into the final text.
-// FailureDetailsTotalCount and FailureDetailsTotalSessions are set by LogAlert
-// to the pre-cap totals. When an Alert is constructed directly (e.g., in tests)
-// and those fields are left at zero, the function falls back to the slice values.
-func buildPolicySectionText(a Alert) string {
+func buildPolicySummaryText(a Alert) string {
 	orgName := TruncateText(normalizeControlChars(a.OrganizationName), maxAlertOrganizationRunes)
 	policyType := TruncateText(normalizeControlChars(policyTypeStr(a.PolicyType)), maxAlertPolicyTypeRunes)
-	reportID := TruncateText(normalizeControlChars(a.ReportID), maxAlertReportIDRunes)
-
-	var sb strings.Builder
-	// Line 1: org | policy type
-	fmt.Fprintf(&sb, "%s | %s\n", orgName, policyType)
-	// Line 2: failed sessions | period (UTC)
-	fmt.Fprintf(&sb, "Failed sessions: %d | Period: %s – %s\n",
+	return fmt.Sprintf("%s | %s | %d | %s – %s",
+		orgName,
+		policyType,
 		a.FailureCount,
 		a.DateRange.Start.UTC().Format(time.DateOnly),
 		a.DateRange.End.UTC().Format(time.DateOnly),
 	)
-	// Line 3: Report ID
-	fmt.Fprintf(&sb, "Report ID: %s", reportID)
+}
 
-	// Failure details (sorted descending by FailedSessionCount, already done in LogAlert).
+func buildFailureDetailsText(a Alert) string {
 	details := a.FailureDetails
-	if len(details) > 0 {
-		shown := details
-		if len(shown) > maxAlertDetailDisplay {
-			shown = shown[:maxAlertDetailDisplay]
-		}
-
-		// Compute effective totals defensively: use the pre-cap values set by LogAlert,
-		// but fall back to the slice length/sum when the Alert is constructed directly
-		// (e.g. in tests) and those fields are left at their zero values.
-		var detailsSessions int64
-		for _, fd := range details {
-			detailsSessions += fd.FailedSessionCount
-		}
-		totalCount := max(a.FailureDetailsTotalCount, int64(len(details)))
-		totalSessions := max(a.FailureDetailsTotalSessions, detailsSessions)
-
-		sb.WriteByte('\n')
-		for i, fd := range shown {
-			resultType := TruncateText(normalizeControlChars(fd.ResultType), maxAlertResultTypeRunes)
-			line := fmt.Sprintf("[%d] %s: %d sessions", i+1, resultType, fd.FailedSessionCount)
-			if fd.ReceivingMXHostname != "" {
-				mx := TruncateText(normalizeControlChars(fd.ReceivingMXHostname), maxAlertMXHostnameRunes)
-				line += " | MX: " + mx
-			}
-			if fd.FailureReasonCode != "" {
-				reason := TruncateText(normalizeControlChars(fd.FailureReasonCode), maxAlertReasonCodeRunes)
-				line += " | Reason: " + reason
-			}
-			sb.WriteString(line)
-			if i < len(shown)-1 || totalCount > maxAlertDetailDisplay {
-				sb.WriteByte('\n')
-			}
-		}
-		if totalCount > maxAlertDetailDisplay {
-			var topSessions int64
-			for _, fd := range shown {
-				topSessions += fd.FailedSessionCount
-			}
-			otherCount := totalCount - maxAlertDetailDisplay
-			otherSessions := max(totalSessions-topSessions, 0)
-			fmt.Fprintf(&sb, "Other %d entries (%d sessions total)", otherCount, otherSessions)
-		}
+	if len(details) == 0 {
+		return ""
+	}
+	shown := details
+	if len(shown) > maxAlertDetailDisplay {
+		shown = shown[:maxAlertDetailDisplay]
 	}
 
+	// Compute effective totals defensively: use the pre-cap values set by LogAlert,
+	// but fall back to the slice length/sum when the Alert is constructed directly
+	// (e.g. in tests) and those fields are left at their zero values.
+	var detailsSessions int64
+	for _, fd := range details {
+		detailsSessions += fd.FailedSessionCount
+	}
+	totalCount := max(a.FailureDetailsTotalCount, int64(len(details)))
+	totalSessions := max(a.FailureDetailsTotalSessions, detailsSessions)
+
+	var sb strings.Builder
+	for i, fd := range shown {
+		resultType := TruncateText(normalizeControlChars(fd.ResultType), maxAlertResultTypeRunes)
+		line := fmt.Sprintf("[%d] %s: %d sessions", i+1, resultType, fd.FailedSessionCount)
+		if fd.ReceivingMXHostname != "" {
+			mx := TruncateText(normalizeControlChars(fd.ReceivingMXHostname), maxAlertMXHostnameRunes)
+			line += " | MX: " + mx
+		}
+		if fd.FailureReasonCode != "" {
+			reason := TruncateText(normalizeControlChars(fd.FailureReasonCode), maxAlertReasonCodeRunes)
+			line += " | Reason: " + reason
+		}
+		sb.WriteString(line)
+		if i < len(shown)-1 || totalCount > maxAlertDetailDisplay {
+			sb.WriteByte('\n')
+		}
+	}
+	if totalCount > maxAlertDetailDisplay {
+		var topSessions int64
+		for _, fd := range shown {
+			topSessions += fd.FailedSessionCount
+		}
+		otherCount := totalCount - maxAlertDetailDisplay
+		otherSessions := max(totalSessions-topSessions, 0)
+		fmt.Fprintf(&sb, "Other %d entries (%d sessions total)", otherCount, otherSessions)
+	}
 	return sb.String()
 }
 

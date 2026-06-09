@@ -96,18 +96,23 @@ func TestFormatAlerts_Fields(t *testing.T) {
 // TestFormatAlerts_RunID verifies the Run ID appears in the context block.
 func TestFormatAlerts_RunID(t *testing.T) {
 	msg := decodeSlackMessage(t, flushAlert(t, sampleAlert()))
-	require.NotEmpty(t, msg.Attachments)
-	var contextText string
-	for _, b := range msg.Attachments[0].Blocks {
-		if b.Type == "context" && len(b.Elements) > 0 {
-			contextText = b.Elements[0].Text
-		}
-	}
-	assert.Contains(t, contextText, "run-001")
+	fields := flattenSlackFields(msg)
+	assert.Equal(t, "run-001", fields["Run ID"])
 }
 
 func TestFormatAlerts_TitleOrgCount(t *testing.T) {
 	assert.Contains(t, string(flushAlert(t, sampleAlert())), "1 organizations affected")
+}
+
+func TestFormatAlerts_AttachmentFallbackIncludesBody(t *testing.T) {
+	msg := decodeSlackMessage(t, flushAlert(t, sampleAlert()))
+	assert.Equal(t, "⚠️ TLS Failures – 1 organizations affected", msg.Text)
+	require.Len(t, msg.Attachments, 1)
+	fallback := msg.Attachments[0].Fallback
+	assert.Contains(t, fallback, "⚠️ TLS Failures – 1 organizations affected")
+	assert.Contains(t, fallback, "Organization / Policy / Failures / Period")
+	assert.Contains(t, fallback, "example.com | sts | 5 | 2024-01-01 – 2024-01-07")
+	assert.Contains(t, fallback, "Run ID\nrun-001")
 }
 
 // TestFormatAlerts_TitleOrgCountDedup verifies that duplicate OrganizationName
@@ -133,8 +138,8 @@ func TestFormatAlerts_TitleOrgCountDedup(t *testing.T) {
 
 func TestFormatAlerts_Color(t *testing.T) {
 	body := string(flushAlert(t, sampleAlert()))
-	assert.Contains(t, body, "warning")
 	assert.Contains(t, body, "⚠️")
+	assert.Contains(t, body, "TLS Failures")
 }
 
 func TestTruncateText_ExactLimit(t *testing.T) {
@@ -210,22 +215,15 @@ func TestFormatAlerts_NoTruncation(t *testing.T) {
 	assert.NotContains(t, string(recv), longName, "Slack payload should be truncated")
 }
 
-// TestFormatAlerts_AttachmentFields verifies alerts use blocks (not fields).
-// After the Block Kit rewrite, alerts have sections in blocks, not in fields.
+// TestFormatAlerts_AttachmentFields verifies alerts keep the legacy attachment
+// field layout used by Slack's yellow warning block.
 func TestFormatAlerts_AttachmentFields(t *testing.T) {
 	msg := decodeSlackMessage(t, flushAlert(t, sampleAlert()))
-	require.NotEmpty(t, msg.Attachments)
-	att := msg.Attachments[0]
-	assert.NotEmpty(t, att.Blocks, "alert attachment must have blocks")
-	assert.Empty(t, att.Fields, "alert attachment must not have fields")
-	// At least one section block with text.
-	var hasSectionText bool
-	for _, b := range att.Blocks {
-		if b.Type == "section" && b.Text != nil && b.Text.Text != "" {
-			hasSectionText = true
-		}
-	}
-	assert.True(t, hasSectionText, "at least one section block must have text")
+	require.Len(t, msg.Attachments, 1)
+	assert.Equal(t, "warning", msg.Attachments[0].Color)
+	require.NotEmpty(t, msg.Attachments[0].Fields)
+	assert.Equal(t, "Organization / Policy / Failures / Period", msg.Attachments[0].Fields[0].Title)
+	assert.Contains(t, msg.Attachments[0].Fields[0].Value, "example.com | sts | 5 | 2024-01-01 – 2024-01-07")
 }
 
 func TestFormatSystemError_Title(t *testing.T) {
@@ -628,13 +626,15 @@ func TestExtract_UnknownAttrKeyLogged(t *testing.T) {
 
 type capturedSlackMessage struct {
 	Text        string                    `json:"text"`
+	Blocks      []capturedSlackBlock      `json:"blocks"`
 	Attachments []capturedSlackAttachment `json:"attachments"`
 }
 
 type capturedSlackAttachment struct {
-	Color  string               `json:"color"`
-	Blocks []capturedSlackBlock `json:"blocks"`
-	Fields []capturedSlackField `json:"fields"`
+	Color    string               `json:"color"`
+	Fallback string               `json:"fallback"`
+	Blocks   []capturedSlackBlock `json:"blocks"`
+	Fields   []capturedSlackField `json:"fields"`
 }
 
 type capturedSlackBlock struct {
@@ -661,10 +661,26 @@ func decodeSlackMessage(t *testing.T, body []byte) capturedSlackMessage {
 	return msg
 }
 
-// sectionTexts returns the text content of all section blocks across all attachments.
+// sectionTexts returns policy and overflow section text for alert messages. The
+// title section is intentionally skipped; msg.Text already carries the same
+// fallback title.
 func sectionTexts(msg capturedSlackMessage) []string {
 	var texts []string
+	for _, b := range msg.Blocks {
+		if b.Type == "section" && b.Text != nil {
+			if strings.Contains(b.Text.Text, "TLS Failures") {
+				continue
+			}
+			texts = append(texts, b.Text.Text)
+		}
+	}
 	for _, att := range msg.Attachments {
+		for _, f := range att.Fields {
+			if f.Title == "Run ID" {
+				continue
+			}
+			texts = append(texts, f.Title+"\n"+f.Value)
+		}
 		for _, b := range att.Blocks {
 			if b.Type == "section" && b.Text != nil {
 				texts = append(texts, b.Text.Text)
@@ -799,7 +815,7 @@ func TestFormatAlerts_PolicySection(t *testing.T) {
 	msg := decodeSlackMessage(t, flushAlert(t, alert))
 	texts := sectionTexts(msg)
 	require.NotEmpty(t, texts)
-	sec := texts[0]
+	sec := strings.Join(texts, "\n")
 	assert.Contains(t, sec, "acme.example")
 	assert.Contains(t, sec, "tlsa")
 	assert.Contains(t, sec, "42")
@@ -833,8 +849,8 @@ func TestFormatAlerts_AllPoliciesIncluded(t *testing.T) {
 	}
 }
 
-// TestFormatAlerts_NoDuplicateHeaders verifies that old repeated headers are gone
-// and each policy is presented in an independent section.
+// TestFormatAlerts_FieldHeaders verifies the legacy field header is preserved
+// so Slack renders the alert in the familiar warning attachment layout.
 func TestFormatAlerts_NoDuplicateHeaders(t *testing.T) {
 	var recv []byte
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
@@ -849,12 +865,15 @@ func TestFormatAlerts_NoDuplicateHeaders(t *testing.T) {
 	}
 	require.NoError(t, h.Flush(context.Background()))
 
-	body := string(recv)
-	assert.NotContains(t, body, "Organization / Policy / Failures / Period",
-		"old repeated header must not appear in Block Kit output")
 	msg := decodeSlackMessage(t, recv)
-	sections := sectionTexts(msg)
-	require.Len(t, sections, 2, "each policy must have an independent section")
+	require.Len(t, msg.Attachments, 1)
+	var headerCount int
+	for _, f := range msg.Attachments[0].Fields {
+		if f.Title == "Organization / Policy / Failures / Period" {
+			headerCount++
+		}
+	}
+	assert.Equal(t, 2, headerCount, "each policy should use the familiar field header")
 }
 
 // TestFormatAlerts_FailureDetails_Basic verifies result-type and failed-session-count
@@ -986,7 +1005,7 @@ func TestFormatAlerts_FailureDetails_SummaryWhenGT3(t *testing.T) {
 	assert.Contains(t, sec, "6 sessions total")
 
 	// Verify >10 entries: LogAlert computes totalCount=12 from the full 12-entry
-	// slice and caps FailureDetails to 10. buildPolicySectionText then uses the
+	// slice and caps FailureDetails to 10. buildFailureDetailsText then uses the
 	// pre-cap totals for the "Other" line.
 	alertBig := notify.Alert{
 		OrganizationName: "big.example",
@@ -1093,7 +1112,7 @@ func TestFormatAlerts_ValueTruncation(t *testing.T) {
 	msg := decodeSlackMessage(t, flushAlert(t, alert))
 	texts := sectionTexts(msg)
 	require.NotEmpty(t, texts)
-	sec := texts[0]
+	sec := strings.Join(texts, "\n")
 
 	// Full long values must not appear.
 	assert.NotContains(t, sec, longOrg)
@@ -1114,8 +1133,8 @@ func TestFormatAlerts_ValueTruncation(t *testing.T) {
 	assert.LessOrEqual(t, utf8.RuneCountInString(sec), 3000)
 
 	// Structural labels must remain.
-	assert.Contains(t, sec, "Failed sessions:")
-	assert.Contains(t, sec, "Report ID:")
+	assert.Contains(t, sec, "Report ID")
+	assert.Contains(t, sec, "Failure Details")
 }
 
 // TestFormatAlerts_OverflowSummary verifies that when there are more than 49
@@ -1138,30 +1157,24 @@ func TestFormatAlerts_OverflowSummary(t *testing.T) {
 
 	msg := decodeSlackMessage(t, recv)
 	require.Len(t, msg.Attachments, 1)
-	blocks := msg.Attachments[0].Blocks
-	assert.LessOrEqual(t, len(blocks), 50, "must not exceed Slack 50-block limit")
+	fields := msg.Attachments[0].Fields
+	assert.LessOrEqual(t, len(fields), 50, "field count should stay bounded")
 
-	// Count section and context blocks.
-	var sectionCount, contextCount int
+	var policyFieldCount int
 	var overflowText string
-	for _, b := range blocks {
-		switch b.Type {
-		case "section":
-			sectionCount++
-			if b.Text != nil && strings.Contains(b.Text.Text, "additional policies omitted") {
-				overflowText = b.Text.Text
-			}
-		case "context":
-			contextCount++
+	for _, f := range fields {
+		switch f.Title {
+		case "Organization / Policy / Failures / Period":
+			policyFieldCount++
+		case "Additional Policies":
+			overflowText = f.Value
 		}
 	}
-	assert.Equal(t, 1, contextCount, "exactly one context block")
 	assert.NotEmpty(t, overflowText, "overflow summary section must be present")
-	// 48 policy sections + 1 overflow summary + 1 context = 50
-	assert.Equal(t, 49, sectionCount, "48 policy sections + 1 overflow summary = 49 sections")
+	assert.Equal(t, 20, policyFieldCount, "20 policy fields should be shown before overflow")
 
 	// Overflow summary must describe omitted policies.
-	assert.Contains(t, overflowText, fmt.Sprintf("%d additional policies omitted", total-48))
+	assert.Contains(t, overflowText, fmt.Sprintf("%d additional policies omitted", total-20))
 }
 
 // TestTruncateMessage_Blocks verifies truncateMessage handles section text > 3000

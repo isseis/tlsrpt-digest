@@ -31,14 +31,16 @@ func formatWarning(w Warning, runID string) slackMessage {
 // slackMessage is the top-level payload sent to a Slack Incoming Webhook.
 type slackMessage struct {
 	Text        string            `json:"text"`
+	Blocks      []slackBlock      `json:"blocks,omitempty"`
 	Attachments []slackAttachment `json:"attachments,omitempty"`
 }
 
 // slackAttachment is a Slack message attachment with optional colour and fields.
 type slackAttachment struct {
-	Color  string       `json:"color,omitempty"`
-	Blocks []slackBlock `json:"blocks,omitempty"` // used for alerts (Block Kit)
-	Fields []slackField `json:"fields,omitempty"` // used for warnings / errors / summary
+	Color    string       `json:"color,omitempty"`
+	Fallback string       `json:"fallback,omitempty"`
+	Blocks   []slackBlock `json:"blocks,omitempty"` // legacy attachment blocks; alerts use top-level Blocks
+	Fields   []slackField `json:"fields,omitempty"` // used for warnings / errors / summary
 }
 
 // slackBlock is a minimal Slack Block Kit block: section, divider, or context.
