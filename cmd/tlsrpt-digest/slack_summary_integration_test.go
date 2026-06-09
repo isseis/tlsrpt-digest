@@ -88,10 +88,10 @@ func TestSlackSummary_Summary_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, int64(3), summary.ReportCount)
-	assert.Contains(t, summary.OrganizationStats, "Google Inc.")
-	assert.Contains(t, summary.OrganizationStats, "Microsoft Corporation")
-	assert.Equal(t, int64(5), summary.OrganizationStats["Google Inc."])
-	assert.Equal(t, int64(2), summary.OrganizationStats["Microsoft Corporation"])
+	require.Contains(t, summary.OrganizationStats, "Google Inc.")
+	require.Contains(t, summary.OrganizationStats, "Microsoft Corporation")
+	require.Equal(t, int64(5), summary.OrganizationStats["Google Inc."])
+	require.Equal(t, int64(2), summary.OrganizationStats["Microsoft Corporation"])
 
 	cfg := &config.Config{}
 	u, err := url.Parse(successURL)
