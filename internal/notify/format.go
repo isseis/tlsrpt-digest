@@ -144,7 +144,9 @@ func extractAlert(r slog.Record, debugLogger *slog.Logger) Alert {
 			if attr.Value.Kind() != slog.KindGroup {
 				break
 			}
-			for _, child := range attr.Value.Group() {
+			children := attr.Value.Group()
+			a.FailureDetails = make([]FailureDetail, 0, len(children))
+			for _, child := range children {
 				// Each child must be a named group (index "0", "1", ...).
 				if child.Value.Kind() != slog.KindGroup {
 					warnUnknownKey(debugLogger, "failure_details."+child.Key, r.Message)
