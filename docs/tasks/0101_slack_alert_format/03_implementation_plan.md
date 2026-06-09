@@ -83,15 +83,15 @@
 
 対象ファイル: `internal/notify/message.go`、`internal/notify/format.go`
 
-- [x] **2-1** `slackAttachment` に `Fallback string` を追加する。
+- [x] **2-1** `slackAttachment` は `Color` と `Fields` だけを持つ構造に保つ。
 - [x] **2-2** `slackMessage.Text` は `⚠️ TLS Failures – N organizations affected` のタイトルだけにする。
-- [x] **2-3** `formatAlerts` で `Attachments[0].Color = "warning"` の単一 attachment を生成する。
-- [x] **2-4** `Attachments[0].Fields` に、ポリシー概要、Report ID、Failure Details、Run ID を配置する。
+- [x] **2-3** `formatAlerts` で `Color = "warning"` の attachment を生成する。
+- [x] **2-4** `Attachments[].Fields` に、ポリシー概要、Report ID、Failure Details、Run ID を配置する。
 - [x] **2-5** ポリシー概要 field は旧来の見た目に合わせ、title を `Organization / Policy / Failures / Period`、value を `org | policy | failures | start – end` とする。
 - [x] **2-6** Failure Details は `failed_session_count` 降順で上位 3 件を表示し、4 件以上は残り件数と合計 sessions を要約する。
-- [x] **2-7** `Attachments[0].Fallback` に詳細本文を構築し、fields が表示されないクライアント向けの情報を保持する。
+- [x] **2-7** attachment fallback は YAGNI 原則に従って持たず、通常表示面を `text` + `attachments[].fields` に絞る。
 - [x] **2-8** top-level `Text` に詳細本文を入れず、通常 Slack 画面で本文が重複しないことを担保する。
-- [x] **2-9** 外部由来文字列の制御文字を空白へ正規化し、Markdown 装飾に依存しない field / fallback 表示にする。
+- [x] **2-9** 外部由来文字列の制御文字を空白へ正規化し、Markdown 装飾に依存しない field 表示にする。
 - [x] **2-10** `slackBlock` / `Blocks` は YAGNI 原則に従って削除する。
 
 完了条件: `make test-slack-notify` の実 Slack 表示で、タイトルの下に黄色い attachment が表示され、本文が重複しない。
@@ -111,16 +111,16 @@
 
 対象ファイル: `internal/notify/*_test.go`、`cmd/tlsrpt-digest/*_test.go`
 
-- [x] **4-1** テスト用 Slack payload 型に `Fallback` を追加し、未使用の `Blocks` 検証は削除する。
-- [x] **4-2** アラート表示テストを fields/fallback 構造検証へ更新する。
+- [x] **4-1** テスト用 Slack payload 型から未使用の `Fallback` / `Blocks` 検証を削除する。
+- [x] **4-2** アラート表示テストを fields 構造検証へ更新する。
 - [x] **4-3** top-level `Text` がタイトルのみで、詳細本文を含まないことを検証する。
 - [x] **4-4** attachment fields に旧来の `Organization / Policy / Failures / Period` 表示、Report ID、Failure Details、Run ID が含まれることを検証する。
-- [x] **4-5** attachment fallback に詳細本文が含まれることを検証する。
+- [x] **4-5** payload に attachment fallback が含まれないことを検証する。
 - [x] **4-6** Failure Details の 0 件、1〜3 件、4 件以上の表示を検証する。
 - [x] **4-7** `receiving-mx-hostname` と `failure-reason-code` の有無による表示/非表示を検証する。
 - [x] **4-8** 制御文字正規化と値ごとの切り詰めを検証する。
 - [x] **4-9** overflow summary を検証する。
-- [x] **4-10** `truncateMessage` が fallback と fields を切り詰めることを検証する。
+- [x] **4-10** `truncateMessage` が top-level `Text` と field value を切り詰めることを検証する。
 - [x] **4-11** IP、`additional-information`、Webhook URL、secret が通知 payload / DebugLogger に混入しないことを検証する。
 - [x] **4-12** warning、system error、summary の既存 fields 表示が変わらないことを既存テストで確認する。
 - [x] **4-13** `make test-slack-notify` 用の統合テストがビルドできることを確認する。

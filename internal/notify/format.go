@@ -293,6 +293,7 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 
 	const (
 		maxAlertPoliciesPerChunk           = 3
+		maxAlertFieldsPerPolicy            = 3
 		maxAlertAttachments                = 100 // Slack per-message attachment limit
 		alertExtraFields                   = 2   // overflow summary (optional) + Run ID
 		maxPoliciesInLastChunkWithOverflow = 2   // keeps last attachment ≤ 10 fields when overflow occurs
@@ -327,7 +328,7 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 		isLast := end == len(shown)
 
 		// Capacity: up to 3 fields per policy + overflow summary + Run ID.
-		fields := make([]slackField, 0, len(chunk)*maxAlertPoliciesPerChunk+alertExtraFields)
+		fields := make([]slackField, 0, len(chunk)*maxAlertFieldsPerPolicy+alertExtraFields)
 		for _, a := range chunk {
 			summary := buildPolicySummaryText(a)
 			fields = append(fields, slackField{
