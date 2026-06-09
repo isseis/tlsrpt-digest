@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -269,12 +270,14 @@ const (
 	maxAlertDetailDisplay = 3
 )
 
-// normalizeControlChars replaces ASCII control characters (< U+0020 or == U+007F)
-// with a space. This prevents external values from injecting fake line breaks or
-// other control sequences into attachment field values and fallback text.
+// normalizeControlChars replaces Unicode control characters (as defined by
+// unicode.IsControl, which covers C0 U+0000–U+001F, DEL U+007F, and C1
+// U+0080–U+009F) with a space. This prevents external values from injecting
+// fake line breaks or other control sequences into attachment field values and
+// fallback text.
 func normalizeControlChars(s string) string {
 	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
+		if unicode.IsControl(r) {
 			return ' '
 		}
 		return r
