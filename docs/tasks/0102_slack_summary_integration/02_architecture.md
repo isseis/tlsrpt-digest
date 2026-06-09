@@ -153,8 +153,9 @@ sequenceDiagram
 
 ```go
 // 追加する定数
-const slackSummaryWebhookEnvKey        = "TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"
-const slackSummaryErrorWebhookEnvKey   = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"
+const slackSummaryWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"
+// 注: error URL は既存の slackNotifyWebhookEnvKey ("TLSRPT_SLACK_WEBHOOK_URL_ERROR") を再利用する。
+// 同一ファイル・同一パッケージ内で同値の定数を重複定義しないこと（03_implementation_plan.md §1 参照）。
 
 // 追加する純粋関数（env == nil のとき os.Getenv にフォールバック）
 // 両方の URL が設定されているかを確認する。
@@ -302,7 +303,7 @@ flowchart TD
     D["notify.GenerateSummary<br>期間: 2026-05-11 ～ 2026-05-14"]
     E{"ReportCount == 3<br>OrganizationStats 正常？"}
     F["require.Fail"]
-    G["setupNotifyHandlers<br>successURL のみ設定"]
+    G["setupNotifyHandlers<br>successURL + errorURL"]
     H["notifier.LogSummary + Flush"]
     I{"エラーなし？"}
     J["require.Fail"]
