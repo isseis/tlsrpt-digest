@@ -9,7 +9,7 @@
 | レビュー日 | 2026-06-09 |
 | 最終更新日 | 2026-06-09 |
 | レビュアー | isseis |
-| コメント | 実 Slack 表示確認後の最終実装に合わせ、Block Kit sections 案から warning attachment fields + fallback 案へ更新 |
+| コメント | 実 Slack 表示確認後の最終実装に合わせ、Block Kit sections 案から warning attachment fields 案へ更新 |
 
 関連文書: [01_requirements.md](01_requirements.md) / [02_architecture.md](02_architecture.md)
 
@@ -28,8 +28,8 @@
 - 既存の送信経路（`SlackHandler.Flush()` → `send()` → `formatRecords()` → `formatAlerts()`）は変更しない。
 - 変更は `internal/notify` と `cmd/tlsrpt-digest` の既存パッケージ内に閉じる。
 - `Alert` へ Report ID と FailureDetails を追加し、`logAlerts` で TLSRPT レポートから公開情報のみを写像する。
-- Slack payload は `Text` にタイトルだけを置き、`Attachments[0].Fields` に主表示、`Attachments[0].Fallback` に詳細 fallback を置く。
-- Block Kit 用の `slackBlock` / `Blocks` は YAGNI 原則に従って削除し、即時アラートの payload surface を `text` + `attachments[].fields` + `attachments[].fallback` に絞る。
+- Slack payload は `Text` にタイトルだけを置き、`Attachments[].Fields` に主表示を置く。
+- Block Kit 用の `slackBlock` / `Blocks` は YAGNI 原則に従って持たず、即時アラートの payload surface を `text` + `attachments[].fields` に絞る。
 - Go ソースのコメント・識別子・文字列リテラルは英語で記述する。
 
 ### 1.3 既存コード調査結果
@@ -37,11 +37,11 @@
 | 領域 | 既存 | 最終変更内容 |
 |---|---|---|
 | `internal/notify/types.go` | `Alert{OrganizationName, PolicyType, FailureCount, DateRange}` | `ReportID string`、`FailureDetails []FailureDetail`、集計用 count/session fields を追加 |
-| `internal/notify/message.go` | `slackMessage{Text, Attachments}`、`slackAttachment{Color, Fields}` | `slackAttachment.Fallback` を追加。未使用の `Blocks` / `slackBlock` 型は削除 |
+| `internal/notify/message.go` | `slackMessage{Text, Attachments}`、`slackAttachment{Color, Fields}` | `Blocks` / `slackBlock` 型は持たない |
 | `internal/notify/helpers.go` | `LogAlert` が基本 5 属性を出力 | Report ID、FailureDetails、FailureDetails の総件数・総セッション数を slog 属性へ追加 |
 | `internal/notify/format.go` `extractAlert` | 基本 5 属性を復元 | 新属性を復元し、未知キーは値を出さず DebugLogger にキー名のみ警告 |
-| `internal/notify/format.go` `formatAlerts` | `maxAlertFields` で fields を生成 | warning attachment fields + fallback を生成。top-level `text` はタイトルのみ |
-| `internal/notify/format.go` `truncateMessage` | `Text` と field values を切り詰め | `Text`、attachment fallback、field title/value を切り詰め |
+| `internal/notify/format.go` `formatAlerts` | `maxAlertFields` で fields を生成 | warning attachment fields を生成。top-level `text` はタイトルのみ |
+| `internal/notify/format.go` `truncateMessage` | `Text` と field values を切り詰め | `Text` と field values を切り詰め |
 | `cmd/tlsrpt-digest/notify_helpers.go` | TLSRPT report から基本 4 項目を写像 | `report.ReportID` と `policy.FailureDetails` の公開 4 項目のみを写像。IP と自由記述は写像しない |
 
 ---
@@ -79,7 +79,7 @@
 - [x] PR がマージされた
 - [x] 次のブランチへ切り替えた
 
-### Phase 2: Slack attachment fields + fallback 整形
+### Phase 2: Slack attachment fields 整形
 
 対象ファイル: `internal/notify/message.go`、`internal/notify/format.go`
 
@@ -137,7 +137,7 @@
 
 **推奨タイトル**: `fix(0101): restore Slack alert attachment rendering`
 
-**レビュー観点**: 黄色い warning attachment の見た目、top-level `Text` と attachment fields の本文重複回避、attachment fallback による非表示クライアント対応、FailureDetails の表示・要約、機微情報非混入、既存通知形式の回帰なし。
+**レビュー観点**: 黄色い warning attachment の見た目、top-level `Text` と attachment fields の本文重複回避、FailureDetails の表示・要約、機微情報非混入、既存通知形式の回帰なし。
 
 - [x] `make test && make lint` が通っていることを確認した
 - [x] `go test -tags test,slack_notify -run '^$' ./cmd/tlsrpt-digest/...` が通っていることを確認した
@@ -151,15 +151,15 @@
 | マイルストーン | 含むステップ | 内容 | テスト状態 |
 |---|---|---|---|
 | PR-1 | 1-1〜1-9 | データ構造・slog 往復・TLSRPT から Alert への公開情報写像 | `make test && make lint` 合格 |
-| PR-2 | 2-1〜2-10 / 3-1〜3-4 / 4-1〜4-13 | warning attachment fields + fallback 表示、切り詰め、本文非重複、未使用 Block Kit 型の削除、テスト更新 | `make test && make lint`、slack_notify ビルドタグのコンパイル確認が合格 |
+| PR-2 | 2-1〜2-10 / 3-1〜3-4 / 4-1〜4-13 | warning attachment fields 表示、切り詰め、本文非重複、テスト更新 | `make test && make lint`、slack_notify ビルドタグのコンパイル確認が合格 |
 
-PR-2 は当初 Block Kit sections で実装したが、実 Slack 表示で本文が消えるケースが確認されたため、最終的に warning attachment fields + fallback へ修正した。この修正は表示仕様に関わるため、同じ PR-2 の範囲として扱う。
+PR-2 は当初 Block Kit sections で実装したが、実 Slack 表示で本文が消えるケースが確認されたため、最終的に warning attachment fields へ修正した。この修正は表示仕様に関わるため、同じ PR-2 の範囲として扱う。
 
 ---
 
 ## 4. テスト戦略
 
-- **単体テスト**: `internal/notify/format_test.go` で Slack payload の fields/fallback shape、本文非重複、FailureDetails 表示、overflow、切り詰めを検証する。
+- **単体テスト**: `internal/notify/format_test.go` で Slack payload の fields shape、本文非重複、FailureDetails 表示、overflow、切り詰めを検証する。
 - **slog 往復・許可リスト**: `helpers_test.go` と `format_internal_test.go` で属性キー、順序保持、上限処理を検証する。
 - **セキュリティテスト**: `security_test.go` で IP、自由記述、Webhook URL、secret が payload / DebugLogger に混入しないことを検証する。
 - **写像境界テスト**: `cmd/tlsrpt-digest/notify_helpers_test.go` で TLSRPT レポートから公開 4 項目だけが通知型へ写像されることを検証する。
@@ -172,8 +172,8 @@ PR-2 は当初 Block Kit sections で実装したが、実 Slack 表示で本文
 
 | リスク | 影響 | 緩和策 |
 |---|---|---|
-| `attachment.blocks` が Slack 表示面で本文非表示になる | サブジェクトだけが表示され、障害対応に必要な情報が見えない | 即時アラートの主表示を `attachment.fields` に戻し、`attachment.fallback` に全文を保持する |
-| top-level `text` に全文を入れる | 通常 Slack 画面で本文が attachment と重複する | top-level `text` はタイトルだけにし、詳細は fields/fallback に置く |
+| `attachment.blocks` が Slack 表示面で本文非表示になる | サブジェクトだけが表示され、障害対応に必要な情報が見えない | 即時アラートの主表示を `attachment.fields` に戻す |
+| top-level `text` に全文を入れる | 通常 Slack 画面で本文が attachment と重複する | top-level `text` はタイトルだけにし、詳細は fields に置く |
 | `failure_details` の順序崩れ | 上位失敗が正しく表示されない | `LogAlert` で降順に整列し、round-trip テストで検証する |
 | FailureDetails の過大入力 | Slack payload が肥大化する | slog 上限、表示上限、overflow summary、`truncateMessage` で制御する |
 | 外部由来文字列による偽装表示 | 改行注入や偽の行見出しが起きる | 制御文字正規化、Markdown 装飾に依存しない表示、値ごとの切り詰めで抑制する |
@@ -203,10 +203,10 @@ PR-2 は当初 Block Kit sections で実装したが、実 Slack 表示で本文
 | AC-04 | 旧来の field title/value 表示として、各 policy summary が読みやすくまとまることを検証 |
 | AC-05〜AC-09 | Failure Details の基本表示、任意項目、有無、3 件以下、4 件以上要約を検証 |
 | AC-10 | Failure Details 空でも policy summary / Report ID / Run ID が表示されることを検証 |
-| AC-11 | Report ID field / fallback の検証 |
+| AC-11 | Report ID field の検証 |
 | AC-12 | UTC 期間表示の検証 |
 | AC-13 | 型境界、制御文字正規化、Markdown 装飾に依存しない表示、機微情報非混入テストで検証 |
-| AC-14 | 値ごとの切り詰め、field/fallback truncation、overflow summary で検証 |
+| AC-14 | 値ごとの切り詰め、field truncation、overflow summary で検証 |
 
 ---
 
