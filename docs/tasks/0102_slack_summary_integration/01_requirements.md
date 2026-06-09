@@ -43,7 +43,7 @@
   - 対象 Webhook URL は環境変数（`TLSRPT_SLACK_WEBHOOK_URL_SUCCESS`）で指定し、未設定時はテストをスキップする
   - 永続アーティファクト（`tlsrpt.json` 等）を残さない（`FakeStore` 使用）
 - 環境変数欠落判定ヘルパーと常時実行ユニットテストの追加
-- `make test-integration` への組み込み（`test-slack-notify` と同様に `slack_notify` タグで隔離）
+- 手動実行専用の make ターゲット `test-slack-summary` の追加（`make test` / `make test-integration` には含めない）
 - 既存の `slack_notify_env_test.go` への success Webhook URL サポートの追加
 
 ### 対象外（Out of Scope）
@@ -58,7 +58,7 @@
 - **新規作成**: `testdata/tlsrpt_success_google_1.eml`、`testdata/tlsrpt_success_google_2.eml`、`testdata/tlsrpt_success_microsoft.eml`（匿名化済みテストデータ、本タスク開始時点で作成済み）。
 - **変更**: `cmd/tlsrpt-digest/slack_notify_env_test.go`（success Webhook URL 用ヘルパーとユニットテストを追加）。
 - **新規作成**: `cmd/tlsrpt-digest/slack_summary_integration_test.go`（実 Slack 送信を行う手動実行専用統合テスト）。
-- **変更**: `Makefile`（`test-slack-summary` ターゲットを追加し、`test-integration` に組み込む）。
+- **変更**: `Makefile`（`test-slack-summary` ターゲットを追加）。
 
 ---
 
