@@ -73,6 +73,7 @@ PR boundary markers embedded in the implementation plan use these labels:
 |---|---|
 | Conditional security guide | `docs/dev/developer_guide/notification_security.md` |
 | Conditional-guide trigger | the feature sends notifications or handles notification destinations |
+| Target client environments | Slack (desktop / mobile), Mattermost (used in `make test-slack-notify`) |
 
 ### Domain examples referenced by commands
 
