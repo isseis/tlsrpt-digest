@@ -160,7 +160,7 @@
     | `error_webhook_url_missing` | `map[string]string{notify.EnvSlackWebhookURLSuccess: "https://hooks.slack.com/services/test"}` | missing リストに `slackNotifyWebhookEnvKey+" (empty)"` が含まれる |
     | `webhook_url_set` | 両方のキーに `"https://hooks.slack.com/services/test"` を設定 | missing リストが空 |
     | `nil_env_fallback_present` | `nil`（`t.Setenv` で両方設定） | missing リストが空 |
-    | `nil_env_fallback_missing` | `nil`（`t.Setenv` で両方を空文字列に設定） | missing リストに両キーのエントリが含まれる |
+    | `nil_env_fallback_missing` | `nil`（`t.Setenv` で両方を空文字列に設定） | missing リストに `notify.EnvSlackWebhookURLSuccess+" (empty)"` と `slackNotifyWebhookEnvKey+" (empty)"` の両方が含まれる |
 
     `error_webhook_url_missing` は `ValidateEnvCombination` が拒否する success-only 組み合わせを `missingSlackSummaryEnv` が確実に検出できることを確認する。
 
