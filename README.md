@@ -117,8 +117,8 @@ fetch_days = 14
 # Set this when connecting to an IMAP server with a self-signed certificate.
 tls_ca_cert = ""
 
-# Maximum message size per email in bytes (default: 0 = unlimited)
-max_message_bytes = 0
+# Maximum message size per email in bytes (default: 1048576 = 1 MiB; set to 0 for unlimited)
+max_message_bytes = 1048576
 
 [notify.slack]
 # Allowed hostname for Slack webhook URLs (must match the webhook URL hostname)

@@ -139,10 +139,10 @@ func TestLoad_UnknownTopLevelKey(t *testing.T) {
 	assert.True(t, errors.Is(err, config.ErrConfigDecode))
 }
 
-func TestLoad_DefaultMaxMessageBytesUnlimited(t *testing.T) {
+func TestLoad_DefaultMaxMessageBytes1MiB(t *testing.T) {
 	cfg, err := config.Load([]byte(baseConfigTOML))
 	require.NoError(t, err)
-	assert.Equal(t, int64(0), cfg.IMAP.MaxMessageBytes)
+	assert.Equal(t, int64(1<<20), cfg.IMAP.MaxMessageBytes)
 }
 
 func TestLoad_IMAPHostValidation(t *testing.T) {
