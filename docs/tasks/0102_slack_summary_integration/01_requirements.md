@@ -91,7 +91,7 @@
 
 **受け入れ条件（Acceptance Criteria）**:
 
-- `AC-08`: 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` が設定されている場合、サマリ送信処理がエラーなく完了すること。
+- `AC-08`: 環境変数 `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` および `TLSRPT_SLACK_WEBHOOK_URL_ERROR` の両方が設定されている場合、サマリ送信処理がエラーなく完了すること（`notify.ValidateEnvCombination` が success URL のみの設定を拒否するため、両方の設定が必要）。
 - `AC-09`: 送信に用いる通知経路・メッセージ書式・リトライ挙動は本番（`summary` サブコマンド実行時のサマリ送信）と同一であること。
 - `AC-10`: `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` が未設定の場合、テストはスキップされること。
 

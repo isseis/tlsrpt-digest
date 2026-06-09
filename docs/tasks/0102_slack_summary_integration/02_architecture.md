@@ -4,10 +4,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | `draft` |
+| ステータス | `approved` |
 | 作成日 | 2026-06-09 |
-| レビュー日 | - |
-| レビュアー | - |
+| レビュー日 | 2026-06-09 |
+| レビュアー | isseis |
 | コメント | - |
 
 ---
@@ -116,7 +116,7 @@ sequenceDiagram
     FS-->>GS: []tlsrpt.Report
     GS-->>Test: Summary{ReportCount:3, OrganizationStats:{...}}
 
-    Test->>NH: setupNotifyHandlers(successURL, config.Secret(""), cfg, runID, false)
+    Test->>NH: setupNotifyHandlers(successURL, errorURL, cfg, runID, false)
     NH-->>Test: NotificationSink
 
     Test->>SH: notifier.LogSummary(ctx, summary)
@@ -135,15 +135,16 @@ sequenceDiagram
 
 | ファイル | 変更種別 | 責務 |
 |---|---|---|
-| `cmd/tlsrpt-digest/slack_notify_env_test.go` | 変更 | success Webhook URL 欠落判定ヘルパー（`missingSlackSummaryEnv`）とユニットテスト（`TestSlackSummary_EnvRequirements`）を追加 |
-| `cmd/tlsrpt-digest/slack_summary_integration_test.go` | 新規 | EML パース → FakeStore 保存 → サマリ生成 → Slack 送信の統合テスト（`TestSlackSummary_Summary_Integration`） |
-| `Makefile` | 変更 | `test-slack-summary` ターゲットを追加（`.PHONY` も更新） |
+| `internal/notify/validate.go` | 変更 | `EnvSlackWebhookURLSuccess` / `EnvSlackWebhookURLError` 定数を追加し、エラーメッセージを定数参照に変更（フェーズ 0） |
+| `cmd/tlsrpt-digest/boot.go` | 変更 | `withDefaults()` 内の `os.Getenv` 引数を `notify.EnvSlackWebhookURLSuccess` / `notify.EnvSlackWebhookURLError` に変更（フェーズ 0） |
+| `cmd/tlsrpt-digest/slack_notify_env_test.go` | 変更 | フェーズ 0: `internal/notify` import 追加・`slackNotifyWebhookEnvKey` を定数参照に変更。フェーズ 1: `missingSlackSummaryEnv` と `TestSlackSummary_EnvRequirements` を追加 |
+| `cmd/tlsrpt-digest/slack_summary_integration_test.go` | 新規 | EML パース → FakeStore 保存 → サマリ生成 → Slack 送信の統合テスト（`TestSlackSummary_Summary_Integration`、フェーズ 2） |
+| `Makefile` | 変更 | `test-slack-summary` ターゲットを追加（`.PHONY` も更新、フェーズ 2） |
 
 既存ファイルで変更が **不要** なもの：
 
 | ファイル | 変更不要の理由 |
 |---|---|
-| `cmd/tlsrpt-digest/boot.go` | `setupNotifyHandlers` はそのまま再利用可能 |
 | `internal/notify/aggregate.go` | `GenerateSummary` はそのまま再利用可能 |
 | `internal/store/testutil/mocks.go` | `FakeStore` はそのまま再利用可能 |
 
@@ -152,9 +153,8 @@ sequenceDiagram
 タスク 0100 の `missingSlackNotifyEnv` パターンを踏襲し、success Webhook URL 用の対称的な純粋ヘルパーを追加する。
 
 ```go
-// 追加する定数
-const slackSummaryWebhookEnvKey        = "TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"
-const slackSummaryErrorWebhookEnvKey   = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"
+// 注: success URL は notify.EnvSlackWebhookURLSuccess を直接参照する（定数エイリアス不要）。
+// error URL は既存の slackNotifyWebhookEnvKey (= notify.EnvSlackWebhookURLError) を再利用する。
 
 // 追加する純粋関数（env == nil のとき os.Getenv にフォールバック）
 // 両方の URL が設定されているかを確認する。
@@ -271,14 +271,14 @@ flowchart TD
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
 
     START(["TestSlackSummary_Summary_Integration 開始"])
-    CHECK{"TLSRPT_SLACK_WEBHOOK_URL_SUCCESS<br>設定済み？"}
+    CHECK{"missingSlackSummaryEnv(nil)<br>= [] ？<br>（SUCCESS + ERROR 両方設定済み）"}
     SKIP["t.Skip()"]
     RUN["テスト本体実行"]
     END(["終了"])
 
     START --> CHECK
-    CHECK -->|"未設定"| SKIP --> END
-    CHECK -->|"設定済み"| RUN --> END
+    CHECK -->|"欠落あり"| SKIP --> END
+    CHECK -->|"欠落なし"| RUN --> END
 
     class START,END process
     class CHECK,SKIP,RUN enhanced
@@ -302,7 +302,7 @@ flowchart TD
     D["notify.GenerateSummary<br>期間: 2026-05-11 ～ 2026-05-14"]
     E{"ReportCount == 3<br>OrganizationStats 正常？"}
     F["require.Fail"]
-    G["setupNotifyHandlers<br>successURL のみ設定"]
+    G["setupNotifyHandlers<br>successURL + errorURL"]
     H["notifier.LogSummary + Flush"]
     I{"エラーなし？"}
     J["require.Fail"]
@@ -333,9 +333,10 @@ flowchart TD
 
 | テストケース | 確認内容 |
 |---|---|
-| `webhook_url_missing` | `slackSummaryWebhookEnvKey` が欠落時に missing リストに含まれること |
-| `webhook_url_empty_value` | 空文字列のとき missing リストに含まれること |
-| `webhook_url_set` | 値が設定されているとき missing リストが空であること |
+| `webhook_url_missing` | `notify.EnvSlackWebhookURLSuccess` が欠落時に missing リストに含まれること |
+| `webhook_url_empty_value` | success URL が空文字列のとき missing リストに含まれること |
+| `error_webhook_url_missing` | success URL 設定済み・error URL 欠落時に missing リストに含まれること（`ValidateEnvCombination` が拒否する組み合わせ） |
+| `webhook_url_set` | 両方の URL が設定されているとき missing リストが空であること |
 | `nil_env_fallback_present` | `env == nil` のとき os.Getenv にフォールバックして設定済みを返すこと |
 | `nil_env_fallback_missing` | `env == nil` のとき os.Getenv にフォールバックして未設定を返すこと |
 
@@ -372,7 +373,7 @@ flowchart TD
 
 ### フェーズ 1: 環境変数ヘルパーとユニットテスト
 
-1. `slack_notify_env_test.go` に `slackSummaryWebhookEnvKey`・`missingSlackSummaryEnv`・`TestSlackSummary_EnvRequirements` を追加する。
+1. `slack_notify_env_test.go` に `missingSlackSummaryEnv`・`TestSlackSummary_EnvRequirements` を追加する（`notify.EnvSlackWebhookURLSuccess` を直接参照。定数エイリアスは不要）。
 
 ### フェーズ 2: 統合テストと Makefile
 
