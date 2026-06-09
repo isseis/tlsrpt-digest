@@ -336,46 +336,46 @@
 
 ## 6. 実装チェックリスト
 
-- [ ] PR-1 マージ済み（対象ステップ: 0.1 / 0.2 / 0.3 / 0.4 / 0.5）
-  - [ ] `EnvSlackWebhookURLSuccess` 定数追加（`internal/notify/validate.go`）
-  - [ ] `EnvSlackWebhookURLError` 定数追加（`internal/notify/validate.go`）
-  - [ ] `validate.go` エラーメッセージを定数参照に変更（before/after は §2 フェーズ 0 タスク 0.2 参照）
-  - [ ] `boot.go` の `os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS")` を `os.Getenv(notify.EnvSlackWebhookURLSuccess)` に変更
-  - [ ] `boot.go` の `os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR")` を `os.Getenv(notify.EnvSlackWebhookURLError)` に変更
-  - [ ] `slack_notify_env_test.go` に `internal/notify` import 追加
-  - [ ] `slackNotifyWebhookEnvKey` の定義を `= notify.EnvSlackWebhookURLError` に変更
-  - [ ] `make test` 通過確認（既存テスト全通過）
+- [x] PR-1 マージ済み（対象ステップ: 0.1 / 0.2 / 0.3 / 0.4 / 0.5）
+  - [x] `EnvSlackWebhookURLSuccess` 定数追加（`internal/notify/validate.go`）
+  - [x] `EnvSlackWebhookURLError` 定数追加（`internal/notify/validate.go`）
+  - [x] `validate.go` エラーメッセージを定数参照に変更（before/after は §2 フェーズ 0 タスク 0.2 参照）
+  - [x] `boot.go` の `os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS")` を `os.Getenv(notify.EnvSlackWebhookURLSuccess)` に変更
+  - [x] `boot.go` の `os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR")` を `os.Getenv(notify.EnvSlackWebhookURLError)` に変更
+  - [x] `slack_notify_env_test.go` に `internal/notify` import 追加
+  - [x] `slackNotifyWebhookEnvKey` の定義を `= notify.EnvSlackWebhookURLError` に変更
+  - [x] `make test` 通過確認（既存テスト全通過）
 
-- [ ] PR-2 マージ済み（対象ステップ: 1.1 / 1.2）
-  - [ ] `missingSlackSummaryEnv` 関数実装（両 URL チェック。`notify.EnvSlackWebhookURLSuccess` を直接参照）
-  - [ ] `TestSlackSummary_EnvRequirements` テスト実装（6 ケース）
-    - [ ] `webhook_url_missing`: success URL 欠落を確認
-    - [ ] `webhook_url_empty_value`: success URL が空文字列であることを確認
-    - [ ] `error_webhook_url_missing`: success URL 設定済み、error URL 欠落を確認
-    - [ ] `webhook_url_set`: 両方設定済みで missing リストが空であることを確認
-    - [ ] `nil_env_fallback_present`: `nil` env + 両方 `t.Setenv` で空リストを確認
-    - [ ] `nil_env_fallback_missing`: `nil` env + 両方空文字列で両エントリの存在を確認
-  - [ ] `make test` 通過確認
+- [x] PR-2 マージ済み（対象ステップ: 1.1 / 1.2）
+  - [x] `missingSlackSummaryEnv` 関数実装（両 URL チェック。`notify.EnvSlackWebhookURLSuccess` を直接参照）
+  - [x] `TestSlackSummary_EnvRequirements` テスト実装（6 ケース）
+    - [x] `webhook_url_missing`: success URL 欠落を確認
+    - [x] `webhook_url_empty_value`: success URL が空文字列であることを確認
+    - [x] `error_webhook_url_missing`: success URL 設定済み、error URL 欠落を確認
+    - [x] `webhook_url_set`: 両方設定済みで missing リストが空であることを確認
+    - [x] `nil_env_fallback_present`: `nil` env + 両方 `t.Setenv` で空リストを確認
+    - [x] `nil_env_fallback_missing`: `nil` env + 両方空文字列で両エントリの存在を確認
+  - [x] `make test` 通過確認
 
 - [ ] PR-3 マージ済み（対象ステップ: 2.1 / 2.2 / 2.3 / 2.4 / 2.5 / 2.6）
-  - [ ] `slack_summary_integration_test.go` 新規作成（ビルドタグ `test && slack_notify`、`package main`）
-  - [ ] `loadSlackSummaryTestEnv` 関数実装（`slack_summary_integration_test.go` にのみ配置）
-  - [ ] `TestSlackSummary_Summary_Integration` テスト実装
-    - [ ] 60s タイムアウト付きコンテキストと `defer cancel()`
-    - [ ] ULID 生成による runID
-    - [ ] 3 通 EML 読み込み（ループ内の `os.ReadFile` に `//nolint:gosec // G304` コメントを 1 箇所付与）
-    - [ ] 各 EML で `require.NotNil(t, report)` を実行（計 3 回）
-    - [ ] 各 EML で `assert.False(t, report.HasFailure())` を実行（計 3 回）
-    - [ ] `FakeStore` への `SaveReports` と `require.NoError`
-    - [ ] `require.Len(t, fakeStore.Reports, 3)` で 3 件保存を確認（AC-03）
-    - [ ] `notify.GenerateSummary` でサマリ生成（期間: 2026-05-11 〜 2026-05-14）と `require.NoError`
-    - [ ] サマリアサーション（`ReportCount` / `OrganizationStats` 両キー / 各成功セッション数）
-    - [ ] `successURL` から `AllowedHost` を設定
-    - [ ] `setupNotifyHandlers(config.Secret(successURL), config.Secret(errorURL), ...)` による `NotificationSink` 構築と `require.NoError`
-    - [ ] `notifier.LogSummary` と `notifier.Flush` で送信、`require.NoError`（計 2 回）
-  - [ ] `.PHONY` 行に `test-slack-summary` 追加（`Makefile`）
-  - [ ] `test-slack-summary` ターゲット追加（`Makefile`）
-  - [ ] `make test && make lint` 通過確認（`make lint` が実行する 4 invocation すべてを含む）
+  - [x] `slack_summary_integration_test.go` 新規作成（ビルドタグ `test && slack_notify`、`package main`）
+  - [x] `loadSlackSummaryTestEnv` 関数実装（`slack_summary_integration_test.go` にのみ配置）
+  - [x] `TestSlackSummary_Summary_Integration` テスト実装
+    - [x] 60s タイムアウト付きコンテキストと `defer cancel()`
+    - [x] ULID 生成による runID
+    - [x] 3 通 EML 読み込み（ループ内の `os.ReadFile` に `//nolint:gosec // G304` コメントを 1 箇所付与）
+    - [x] 各 EML で `require.NotNil(t, report)` を実行（計 3 回）
+    - [x] 各 EML で `assert.False(t, report.HasFailure())` を実行（計 3 回）
+    - [x] `FakeStore` への `SaveReports` と `require.NoError`
+    - [x] `require.Len(t, fakeStore.Reports, 3)` で 3 件保存を確認（AC-03）
+    - [x] `notify.GenerateSummary` でサマリ生成（期間: 2026-05-11 〜 2026-05-14）と `require.NoError`
+    - [x] サマリアサーション（`ReportCount` / `OrganizationStats` 両キー / 各成功セッション数）
+    - [x] `successURL` から `AllowedHost` を設定
+    - [x] `setupNotifyHandlers(config.Secret(successURL), config.Secret(errorURL), ...)` による `NotificationSink` 構築と `require.NoError`
+    - [x] `notifier.LogSummary` と `notifier.Flush` で送信、`require.NoError`（計 2 回）
+  - [x] `.PHONY` 行に `test-slack-summary` 追加（`Makefile`）
+  - [x] `test-slack-summary` ターゲット追加（`Makefile`）
+  - [x] `make test && make lint` 通過確認（`make lint` が実行する 4 invocation すべてを含む）
 
 ---
 
@@ -383,24 +383,24 @@
 
 ### 機能完全性
 
-- [ ] `EnvSlackWebhookURLSuccess` / `EnvSlackWebhookURLError` が `internal/notify/validate.go` に定義され、`boot.go`・`validate.go`・`slack_notify_env_test.go` がすべて定数参照している（`missingSlackSummaryEnv` は `notify.EnvSlackWebhookURLSuccess` を直接参照）。
-- [ ] `TestSlackSummary_EnvRequirements` が 6 ケースすべて通過する。
-- [ ] `TestSlackSummary_Summary_Integration` が環境変数設定時に通過し、未設定時にスキップされる。
-- [ ] `make test-slack-summary` で `TestSlackSummary` プレフィックスのテストのみが実行される。
+- [x] `EnvSlackWebhookURLSuccess` / `EnvSlackWebhookURLError` が `internal/notify/validate.go` に定義され、`boot.go`・`validate.go`・`slack_notify_env_test.go` がすべて定数参照している（`missingSlackSummaryEnv` は `notify.EnvSlackWebhookURLSuccess` を直接参照）。
+- [x] `TestSlackSummary_EnvRequirements` が 6 ケースすべて通過する。
+- [ ] `TestSlackSummary_Summary_Integration` が環境変数設定時に通過し、未設定時にスキップされる。（手動検証待ち）
+- [x] `make test-slack-summary` で `TestSlackSummary` プレフィックスのテストのみが実行される。
 
 ### 品質指標
 
-- [ ] `make test` 通過（既存テストへのリグレッションなし）
-- [ ] `make lint` 通過（`make lint` が実行する 4 invocation すべて）
+- [x] `make test` 通過（既存テストへのリグレッションなし）
+- [x] `make lint` 通過（`make lint` が実行する 4 invocation すべて）
 
 ### セキュリティ確認
 
-- [ ] Webhook URL がコード内にハードコードされていないこと（環境変数からのみ取得）。
-- [ ] `config.Secret(webhookURL)` でラップして `setupNotifyHandlers` に渡していること。
+- [x] Webhook URL がコード内にハードコードされていないこと（環境変数からのみ取得）。
+- [x] `config.Secret(webhookURL)` でラップして `setupNotifyHandlers` に渡していること。
 
 ### ドキュメント完全性
 
-- [ ] 本計画書（`03_implementation_plan.md`）が `approved` になっていること。
+- [x] 本計画書（`03_implementation_plan.md`）が `approved` になっていること。
 
 ---
 
