@@ -143,13 +143,13 @@
 
 **対象ファイル**: `cmd/tlsrpt-digest/slack_notify_env_test.go`
 
-- [ ] **1.1** `missingSlackSummaryEnv(env map[string]string) []string` 関数を実装する。
+- [x] **1.1** `missingSlackSummaryEnv(env map[string]string) []string` 関数を実装する。
   - `notify.EnvSlackWebhookURLSuccess` と `slackNotifyWebhookEnvKey`（`notify.EnvSlackWebhookURLError`）の**両方**を確認する。定数エイリアスは追加しない。
   - `env == nil` のとき `os.Getenv` にフォールバックする（`missingSlackNotifyEnv` と同パターン）。
   - 値が空文字列のキーは `"<KEY> (empty)"` 形式で missing リストに追加する。
   - `missingSlackNotifyEnv` の直後に配置する。
 
-- [ ] **1.2** `TestSlackSummary_EnvRequirements` テスト関数を実装する。
+- [x] **1.2** `TestSlackSummary_EnvRequirements` テスト関数を実装する。
   - `TestSlackNotify_EnvRequirements` の直後に追加する。
   - 以下の 6 サブテストを実装する（`02_architecture.md` § 7.1 の 5 ケースに `error_webhook_url_missing` を追加）:
 
