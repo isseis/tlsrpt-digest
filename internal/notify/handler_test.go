@@ -108,7 +108,7 @@ func TestFlush_ErrorGoesToErrorWebhook(t *testing.T) {
 	assert.Equal(t, int32(1), errReqs.Load())
 }
 
-// TestFlush_InfoNotToErrorWebhook verifies AC-15: INFO-level events are never
+// TestFlush_InfoNotToErrorWebhook verifies that INFO-level events are never
 // delivered to the error webhook. Uses LogSummary (the canonical INFO entry
 // point) so the helper's Enabled check correctly filters the record out.
 func TestFlush_InfoNotToErrorWebhook(t *testing.T) {
@@ -121,7 +121,7 @@ func TestFlush_InfoNotToErrorWebhook(t *testing.T) {
 	assert.Equal(t, int32(0), errReqs.Load(), "INFO must not POST to error webhook")
 }
 
-// TestFlush_WarnNotToSuccessOnly verifies AC-16: WARN-level events are never
+// TestFlush_WarnNotToSuccessOnly verifies that WARN-level events are never
 // delivered to a success-only handler. Uses LogAlert (the canonical WARN entry
 // point) so the helper's Enabled check correctly filters the record out.
 func TestFlush_WarnNotToSuccessOnly(t *testing.T) {

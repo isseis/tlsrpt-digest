@@ -285,7 +285,7 @@ func TestSecretNotInMessage_JSONCheck(t *testing.T) {
 }
 
 // TestAlertPayload_NoSensitiveData verifies the Block Kit alert payload does not
-// contain IP addresses, additional-information text, or the Webhook URL (AC-13).
+// contain IP addresses, additional-information text, or the Webhook URL.
 func TestAlertPayload_NoSensitiveData(t *testing.T) {
 	const sensitiveIP = "203.0.113.42"
 	const sensitiveAdditional = "supersecret-freetext"
@@ -318,7 +318,7 @@ func TestAlertPayload_NoSensitiveData(t *testing.T) {
 		FailureDetailsTotalSessions: 5,
 		FailureDetails: []notify.FailureDetail{
 			// IP and additional-information are intentionally NOT fields of FailureDetail;
-			// they are structurally excluded from the type (AC-13 Principle 1).
+			// they are structurally excluded from the type.
 			{
 				ResultType:          strings.Repeat("a", 80),
 				FailedSessionCount:  5,

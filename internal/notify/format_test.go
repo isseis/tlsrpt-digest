@@ -111,7 +111,7 @@ func TestFormatAlerts_TitleOrgCount(t *testing.T) {
 }
 
 // TestFormatAlerts_TitleOrgCountDedup verifies that duplicate OrganizationName
-// values are counted only once in the title (AC-20e).
+// values are counted only once in the title.
 func TestFormatAlerts_TitleOrgCountDedup(t *testing.T) {
 	var recv []byte
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
@@ -783,7 +783,7 @@ func TestFormatWarning_SlackPayloadFields(t *testing.T) {
 // ---- New AC tests (Phase 4) ----
 
 // TestFormatAlerts_PolicySection verifies each policy's org name, policy type,
-// failure count, and period (UTC) appear in the same section (AC-02, AC-12).
+// failure count, and period (UTC) appear in the same section.
 func TestFormatAlerts_PolicySection(t *testing.T) {
 	alert := notify.Alert{
 		OrganizationName: "acme.example",
@@ -808,7 +808,7 @@ func TestFormatAlerts_PolicySection(t *testing.T) {
 }
 
 // TestFormatAlerts_AllPoliciesIncluded verifies all failure policies appear in
-// distinct section blocks (AC-03 normal case).
+// distinct section blocks.
 func TestFormatAlerts_AllPoliciesIncluded(t *testing.T) {
 	var recv []byte
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
@@ -833,7 +833,7 @@ func TestFormatAlerts_AllPoliciesIncluded(t *testing.T) {
 }
 
 // TestFormatAlerts_NoDuplicateHeaders verifies that old repeated headers are gone
-// and each policy is presented in an independent section (AC-04).
+// and each policy is presented in an independent section.
 func TestFormatAlerts_NoDuplicateHeaders(t *testing.T) {
 	var recv []byte
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
@@ -857,7 +857,7 @@ func TestFormatAlerts_NoDuplicateHeaders(t *testing.T) {
 }
 
 // TestFormatAlerts_FailureDetails_Basic verifies result-type and failed-session-count
-// appear in the section (AC-05).
+// appear in the section.
 func TestFormatAlerts_FailureDetails_Basic(t *testing.T) {
 	alert := notify.Alert{
 		OrganizationName:            "basic.example",
@@ -876,7 +876,7 @@ func TestFormatAlerts_FailureDetails_Basic(t *testing.T) {
 }
 
 // TestFormatAlerts_FailureDetails_MXHostname verifies receiving-mx-hostname is
-// shown when present and absent when empty (AC-06).
+// shown when present and absent when empty.
 func TestFormatAlerts_FailureDetails_MXHostname(t *testing.T) {
 	withMX := notify.Alert{
 		OrganizationName:            "mx.example",
@@ -906,7 +906,7 @@ func TestFormatAlerts_FailureDetails_MXHostname(t *testing.T) {
 }
 
 // TestFormatAlerts_FailureDetails_ReasonCode verifies failure-reason-code is
-// shown when present and absent when empty (AC-07).
+// shown when present and absent when empty.
 func TestFormatAlerts_FailureDetails_ReasonCode(t *testing.T) {
 	withReason := notify.Alert{
 		OrganizationName:            "reason.example",
@@ -936,7 +936,7 @@ func TestFormatAlerts_FailureDetails_ReasonCode(t *testing.T) {
 }
 
 // TestFormatAlerts_FailureDetails_AllWhenLE3 verifies that 3 or fewer entries
-// are all shown in detail (AC-08).
+// are all shown in detail.
 func TestFormatAlerts_FailureDetails_AllWhenLE3(t *testing.T) {
 	alert := notify.Alert{
 		OrganizationName:            "le3.example",
@@ -958,7 +958,7 @@ func TestFormatAlerts_FailureDetails_AllWhenLE3(t *testing.T) {
 }
 
 // TestFormatAlerts_FailureDetails_SummaryWhenGT3 verifies that 4+ entries show
-// top 3 in detail and the rest as "Other N entries (M sessions total)" (AC-09).
+// top 3 in detail and the rest as "Other N entries (M sessions total)".
 func TestFormatAlerts_FailureDetails_SummaryWhenGT3(t *testing.T) {
 	// 5 entries, sessions: 10,8,6,4,2 = total 30; top3 = 24, other2 = 6 sessions
 	alert := notify.Alert{
@@ -1010,7 +1010,7 @@ func TestFormatAlerts_FailureDetails_SummaryWhenGT3(t *testing.T) {
 }
 
 // TestFormatAlerts_FailureDetails_Empty verifies empty failure-details produces
-// a clean section with no error or strange output (AC-10).
+// a clean section with no error or strange output.
 func TestFormatAlerts_FailureDetails_Empty(t *testing.T) {
 	alert := notify.Alert{
 		OrganizationName: "empty-details.example",
@@ -1025,7 +1025,7 @@ func TestFormatAlerts_FailureDetails_Empty(t *testing.T) {
 	assert.NotContains(t, sec, "Other")
 }
 
-// TestFormatAlerts_ReportID verifies the Report ID appears in the section (AC-11).
+// TestFormatAlerts_ReportID verifies the Report ID appears in the section.
 func TestFormatAlerts_ReportID(t *testing.T) {
 	alert := sampleAlert()
 	alert.ReportID = "rpt-unique-42"
@@ -1034,7 +1034,7 @@ func TestFormatAlerts_ReportID(t *testing.T) {
 }
 
 // TestFormatAlerts_NormalizesControlChars verifies control characters in external
-// values are replaced with spaces, not rendered as line breaks (AC-13).
+// values are replaced with spaces, not rendered as line breaks.
 func TestFormatAlerts_NormalizesControlChars(t *testing.T) {
 	alert := notify.Alert{
 		OrganizationName:            "evil\norg\ttab",
@@ -1063,7 +1063,7 @@ func TestFormatAlerts_NormalizesControlChars(t *testing.T) {
 }
 
 // TestFormatAlerts_ValueTruncation verifies that each per-field limit is enforced
-// and required labels remain in the output (AC-14).
+// and required labels remain in the output.
 func TestFormatAlerts_ValueTruncation(t *testing.T) {
 	longOrg := strings.Repeat("o", 200)
 	longReportID := strings.Repeat("r", 200)
@@ -1109,7 +1109,7 @@ func TestFormatAlerts_ValueTruncation(t *testing.T) {
 
 // TestFormatAlerts_OverflowSummary verifies that when there are more than 49
 // failure policies, a single message with ≤50 blocks is produced and an overflow
-// summary section is added (AC-03 overflow, AC-14).
+// summary section is added.
 func TestFormatAlerts_OverflowSummary(t *testing.T) {
 	var recv []byte
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
@@ -1154,7 +1154,7 @@ func TestFormatAlerts_OverflowSummary(t *testing.T) {
 }
 
 // TestTruncateMessage_Blocks verifies truncateMessage handles section text > 3000
-// runes and does not panic on nil-Text blocks (AC-14).
+// runes and does not panic on nil-Text blocks.
 func TestTruncateMessage_Blocks(t *testing.T) {
 	// Flush an alert with a very long org name that exceeds maxAlertSectionRunes
 	// after all per-field truncations are bypassed by setting the field via raw
