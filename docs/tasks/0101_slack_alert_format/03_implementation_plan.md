@@ -195,7 +195,7 @@ Slack 仕様は 2026-06-08 に公式ドキュメントで確認済み。
 **レビュー観点**: ポリシー単位 `section` の自己完結性と旧 `fields` 撤廃 / `plain_text` 無害化（制御文字正規化・メンション抑制） / ステップ 3-3：overflow 時は policy section 最大 48・通常時は最大 49 という 48/49 件分岐と block 数 ≤ 50 の invariant；`FailureDetailsTotalCount`/`FailureDetailsTotalSessions` が PR-1 の事前集計値（>10 件でも正確な元総数）を参照していること / ステップ 3-4：`divider` 等 `Text==nil` ブロックでパニックしない nil ガードの実装 / AC 別テストの網羅と許可リスト・機微情報テストの維持
 
 - [x] `make test && make lint` が通っていることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
