@@ -63,32 +63,17 @@ flowchart LR
 本タスクで変更・追加するファイルは `cmd/tlsrpt-digest` パッケージ内のみ。既存の `internal/` パッケージは変更しない。
 
 ```mermaid
-graph TB
+flowchart LR
     classDef process fill:#fff1e6,stroke:#ff7f0e,stroke-width:1px,color:#8a3e00;
     classDef enhanced fill:#e8f5e8,stroke:#2e8b57,stroke-width:2px,color:#006400;
-    classDef data fill:#e6f7ff,stroke:#1f77b4,stroke-width:1px,color:#0b3d91;
 
-    subgraph cmd ["cmd/tlsrpt-digest/"]
-        ENV["slack_notify_env_test.go<br>（変更）"]
-        INT["slack_summary_integration_test.go<br>（新規）"]
-    end
-
-    subgraph internal_notify ["internal/notify/"]
-        GEN["aggregate.go<br>GenerateSummary()"]
-        LOG["helpers.go<br>LogSummary()"]
-    end
-
-    subgraph internal_store ["internal/store/testutil/"]
-        FAKE["mocks.go<br>FakeStore"]
-    end
-
-    subgraph boot ["boot.go（変更なし）"]
-        SETUP["setupNotifyHandlers()"]
-    end
-
-    subgraph mk ["Makefile（変更）"]
-        TARGET["test-slack-summary"]
-    end
+    INT["cmd/.../slack_summary_integration_test.go<br>（新規）"]
+    ENV["cmd/.../slack_notify_env_test.go<br>（変更）"]
+    TARGET["Makefile · test-slack-summary<br>（変更）"]
+    GEN["internal/notify/aggregate.go<br>GenerateSummary()"]
+    LOG["internal/notify/helpers.go<br>LogSummary()"]
+    FAKE["internal/store/testutil/mocks.go<br>FakeStore"]
+    SETUP["boot.go<br>setupNotifyHandlers()"]
 
     INT --> ENV
     INT --> GEN
@@ -96,7 +81,7 @@ graph TB
     INT --> FAKE
     INT --> SETUP
 
-    class ENV,INT,TARGET enhanced
+    class INT,ENV,TARGET enhanced
     class GEN,LOG,FAKE,SETUP process
 ```
 
