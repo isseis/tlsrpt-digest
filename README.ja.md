@@ -117,8 +117,8 @@ fetch_days = 14
 # 自己署名証明書を使用する IMAP サーバに接続する場合に設定
 tls_ca_cert = ""
 
-# 1 通あたりの最大メッセージサイズ（バイト）（省略時: 0 = 制限なし）
-max_message_bytes = 0
+# 1 通あたりの最大メッセージサイズ（バイト）（省略時: 1048576 = 1 MiB、0 を指定すると制限なし）
+max_message_bytes = 1048576
 
 [notify.slack]
 # Slack Webhook URL の許可ホスト名（Webhook URL のホスト名と一致させること）

@@ -3,6 +3,7 @@ package config
 const (
 	defaultIMAPMailbox       = "INBOX"
 	defaultIMAPFetchDays     = 14
+	defaultMaxMessageBytes   = int64(1 << 20) // 1 MiB
 	defaultStoreRootDir      = "./store"
 	defaultSummaryWindowDays = 7
 	defaultStoreRetention    = 30
@@ -17,7 +18,7 @@ func applyDefaults(raw *rawConfig) Config {
 			Mailbox:         stringDefault(raw.IMAP.Mailbox, defaultIMAPMailbox),
 			FetchDays:       intDefault(raw.IMAP.FetchDays, defaultIMAPFetchDays),
 			TLSCACert:       stringValue(raw.IMAP.TLSCACert),
-			MaxMessageBytes: int64Value(raw.IMAP.MaxMessageBytes),
+			MaxMessageBytes: int64Default(raw.IMAP.MaxMessageBytes, defaultMaxMessageBytes),
 		},
 		Notify: NotifyConfig{
 			Slack: NotifySlackConfig{
@@ -63,9 +64,9 @@ func intDefault(value *int, fallback int) int {
 	return *value
 }
 
-func int64Value(value *int64) int64 {
+func int64Default(value *int64, fallback int64) int64 {
 	if value == nil {
-		return 0
+		return fallback
 	}
 	return *value
 }
