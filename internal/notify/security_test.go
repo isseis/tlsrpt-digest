@@ -283,3 +283,57 @@ func TestSecretNotInMessage_JSONCheck(t *testing.T) {
 	raw := string(recv)
 	assert.NotContains(t, raw, sampleWebhookSuffix)
 }
+
+// TestAlertPayload_NoSensitiveData verifies the alert payload does not contain
+// IP addresses, additional-information text, or the Webhook URL.
+// The IP and additional-information strings are injected as unknown slog attrs on
+// a raw record (simulating an accidental or future-extension leak path) to make
+// the assertions meaningful — they verify that unknown attr values are suppressed
+// by the notification layer and never forwarded to Slack.
+func TestAlertPayload_NoSensitiveData(t *testing.T) {
+	const sensitiveIP = "203.0.113.42"
+	const sensitiveAdditional = "supersecret-freetext"
+
+	var recv []byte
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recv, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	webhookURL := srv.URL + "/" + sampleWebhookSuffix + "/webhook"
+	opts := notify.SlackHandlerOptions{
+		WebhookURL:    config.Secret(webhookURL),
+		AllowedHost:   "127.0.0.1",
+		RunID:         "test",
+		LevelMode:     notify.LevelModeWarnAndAbove,
+		HTTPClient:    srv.Client(),
+		BackoffConfig: notify.DefaultBackoffConfig,
+	}
+	h, err := notify.NewSlackHandler(opts)
+	require.NoError(t, err)
+
+	// Build a raw slog.Record that includes the sensitive values as unexpected attrs
+	// alongside valid alert fields. extractAlert calls warnUnknownKey (key-only) for
+	// unrecognised attrs, so the values must not propagate to the Slack payload.
+	r := slog.NewRecord(time.Now(), slog.LevelWarn, "tls_failure_alert", 0)
+	r.AddAttrs(
+		slog.String("organization_name", "public.example"),
+		slog.String("policy_type", "sts"),
+		slog.Int64("failure_count", 5),
+		slog.String("report_id", "rpt-security-test"),
+		slog.Int64("failure_details_total_count", 0),
+		slog.Int64("failure_details_total_sessions", 0),
+		// Simulate attrs that should never reach Slack (no matching case in extractAlert).
+		slog.String("sending_mta_ip", sensitiveIP),
+		slog.String("additional_information", sensitiveAdditional),
+	)
+	require.NoError(t, h.Handle(context.Background(), r))
+	require.NoError(t, h.Flush(context.Background()))
+
+	require.NotEmpty(t, recv, "Flush must have sent a payload — without this check all NotContains assertions would be vacuously true")
+	body := string(recv)
+	assert.NotContains(t, body, sensitiveIP, "IP address value must not appear in alert payload")
+	assert.NotContains(t, body, sensitiveAdditional, "additional-information value must not appear in alert payload")
+	assert.NotContains(t, body, sampleWebhookSuffix, "webhook URL must not appear in alert payload")
+}
