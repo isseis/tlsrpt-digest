@@ -194,9 +194,7 @@ func TestSlackSummary_Summary_Integration(t *testing.T)
 - `-v -count=1` を渡してテスト出力を詳細に表示し、キャッシュを無効化する。
 - `./cmd/tlsrpt-digest/...` を対象パターンとする。
 
-`.PHONY` に `test-slack-summary` を追加する。
-
-**`make test-integration` から除外する理由**: `01_requirements.md` の In Scope 節には「`test-integration` に組み込む」と記載があるが、AC-13 は「`make test-integration` では本テストが実行されないこと」を明示的に定めており、両者は矛盾する。本設計は AC-13 を優先する。根拠は、同一文書の「対象外（Out of Scope）」節に「本テストは手動実行専用」と明記されていること、および既存の `test-slack-notify` ターゲットが同じ理由（実 Slack Webhook が必須）で `test-integration` に含まれていないことである。`test-integration` のビルドタグには `slack_notify` を含まないため、本テストは `make test-integration` では実行されない。
+`.PHONY` に `test-slack-summary` を追加する。`test-integration` のビルドタグには `slack_notify` を含まないため、本テストは `make test-integration` では実行されない（AC-13）。
 
 ---
 
