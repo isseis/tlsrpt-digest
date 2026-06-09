@@ -175,7 +175,7 @@
 **レビュー観点**: `missingSlackSummaryEnv` が両 URL を必須チェックしていること / 6 サブテストの網羅性（特に `error_webhook_url_missing` で success-only 拒否を確認） / `missingSlackNotifyEnv` との対称性
 
 - [x] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
-- [ ] PR を作成した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
