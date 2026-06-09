@@ -1,0 +1,234 @@
+Return-Path: <tlsrpt-noreply@microsoft.com>
+Received: from mail.example.com (mail.example.com [192.0.2.1])
+	 by mail.example.com (Cyrus 3.13.4-55-gb8e25e6a4-fm-20260511.002-gb8e25e6a) with LMTPA;
+	 Thu, 14 May 2026 17:32:36 -0400
+X-Cyrus-Session-Id: mail.example.com-1778794356-2347766-2-892526828099750210
+X-Sieve: CMU Sieve 3.0
+X-Spam-known-sender: no
+X-Spam-sender-reputation: 1000 (domain)
+X-Spam-score: 0.0
+X-Spam-hits: BAYES_50 0.8, DCC_CHECK 1.1, HTML_MESSAGE 0.001, ME_SC_SENDERREP -100,
+  ME_SENDERREP_ALLOW -4, MIME_HTML_ONLY 0.1, RCVD_IN_DNSWL_NONE -0.0001,
+  RCVD_IN_MSPIKE_H2 0.001, SHORTCIRCUIT -0.0001, SPF_HELO_PASS -0.001,
+  SPF_PASS -0.001, T_HK_SPAMMY_FILENAME 0.01, LANGUAGES en,
+  BAYES_USED user, SA_VERSION 4.0.1
+X-Spam-source: IP='52.101.43.143',
+  Host='mail-westusazon11022143.outbound.protection.outlook.com',
+  Country='US', FromHeader='com', MailFrom='com'
+X-Spam-charsets: html='us-ascii'
+X-Attached: microsoft.com!example.com!1778630400!1778716799!134232617934286362.json.gz
+X-Resolved-to: tls-report@example.com
+X-Delivered-to: tls-report@example.com
+X-Mail-from: tlsrpt-noreply@microsoft.com
+Received: from phl-mx-01 ([192.0.2.1])
+  by mail.example.com (LMTPProxy); Thu, 14 May 2026 17:32:36 -0400
+Received: from mail.example.com (localhost [127.0.0.1])
+	by mail.example.com (Postfix) with ESMTP id A1B5B11200D8
+	for <tls-report@example.com>; Thu, 14 May 2026 17:32:35 -0400 (EDT)
+Received: from mail.example.com (localhost [127.0.0.1])
+    by mail.example.com (Authentication Milter) with ESMTP
+    id 65906BAAA7F.5E5381120113;
+    Thu, 14 May 2026 17:32:35 -0400
+ARC-Seal: i=2; a=rsa-sha256; cv=fail; d=messagingengine.com; s=fm3; t=
+    1778794355; b=RzjYKKjMEfrHo2bEgwkyG9ndxiXdihcLzYViu3SZtHmUDD30IY
+    MmgrNJIuULDMNJ5r6LGuWyrCA7HIhAkCHfXn5cGrWvWMD8o1PZ1JgHnmxDIyRSnk
+    er+59oSImSoNmN0KueGMndGLRdN/+1qFQnx/5x/UCrFTCnzmmmcfkM38uvrerLej
+    mqg252EfP3dlxDcMcQoHaAXK3BxZ/f5SrnsBFlyU4koTUpMmHvD4Z8C9WXutTWbi
+    SKa26BTFw0ZxND9bPHk+wTLsk6qOGgzA7uL1SyJ7iBXvpoQIY6btCXDJKr5/I3DD
+    nSjQVfeoAwOwOR+N97fOW6A5Y3RJCJJ3s7tw==
+ARC-Message-Signature: i=2; a=rsa-sha256; c=relaxed/relaxed; d=
+    messagingengine.com; h=from:to:date:subject:mime-version
+    :message-id:content-type; s=fm3; t=1778794355; bh=MJ7GyDpSVDS02J
+    m/xNVe/SLDuDgkWignlyEyl8O3oHo=; b=dc5eWZqJUFRCeT14h+5GQGHMlVWDjp
+    L/hPUgaxtXlA9jFSYzh2m8C6NbIZ9N1fXHxdliTbLRCKj1bcfMczZC/BAUf+48U3
+    Z4YEJqWGofCrTPe9tJb+PPJKvxnK0q/ivDK1sfoYKHhpHru7+WkYaJCg5Ez8UPLZ
+    H959/hqpCQ0L3zMVsfHmsD2RsAyN7tNYFOoYAxiVHY2hW27o1XM0xS2tg01k+M6l
+    w0pKyx14pKiT2bp/1TwZB7s67Lwm/G6bGrgKuyUrFOQeri5sEfx1lGcDPJCsOzf4
+    bHOshpK/BnQJwDKT2mgqb85TcKESbrZQX6718p13H3EcSrnjCN+J987w==
+ARC-Authentication-Results: i=2; mail.example.com;
+    x-csa=none;
+    x-me-sender=none;
+    x-ptr=fail smtp.helo=SJ2PR03CU001.outbound.protection.outlook.com
+    policy.ptr=mail-westusazon11022143.outbound.protection.outlook.com;
+    bimi=none (No BIMI records found);
+    arc=fail
+    (as.1.microsoft.com=fail (bad RSA signature), ams.1.microsoft.com=fail (bad RSA signature))
+    smtp.remote-ip=52.101.43.143;
+    dkim=pass (1024-bit rsa key sha256) header.d=microsoft.com
+    header.i=@microsoft.com header.b=b3tWytEp header.a=rsa-sha256
+    header.s=selector2;
+    dmarc=pass policy.published-domain-policy=reject
+    policy.applied-disposition=none policy.evaluated-disposition=none
+    (p=reject,d=none,d.eval=none) policy.policy-from=p
+    header.from=microsoft.com;
+    iprev=pass smtp.remote-ip=52.101.43.143
+    (mail-westusazon11022143.outbound.protection.outlook.com);
+    spf=pass smtp.mailfrom=tlsrpt-noreply@microsoft.com
+    smtp.helo=SJ2PR03CU001.outbound.protection.outlook.com
+X-ME-Authentication-Results: mail.example.com;
+    x-tls=pass smtp.version=TLSv1.3 smtp.cipher=TLS_AES_256_GCM_SHA384
+      smtp.bits=256/256;
+    x-vs=clean score=40 state=0
+Authentication-Results: mail.example.com;
+    x-csa=none;
+    x-me-sender=none;
+    x-ptr=fail smtp.helo=SJ2PR03CU001.outbound.protection.outlook.com
+      policy.ptr=mail-westusazon11022143.outbound.protection.outlook.com
+Authentication-Results: mail.example.com;
+    bimi=none (No BIMI records found)
+Authentication-Results: mail.example.com;
+    arc=fail
+      (as.1.microsoft.com=fail (bad RSA signature), ams.1.microsoft.com=fail (bad RSA signature))
+      smtp.remote-ip=52.101.43.143
+Authentication-Results: mail.example.com;
+    dkim=pass (1024-bit rsa key sha256) header.d=microsoft.com
+      header.i=@microsoft.com header.b=b3tWytEp header.a=rsa-sha256
+      header.s=selector2;
+    dmarc=pass policy.published-domain-policy=reject
+      policy.applied-disposition=none policy.evaluated-disposition=none
+      (p=reject,d=none,d.eval=none) policy.policy-from=p
+      header.from=microsoft.com;
+    iprev=pass smtp.remote-ip=52.101.43.143
+      (mail-westusazon11022143.outbound.protection.outlook.com);
+    spf=pass smtp.mailfrom=tlsrpt-noreply@microsoft.com
+      smtp.helo=SJ2PR03CU001.outbound.protection.outlook.com
+X-ME-VSCause: gggruggvucftvghtrhhoucdtuddrgeefhedrtddtgdduvdekieduucetufdoteggodetrf
+    dotffvucfrrhhofhhilhgvmecuhfgrshhtofgrihhlpdfurfetoffkrfgpnffqhgenuceu
+    rghilhhouhhtmecufedttdenucgotffhvedqqdfouhhlthhiphgrrhhttfgvphhorhhtqd
+    fpohftvghpohhrthculdegtddmnecujfgurhephffvfffuggfktgesphdtreertddtvden
+    ucfhrhhomhepoehtlhhsrhhpthdqnhhorhgvphhlhiesmhhitghrohhsohhfthdrtghomh
+    eqnecuggftrfgrthhtvghrnhepgeefgedvieejuefhffeihfffffekudeikeelgeevvdeh
+    gfefhfdtkeelvdefffejnecuffhomhgrihhnpehmihgtrhhoshhofhhtrdgtohhmnecukf
+    hppeehvddruddtuddrgeefrddugeefpddvtddrkeehrdejuddrvddvkeenucevlhhushht
+    vghrufhiiigvpedtnecurfgrrhgrmhepihhnvghtpeehvddruddtuddrgeefrddugeefpd
+    hhvghlohepufflvdfrtfdtfeevfgdttddurdhouhhtsghouhhnugdrphhrohhtvggtthhi
+    ohhnrdhouhhtlhhoohhkrdgtohhmpdhmrghilhhfrhhomhepoehtlhhsrhhpthdqnhhorh
+    gvphhlhiesmhhitghrohhsohhfthdrtghomheqpdhnsggprhgtphhtthhopedupdhrtghp
+    thhtohepoehtlhhsqdhrvghpohhrthesihhsshgvihdrohhrgheq
+X-ME-VSScore: 40
+X-ME-VSCategory: clean
+X-ME-CSA: none
+X-ME-Received: <xmx:cz8Gak4KgdRNUPmbBVON5AyQFnu0DVjFBZUhisKmUoR9d2cqkaoMHA>
+X-ME-Received: <xmx:cz8GapMHXpkusezCwu2pSMMZzNCUpkq_pS8tGOt49QUlABBcYKjxHg>
+Received-SPF: pass
+    (microsoft.com: Sender is authorized to use 'tlsrpt-noreply@microsoft.com' in 'mfrom' identity (mechanism 'include:_spf-a.microsoft.com' matched))
+    receiver=mail.example.com;
+    identity=mailfrom;
+    envelope-from="tlsrpt-noreply@microsoft.com";
+    helo=SJ2PR03CU001.outbound.protection.outlook.com;
+    client-ip=52.101.43.143
+Received: from SJ2PR03CU001.outbound.protection.outlook.com (mail-westusazon11022143.outbound.protection.outlook.com [52.101.43.143])
+	(using TLSv1.3 with cipher TLS_AES_256_GCM_SHA384 (256/256 bits)
+	 key-exchange ECDHE (secp384r1) server-signature RSA-PSS (2048 bits) server-digest SHA256)
+	(No client certificate requested)
+	by mail.example.com (Postfix) with ESMTPS id 5E5381120113
+	for <tls-report@example.com>; Thu, 14 May 2026 17:32:35 -0400 (EDT)
+ARC-Seal: i=1; a=rsa-sha256; s=arcselector10001; d=microsoft.com; cv=none;
+ b=bbR88ZVv3No7h4lVkGHvUKhMHYJIyv/0TB7brd6sDXhUTYW0fq58JroDkIe0up6iJen+iYX1D9tNI8FUHV/WSTiFnMMbbMkevSwmWYl+rvtO9yffJ501+EdUg9Fts43eT12NPK9rlF+uiaMt1UMt2o/+jaj+OR75d5JygclVH+mA6sUf1h/lummrV1LanwBnV1o1OcAphVuwUmy/rqQnF44lYIx9D13VeSoNAuWKAcooWmy3F2KeRKQAxOO2daMIJ1XKbSujZT96HX28zFqQ+ygkSVDN2lSKQbowdkTFH5U7qg60D0xAhhYwpVV4jre3oDeiN/P/+wKdmGJLQUboyQ==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=microsoft.com;
+ s=arcselector10001;
+ h=From:Date:Subject:Message-ID:Content-Type:MIME-Version:X-MS-Exchange-AntiSpam-MessageData-ChunkCount:X-MS-Exchange-AntiSpam-MessageData-0:X-MS-Exchange-AntiSpam-MessageData-1;
+ bh=MJ7GyDpSVDS02Jm/xNVe/SLDuDgkWignlyEyl8O3oHo=;
+ b=oZ22QUvZ4nePSUg2TwTK/VXhyiQc+IUgom9mi62K7RVqJ/o+GOLhvulrIIrS4FSM8/h9UhcSKwlbCBbtPcZB853ozmmc+3aAXMRIWC3isq0OOKvo8HrQAUfR0/ofpp52IpwjPX6eq2pVuqVPeWJta5esL0nJ23PxlQvfQCgRntLPMjPEUL152yTl6dlBcP/bQltNHtqDvFwOioq0UdYCXtupAEIM24R7lLOTHNQW8ypJVaKLv0XIzi1Q0r+hjSrbRbMWogmPcMC29k6mWfv5W6il3YYLVmzY3T0wdAoTFpv2S0DMl4P61WkEZsObp6WhLKfQj+9PKb/QbPfI9CyKHg==
+ARC-Authentication-Results: i=1; mx.microsoft.com 1; spf=none; dmarc=none
+ action=none header.from=microsoft.com; dkim=none (message not signed);
+ arc=none
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=microsoft.com;
+ s=selector2;
+ h=From:Date:Subject:Message-ID:Content-Type:MIME-Version:X-MS-Exchange-SenderADCheck;
+ bh=MJ7GyDpSVDS02Jm/xNVe/SLDuDgkWignlyEyl8O3oHo=;
+ b=b3tWytEpj8DtsWV7iT0UgSUspLslIY8Hg8jk/GDldh4zwpe2YHNIHzYH4UbBE7sy0Y2ibUsPzMf4JFTRpMj8pKvY/cDqkIRy/fXNhkzQ0WQMXiA8jt93vkKJssPjT7gCdcrsNkyGO+NocpxmHe/gHyl7DOKyFaiJmA3sS25idkw=
+Received: from MN0PR05CA0010.namprd05.prod.outlook.com (2603:10b6:208:52c::19)
+ by CH4PR21MB4614.namprd21.prod.outlook.com (2603:10b6:610:266::6) with
+ Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.21.48.4; Thu, 14 May 2026
+ 21:32:31 +0000
+Received: from BL02EPF00029927.namprd02.prod.outlook.com
+ (2603:10b6:208:52c:cafe::43) by MN0PR05CA0010.outlook.office365.com
+ (2603:10b6:208:52c::19) with Microsoft SMTP Server (version=TLS1_3,
+ cipher=TLS_AES_256_GCM_SHA384) id 15.21.25.19 via Frontend Transport; Thu, 14
+ May 2026 21:32:31 +0000
+X-MS-Exchange-Authentication-Results: spf=none (sender IP is 20.85.71.228)
+ smtp.mailfrom=microsoft.com; dkim=none (message not signed)
+ header.d=none;dmarc=none action=none header.from=microsoft.com;
+Received: from microsoft-com.mail.protection.outlook.com (20.85.71.228) by
+ BL02EPF00029927.mail.protection.outlook.com (10.167.249.52) with Microsoft
+ SMTP Server (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id
+ 15.21.25.13 via Frontend Transport; Thu, 14 May 2026 21:32:31 +0000
+From: <tlsrpt-noreply@microsoft.com>
+To: "tls-report@example.com" <tls-report@example.com>
+Date: Thu, 14 May 2026 21:32:30 +0000
+Subject: Report Domain: example.com Submitter: microsoft.com Report-ID:
+ 134232617934286362+example.com
+TLS-Report-Domain: example.com
+TLS-Report-Submitter: microsoft.com
+MIME-Version: 1.0
+Message-ID: <134232617934286362+example.com@example.com>
+Content-Type: multipart/report;
+	boundary="_ef7ba0ff-fc83-492a-bd16-ed8162e24e7c_"; report-type=tlsrpt
+X-MS-TrafficTypeDiagnostic:
+	BL02EPF00029927:EE_FirstParty-TlsRpt-V3-System|CH4PR21MB4614:EE_FirstParty-TlsRpt-V3-System
+X-MS-PublicTrafficType: Email
+X-MS-Office365-Filtering-Correlation-Id: 1ee32830-6065-4350-12a3-08deb2004e06
+X-MS-Exchange-SenderADCheck: 1
+X-MS-Exchange-AntiSpam-Relay: 0
+X-Microsoft-Antispam:
+	BCL:0;ARA:13230040|376014|6049299003|61400799027|16102099003|56012099003|18002099003|11063799003|4053099003|8096899003;
+X-Microsoft-Antispam-Message-Info:
+	gwJPc8xd2iDB0M+BwN5MnMuBF2ZUUxG1AN7P2XVcLV5I8DpgiS6FJmewvTZYBsQ8SIX3YwhTQx/w1rnTI9KF2SNFP6NP6HyKf2yvWweP30K5jlUGtSBHug7SVUIA0+eXjEkksMThepCuuo8cq3hJGrF/pAShZK02xUz5tH+7Am1BiEI2K/TRzlnrikuDp6lOTzVrfJdKqGEgxs2hm/gbPWCnTCoFCQmy7I13L9U1zQinpqStMaSkOymjEpyc+T3w8vEGc7wVzSuXLyEsYBvcazB1Fk7wmER1GU0cNi++tloVNbcbeawJr18X4b/ScLAZxT0ujAMsyhqPTuMGF2/LTOdLqAY4yf1rwFXoiMIshdDvKuvSlaRgJGhMlqyieB/qQYfG4gPZjwhshSUWCkpJBziMOwx/AAbQgRqZ9wvK3SmEoWUydQSnL12g1gBZLdeOcQOVUsNZWaCF7FfnC8qCHq1ahCXdb8+9GNWdfYp/5OhsvKg21R3ojezCvq4jwW2pTGaBQ1Xq5D93c/97GztN3idDo/p7mSVz150n4U8+OLwFx6nAQT60rGt3NmCXypqfspSg8x7Cqjl17DuBNHsCz6oCn3ScH8sc2R8yyVEf7DX1G6oTFtEXp6cx5KNFXKPH9MV72G51ipwZaMmHJ8XSP858CPq+o0VBHA2FqxYWuD8FNSxO6+wRbs/5QtrI0+Gx6YFcxxKFInIdDogEuEzj4s2eqVzeSRT0xzD6yI4l602c2YLLLXwUfN0eLKU5oOzqcH6loYY0JY/2rbdnNaLxFAjetBwBaSsuLo5eJnl3oBA=
+X-Forefront-Antispam-Report:
+	CIP:20.85.71.228;CTRY:US;LANG:en;SCL:1;SRV:;IPV:NLI;SFV:NSPM;H:microsoft-com.mail.protection.outlook.com;PTR:InfoDomainNonexistent;CAT:NONE;SFS:(13230040)(376014)(6049299003)(61400799027)(16102099003)(56012099003)(18002099003)(11063799003)(4053099003)(8096899003);DIR:OUT;SFP:1102;
+X-MS-Exchange-AntiSpam-MessageData-ChunkCount: 1
+X-MS-Exchange-AntiSpam-MessageData-0:
+	ZKN5YN6I+wwgS/yL+kzlVDb04XHhxta9+Mw1Ezkr0gXemz89Zq02UQGRZNPnmZG4o9R3XJbq8mdAuX+g0PhHif6VowuiEGtvA5PQ8xq7D3czOXT7doX++ah6VOMqGo6/yBMk5AmeSVGd3vxMToV4h4TYb3enFhnuhfERJ+7v6Pom9a1krBiZAfAoYGu94PZND/pJPqJuvjyrZv516y0iWXgXAUH9Ppc8BIlzWzSChKJI9ZI3EV2+mFWw3t/rHQV18Ju661gXULjh2Jfacm9yfrRICHzbsLjQWmi69LFty/QU70en3crkGB7brO595UuCrjS+OG5VVI5b+PEHNbXusQ3QkIPMEawe6JTQZEscj/87JqFidoJ0CNfKQL6NxbjPlSS32lOyPdr3LQ0/PMTV0Yz3gAWETzpA/Yo2b7cWrPnAXZzRFBAVRzjQQOdUR4af9sR7KRJCmw4r8RGQHuC8oTLkAzHZXZW8Lfxyg9+NkaS2tDPT//Vf2gJGmsjThYqWeZ3N5mPlKB6rbKrslerIpfZAUu7FlbzWFVtALDW6cHlOMyllZRWgRdpcjlHw/K+LhtBBM28/+A7LZKU+lyAxN87PiF7pNXEMPtP7T7v5ndDU+DS27InYK8vI82TmhfR7F2EE1XNEc+jKN1J+BBa0fc+QSqAZ2ea1J7vowLUDr0IeoJ4NBnyeZbPs1Qm1Q6l37waEojO7H8RdMGQ5lYAPaeMJXYDX2NCRmEA2SMNRCkKcKsZJRIAthf8SYUhDFHql80cq12KFrXtvTusieP+QawnHcG+XhovjUlD+MtdCL9QX3dg9SOFRtEziJvolNv0h
+X-OriginatorOrg: microsoft.com
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 14 May 2026 21:32:31.0444
+ (UTC)
+X-MS-Exchange-CrossTenant-Network-Message-Id: 1ee32830-6065-4350-12a3-08deb2004e06
+X-MS-Exchange-CrossTenant-Id: 72f988bf-86f1-41af-91ab-2d7cd011db47
+X-MS-Exchange-CrossTenant-OriginalAttributedTenantConnectingIp: TenantId=72f988bf-86f1-41af-91ab-2d7cd011db47;Ip=[20.85.71.228];Helo=[microsoft-com.mail.protection.outlook.com]
+X-MS-Exchange-CrossTenant-FromEntityHeader: Internet
+X-MS-Exchange-CrossTenant-AuthAs: Internal
+X-MS-Exchange-CrossTenant-AuthSource:
+	TreatMessagesAsInternal-CH4PR21MB4614.namprd21.prod.outlook.com
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: CH4PR21MB4614
+
+--_ef7ba0ff-fc83-492a-bd16-ed8162e24e7c_
+Content-Type: text/html; charset="us-ascii"
+Content-Transfer-Encoding: quoted-printable
+
+<html>
+<head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3Dus-ascii"=
+>
+</head>
+<body>
+<div>This is an aggregate TLS report from microsoft.com</div>
+ <br>
+<br>
+<p><em>Microsoft respects your privacy. Review our online </em><a href=3D"h=
+ttps://privacy.microsoft.com/en-us/privacystatement"><em>Privacy Statement<=
+/em></a><em><br>
+<br>
+<em>Microsoft Corporation </em><br>
+<em>One Microsoft Way</em><br>
+<em>Redmond, WA, USA 98052</em></em></p>
+ </body>
+</html>
+
+--_ef7ba0ff-fc83-492a-bd16-ed8162e24e7c_
+Content-Type: application/tlsrpt+gzip
+Content-Description:
+ microsoft.com!example.com!1778630400!1778716799!134232617934286362.json.gz
+Content-Disposition: attachment;
+	filename="microsoft.com!example.com!1778630400!1778716799!134232617934286362.json.gz"
+Content-Transfer-Encoding: base64
+
+H4sIAAAAAAACA32RwWrDMAyGXyX4urg4Tpu1Pg123qk9dZRhHCcYYivYSmlW8u5T0naMwQbGluRP
+0i/7yiC2OrhPjQ4CD9pbptibMxESNJi9QuwhLpcsZ7VGy6MOLUFXllBH5HMM3ZImhay42PCiPAih
+lnWkLBvqPyhZqs2O1pFNOTMQUBvkLjRAGHYp9sgDRNt344t/SFoZ8FSUokDdXU1oUa5lKavieUfG
+tior+WQv2vedvcM9dM44m5h6v96ccR7gZnEc+1lXwvRAR54wutASz842JppeZfvD/lwQ4aG2KrOk
+Mho7+xeVuVDw5LFfeZuSbinVBtof/W+I/BfRlw/dUuFKrLdCsNO3lBq8doEE/pyJ3isN3uu4DIKA
+uuNpMIZqNwOZdM7/aWAIyJTM70ijXTdE+/teTNNp+gJo6NjXCwIAAA==
+
+--_ef7ba0ff-fc83-492a-bd16-ed8162e24e7c_--

@@ -289,7 +289,7 @@ func TestParseRealReport(t *testing.T) {
 		wantFailure bool
 	}{
 		{
-			filename:    "../../testdata/tlsrpt_success.eml",
+			filename:    "../../testdata/tlsrpt_success_google_2.eml",
 			wantFailure: false,
 		},
 		{
