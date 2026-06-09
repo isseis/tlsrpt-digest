@@ -38,6 +38,8 @@ Work in the following order.
 - For any diagram edge that depicts the *current* behavior of existing components (i.e., relationships that already exist in code today, not new relationships this feature is introducing), verify that it accurately reflects actual code behavior. Edges that show newly planned relationships introduced by this feature do not need to match existing code, but should be clearly distinguishable from current-behavior edges (e.g., by using the `enhanced` class or an explanatory label).
 - If the design introduces any behavior that conflicts with or creates an exception to policies established in other architecture documents under `docs/tasks/`, identify and document all three of the following inline in the design (not only in an appendix): (1) the original policy and where it is documented, (2) why this design is an intentional exception, (3) which existing tests assert the old behavior and will therefore need updating.
 - Identify existing tests (in `*_test.go` files) that assert behaviors this design changes. Note them in the component responsibilities table or the relevant design section so implementers know which tests require updating.
+- **Before adopting any new feature of an external API** (e.g., a Slack Block Kit element, an IMAP extension, an RFC-defined capability), verify that it behaves correctly on **all target client environments** (list them in `_context.md`, Domain-specific). Record the verification result inline in the design document. If verification across all targets is not possible before the architecture is approved, document the risk explicitly and prefer a fallback that is known to work on all targets.
+- **Before introducing a new approach to replace existing behavior**, state briefly why the existing simpler approach cannot satisfy the requirements. If it can, use the simpler approach (YAGNI). This is required even when the new approach is technically superior — the question is whether the requirement demands it.
 
 7. Create `02_architecture.md` in the same task directory.
 - Write in Japanese.
@@ -76,6 +78,8 @@ Work in the following order.
 - [ ] For notification-related features, the security section reflects `notification_security.md`.
 - [ ] The component responsibilities table lists all new and modified files.
 - [ ] The design does not overlap with existing packages or re-implement existing responsibilities.
+- [ ] Any new external-service feature the design relies on (Slack API, IMAP capability, etc.) is verified to behave correctly on all target client environments listed in `_context.md`; the verification result is stated inline, or the unverified risk is explicitly documented.
+- [ ] When the design replaces existing behavior with a new approach, a "why not the existing approach?" justification is present and names the specific requirement the simpler approach cannot satisfy.
 
 **Readability and consistency checklist (use verbatim as evaluation criteria in the subagent prompt above):**
 - [ ] The arrow semantics used in each diagram are stated explicitly in a caption or note (e.g., "矢印 A → B は…を表す"), and are applied consistently within that diagram.
