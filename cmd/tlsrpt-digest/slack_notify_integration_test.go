@@ -32,9 +32,8 @@ func loadSlackNotifyTestEnv(t *testing.T) string {
 }
 
 func TestSlackNotify_FailureAlert_Integration(t *testing.T) {
-	// 60s prevents an indefinite hang if Slack is unreachable. The worst-case retry
-	// sequence is 4 attempts × 5s per-request timeout + (2+4+8)s backoff sleeps ≈ 34s,
-	// so 60s gives comfortable headroom without blocking the terminal for too long.
+	// 60s gives comfortable headroom for the full retry sequence;
+	// update this if the notifier's retry parameters change.
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
