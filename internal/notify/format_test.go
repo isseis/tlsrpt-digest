@@ -1186,6 +1186,55 @@ func TestFormatAlerts_AllPoliciesSpanMultipleAttachments(t *testing.T) {
 	}
 }
 
+// TestFormatAlerts_AttachmentOverflow verifies that when the number of policies
+// would exceed Slack's 100-attachment limit, an overflow summary is added to the
+// last attachment and the total attachment count stays at or below 100.
+func TestFormatAlerts_AttachmentOverflow(t *testing.T) {
+	var recv []byte
+	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
+	defer cleanup()
+
+	// 301 policies requires ceil(301/3)=101 attachments without overflow capping.
+	const total = 301
+	for i := range total {
+		require.NoError(t, notify.LogAlert(context.Background(), h, notify.Alert{
+			OrganizationName: fmt.Sprintf("org-%03d.example", i),
+			PolicyType:       notify.PolicyTypeSTS,
+			FailureCount:     int64(i + 1),
+		}))
+	}
+	require.NoError(t, h.Flush(context.Background()))
+
+	msg := decodeSlackMessage(t, recv)
+	assert.LessOrEqual(t, len(msg.Attachments), 100, "must not exceed Slack's 100-attachment limit")
+
+	// The last attachment must contain the overflow summary and Run ID.
+	lastAtt := msg.Attachments[len(msg.Attachments)-1]
+	var hasOverflow, hasRunID bool
+	for _, f := range lastAtt.Fields {
+		switch f.Title {
+		case "Additional Policies":
+			hasOverflow = true
+			assert.Contains(t, f.Value, "additional policies omitted")
+		case "Run ID":
+			hasRunID = true
+		}
+	}
+	assert.True(t, hasOverflow, "overflow summary must appear in the last attachment")
+	assert.True(t, hasRunID, "Run ID must appear in the last attachment")
+
+	// Total policy summary fields across all attachments must be exactly 300 (= 100×3).
+	var policyFieldCount int
+	for _, att := range msg.Attachments {
+		for _, f := range att.Fields {
+			if f.Title == "Organization / Policy / Failures / Period" {
+				policyFieldCount++
+			}
+		}
+	}
+	assert.Equal(t, 300, policyFieldCount, "exactly 300 policies shown; 1 overflows to summary")
+}
+
 // TestTruncateMessage_Blocks verifies truncateMessage handles section text > 3000
 // runes and does not panic on nil-Text blocks.
 func TestTruncateMessage_Blocks(t *testing.T) {

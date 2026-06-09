@@ -304,6 +304,9 @@ func normalizeControlChars(s string) string {
 // attachments (at most maxAlertPoliciesPerChunk each) so that the field count
 // per attachment stays within Slack's recommended limit; the Run ID field is
 // appended to the final attachment.
+// When the number of policy chunks would exceed maxAlertAttachments, the
+// remaining policies are summarised in an "Additional Policies" overflow field
+// on the last attachment so the total stays within Slack's attachment limit.
 // The first attachment's fallback contains the full text for clients that do
 // not render attachments.
 // No truncation is applied here; the caller (Flush) applies truncateMessage.
@@ -315,18 +318,35 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 	// details). Chunking at 3 policies per attachment keeps the field count
 	// to at most 9 alert fields + 1 Run ID = 10 total, matching the original
 	// per-attachment budget.
-	const maxAlertPoliciesPerChunk = 3
+	// Slack allows at most 100 attachments per message; cap the shown policies
+	// accordingly and summarise any remainder in an overflow field.
+	const (
+		maxAlertPoliciesPerChunk = 3
+		maxAlertAttachments      = 100 // Slack per-message attachment limit
+		// alertBlocksOverhead is the number of extra fields on the last attachment:
+		// optional overflow summary + Run ID.
+		alertBlocksOverhead = 2
+	)
+	maxPoliciesShown := maxAlertAttachments * maxAlertPoliciesPerChunk
+
+	shown := alerts
+	var overflowAlerts []Alert
+	if len(alerts) > maxPoliciesShown {
+		shown = alerts[:maxPoliciesShown]
+		overflowAlerts = alerts[maxPoliciesShown:]
+	}
 
 	var fallbackParts []string
 	fallbackParts = append(fallbackParts, title)
 
 	var attachments []slackAttachment
-	for i := 0; i < len(alerts); i += maxAlertPoliciesPerChunk {
-		end := min(i+maxAlertPoliciesPerChunk, len(alerts))
-		chunk := alerts[i:end]
-		isLast := end == len(alerts)
+	for i := 0; i < len(shown); i += maxAlertPoliciesPerChunk {
+		end := min(i+maxAlertPoliciesPerChunk, len(shown))
+		chunk := shown[i:end]
+		isLast := end == len(shown)
 
-		fields := make([]slackField, 0, len(chunk)*3+1)
+		// Capacity: up to 3 fields per policy + overflow summary + Run ID.
+		fields := make([]slackField, 0, len(chunk)*maxAlertPoliciesPerChunk+alertBlocksOverhead)
 		for _, a := range chunk {
 			summary := buildPolicySummaryText(a)
 			fields = append(fields, slackField{
@@ -349,6 +369,17 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 		}
 
 		if isLast {
+			if len(overflowAlerts) > 0 {
+				overflowOrgs := uniqueOrgCount(overflowAlerts)
+				var overflowSessions int64
+				for _, a := range overflowAlerts {
+					overflowSessions += a.FailureCount
+				}
+				overflowText := fmt.Sprintf("%d additional policies omitted; organizations: %d; failed sessions: %d",
+					len(overflowAlerts), overflowOrgs, overflowSessions)
+				fields = append(fields, slackField{Title: "Additional Policies", Value: overflowText, Short: false})
+				fallbackParts = append(fallbackParts, overflowText)
+			}
 			fields = append(fields, slackField{Title: "Run ID", Value: runID, Short: false})
 			fallbackParts = append(fallbackParts, "Run ID\n"+runID)
 		}
