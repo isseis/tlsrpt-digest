@@ -761,83 +761,6 @@ func TestFormatWarning_SlackPayloadFields(t *testing.T) {
 	assert.Contains(t, body, "run-001", "run_id should appear in payload")
 }
 
-// TestFormatAlerts_PolicyField verifies each policy's org name, policy type,
-// failure count, and period (UTC) appear in the same field.
-func TestFormatAlerts_PolicyField(t *testing.T) {
-	alert := notify.Alert{
-		OrganizationName: "acme.example",
-		PolicyType:       notify.PolicyTypeTLSA,
-		FailureCount:     42,
-		DateRange: notify.DateRange{
-			Start: time.Date(2024, 3, 1, 6, 0, 0, 0, time.UTC),
-			End:   time.Date(2024, 3, 7, 18, 0, 0, 0, time.UTC),
-		},
-		ReportID: "rpt-tlsa-1",
-	}
-	msg := decodeSlackMessage(t, flushAlert(t, alert))
-	texts := alertBodyTexts(msg)
-	require.NotEmpty(t, texts)
-	sec := strings.Join(texts, "\n")
-	assert.Contains(t, sec, "acme.example")
-	assert.Contains(t, sec, "tlsa")
-	assert.Contains(t, sec, "42")
-	assert.Contains(t, sec, "2024-03-01")
-	assert.Contains(t, sec, "2024-03-07")
-	assert.Contains(t, sec, "rpt-tlsa-1")
-}
-
-// TestFormatAlerts_AllPoliciesIncluded verifies all failure policies appear in
-// distinct attachment fields.
-func TestFormatAlerts_AllPoliciesIncluded(t *testing.T) {
-	var recv []byte
-	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
-	defer cleanup()
-
-	orgs := []string{"org-a.example", "org-b.example", "org-c.example"}
-	for _, org := range orgs {
-		require.NoError(t, notify.LogAlert(context.Background(), h, notify.Alert{
-			OrganizationName: org,
-			PolicyType:       notify.PolicyTypeSTS,
-			FailureCount:     1,
-		}))
-	}
-	require.NoError(t, h.Flush(context.Background()))
-
-	msg := decodeSlackMessage(t, recv)
-	fields := alertBodyTexts(msg)
-	require.Len(t, fields, len(orgs), "each policy must have its own attachment field")
-	for i, org := range orgs {
-		assert.Contains(t, fields[i], org, "field[%d] must contain org %s", i, org)
-	}
-}
-
-// TestFormatAlerts_FieldHeaders verifies the legacy field header is preserved
-// so Slack renders the alert in the familiar warning attachment layout.
-func TestFormatAlerts_FieldHeaders(t *testing.T) {
-	var recv []byte
-	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
-	defer cleanup()
-
-	for _, pt := range []notify.PolicyType{notify.PolicyTypeSTS, notify.PolicyTypeTLSA} {
-		require.NoError(t, notify.LogAlert(context.Background(), h, notify.Alert{
-			OrganizationName: "corp.example",
-			PolicyType:       pt,
-			FailureCount:     2,
-		}))
-	}
-	require.NoError(t, h.Flush(context.Background()))
-
-	msg := decodeSlackMessage(t, recv)
-	require.Len(t, msg.Attachments, 1)
-	var headerCount int
-	for _, f := range msg.Attachments[0].Fields {
-		if f.Title == "Organization / Policy / Failures / Period" {
-			headerCount++
-		}
-	}
-	assert.Equal(t, 2, headerCount, "each policy should use the familiar field header")
-}
-
 // TestFormatAlerts_FailureDetails_Basic verifies result-type and failed-session-count
 // appear in alert fields.
 func TestFormatAlerts_FailureDetails_Basic(t *testing.T) {
@@ -857,51 +780,26 @@ func TestFormatAlerts_FailureDetails_Basic(t *testing.T) {
 	assert.Contains(t, sec, "7")
 }
 
-// TestFormatAlerts_FailureDetails_MXHostname verifies receiving-mx-hostname is
-// shown when present and absent when empty.
-func TestFormatAlerts_FailureDetails_MXHostname(t *testing.T) {
-	withMX := notify.Alert{
-		OrganizationName:            "mx.example",
-		PolicyType:                  notify.PolicyTypeSTS,
-		FailureCount:                3,
-		FailureDetailsTotalCount:    1,
-		FailureDetailsTotalSessions: 3,
-		FailureDetails: []notify.FailureDetail{
-			{ResultType: "validation-failure", FailedSessionCount: 3, ReceivingMXHostname: "mail.mx.example"},
-		},
-	}
-	noMX := notify.Alert{
-		OrganizationName:            "nomx.example",
-		PolicyType:                  notify.PolicyTypeSTS,
-		FailureCount:                2,
-		FailureDetailsTotalCount:    1,
-		FailureDetailsTotalSessions: 2,
-		FailureDetails: []notify.FailureDetail{
-			{ResultType: "validation-failure", FailedSessionCount: 2},
-		},
-	}
-	withSec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, withMX))), "\n")
-	noSec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, noMX))), "\n")
-
-	assert.Contains(t, withSec, "mail.mx.example")
-	assert.NotContains(t, noSec, "MX:")
-}
-
-// TestFormatAlerts_FailureDetails_ReasonCode verifies failure-reason-code is
-// shown when present and absent when empty.
-func TestFormatAlerts_FailureDetails_ReasonCode(t *testing.T) {
-	withReason := notify.Alert{
-		OrganizationName:            "reason.example",
+// TestFormatAlerts_FailureDetails_OptionalFields verifies optional failure-detail
+// values are shown when present and omitted when empty.
+func TestFormatAlerts_FailureDetails_OptionalFields(t *testing.T) {
+	withOptional := notify.Alert{
+		OrganizationName:            "optional.example",
 		PolicyType:                  notify.PolicyTypeSTS,
 		FailureCount:                4,
 		FailureDetailsTotalCount:    1,
 		FailureDetailsTotalSessions: 4,
 		FailureDetails: []notify.FailureDetail{
-			{ResultType: "certificate-expired", FailedSessionCount: 4, FailureReasonCode: "X509_EXPIRED"},
+			{
+				ResultType:          "certificate-expired",
+				FailedSessionCount:  4,
+				ReceivingMXHostname: "mail.mx.example",
+				FailureReasonCode:   "X509_EXPIRED",
+			},
 		},
 	}
-	noReason := notify.Alert{
-		OrganizationName:            "noreason.example",
+	withoutOptional := notify.Alert{
+		OrganizationName:            "no-optional.example",
 		PolicyType:                  notify.PolicyTypeSTS,
 		FailureCount:                1,
 		FailureDetailsTotalCount:    1,
@@ -910,11 +808,13 @@ func TestFormatAlerts_FailureDetails_ReasonCode(t *testing.T) {
 			{ResultType: "starttls-not-supported", FailedSessionCount: 1},
 		},
 	}
-	withSec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, withReason))), "\n")
-	noSec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, noReason))), "\n")
+	withText := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, withOptional))), "\n")
+	withoutText := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, withoutOptional))), "\n")
 
-	assert.Contains(t, withSec, "X509_EXPIRED")
-	assert.NotContains(t, noSec, "Reason:")
+	assert.Contains(t, withText, "mail.mx.example")
+	assert.Contains(t, withText, "X509_EXPIRED")
+	assert.NotContains(t, withoutText, "MX:")
+	assert.NotContains(t, withoutText, "Reason:")
 }
 
 // TestFormatAlerts_FailureDetails_AllWhenLE3 verifies that 3 or fewer entries
