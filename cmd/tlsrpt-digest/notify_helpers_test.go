@@ -89,8 +89,8 @@ func TestLogWarn_NoLogWhenNoError(t *testing.T) {
 	assert.Empty(t, buf.String(), "expected no log output on success")
 }
 
-// TestLogAlerts_MapsPublicFailureFields verifies that logAlerts maps ReportID and
-// only the public 4 FailureDetail fields; IP and additional-information are excluded.
+// TestLogAlerts_MapsPublicFailureFields verifies that logAlerts correctly maps
+// ReportID and the four public FailureDetail fields from a tlsrpt.Report to Alert.
 func TestLogAlerts_MapsPublicFailureFields(t *testing.T) {
 	report := &tlsrpt.Report{
 		ReportID:         "report-xyz",
@@ -108,9 +108,9 @@ func TestLogAlerts_MapsPublicFailureFields(t *testing.T) {
 						FailedSessionCount:    7,
 						ReceivingMXHostname:   "mx.example.com",
 						FailureReasonCode:     "X509_V_ERR_CERT_HAS_EXPIRED",
-						SendingMTAIP:          "192.0.2.1",     // must NOT be copied
-						ReceivingIP:           "198.51.100.1",  // must NOT be copied
-						AdditionalInformation: "some raw text", // must NOT be copied
+						SendingMTAIP:          "192.0.2.1",
+						ReceivingIP:           "198.51.100.1",
+						AdditionalInformation: "some raw text",
 					},
 				},
 			},
@@ -130,5 +130,4 @@ func TestLogAlerts_MapsPublicFailureFields(t *testing.T) {
 	assert.Equal(t, int64(7), fd.FailedSessionCount)
 	assert.Equal(t, "mx.example.com", fd.ReceivingMXHostname)
 	assert.Equal(t, "X509_V_ERR_CERT_HAS_EXPIRED", fd.FailureReasonCode)
-	// notify.FailureDetail has no IP or AdditionalInformation fields - structural exclusion.
 }
