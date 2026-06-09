@@ -256,10 +256,10 @@ func (o BootstrapOptions) withDefaults() BootstrapOptions {
 		o.OpenStore = store.Open
 	}
 	if o.SlackWebhookURLSuccess == "" {
-		o.SlackWebhookURLSuccess = config.Secret(os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"))
+		o.SlackWebhookURLSuccess = config.Secret(os.Getenv(notify.EnvSlackWebhookURLSuccess))
 	}
 	if o.SlackWebhookURLError == "" {
-		o.SlackWebhookURLError = config.Secret(os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR"))
+		o.SlackWebhookURLError = config.Secret(os.Getenv(notify.EnvSlackWebhookURLError))
 	}
 	if o.Stderr == nil {
 		o.Stderr = os.Stderr

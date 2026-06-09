@@ -8,9 +8,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/isseis/tlsrpt-digest/internal/notify"
 )
 
-const slackNotifyWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"
+const slackNotifyWebhookEnvKey = notify.EnvSlackWebhookURLError
 
 // missingSlackNotifyEnv returns the names of environment variables required
 // for Slack notify integration tests that are missing or empty.

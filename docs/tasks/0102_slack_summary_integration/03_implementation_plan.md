@@ -4,10 +4,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | `draft` |
+| ステータス | `approved` |
 | 作成日 | 2026-06-09 |
-| レビュー日 | - |
-| レビュアー | - |
+| レビュー日 | 2026-06-09 |
+| レビュアー | isseis |
 | コメント | - |
 
 ---
@@ -88,7 +88,7 @@
 
 #### 0-A: `internal/notify/validate.go` への定数追加
 
-- [ ] **0.1** `validate.go` の先頭（`package notify` 直下）に以下の定数を追加する。
+- [x] **0.1** `validate.go` の先頭（`package notify` 直下）に以下の定数を追加する。
   ```go
   // EnvSlackWebhookURLSuccess is the environment variable name for the Slack
   // success (summary) webhook URL.
@@ -99,13 +99,13 @@
   const EnvSlackWebhookURLError = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"
   ```
 
-- [ ] **0.2** `validate.go` のエラーメッセージを定数参照に変更する。
+- [x] **0.2** `validate.go` のエラーメッセージを定数参照に変更する。
   - 変更前の `Msg` 値: `"TLSRPT_SLACK_WEBHOOK_URL_SUCCESS is set but TLSRPT_SLACK_WEBHOOK_URL_ERROR is not; error notifications must be enabled to prevent silent failures"`
   - 変更後の `Msg` 値: `EnvSlackWebhookURLSuccess + " is set but " + EnvSlackWebhookURLError + " is not; error notifications must be enabled to prevent silent failures"`
 
 #### 0-B: `cmd/tlsrpt-digest/boot.go` の更新
 
-- [ ] **0.3** `withDefaults()` 内の `os.Getenv` 呼び出しを定数参照に変更する。
+- [x] **0.3** `withDefaults()` 内の `os.Getenv` 呼び出しを定数参照に変更する。
   - 変更前: `config.Secret(os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS"))`
   - 変更後: `config.Secret(os.Getenv(notify.EnvSlackWebhookURLSuccess))`
   - 変更前: `config.Secret(os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR"))`
@@ -113,14 +113,27 @@
 
 #### 0-C: `cmd/tlsrpt-digest/slack_notify_env_test.go` の更新
 
-- [ ] **0.4** import ブロックに `"github.com/isseis/tlsrpt-digest/internal/notify"` を追加する。
+- [x] **0.4** import ブロックに `"github.com/isseis/tlsrpt-digest/internal/notify"` を追加する。
 
-- [ ] **0.5** `slackNotifyWebhookEnvKey` の定義を文字列リテラルから定数参照に変更する。
+- [x] **0.5** `slackNotifyWebhookEnvKey` の定義を文字列リテラルから定数参照に変更する。
   - 変更前: `const slackNotifyWebhookEnvKey = "TLSRPT_SLACK_WEBHOOK_URL_ERROR"`
   - 変更後: `const slackNotifyWebhookEnvKey = notify.EnvSlackWebhookURLError`
   - `TestSlackNotify_EnvRequirements` の既存テストは `slackNotifyWebhookEnvKey` を名前で参照しているため変更不要。
 
 **完了確認**: `make test` が通過すること（既存テストのリグレッションなし）。
+
+### PR-1 作成ポイント: env var constant consolidation
+
+**対象ステップ**: 0.1 / 0.2 / 0.3 / 0.4 / 0.5
+
+**推奨タイトル**: `refactor(0102): consolidate Slack webhook URL env var names as exported constants`
+
+**レビュー観点**: `internal/notify` へのエクスポート定数の追加と既存テスト通過確認 / `boot.go` の動作等価性（リファクタリングのみ） / `slack_notify_env_test.go` の既存テストが定数参照変更後も通過すること
+
+- [x] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
+- [x] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ---
 
@@ -147,11 +160,24 @@
     | `error_webhook_url_missing` | `map[string]string{notify.EnvSlackWebhookURLSuccess: "https://hooks.slack.com/services/test"}` | missing リストに `slackNotifyWebhookEnvKey+" (empty)"` が含まれる |
     | `webhook_url_set` | 両方のキーに `"https://hooks.slack.com/services/test"` を設定 | missing リストが空 |
     | `nil_env_fallback_present` | `nil`（`t.Setenv` で両方設定） | missing リストが空 |
-    | `nil_env_fallback_missing` | `nil`（`t.Setenv` で両方を空文字列に設定） | missing リストに両キーのエントリが含まれる |
+    | `nil_env_fallback_missing` | `nil`（`t.Setenv` で両方を空文字列に設定） | missing リストに `notify.EnvSlackWebhookURLSuccess+" (empty)"` と `slackNotifyWebhookEnvKey+" (empty)"` の両方が含まれる |
 
     `error_webhook_url_missing` は `ValidateEnvCombination` が拒否する success-only 組み合わせを `missingSlackSummaryEnv` が確実に検出できることを確認する。
 
 **完了確認**: `make test` が通過すること。
+
+### PR-2 作成ポイント: summary env helper and unit tests
+
+**対象ステップ**: 1.1 / 1.2
+
+**推奨タイトル**: `feat(0102): add missingSlackSummaryEnv helper and unit tests`
+
+**レビュー観点**: `missingSlackSummaryEnv` が両 URL を必須チェックしていること / 6 サブテストの網羅性（特に `error_webhook_url_missing` で success-only 拒否を確認） / `missingSlackNotifyEnv` との対称性
+
+- [ ] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
 
 ---
 
@@ -237,6 +263,19 @@
 
 **完了確認**: `make test && make lint` が通過すること。
 
+### PR-3 作成ポイント: Slack summary integration test and Makefile target
+
+**対象ステップ**: 2.1 / 2.2 / 2.3 / 2.4 / 2.5 / 2.6
+
+**推奨タイトル**: `feat(0102): add Slack summary integration test and Makefile target`
+
+**レビュー観点**: `//go:build test && slack_notify` による `make test` からの隔離 / ULID runID による再実行安全性 / `FakeStore` 使用（永続ファイル非作成、AC-14） / 3 通の `os.ReadFile` 呼び出しすべてに `//nolint:gosec // G304` が付与されていること
+
+- [ ] グリーンゲート（`_context.md` の "Green gate" 参照）がパスしていることを確認した
+- [ ] PR を作成した
+- [ ] PR がマージされた
+- [ ] 次のブランチへ切り替えた（次ステップは新しいブランチで作業する）
+
 ---
 
 ## 3. 実装順序とマイルストーン
@@ -249,6 +288,14 @@
 | M3: 手動検証完了 | `TLSRPT_SLACK_WEBHOOK_URL_SUCCESS` と `TLSRPT_SLACK_WEBHOOK_URL_ERROR` を設定して `make test-slack-summary` を実行し、Slack チャンネルにサマリが届くことを目視確認 |
 
 フェーズ 0 → 1 → 2 の順で実施する。フェーズ 0 は既存テストのリグレッションなしを確認してからフェーズ 1 に進む。
+
+### 3.2 PR 構成
+
+| PR | 対象ステップ | 主な変更内容 |
+|---|---|---|
+| PR-1 | 0.1 / 0.2 / 0.3 / 0.4 / 0.5 | `internal/notify/validate.go` に `EnvSlackWebhookURLSuccess`・`EnvSlackWebhookURLError` 定数を追加し、`boot.go`・`slack_notify_env_test.go` の文字列リテラルを定数参照に変更（リファクタリング） |
+| PR-2 | 1.1 / 1.2 | `slack_notify_env_test.go` に `missingSlackSummaryEnv` 関数と `TestSlackSummary_EnvRequirements`（6 ケース）を追加 |
+| PR-3 | 2.1 / 2.2 / 2.3 / 2.4 / 2.5 / 2.6 | `slack_summary_integration_test.go` を新規作成し `TestSlackSummary_Summary_Integration` を実装、`Makefile` に `test-slack-summary` ターゲットを追加 |
 
 ---
 
@@ -290,49 +337,46 @@
 
 ## 6. 実装チェックリスト
 
-### フェーズ 0
+- [ ] PR-1 マージ済み（対象ステップ: 0.1 / 0.2 / 0.3 / 0.4 / 0.5）
+  - [ ] `EnvSlackWebhookURLSuccess` 定数追加（`internal/notify/validate.go`）
+  - [ ] `EnvSlackWebhookURLError` 定数追加（`internal/notify/validate.go`）
+  - [ ] `validate.go` エラーメッセージを定数参照に変更（before/after は §2 フェーズ 0 タスク 0.2 参照）
+  - [ ] `boot.go` の `os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS")` を `os.Getenv(notify.EnvSlackWebhookURLSuccess)` に変更
+  - [ ] `boot.go` の `os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR")` を `os.Getenv(notify.EnvSlackWebhookURLError)` に変更
+  - [ ] `slack_notify_env_test.go` に `internal/notify` import 追加
+  - [ ] `slackNotifyWebhookEnvKey` の定義を `= notify.EnvSlackWebhookURLError` に変更
+  - [ ] `make test` 通過確認（既存テスト全通過）
 
-- [ ] `EnvSlackWebhookURLSuccess` 定数追加（`internal/notify/validate.go`）
-- [ ] `EnvSlackWebhookURLError` 定数追加（`internal/notify/validate.go`）
-- [ ] `validate.go` エラーメッセージを定数参照に変更（before/after は §2 フェーズ 0 タスク 0.2 参照）
-- [ ] `boot.go` の `os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_SUCCESS")` を `os.Getenv(notify.EnvSlackWebhookURLSuccess)` に変更
-- [ ] `boot.go` の `os.Getenv("TLSRPT_SLACK_WEBHOOK_URL_ERROR")` を `os.Getenv(notify.EnvSlackWebhookURLError)` に変更
-- [ ] `slack_notify_env_test.go` に `internal/notify` import 追加
-- [ ] `slackNotifyWebhookEnvKey` の定義を `= notify.EnvSlackWebhookURLError` に変更
-- [ ] `make test` 通過確認（既存テスト全通過）
+- [ ] PR-2 マージ済み（対象ステップ: 1.1 / 1.2）
+  - [ ] `missingSlackSummaryEnv` 関数実装（両 URL チェック。`notify.EnvSlackWebhookURLSuccess` を直接参照）
+  - [ ] `TestSlackSummary_EnvRequirements` テスト実装（6 ケース）
+    - [ ] `webhook_url_missing`: success URL 欠落を確認
+    - [ ] `webhook_url_empty_value`: success URL が空文字列であることを確認
+    - [ ] `error_webhook_url_missing`: success URL 設定済み、error URL 欠落を確認
+    - [ ] `webhook_url_set`: 両方設定済みで missing リストが空であることを確認
+    - [ ] `nil_env_fallback_present`: `nil` env + 両方 `t.Setenv` で空リストを確認
+    - [ ] `nil_env_fallback_missing`: `nil` env + 両方空文字列で両エントリの存在を確認
+  - [ ] `make test` 通過確認
 
-### フェーズ 1
-
-- [ ] `missingSlackSummaryEnv` 関数実装（両 URL チェック。`notify.EnvSlackWebhookURLSuccess` を直接参照）
-- [ ] `TestSlackSummary_EnvRequirements` テスト実装（6 ケース）
-  - [ ] `webhook_url_missing`: success URL 欠落を確認
-  - [ ] `webhook_url_empty_value`: success URL が空文字列であることを確認
-  - [ ] `error_webhook_url_missing`: success URL 設定済み、error URL 欠落を確認
-  - [ ] `webhook_url_set`: 両方設定済みで missing リストが空であることを確認
-  - [ ] `nil_env_fallback_present`: `nil` env + 両方 `t.Setenv` で空リストを確認
-  - [ ] `nil_env_fallback_missing`: `nil` env + 両方空文字列で両エントリの存在を確認
-- [ ] `make test` 通過確認
-
-### フェーズ 2
-
-- [ ] `slack_summary_integration_test.go` 新規作成（ビルドタグ `test && slack_notify`、`package main`）
-- [ ] `loadSlackSummaryTestEnv` 関数実装（`slack_summary_integration_test.go` にのみ配置）
-- [ ] `TestSlackSummary_Summary_Integration` テスト実装
-  - [ ] 60s タイムアウト付きコンテキストと `defer cancel()`
-  - [ ] ULID 生成による runID
-  - [ ] 3 通 EML 読み込み（各 `os.ReadFile` に `//nolint:gosec // G304` コメント、計 3 箇所）
-  - [ ] 各 EML で `require.NotNil(t, report)` を実行（計 3 回）
-  - [ ] 各 EML で `assert.False(t, report.HasFailure())` を実行（計 3 回）
-  - [ ] `FakeStore` への `SaveReports` と `require.NoError`
-  - [ ] `require.Len(t, fakeStore.Reports, 3)` で 3 件保存を確認（AC-03）
-  - [ ] `notify.GenerateSummary` でサマリ生成（期間: 2026-05-11 〜 2026-05-14）と `require.NoError`
-  - [ ] サマリアサーション（`ReportCount` / `OrganizationStats` 両キー / 各成功セッション数）
-  - [ ] `successURL` から `AllowedHost` を設定
-  - [ ] `setupNotifyHandlers(config.Secret(successURL), config.Secret(errorURL), ...)` による `NotificationSink` 構築と `require.NoError`
-  - [ ] `notifier.LogSummary` と `notifier.Flush` で送信、`require.NoError`（計 2 回）
-- [ ] `.PHONY` 行に `test-slack-summary` 追加（`Makefile`）
-- [ ] `test-slack-summary` ターゲット追加（`Makefile`）
-- [ ] `make test && make lint` 通過確認（`make lint` が実行する 4 invocation すべてを含む）
+- [ ] PR-3 マージ済み（対象ステップ: 2.1 / 2.2 / 2.3 / 2.4 / 2.5 / 2.6）
+  - [ ] `slack_summary_integration_test.go` 新規作成（ビルドタグ `test && slack_notify`、`package main`）
+  - [ ] `loadSlackSummaryTestEnv` 関数実装（`slack_summary_integration_test.go` にのみ配置）
+  - [ ] `TestSlackSummary_Summary_Integration` テスト実装
+    - [ ] 60s タイムアウト付きコンテキストと `defer cancel()`
+    - [ ] ULID 生成による runID
+    - [ ] 3 通 EML 読み込み（各 `os.ReadFile` に `//nolint:gosec // G304` コメント、計 3 箇所）
+    - [ ] 各 EML で `require.NotNil(t, report)` を実行（計 3 回）
+    - [ ] 各 EML で `assert.False(t, report.HasFailure())` を実行（計 3 回）
+    - [ ] `FakeStore` への `SaveReports` と `require.NoError`
+    - [ ] `require.Len(t, fakeStore.Reports, 3)` で 3 件保存を確認（AC-03）
+    - [ ] `notify.GenerateSummary` でサマリ生成（期間: 2026-05-11 〜 2026-05-14）と `require.NoError`
+    - [ ] サマリアサーション（`ReportCount` / `OrganizationStats` 両キー / 各成功セッション数）
+    - [ ] `successURL` から `AllowedHost` を設定
+    - [ ] `setupNotifyHandlers(config.Secret(successURL), config.Secret(errorURL), ...)` による `NotificationSink` 構築と `require.NoError`
+    - [ ] `notifier.LogSummary` と `notifier.Flush` で送信、`require.NoError`（計 2 回）
+  - [ ] `.PHONY` 行に `test-slack-summary` 追加（`Makefile`）
+  - [ ] `test-slack-summary` ターゲット追加（`Makefile`）
+  - [ ] `make test && make lint` 通過確認（`make lint` が実行する 4 invocation すべてを含む）
 
 ---
 
