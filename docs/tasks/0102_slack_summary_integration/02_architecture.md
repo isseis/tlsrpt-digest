@@ -95,7 +95,6 @@ flowchart LR
 sequenceDiagram
     participant Test as TestSlackSummary_<br>Summary_Integration
     participant MP as mailparse
-    participant TLSRPT as tlsrpt
     participant FS as FakeStore
     participant GS as notify.GenerateSummary
     participant NH as setupNotifyHandlers
@@ -105,8 +104,8 @@ sequenceDiagram
     loop 3 通の EML
         Test->>MP: ExtractAttachments(msg, maxBytes)
         MP-->>Test: []Attachment
-        Test->>TLSRPT: parseTLSRPTAttachment(att)
-        TLSRPT-->>Test: *tlsrpt.Report
+        Note over Test: parseTLSRPTAttachment(att)<br>fetch.go のローカル関数
+        Test-->>Test: *tlsrpt.Report
     end
 
     Test->>FS: SaveReports([]ReportInput)
