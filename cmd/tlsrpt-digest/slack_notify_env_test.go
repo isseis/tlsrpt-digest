@@ -86,10 +86,12 @@ func TestSlackSummary_EnvRequirements(t *testing.T) {
 	t.Run("webhook_url_missing", func(t *testing.T) {
 		got := missingSlackSummaryEnv(map[string]string{})
 		assert.Contains(t, got, notify.EnvSlackWebhookURLSuccess+" (empty)")
+		assert.Contains(t, got, slackNotifyWebhookEnvKey+" (empty)")
 	})
 	t.Run("webhook_url_empty_value", func(t *testing.T) {
 		got := missingSlackSummaryEnv(map[string]string{notify.EnvSlackWebhookURLSuccess: ""})
 		assert.Contains(t, got, notify.EnvSlackWebhookURLSuccess+" (empty)")
+		assert.Contains(t, got, slackNotifyWebhookEnvKey+" (empty)")
 	})
 	t.Run("error_webhook_url_missing", func(t *testing.T) {
 		env := map[string]string{notify.EnvSlackWebhookURLSuccess: "https://hooks.slack.com/services/test"}
