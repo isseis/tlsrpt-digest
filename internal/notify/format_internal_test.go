@@ -3,8 +3,10 @@ package notify
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -127,4 +129,47 @@ func TestLogAlert_FailureDetailsRoundTrip(t *testing.T) {
 		// Top entry is the highest count (12).
 		assert.Equal(t, int64(12), got.FailureDetails[0].FailedSessionCount)
 	})
+}
+
+// TestTruncateMessage_Blocks exercises the block-level truncation path in
+// truncateMessage: a section with text > 3000 runes is cut to 3000, and a
+// divider block whose Text field is nil does not panic.
+func TestTruncateMessage_Blocks(t *testing.T) {
+	longText := strings.Repeat("a", maxAlertSectionRunes+100)
+	longContext := strings.Repeat("b", maxAlertContextRunes+100)
+
+	msg := &slackMessage{
+		Text: "title",
+		Attachments: []slackAttachment{
+			{
+				Color: colorWarning,
+				Blocks: []slackBlock{
+					// Section with text exceeding the section rune limit.
+					{Type: "section", Text: &slackTextObject{Type: "plain_text", Text: longText}},
+					// Divider with nil Text — must not panic.
+					{Type: "divider"},
+					// Context with text exceeding the context rune limit.
+					{Type: "context", Elements: []slackTextObject{
+						{Type: "plain_text", Text: longContext},
+					}},
+				},
+			},
+		},
+	}
+
+	require.NotPanics(t, func() { truncateMessage(msg) })
+
+	blocks := msg.Attachments[0].Blocks
+	require.Len(t, blocks, 3)
+
+	sectionText := blocks[0].Text.Text
+	assert.LessOrEqual(t, utf8.RuneCountInString(sectionText), maxAlertSectionRunes,
+		"section text must be ≤ maxAlertSectionRunes after truncation")
+	assert.True(t, strings.HasSuffix(sectionText, "..."), "truncated section must end with ...")
+
+	assert.Nil(t, blocks[1].Text, "divider Text must still be nil after truncation")
+
+	contextText := blocks[2].Elements[0].Text
+	assert.LessOrEqual(t, utf8.RuneCountInString(contextText), maxAlertContextRunes,
+		"context text must be ≤ maxAlertContextRunes after truncation")
 }

@@ -350,6 +350,10 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 // buildPolicySectionText constructs the plain_text content for one policy section.
 // External-origin strings are control-char-normalized and per-field truncated
 // before being assembled into the final text.
+// Invariant: a.FailureDetailsTotalCount >= int64(len(a.FailureDetails)) — both are
+// set by LogAlert from the same slice, with FailureDetailsTotalCount computed before
+// the 10-entry cap. Direct Alert construction must respect this invariant for the
+// "Other N entries" summary to be accurate.
 func buildPolicySectionText(a Alert) string {
 	orgName := TruncateText(normalizeControlChars(a.OrganizationName), maxAlertOrganizationRunes)
 	policyType := TruncateText(normalizeControlChars(policyTypeStr(a.PolicyType)), maxAlertPolicyTypeRunes)

@@ -199,9 +199,10 @@ func TestFormatAlerts_NoTruncation(t *testing.T) {
 	}))
 	require.NoError(t, h.Flush(context.Background()))
 
-	// Debug log receives the pre-truncateMessage payload (per-field truncation
-	// already applies inside formatAlerts, so the full 5000-char name is not expected).
-	assert.NotEmpty(t, debugBuf.String(), "debug logger must receive something")
+	// Per-field truncation occurs inside formatAlerts (before debug logging), so the
+	// debug logger sees the 120-char truncated org name, not the full 5000-char string.
+	truncatedOrg := strings.Repeat("x", 117) + "..."
+	assert.Contains(t, debugBuf.String(), truncatedOrg, "debug logger must contain the per-field-truncated org name")
 	msg := decodeSlackMessage(t, recv)
 	for _, s := range sectionTexts(msg) {
 		assert.LessOrEqual(t, utf8.RuneCountInString(s), 3000, "section text must be within 3000 runes")
@@ -1057,9 +1058,11 @@ func TestFormatAlerts_NormalizesControlChars(t *testing.T) {
 	assert.NotContains(t, sec, "evil\norg")
 	assert.NotContains(t, sec, "rpt\r\ninjected")
 	assert.NotContains(t, sec, "type\nwith")
-	// Normalised values should appear.
-	assert.Contains(t, sec, "evil org")
-	assert.Contains(t, sec, "type with newlines")
+	// Normalised values should appear (verifying \n, \t, and \r are all spaces).
+	assert.Contains(t, sec, "evil org tab")       // \n and \t in org name become spaces
+	assert.Contains(t, sec, "type with newlines") // \n in result-type becomes space
+	assert.Contains(t, sec, "mx host")            // \t in MX hostname becomes space
+	assert.Contains(t, sec, "CODE X")             // \r in reason code becomes space
 }
 
 // TestFormatAlerts_ValueTruncation verifies that each per-field limit is enforced
@@ -1099,7 +1102,15 @@ func TestFormatAlerts_ValueTruncation(t *testing.T) {
 	assert.NotContains(t, sec, longMX)
 	assert.NotContains(t, sec, longReason)
 
-	// Truncated values end with "..." and the section stays within rune limit.
+	// Truncated forms (ending "...") must appear in the section, proving fields
+	// are truncated rather than silently dropped.
+	assert.Contains(t, sec, strings.Repeat("o", 117)+"...", "org name truncated form must appear")
+	assert.Contains(t, sec, strings.Repeat("r", 157)+"...", "report-id truncated form must appear")
+	assert.Contains(t, sec, strings.Repeat("t", 77)+"...", "result-type truncated form must appear")
+	assert.Contains(t, sec, strings.Repeat("m", 117)+"...", "MX hostname truncated form must appear")
+	assert.Contains(t, sec, strings.Repeat("c", 77)+"...", "reason code truncated form must appear")
+
+	// The section stays within the section rune limit.
 	assert.LessOrEqual(t, utf8.RuneCountInString(sec), 3000)
 
 	// Structural labels must remain.
