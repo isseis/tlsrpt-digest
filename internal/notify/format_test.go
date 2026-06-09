@@ -82,7 +82,7 @@ func flushSummary(t *testing.T, summary notify.Summary) []byte {
 // TestFormatAlerts_Fields verifies core alert values appear in the attachment fields.
 func TestFormatAlerts_Fields(t *testing.T) {
 	msg := decodeSlackMessage(t, flushAlert(t, sampleAlert()))
-	texts := sectionTexts(msg)
+	texts := alertBodyTexts(msg)
 	require.NotEmpty(t, texts)
 	combined := strings.Join(texts, "\n")
 	assert.Contains(t, combined, "example.com")
@@ -208,8 +208,10 @@ func TestFormatAlerts_NoTruncation(t *testing.T) {
 	truncatedOrg := strings.Repeat("x", 117) + "..."
 	assert.Contains(t, debugBuf.String(), truncatedOrg, "debug logger must contain the per-field-truncated org name")
 	msg := decodeSlackMessage(t, recv)
-	for _, s := range sectionTexts(msg) {
-		assert.LessOrEqual(t, utf8.RuneCountInString(s), 3000, "section text must be within 3000 runes")
+	for _, att := range msg.Attachments {
+		for _, f := range att.Fields {
+			assert.LessOrEqual(t, utf8.RuneCountInString(f.Value), 1000, "field value must be within 1000 runes")
+		}
 	}
 	assert.NotContains(t, string(recv), longName, "Slack payload should be truncated")
 }
@@ -470,21 +472,21 @@ func TestFormatSummary_EmptyOrganizationStats(t *testing.T) {
 	assert.Contains(t, msg.Text, "Organizations: 0")
 }
 
-// TestFormatAlerts_NoPolicyFound verifies no-policy-found appears in a section.
+// TestFormatAlerts_NoPolicyFound verifies no-policy-found appears in alert fields.
 func TestFormatAlerts_NoPolicyFound(t *testing.T) {
 	a := sampleAlert()
 	a.PolicyType = notify.PolicyTypeNoPolicyFound
 	msg := decodeSlackMessage(t, flushAlert(t, a))
-	combined := strings.Join(sectionTexts(msg), "\n")
+	combined := strings.Join(alertBodyTexts(msg), "\n")
 	assert.Contains(t, combined, "no-policy-found")
 }
 
-// TestFormatAlerts_PolicyTypeUnknown verifies unknown placeholder appears in a section.
+// TestFormatAlerts_PolicyTypeUnknown verifies unknown placeholder appears in alert fields.
 func TestFormatAlerts_PolicyTypeUnknown(t *testing.T) {
 	a := sampleAlert()
 	a.PolicyType = notify.PolicyTypeUnknown
 	msg := decodeSlackMessage(t, flushAlert(t, a))
-	combined := strings.Join(sectionTexts(msg), "\n")
+	combined := strings.Join(alertBodyTexts(msg), "\n")
 	assert.Contains(t, combined, "(unknown)")
 }
 
@@ -625,26 +627,13 @@ func TestExtract_UnknownAttrKeyLogged(t *testing.T) {
 
 type capturedSlackMessage struct {
 	Text        string                    `json:"text"`
-	Blocks      []capturedSlackBlock      `json:"blocks"`
 	Attachments []capturedSlackAttachment `json:"attachments"`
 }
 
 type capturedSlackAttachment struct {
 	Color    string               `json:"color"`
 	Fallback string               `json:"fallback"`
-	Blocks   []capturedSlackBlock `json:"blocks"`
 	Fields   []capturedSlackField `json:"fields"`
-}
-
-type capturedSlackBlock struct {
-	Type     string                    `json:"type"`
-	Text     *capturedSlackTextObject  `json:"text,omitempty"`
-	Elements []capturedSlackTextObject `json:"elements,omitempty"`
-}
-
-type capturedSlackTextObject struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
 }
 
 type capturedSlackField struct {
@@ -660,30 +649,15 @@ func decodeSlackMessage(t *testing.T, body []byte) capturedSlackMessage {
 	return msg
 }
 
-// sectionTexts returns policy and overflow section text for alert messages. The
-// title section is intentionally skipped; msg.Text already carries the same
-// fallback title.
-func sectionTexts(msg capturedSlackMessage) []string {
+// alertBodyTexts returns policy and overflow field text for alert messages.
+func alertBodyTexts(msg capturedSlackMessage) []string {
 	var texts []string
-	for _, b := range msg.Blocks {
-		if b.Type == "section" && b.Text != nil {
-			if strings.Contains(b.Text.Text, "TLS Failures") {
-				continue
-			}
-			texts = append(texts, b.Text.Text)
-		}
-	}
 	for _, att := range msg.Attachments {
 		for _, f := range att.Fields {
 			if f.Title == "Run ID" {
 				continue
 			}
 			texts = append(texts, f.Title+"\n"+f.Value)
-		}
-		for _, b := range att.Blocks {
-			if b.Type == "section" && b.Text != nil {
-				texts = append(texts, b.Text.Text)
-			}
 		}
 	}
 	return texts
@@ -798,9 +772,9 @@ func TestFormatWarning_SlackPayloadFields(t *testing.T) {
 
 // ---- New AC tests (Phase 4) ----
 
-// TestFormatAlerts_PolicySection verifies each policy's org name, policy type,
-// failure count, and period (UTC) appear in the same section.
-func TestFormatAlerts_PolicySection(t *testing.T) {
+// TestFormatAlerts_PolicyField verifies each policy's org name, policy type,
+// failure count, and period (UTC) appear in the same field.
+func TestFormatAlerts_PolicyField(t *testing.T) {
 	alert := notify.Alert{
 		OrganizationName: "acme.example",
 		PolicyType:       notify.PolicyTypeTLSA,
@@ -812,7 +786,7 @@ func TestFormatAlerts_PolicySection(t *testing.T) {
 		ReportID: "rpt-tlsa-1",
 	}
 	msg := decodeSlackMessage(t, flushAlert(t, alert))
-	texts := sectionTexts(msg)
+	texts := alertBodyTexts(msg)
 	require.NotEmpty(t, texts)
 	sec := strings.Join(texts, "\n")
 	assert.Contains(t, sec, "acme.example")
@@ -824,7 +798,7 @@ func TestFormatAlerts_PolicySection(t *testing.T) {
 }
 
 // TestFormatAlerts_AllPoliciesIncluded verifies all failure policies appear in
-// distinct section blocks.
+// distinct attachment fields.
 func TestFormatAlerts_AllPoliciesIncluded(t *testing.T) {
 	var recv []byte
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
@@ -841,16 +815,16 @@ func TestFormatAlerts_AllPoliciesIncluded(t *testing.T) {
 	require.NoError(t, h.Flush(context.Background()))
 
 	msg := decodeSlackMessage(t, recv)
-	sections := sectionTexts(msg)
-	require.Len(t, sections, len(orgs), "each policy must have its own section block")
+	fields := alertBodyTexts(msg)
+	require.Len(t, fields, len(orgs), "each policy must have its own attachment field")
 	for i, org := range orgs {
-		assert.Contains(t, sections[i], org, "section[%d] must contain org %s", i, org)
+		assert.Contains(t, fields[i], org, "field[%d] must contain org %s", i, org)
 	}
 }
 
 // TestFormatAlerts_FieldHeaders verifies the legacy field header is preserved
 // so Slack renders the alert in the familiar warning attachment layout.
-func TestFormatAlerts_NoDuplicateHeaders(t *testing.T) {
+func TestFormatAlerts_FieldHeaders(t *testing.T) {
 	var recv []byte
 	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
 	defer cleanup()
@@ -876,7 +850,7 @@ func TestFormatAlerts_NoDuplicateHeaders(t *testing.T) {
 }
 
 // TestFormatAlerts_FailureDetails_Basic verifies result-type and failed-session-count
-// appear in the section.
+// appear in alert fields.
 func TestFormatAlerts_FailureDetails_Basic(t *testing.T) {
 	alert := notify.Alert{
 		OrganizationName:            "basic.example",
@@ -889,7 +863,7 @@ func TestFormatAlerts_FailureDetails_Basic(t *testing.T) {
 		},
 	}
 	msg := decodeSlackMessage(t, flushAlert(t, alert))
-	sec := strings.Join(sectionTexts(msg), "\n")
+	sec := strings.Join(alertBodyTexts(msg), "\n")
 	assert.Contains(t, sec, "certificate-expired")
 	assert.Contains(t, sec, "7")
 }
@@ -917,8 +891,8 @@ func TestFormatAlerts_FailureDetails_MXHostname(t *testing.T) {
 			{ResultType: "validation-failure", FailedSessionCount: 2},
 		},
 	}
-	withSec := strings.Join(sectionTexts(decodeSlackMessage(t, flushAlert(t, withMX))), "\n")
-	noSec := strings.Join(sectionTexts(decodeSlackMessage(t, flushAlert(t, noMX))), "\n")
+	withSec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, withMX))), "\n")
+	noSec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, noMX))), "\n")
 
 	assert.Contains(t, withSec, "mail.mx.example")
 	assert.NotContains(t, noSec, "MX:")
@@ -947,8 +921,8 @@ func TestFormatAlerts_FailureDetails_ReasonCode(t *testing.T) {
 			{ResultType: "starttls-not-supported", FailedSessionCount: 1},
 		},
 	}
-	withSec := strings.Join(sectionTexts(decodeSlackMessage(t, flushAlert(t, withReason))), "\n")
-	noSec := strings.Join(sectionTexts(decodeSlackMessage(t, flushAlert(t, noReason))), "\n")
+	withSec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, withReason))), "\n")
+	noSec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, noReason))), "\n")
 
 	assert.Contains(t, withSec, "X509_EXPIRED")
 	assert.NotContains(t, noSec, "Reason:")
@@ -969,7 +943,7 @@ func TestFormatAlerts_FailureDetails_AllWhenLE3(t *testing.T) {
 			{ResultType: "starttls-not-supported", FailedSessionCount: 1},
 		},
 	}
-	sec := strings.Join(sectionTexts(decodeSlackMessage(t, flushAlert(t, alert))), "\n")
+	sec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, alert))), "\n")
 	assert.Contains(t, sec, "certificate-expired")
 	assert.Contains(t, sec, "validation-failure")
 	assert.Contains(t, sec, "starttls-not-supported")
@@ -994,7 +968,7 @@ func TestFormatAlerts_FailureDetails_SummaryWhenGT3(t *testing.T) {
 			{ResultType: "type-e", FailedSessionCount: 2},
 		},
 	}
-	sec := strings.Join(sectionTexts(decodeSlackMessage(t, flushAlert(t, alert))), "\n")
+	sec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, alert))), "\n")
 	assert.Contains(t, sec, "type-a")
 	assert.Contains(t, sec, "type-b")
 	assert.Contains(t, sec, "type-c")
@@ -1022,14 +996,14 @@ func TestFormatAlerts_FailureDetails_SummaryWhenGT3(t *testing.T) {
 			return dets
 		}(),
 	}
-	secBig := strings.Join(sectionTexts(decodeSlackMessage(t, flushAlert(t, alertBig))), "\n")
+	secBig := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, alertBig))), "\n")
 	// Other = 12 - 3 = 9 entries; sessions total - top3 sessions = 78 - (12+11+10) = 45
 	assert.Contains(t, secBig, "Other 9 entries")
 	assert.Contains(t, secBig, "45 sessions total")
 }
 
 // TestFormatAlerts_FailureDetails_Empty verifies empty failure-details produces
-// a clean section with no error or strange output.
+// a clean alert body with no error or strange output.
 func TestFormatAlerts_FailureDetails_Empty(t *testing.T) {
 	alert := notify.Alert{
 		OrganizationName: "empty-details.example",
@@ -1037,18 +1011,18 @@ func TestFormatAlerts_FailureDetails_Empty(t *testing.T) {
 		FailureCount:     3,
 		ReportID:         "rpt-empty",
 	}
-	sec := strings.Join(sectionTexts(decodeSlackMessage(t, flushAlert(t, alert))), "\n")
+	sec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, alert))), "\n")
 	assert.Contains(t, sec, "empty-details.example")
 	assert.Contains(t, sec, "rpt-empty")
 	assert.NotContains(t, sec, "[1]")
 	assert.NotContains(t, sec, "Other")
 }
 
-// TestFormatAlerts_ReportID verifies the Report ID appears in the section.
+// TestFormatAlerts_ReportID verifies the Report ID appears in alert fields.
 func TestFormatAlerts_ReportID(t *testing.T) {
 	alert := sampleAlert()
 	alert.ReportID = "rpt-unique-42"
-	sec := strings.Join(sectionTexts(decodeSlackMessage(t, flushAlert(t, alert))), "\n")
+	sec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, alert))), "\n")
 	assert.Contains(t, sec, "rpt-unique-42")
 }
 
@@ -1071,7 +1045,7 @@ func TestFormatAlerts_NormalizesControlChars(t *testing.T) {
 			},
 		},
 	}
-	sec := strings.Join(sectionTexts(decodeSlackMessage(t, flushAlert(t, alert))), "\n")
+	sec := strings.Join(alertBodyTexts(decodeSlackMessage(t, flushAlert(t, alert))), "\n")
 	// Control characters must be replaced with space.
 	assert.NotContains(t, sec, "evil\norg")
 	assert.NotContains(t, sec, "rpt\r\ninjected")
@@ -1109,7 +1083,7 @@ func TestFormatAlerts_ValueTruncation(t *testing.T) {
 		},
 	}
 	msg := decodeSlackMessage(t, flushAlert(t, alert))
-	texts := sectionTexts(msg)
+	texts := alertBodyTexts(msg)
 	require.NotEmpty(t, texts)
 	sec := strings.Join(texts, "\n")
 
@@ -1120,7 +1094,7 @@ func TestFormatAlerts_ValueTruncation(t *testing.T) {
 	assert.NotContains(t, sec, longMX)
 	assert.NotContains(t, sec, longReason)
 
-	// Truncated forms (ending "...") must appear in the section, proving fields
+	// Truncated forms (ending "...") must appear in alert fields, proving fields
 	// are truncated rather than silently dropped.
 	assert.Contains(t, sec, strings.Repeat("o", 117)+"...", "org name truncated form must appear")
 	assert.Contains(t, sec, strings.Repeat("r", 157)+"...", "report-id truncated form must appear")
@@ -1128,8 +1102,11 @@ func TestFormatAlerts_ValueTruncation(t *testing.T) {
 	assert.Contains(t, sec, strings.Repeat("m", 117)+"...", "MX hostname truncated form must appear")
 	assert.Contains(t, sec, strings.Repeat("c", 77)+"...", "reason code truncated form must appear")
 
-	// The section stays within the section rune limit.
-	assert.LessOrEqual(t, utf8.RuneCountInString(sec), 3000)
+	for _, att := range msg.Attachments {
+		for _, f := range att.Fields {
+			assert.LessOrEqual(t, utf8.RuneCountInString(f.Value), 1000, "field value must be within 1000 runes")
+		}
+	}
 
 	// Structural labels must remain.
 	assert.Contains(t, sec, "Report ID")
@@ -1233,47 +1210,4 @@ func TestFormatAlerts_AttachmentOverflow(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 300, policyFieldCount, "exactly 300 policies shown; 1 overflows to summary")
-}
-
-// TestTruncateMessage_Blocks verifies truncateMessage handles section text > 3000
-// runes and does not panic on nil-Text blocks.
-func TestTruncateMessage_Blocks(t *testing.T) {
-	// Flush an alert with a very long org name that exceeds maxAlertSectionRunes
-	// after all per-field truncations are bypassed by setting the field via raw
-	// Alert (the per-field limit is 120, so we rely on truncateMessage as backup).
-	// We build the scenario via a SlackHandler whose debug logger captures the full payload.
-	var recv []byte
-	h, cleanup := buildCaptureHandler(t, notify.LevelModeWarnAndAbove, &recv)
-	defer cleanup()
-
-	// Create a valid alert; per-field truncation already limits org name to 120,
-	// so we verify truncateMessage's block-level truncation by injecting a very long
-	// reason code repeated 40 times per detail (3 details × 80 runes = 240 + overhead).
-	// For a direct test, log an alert and verify the section text is within 3000 runes.
-	longReason := strings.Repeat("R", 80)
-	details := make([]notify.FailureDetail, 3)
-	for i := range details {
-		details[i] = notify.FailureDetail{
-			ResultType:          strings.Repeat("T", 80),
-			FailedSessionCount:  int64(i + 1),
-			ReceivingMXHostname: strings.Repeat("M", 120),
-			FailureReasonCode:   longReason,
-		}
-	}
-	alert := notify.Alert{
-		OrganizationName:            strings.Repeat("O", 120),
-		PolicyType:                  notify.PolicyTypeSTS,
-		FailureCount:                6,
-		ReportID:                    strings.Repeat("I", 160),
-		FailureDetailsTotalCount:    3,
-		FailureDetailsTotalSessions: 6,
-		FailureDetails:              details,
-	}
-	require.NoError(t, notify.LogAlert(context.Background(), h, alert))
-	require.NoError(t, h.Flush(context.Background()))
-
-	msg := decodeSlackMessage(t, recv)
-	for _, s := range sectionTexts(msg) {
-		assert.LessOrEqual(t, utf8.RuneCountInString(s), 3000)
-	}
 }

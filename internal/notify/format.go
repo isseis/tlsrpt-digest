@@ -53,13 +53,10 @@ func TruncateText(s string, maxLen int) string {
 // It is called after DebugLogger logging. Note that per-field truncation
 // (org name, report ID, etc.) already occurs during alert formatting
 // during formatAlerts, so the debug log may already contain truncated values;
-// truncateMessage is a final hard-limit pass that guards against section-level
-// overrun (e.g. a section text exceeding maxAlertSectionRunes).
+// truncateMessage is a final hard-limit pass for top-level text, attachment
+// fallback text, and attachment fields.
 func truncateMessage(m *slackMessage) {
 	m.Text = TruncateText(m.Text, maxTextRunes)
-	for i := range m.Blocks {
-		truncateBlock(&m.Blocks[i])
-	}
 	for i := range m.Attachments {
 		m.Attachments[i].Fallback = TruncateText(m.Attachments[i].Fallback, maxTextRunes)
 		for j := range m.Attachments[i].Fields {
@@ -67,18 +64,6 @@ func truncateMessage(m *slackMessage) {
 				m.Attachments[i].Fields[j].Value, maxFieldRunes,
 			)
 		}
-		for j := range m.Attachments[i].Blocks {
-			truncateBlock(&m.Attachments[i].Blocks[j])
-		}
-	}
-}
-
-func truncateBlock(b *slackBlock) {
-	if b.Text != nil {
-		b.Text.Text = TruncateText(b.Text.Text, maxAlertSectionRunes)
-	}
-	for k := range b.Elements {
-		b.Elements[k].Text = TruncateText(b.Elements[k].Text, maxAlertContextRunes)
 	}
 }
 
@@ -272,8 +257,6 @@ func extractSummary(r slog.Record, debugLogger *slog.Logger) Summary {
 
 // Size limits for alert messages.
 const (
-	maxAlertSectionRunes      = 3000 // truncateBlock limit for section/context text
-	maxAlertContextRunes      = 300  // conservative limit for context element text
 	maxAlertOrganizationRunes = 120
 	maxAlertPolicyTypeRunes   = 80
 	maxAlertReportIDRunes     = 160
@@ -323,9 +306,9 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 	const (
 		maxAlertPoliciesPerChunk = 3
 		maxAlertAttachments      = 100 // Slack per-message attachment limit
-		// alertBlocksOverhead is the number of extra fields on the last attachment:
+		// alertExtraFields is the number of extra fields on the last attachment:
 		// optional overflow summary + Run ID.
-		alertBlocksOverhead = 2
+		alertExtraFields = 2
 	)
 	maxPoliciesShown := maxAlertAttachments * maxAlertPoliciesPerChunk
 
@@ -346,7 +329,7 @@ func formatAlerts(alerts []Alert, runID string) slackMessage {
 		isLast := end == len(shown)
 
 		// Capacity: up to 3 fields per policy + overflow summary + Run ID.
-		fields := make([]slackField, 0, len(chunk)*maxAlertPoliciesPerChunk+alertBlocksOverhead)
+		fields := make([]slackField, 0, len(chunk)*maxAlertPoliciesPerChunk+alertExtraFields)
 		for _, a := range chunk {
 			summary := buildPolicySummaryText(a)
 			fields = append(fields, slackField{
