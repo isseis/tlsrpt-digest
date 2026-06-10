@@ -17,6 +17,9 @@ type IMAPConfig struct {
 	FetchDays       int
 	TLSCACert       string
 	MaxMessageBytes int64
+	// RetentionDays is the IMAP message retention period in days.
+	// 0 disables IMAP deletion (opt-in, default).
+	RetentionDays int
 }
 
 // NotifyConfig holds notification-related configuration.
@@ -55,6 +58,7 @@ type rawIMAPConfig struct {
 	FetchDays       *int    `toml:"fetch_days"`
 	TLSCACert       *string `toml:"tls_ca_cert"`
 	MaxMessageBytes *int64  `toml:"max_message_bytes"`
+	RetentionDays   *int    `toml:"retention_days"`
 }
 
 type rawNotifyConfig struct {

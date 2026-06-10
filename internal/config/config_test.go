@@ -97,6 +97,7 @@ mailbox = "tls-reports"
 fetch_days = 3
 tls_ca_cert = ""
 max_message_bytes = 12345
+retention_days = 30
 
 [notify.slack]
 allowed_host = "hooks.slack.com"
@@ -118,6 +119,7 @@ window_days = 5
 	assert.Equal(t, 3, cfg.IMAP.FetchDays)
 	assert.Equal(t, "", cfg.IMAP.TLSCACert)
 	assert.Equal(t, int64(12345), cfg.IMAP.MaxMessageBytes)
+	assert.Equal(t, 30, cfg.IMAP.RetentionDays)
 	assert.Equal(t, "hooks.slack.com", cfg.Notify.Slack.AllowedHost)
 	assert.Equal(t, "/var/lib/tlsrpt", cfg.Store.RootDir)
 	assert.Equal(t, 12, cfg.Store.RetentionDays)
@@ -348,6 +350,78 @@ func TestLoad_DaysValidation(t *testing.T) {
 	}
 }
 
+func TestLoad_IMAPRetentionDaysValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   int
+		wantErr error
+	}{
+		{name: "negative", value: -1, wantErr: config.ErrInvalidIMAPRetentionDays},
+		{name: "zero disables", value: 0, wantErr: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := []byte(baseConfigTOML + fmt.Sprintf("retention_days = %d\n", tt.value))
+			_, err := config.Load(data)
+			if tt.wantErr != nil {
+				require.Error(t, err)
+				assert.True(t, errors.Is(err, tt.wantErr))
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestLoad_IMAPRetentionTooShort(t *testing.T) {
+	tests := []struct {
+		name           string
+		extraIMAP      string
+		summarySection string
+		retentionDays  int
+		wantErr        error
+	}{
+		{
+			name:          "default fetch_days and window_days, below max",
+			retentionDays: 13,
+			wantErr:       config.ErrIMAPRetentionTooShort,
+		},
+		{
+			name:          "default fetch_days and window_days, equal to max",
+			retentionDays: 14,
+			wantErr:       nil,
+		},
+		{
+			name:           "window_days dominates, below max",
+			extraIMAP:      "fetch_days = 5\n",
+			summarySection: "[summary]\nwindow_days = 20\n",
+			retentionDays:  19,
+			wantErr:        config.ErrIMAPRetentionTooShort,
+		},
+		{
+			name:           "window_days dominates, equal to max",
+			extraIMAP:      "fetch_days = 5\n",
+			summarySection: "[summary]\nwindow_days = 20\n",
+			retentionDays:  20,
+			wantErr:        nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := []byte(baseConfigTOML + tt.extraIMAP + fmt.Sprintf("retention_days = %d\n", tt.retentionDays) + tt.summarySection)
+			_, err := config.Load(data)
+			if tt.wantErr != nil {
+				require.Error(t, err)
+				assert.True(t, errors.Is(err, tt.wantErr))
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestLoad_MaxMessageBytesValidation(t *testing.T) {
 	data := []byte(`[imap]
 host = "imap.example.com"
@@ -380,6 +454,12 @@ func TestLoad_Default_FetchDays14(t *testing.T) {
 	cfg, err := config.Load([]byte(baseConfigTOML))
 	require.NoError(t, err)
 	assert.Equal(t, 14, cfg.IMAP.FetchDays)
+}
+
+func TestLoad_Default_IMAPRetentionDays0(t *testing.T) {
+	cfg, err := config.Load([]byte(baseConfigTOML))
+	require.NoError(t, err)
+	assert.Equal(t, 0, cfg.IMAP.RetentionDays)
 }
 
 func TestLoad_Default_StoreRootDir(t *testing.T) {
