@@ -267,7 +267,7 @@
 - `retention_days > 0` の不変条件が `fetch_days` と `summary.window_days` の両方を考慮し、境界値（等しい場合）で許可されること（AC-05）。
 - 新規エラー型が `errors.Is` で判別可能であること（AC-06）。
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のステップ用のブランチへ切り替えた
