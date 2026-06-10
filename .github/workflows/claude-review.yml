@@ -17,6 +17,10 @@ jobs:
           fetch-depth: 0
 
       - name: Claude Code Review
-        uses: anthropics/claude-code-action@beta
+        uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            このコードの差分をレビューしてください。
+            セキュリティ、パフォーマンス、コード品質、開発文書との整合性の観点から指摘をお願いします。
+            可能であれば、改善案も提示してください。
