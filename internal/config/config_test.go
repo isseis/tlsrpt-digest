@@ -357,6 +357,8 @@ func TestLoad_IMAPRetentionDaysValidation(t *testing.T) {
 		wantErr error
 	}{
 		{name: "negative", value: -1, wantErr: config.ErrInvalidIMAPRetentionDays},
+		// 0 is exempt from the retention-vs-fetch_days/window_days invariant
+		// even though it is below the default max(fetch_days, window_days).
 		{name: "zero disables", value: 0, wantErr: nil},
 	}
 
