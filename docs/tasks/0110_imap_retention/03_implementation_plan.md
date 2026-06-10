@@ -158,9 +158,9 @@
   - `TestParseCLI_DryRunUnsupportedSubcommands` と `TestRunCLI_DryRunUnsupportedSubcommandExits2` のループ対象から `subcommandGC` を削除し、`{subcommandReprocess, subcommandRecover}` のみとする。
 
 #### `go.mod`
-- **現状**: `require` ブロックに `github.com/emersion/go-imap-uidplus` は無い。モジュールキャッシュ（`/home/devuser/go/pkg/mod/github.com/emersion/`）にも存在せず、本セッションではネットワークアクセスを伴う `go get` を実行していないため、実際の API シグネチャ（`UidExpunge` の引数・戻り値・`SupportUidPlus` の有無）は未確認である。
+- **現状**: `go.mod` の `require` ブロックに `github.com/emersion/go-imap-uidplus` は無く、リポジトリは現時点でこのパッケージに依存していない。実際の API シグネチャ（`UidExpunge` の引数・戻り値・`SupportUidPlus` の有無）は未確認である。
 - **変更が必要**: `go get github.com/emersion/go-imap-uidplus` で依存を追加する。Phase 2 の最初のタスクとして `go doc` で実際の API シグネチャを確認し、`client.go` のラッパー実装をそれに合わせる（§3.3 の A.1 参照）。
-- **フォールバック（`go-imap-uidplus` が取得不能、または API がコンストラクタ・`UidExpunge` シグネチャの想定と大きく異なる場合）**: 新規外部依存を追加せず、`internal/imap/client.go` 内で RFC 4315 の `UID EXPUNGE` コマンドを `*imapclient.Client.Execute` で直接送信する。`go-imap` v1.2.1 にはこの実行経路がすでに存在することを `/home/devuser/go/pkg/mod/github.com/emersion/go-imap@v1.2.1/client/client.go:331`（`func (c *Client) Execute(cmdr imap.Commander, h responses.Handler) (*imap.StatusResp, error)`）および `commands/expunge.go`（`imap.Commander` の実装例）で確認済み。フォールバック実装は以下の形になる。
+- **フォールバック（`go-imap-uidplus` が取得不能、または API がコンストラクタ・`UidExpunge` シグネチャの想定と大きく異なる場合）**: 新規外部依存を追加せず、`internal/imap/client.go` 内で RFC 4315 の `UID EXPUNGE` コマンドを `*imapclient.Client.Execute` で直接送信する。`go-imap` v1.2.1 の `client` パッケージには `func (c *Client) Execute(cmdr imap.Commander, h responses.Handler) (*imap.StatusResp, error)` というこの実行経路がすでに存在し、ルートパッケージの `imap.Commander` インターフェースと `imap.Command` 構造体（`commands/expunge.go` がその実装例）を使って任意のコマンドを送信できることを確認済み。フォールバック実装は以下の形になる。
 
   ```go
   // uidExpungeCommand implements imap.Commander for the RFC 4315 UID EXPUNGE
@@ -971,7 +971,7 @@
   変更後:
   ```
     gc:
-      -n, --dry-run                 Preview deletions without modifying the local store or IMAP mailbox (read-only store, no Slack notifications)
+      -n, --dry-run                 Preview deletions without modifying the local store or IMAP mailbox (read-only store, log Slack payload instead of sending it)
       --before <duration>           Override report retention duration (default: retention_days in config)
       --max-email-age <duration>    Override .eml file retention duration (default: max_email_age_days in config)
   ```
