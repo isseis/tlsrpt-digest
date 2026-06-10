@@ -4,10 +4,10 @@
 
 | 項目 | 内容 |
 |---|---|
-| ステータス | `draft` |
+| ステータス | `approved` |
 | 作成日 | 2026-06-10 |
-| レビュー日 | - |
-| レビュアー | - |
+| レビュー日 | 2026-06-10 |
+| レビュアー | isseis |
 | コメント | - |
 
 ---
@@ -193,7 +193,7 @@
 
 #### 変更ファイル: `internal/config/types.go`
 
-- [ ] `IMAPConfig` 構造体の `MaxMessageBytes int64` フィールドの直後に以下を追加する。
+- [x] `IMAPConfig` 構造体の `MaxMessageBytes int64` フィールドの直後に以下を追加する。
 
   ```go
   // RetentionDays is the IMAP message retention period in days.
@@ -201,7 +201,7 @@
   RetentionDays int
   ```
 
-- [ ] `rawIMAPConfig` 構造体の `MaxMessageBytes *int64 \`toml:"max_message_bytes"\`` の直後に以下を追加する。
+- [x] `rawIMAPConfig` 構造体の `MaxMessageBytes *int64 \`toml:"max_message_bytes"\`` の直後に以下を追加する。
 
   ```go
   RetentionDays *int `toml:"retention_days"`
@@ -209,7 +209,7 @@
 
 #### 変更ファイル: `internal/config/defaults.go`
 
-- [ ] `applyDefaults` 内の `IMAPConfig{...}` リテラルの `MaxMessageBytes: int64Default(...)` の直後に以下のフィールドを追加する。リテラル `0` をそのまま使用し、`defaultIMAPRetentionDays` のような新規定数は追加しない（`defaultStoreRetention = 30` などの既存定数とは異なり、無効値であることをコード上で明示するため）。
+- [x] `applyDefaults` 内の `IMAPConfig{...}` リテラルの `MaxMessageBytes: int64Default(...)` の直後に以下のフィールドを追加する。リテラル `0` をそのまま使用し、`defaultIMAPRetentionDays` のような新規定数は追加しない（`defaultStoreRetention = 30` などの既存定数とは異なり、無効値であることをコード上で明示するため）。
 
   ```go
   RetentionDays: intDefault(raw.IMAP.RetentionDays, 0), // 0 = IMAP deletion disabled (opt-in)
@@ -217,7 +217,7 @@
 
 #### 変更ファイル: `internal/config/errors.go`
 
-- [ ] "Field validation errors" の `var (...)` ブロック末尾に以下の 2 つの sentinel エラーを追加する（AC-06）。
+- [x] "Field validation errors" の `var (...)` ブロック末尾に以下の 2 つの sentinel エラーを追加する（AC-06）。
 
   ```go
   ErrInvalidIMAPRetentionDays = errors.New("imap.retention_days must be >= 0")
@@ -226,7 +226,7 @@
 
 #### 変更ファイル: `internal/config/validate.go`
 
-- [ ] `validate` 関数内の `cfg.IMAP.MaxMessageBytes < 0` のチェック（`ErrInvalidMaxMessageBytes` を返すブロック）の直後、`validateTLSCACert` の呼び出しより前に、以下の不変条件チェックを追加する。Go 1.21+ 組み込みの `max` を使用する（CLAUDE.md「Modern Go Idioms」準拠）。
+- [x] `validate` 関数内の `cfg.IMAP.MaxMessageBytes < 0` のチェック（`ErrInvalidMaxMessageBytes` を返すブロック）の直後、`validateTLSCACert` の呼び出しより前に、以下の不変条件チェックを追加する。Go 1.21+ 組み込みの `max` を使用する（CLAUDE.md「Modern Go Idioms」準拠）。
 
   ```go
   if cfg.IMAP.RetentionDays < 0 {
@@ -241,21 +241,21 @@
 
 #### 変更ファイル: `internal/config/config_test.go`
 
-- [ ] `TestLoad_AllFields`（92-126 行目）の `[imap]` ブロックに `retention_days = 30` を追加し（既存の `fetch_days = 3` と `[summary] window_days = 5` に対し `30 >= max(3,5)=5` を満たす）、アサーションに `assert.Equal(t, 30, cfg.IMAP.RetentionDays)` を追加する。
-- [ ] `TestLoad_Default_IMAPRetentionDays0`（新規）を追加する。`config.Load([]byte(baseConfigTOML))` をロードし、`assert.Equal(t, 0, cfg.IMAP.RetentionDays)` を検証する（AC-02、`TestLoad_Default_FetchDays14` と同じ形式）。
-- [ ] `TestLoad_IMAPRetentionDaysValidation`（新規）を追加する。`baseConfigTOML`（`fetch_days` 未指定 = 14、`window_days` 未指定 = 7）に `[imap] retention_days = N` を追加したテーブル駆動テストとし、以下を検証する。
+- [x] `TestLoad_AllFields`（92-126 行目）の `[imap]` ブロックに `retention_days = 30` を追加し（既存の `fetch_days = 3` と `[summary] window_days = 5` に対し `30 >= max(3,5)=5` を満たす）、アサーションに `assert.Equal(t, 30, cfg.IMAP.RetentionDays)` を追加する。
+- [x] `TestLoad_Default_IMAPRetentionDays0`（新規）を追加する。`config.Load([]byte(baseConfigTOML))` をロードし、`assert.Equal(t, 0, cfg.IMAP.RetentionDays)` を検証する（AC-02、`TestLoad_Default_FetchDays14` と同じ形式）。
+- [x] `TestLoad_IMAPRetentionDaysValidation`（新規）を追加する。`baseConfigTOML`（`fetch_days` 未指定 = 14、`window_days` 未指定 = 7）に `[imap] retention_days = N` を追加したテーブル駆動テストとし、以下を検証する。
   - `N = -1` → `errors.Is(err, config.ErrInvalidIMAPRetentionDays)`（AC-04）。
   - `N = 0` → `require.NoError(t, err)`（AC-03、明示的な無効化として許可）。
-- [ ] `TestLoad_IMAPRetentionTooShort`（新規）を追加する。テーブル駆動テストとし、以下のケースを検証する（AC-05）。
+- [x] `TestLoad_IMAPRetentionTooShort`（新規）を追加する。テーブル駆動テストとし、以下のケースを検証する（AC-05）。
   - `fetch_days` 未指定（デフォルト 14）、`window_days` 未指定（デフォルト 7）、`retention_days = 13` → `errors.Is(err, config.ErrIMAPRetentionTooShort)`（`max(14,7)=14` 未満）。
   - 同条件で `retention_days = 14` → `require.NoError(t, err)`（境界値、`max(14,7)=14` と等しい場合は許可）。
   - `[imap] fetch_days = 5`、`[summary] window_days = 20`、`retention_days = 19` → `errors.Is(err, config.ErrIMAPRetentionTooShort)`（`window_days` が支配的になるケース、`max(5,20)=20` 未満）。
   - 同条件で `retention_days = 20` → `require.NoError(t, err)`（境界値）。
 
 **フェーズ完了の確認**:
-- [ ] `make fmt` を実行し差分がないこと
-- [ ] `make test` が通過すること
-- [ ] `make lint` が通過すること
+- [x] `make fmt` を実行し差分がないこと
+- [x] `make test` が通過すること
+- [x] `make lint` が通過すること
 
 ### PR-1 作成ポイント: imap.retention_days config support
 
@@ -267,8 +267,8 @@
 - `retention_days > 0` の不変条件が `fetch_days` と `summary.window_days` の両方を考慮し、境界値（等しい場合）で許可されること（AC-05）。
 - 新規エラー型が `errors.Is` で判別可能であること（AC-06）。
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のステップ用のブランチへ切り替えた
 

@@ -19,6 +19,7 @@ func applyDefaults(raw *rawConfig) Config {
 			FetchDays:       intDefault(raw.IMAP.FetchDays, defaultIMAPFetchDays),
 			TLSCACert:       stringValue(raw.IMAP.TLSCACert),
 			MaxMessageBytes: int64Default(raw.IMAP.MaxMessageBytes, defaultMaxMessageBytes),
+			RetentionDays:   intDefault(raw.IMAP.RetentionDays, 0), // 0 = IMAP deletion disabled (opt-in)
 		},
 		Notify: NotifyConfig{
 			Slack: NotifySlackConfig{

@@ -35,6 +35,12 @@ func validate(cfg *Config) error {
 	if cfg.IMAP.MaxMessageBytes < 0 {
 		return fmt.Errorf("config: %w: %d", ErrInvalidMaxMessageBytes, cfg.IMAP.MaxMessageBytes)
 	}
+	if cfg.IMAP.RetentionDays < 0 {
+		return fmt.Errorf("config: %w: %d", ErrInvalidIMAPRetentionDays, cfg.IMAP.RetentionDays)
+	}
+	if cfg.IMAP.RetentionDays > 0 && cfg.IMAP.RetentionDays < max(cfg.IMAP.FetchDays, cfg.Summary.WindowDays) {
+		return fmt.Errorf("config: %w: %d", ErrIMAPRetentionTooShort, cfg.IMAP.RetentionDays)
+	}
 	if err := validateTLSCACert(cfg.IMAP.TLSCACert); err != nil {
 		return err
 	}

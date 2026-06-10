@@ -22,4 +22,10 @@ var (
 	ErrTLSCACertNotReadable   = errors.New("imap.tls_ca_cert cannot be read")
 	ErrTLSCACertNotPEM        = errors.New("imap.tls_ca_cert is not a PEM-encoded certificate")
 	ErrInvalidMaxMessageBytes = errors.New("imap.max_message_bytes must be >= 0")
+
+	// ErrInvalidIMAPRetentionDays and ErrIMAPRetentionTooShort validate
+	// imap.retention_days, distinct from ErrInvalidRetentionDays which
+	// validates store.retention_days (local report retention).
+	ErrInvalidIMAPRetentionDays = errors.New("imap.retention_days must be >= 0")
+	ErrIMAPRetentionTooShort    = errors.New("imap.retention_days must be >= max(imap.fetch_days, summary.window_days) when enabled")
 )
