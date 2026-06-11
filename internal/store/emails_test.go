@@ -632,3 +632,68 @@ func TestDeleteEmailsBefore_DirCleanupWarn(t *testing.T) {
 	}
 	assert.True(t, warnFound, "a WARN with message 'DeleteEmailsBefore: remove YYYYMM dir failed' should be emitted")
 }
+
+// TestCountEmailsBefore_ZeroCutoff verifies that passing time.Time{} returns 0, nil immediately.
+func TestCountEmailsBefore_ZeroCutoff(t *testing.T) {
+	s, _ := openTestStore(t)
+
+	base := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	saveEMLWithMeta(t, s, 1, base)
+
+	count, err := s.CountEmailsBefore(time.Time{})
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
+// TestCountEmailsBefore_Conditions verifies that internal_date < cutoff is counted
+// and internal_date >= cutoff is not, and that no .eml files or index entries are removed.
+func TestCountEmailsBefore_Conditions(t *testing.T) {
+	s, rootDir := openTestStore(t)
+
+	cutoff := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	// UID=1: internalDate before cutoff → counted
+	before := cutoff.Add(-time.Hour)
+	saveEMLWithMeta(t, s, 1, before)
+
+	// UID=2: internalDate equal to cutoff → not counted
+	saveEMLWithMeta(t, s, 2, cutoff)
+
+	// UID=3: internalDate after cutoff → not counted
+	after := cutoff.Add(time.Hour)
+	saveEMLWithMeta(t, s, 3, after)
+
+	count, err := s.CountEmailsBefore(cutoff)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	// All three files should still exist.
+	assert.FileExists(t, filepath.Join(rootDir, "emails", "100",
+		before.UTC().Format("200601"), "0000000001.eml"))
+	assert.FileExists(t, filepath.Join(rootDir, "emails", "100", "202506", "0000000002.eml"))
+	assert.FileExists(t, filepath.Join(rootDir, "emails", "100",
+		after.UTC().Format("200601"), "0000000003.eml"))
+
+	// All three entries should remain in the index.
+	df, err := loadDataFileFromPath(rootDir)
+	require.NoError(t, err)
+	assert.Len(t, df.Emails, 3)
+}
+
+// TestCountEmailsBefore_ReadOnly verifies that CountEmailsBefore works on a
+// store opened with OpenReadOnly.
+func TestCountEmailsBefore_ReadOnly(t *testing.T) {
+	rootDir := t.TempDir()
+	s, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+
+	cutoff := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	saveEMLWithMeta(t, s, 1, cutoff.Add(-time.Hour))
+
+	roStore, err := Open(rootDir, makeTestIdentity(), OpenReadOnly)
+	require.NoError(t, err)
+
+	count, err := roStore.CountEmailsBefore(cutoff)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}

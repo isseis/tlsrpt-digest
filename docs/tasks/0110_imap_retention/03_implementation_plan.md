@@ -586,8 +586,8 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した（#159）
-- [ ] PR がマージされた
-- [ ] 次のステップ用のブランチへ切り替えた
+- [x] PR がマージされた
+- [x] 次のステップ用のブランチへ切り替えた
 
 ---
 
@@ -595,7 +595,7 @@
 
 #### 変更ファイル: `internal/store/store.go`
 
-- [ ] `Store` インターフェースの `DeleteEmailsBefore` メソッド定義（末尾）の直後に、以下の 2 メソッドを追加する。`02_architecture.md` §3.4 のドキュメントコメントに準拠する。
+- [x] `Store` インターフェースの `DeleteEmailsBefore` メソッド定義（末尾）の直後に、以下の 2 メソッドを追加する。`02_architecture.md` §3.4 のドキュメントコメントに準拠する。
 
   ```go
   // CountReportsBefore returns the number of report records whose
@@ -611,7 +611,7 @@
 
 #### 変更ファイル: `internal/store/reports.go`
 
-- [ ] `DeleteReportsBefore`（末尾）の直後に `CountReportsBefore` を実装する。`DeleteReportsBefore` と同じ `loadDataFile` + `EndDatetime.Before(cutoff)` 判定を用いるが、`s.readOnly` チェックを行わず、`df.Reports` を変更しない（カウントのみ）。
+- [x] `DeleteReportsBefore`（末尾）の直後に `CountReportsBefore` を実装する。`DeleteReportsBefore` と同じ `loadDataFile` + `EndDatetime.Before(cutoff)` 判定を用いるが、`s.readOnly` チェックを行わず、`df.Reports` を変更しない（カウントのみ）。
 
   ```go
   // CountReportsBefore implements Store.CountReportsBefore.
@@ -632,7 +632,7 @@
 
 #### 変更ファイル: `internal/store/emails.go`
 
-- [ ] `DeleteEmailsBefore`（末尾、`cleanupEmptyDirs` の前）の直後に `CountEmailsBefore` を実装する。`DeleteEmailsBefore` 冒頭のゼロカットオフ早期リターンと `entry.InternalDate.Before(cutoff)` 判定を用いるが、`s.readOnly` チェック・ファイル削除・インデックス更新を行わない（カウントのみ）。
+- [x] `DeleteEmailsBefore`（末尾、`cleanupEmptyDirs` の前）の直後に `CountEmailsBefore` を実装する。`DeleteEmailsBefore` 冒頭のゼロカットオフ早期リターンと `entry.InternalDate.Before(cutoff)` 判定を用いるが、`s.readOnly` チェック・ファイル削除・インデックス更新を行わない（カウントのみ）。
 
   ```go
   // CountEmailsBefore implements Store.CountEmailsBefore.
@@ -657,21 +657,21 @@
 
 #### 変更ファイル: `internal/store/reports_test.go`
 
-- [ ] "--- DeleteReportsBefore tests (Phase 3) ---" の節の末尾に、以下の新規テストを追加する。
+- [x] "--- DeleteReportsBefore tests (Phase 3) ---" の節の末尾に、以下の新規テストを追加する。
   - `TestCountReportsBefore_BoundaryValues`: `TestDeleteReportsBefore_BoundaryValues`（304-331 行目）と同じ `before`/`equal`/`after` の3件のレポートを保存し、`s.CountReportsBefore(cutoff)` が `1`（`before` のみ）を返すことを検証する。さらに `s.GetAllReports()` で3件とも残っていること（削除されていないこと）を確認する。
   - `TestCountReportsBefore_ZeroCounted`: レポート未保存の状態で `s.CountReportsBefore(time.Now())` が `(0, nil)` を返すことを検証する。
   - `TestCountReportsBefore_ReadOnly`: `OpenReadWrite` でレポートを1件保存した後ストアを閉じ、同じ `rootDir` を `OpenReadOnly` で開き直し、`CountReportsBefore` が読み取り専用ストアでもエラーなく動作し正しい件数を返すことを検証する（`TestGetAllReports_ReadOnly_Empty`、209-220行目のオープンパターンを参考にする）。
 
 #### 変更ファイル: `internal/store/emails_test.go`
 
-- [ ] "DeleteEmailsBefore tests" の節の末尾（`TestDeleteEmailsBefore_DirCleanupWarn` の後）に、以下の新規テストを追加する。
+- [x] "DeleteEmailsBefore tests" の節の末尾（`TestDeleteEmailsBefore_DirCleanupWarn` の後）に、以下の新規テストを追加する。
   - `TestCountEmailsBefore_ZeroCutoff`: `TestDeleteEmailsBefore_ZeroCutoff`（466-475行目）と同様に1件 `.eml` を保存し、`s.CountEmailsBefore(time.Time{})` が `(0, nil)` を返すことを検証する。
   - `TestCountEmailsBefore_Conditions`: `TestDeleteEmailsBefore_Conditions`（479-518行目）と同じ `before`/`equal`/`after` の3件の `.eml` を保存し、`s.CountEmailsBefore(cutoff)` が `1`（`before` のみ）を返すことを検証する。さらに3件の `.eml` ファイルすべてが削除されずに残っていること（`assert.FileExists`）と、インデックスに3件とも残っていることを確認する。
   - `TestCountEmailsBefore_ReadOnly`: `OpenReadWrite` で `.eml` を1件保存した後ストアを閉じ、同じ `rootDir` を `OpenReadOnly` で開き直し、`CountEmailsBefore` が読み取り専用ストアでもエラーなく動作し正しい件数を返すことを検証する。
 
 #### 変更ファイル: `internal/store/testutil/mocks.go`
 
-- [ ] `DeleteEmailsBefore`（271-286行目）の直後に、以下の2メソッドを追加する。`DeleteReportsBefore`/`DeleteEmailsBefore` の判定ロジックを再利用するが、マップを変更せず、呼び出し回数・カットオフ記録用フィールドは追加しない（読み取り専用カウントのため、`02_architecture.md` の方針通り副作用追跡は不要）。
+- [x] `DeleteEmailsBefore`（271-286行目）の直後に、以下の2メソッドを追加する。`DeleteReportsBefore`/`DeleteEmailsBefore` の判定ロジックを再利用するが、マップを変更せず、呼び出し回数・カットオフ記録用フィールドは追加しない（読み取り専用カウントのため、`02_architecture.md` の方針通り副作用追跡は不要）。
 
   ```go
   // CountReportsBefore implements store.Store.
@@ -701,9 +701,9 @@
   ```
 
 **フェーズ完了の確認**:
-- [ ] `make fmt` を実行し差分がないこと
-- [ ] `make test` が通過すること
-- [ ] `make lint` が通過すること
+- [x] `make fmt` を実行し差分がないこと
+- [x] `make test` が通過すること
+- [x] `make lint` が通過すること
 
 ### PR-3 作成ポイント: Store.CountReportsBefore / CountEmailsBefore
 
@@ -715,8 +715,8 @@
 - 読み取り専用（`OpenReadOnly`）で開いたストアでもエラーなく動作すること。
 - `CountEmailsBefore` がゼロカットオフで `(0, nil)` を即座に返すこと。
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した（#160）
 - [ ] PR がマージされた
 - [ ] 次のステップ用のブランチへ切り替えた
 

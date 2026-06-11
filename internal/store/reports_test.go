@@ -414,3 +414,60 @@ func TestDeleteReportsBefore_Performance(t *testing.T) {
 	require.NoError(t, err)
 	assert.Less(t, time.Since(start), time.Second, "DeleteReportsBefore should complete within 1s for 10k records")
 }
+
+// TestCountReportsBefore_BoundaryValues verifies the cutoff boundary matches
+// DeleteReportsBefore: end-datetime < cutoff is counted; end-datetime == cutoff
+// or > cutoff is not. Counting must not delete any records.
+func TestCountReportsBefore_BoundaryValues(t *testing.T) {
+	s, _ := openTestStore(t)
+
+	cutoff := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	before := cutoff.Add(-time.Nanosecond)
+	after := cutoff.Add(time.Nanosecond)
+
+	inputs := []ReportInput{
+		{Report: makeFullReport("before", before), UID: 1, UIDValidity: 10},
+		{Report: makeFullReport("equal", cutoff), UID: 2, UIDValidity: 10},
+		{Report: makeFullReport("after", after), UID: 3, UIDValidity: 10},
+	}
+	require.NoError(t, s.SaveReports(inputs))
+
+	count, err := s.CountReportsBefore(cutoff)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	remaining, err := s.GetAllReports()
+	require.NoError(t, err)
+	assert.Len(t, remaining, 3, "CountReportsBefore must not delete any records")
+}
+
+// TestCountReportsBefore_ZeroCounted verifies that an empty store returns (0, nil).
+func TestCountReportsBefore_ZeroCounted(t *testing.T) {
+	s, _ := openTestStore(t)
+
+	count, err := s.CountReportsBefore(time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+}
+
+// TestCountReportsBefore_ReadOnly verifies that CountReportsBefore works on a
+// store opened with OpenReadOnly.
+func TestCountReportsBefore_ReadOnly(t *testing.T) {
+	rootDir := t.TempDir()
+	s, err := Open(rootDir, makeTestIdentity(), OpenReadWrite)
+	require.NoError(t, err)
+
+	cutoff := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, SaveReport(s, ReportInput{
+		Report:      makeFullReport("r1", cutoff.Add(-time.Hour)),
+		UID:         1,
+		UIDValidity: 10,
+	}))
+
+	roStore, err := Open(rootDir, makeTestIdentity(), OpenReadOnly)
+	require.NoError(t, err)
+
+	count, err := roStore.CountReportsBefore(cutoff)
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+}
