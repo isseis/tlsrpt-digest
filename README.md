@@ -159,6 +159,7 @@ window_days = 7
 - Deleting emails from IMAP is an irreversible operation, and there is no filtering to limit deletion targets to TLSRPT reports. Therefore, it is recommended to use a mailbox dedicated to receiving TLSRPT reports. It is also recommended to check the number of deletion candidates with `gc --dry-run` before enabling this.
 - Prerequisite when using Gmail: In Gmail's IMAP settings (the "Forwarding and POP/IMAP" tab), if the behavior when a message is marked `\Deleted` and EXPUNGEd remains the default "Archive the message", UID EXPUNGE will only remove the label (moving it to All Mail) and storage will not be freed. To actually curb accumulation on the server, you need to change this to "Immediately delete the message forever" or "Move the message to the Trash" (plus enabling Auto-Expunge for messages in Trash).
 - Set `imap.fetch_days` (and the lookback window specified by `fetch --since`) to be less than or equal to `imap.retention_days`. Emails older than that will be deleted from IMAP by `gc`, and will no longer be retrievable by `fetch` afterwards.
+- There is no command-line flag to override `imap.retention_days` (`gc --before` / `--max-email-age` only override the local store retention periods and do not affect the IMAP deletion cutoff). The IMAP retention period can only be changed in the configuration file.
 
 ---
 

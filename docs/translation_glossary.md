@@ -19,13 +19,13 @@
 | 〜に加えて | in addition to 〜 | |
 | 受け入れ条件 | acceptance criteria | 要件定義書・実装計画書の文脈 |
 | アーキテクチャ設計書 | architecture design | |
+| メールをアーカイブする | "Archive the message" | Gmail UI 表記。`\Deleted` + EXPUNGE 時の Gmail のデフォルト挙動（ラベル除去のみでストレージは解放されない） |
 | アクセス | access | |
 | 値 | value | |
 | 曖昧さ | ambiguity | |
 | アプリケーション | application | |
 | 引数 | argument | コマンドの引数 |
 | 配列 | array | |
-| メールをアーカイブする | "Archive the message" | Gmail UI 表記。`\Deleted` + EXPUNGE 時の Gmail のデフォルト挙動（ラベル除去のみでストレージは解放されない） |
 | 代替案 | alternative | |
 | Auto-Expunge | Auto-Expunge | IMAP サーバが `\Deleted` 付与済みメッセージを自動的に EXPUNGE する挙動 |
 | 型アサーション | type assertion | Go言語の文脈 |
