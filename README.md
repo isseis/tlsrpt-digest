@@ -122,7 +122,8 @@ max_message_bytes = 1048576
 
 # Retention period in days for emails on the IMAP mailbox (default: 0 = disabled)
 # When set to a value greater than 0, gc deletes IMAP messages whose
-# INTERNALDATE (with the time truncated to the date) is older than (today - retention_days).
+# INTERNALDATE (with the time truncated to the date) is older than
+# (today's UTC midnight - retention_days days).
 # This is an irreversible operation.
 # When enabling this, set it to a value greater than or equal to both
 # imap.fetch_days and summary.window_days (otherwise startup fails with
@@ -158,7 +159,7 @@ window_days = 7
 
 The default for `retention_days` is `0` (disabled). Deletion of emails on the IMAP mailbox is enabled only when the user explicitly sets a positive value (opt-in). Here, "the IMAP mailbox" refers to the mailbox specified by `imap.mailbox`; `gc` does not delete emails in any other mailbox.
 
-Enabling this (setting `retention_days > 0`) makes IMAP credentials (`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`) required for `gc` to run. As long as `retention_days = 0` (the default), `gc` does not connect to IMAP and credentials are not required.
+Enabling this (setting `retention_days > 0`) makes IMAP credentials (`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`) required for `gc` (without `--dry-run`) to run. `gc --dry-run` can run without credentials; in that case it logs a warning and skips the IMAP deletion-candidate preview. As long as `retention_days = 0` (the default), `gc` does not connect to IMAP and credentials are not required.
 
 #### Prerequisites
 
@@ -243,7 +244,7 @@ tlsrpt-digest --config path summary [--dry-run] [--window duration]
 
 ### gc
 
-Deletes data older than the configured retention period. If `imap.retention_days` is configured, also deletes old emails on the IMAP mailbox (an irreversible operation; for details, see [About IMAP Mailbox Retention](#about-imap-mailbox-retention-imapretention_days)).
+Deletes data older than the configured retention period. If `imap.retention_days` is greater than `0`, also deletes old emails on the IMAP mailbox (an irreversible operation; for details, see [About IMAP Mailbox Retention](#about-imap-mailbox-retention-imapretention_days)).
 
 ```bash
 tlsrpt-digest --config path gc [--dry-run] [--before duration] [--max-email-age duration]
