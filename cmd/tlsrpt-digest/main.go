@@ -142,7 +142,7 @@ func parseCLI(args []string, stderr io.Writer) (cliInvocation, error) {
 	fs := flag.NewFlagSet(string(subcmd), flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	opts := cliOptions{ConfigPath: configPath}
-	fs.BoolVar(&opts.DryRun, "dry-run", false, "connect to IMAP and check UIDVALIDITY, then stop: skip message downloads, report and UIDVALIDITY store writes, MarkSeen, and Slack HTTP notifications (store opened read-only: no files created or modified)")
+	fs.BoolVar(&opts.DryRun, "dry-run", false, "preview without making changes: skip local store writes and IMAP mailbox modifications, and log what would happen instead of sending Slack notifications (store opened read-only)")
 	fs.BoolVar(&opts.DryRun, "n", false, "shorthand for --dry-run")
 	registerFlags(fs, subcmd, &opts)
 
@@ -193,7 +193,7 @@ func validateFlags(subcmd SubcommandName, opts cliOptions) error {
 	if opts.ConfigPath == "" {
 		return errConfigRequired
 	}
-	if opts.DryRun && subcmd != subcommandFetch && subcmd != subcommandSummary {
+	if opts.DryRun && subcmd != subcommandFetch && subcmd != subcommandSummary && subcmd != subcommandGC {
 		return errDryRunNotSupported
 	}
 	if subcmd != subcommandRecover {
@@ -233,7 +233,7 @@ Subcommands:
   fetch       Fetch TLSRPT reports from IMAP and process them
   summary     Send a periodic summary of accumulated reports
   reprocess   Re-parse stored .eml files and rebuild the report store
-  gc          Delete report data older than the retention period
+  gc          Delete report data, .eml files, and (if imap.retention_days > 0) old IMAP messages
   recover     Inspect and repair store consistency
   help        Show this help
 
@@ -250,8 +250,9 @@ Subcommand options:
     --notify              Send Slack notifications for TLS failures and parse errors
 
   gc:
-    --before <duration>          Override report retention duration (default: retention_days in config)
-    --max-email-age <duration>   Override .eml file retention duration (default: max_email_age_days in config)
+    -n, --dry-run                 Preview deletions without modifying the local store or IMAP mailbox (read-only store, log Slack payload instead of sending it)
+    --before <duration>           Override report retention duration (default: retention_days in config)
+    --max-email-age <duration>    Override .eml file retention duration (default: max_email_age_days in config)
 
   recover:
     --mode <keep-old|discard-old>   Recovery mode

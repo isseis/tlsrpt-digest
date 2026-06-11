@@ -153,7 +153,7 @@ func TestRunCLI_UsageErrorsExit2(t *testing.T) {
 }
 
 func TestParseCLI_DryRunSupportedSubcommands(t *testing.T) {
-	for _, subcmd := range []SubcommandName{subcommandFetch, subcommandSummary} {
+	for _, subcmd := range []SubcommandName{subcommandFetch, subcommandSummary, subcommandGC} {
 		t.Run(string(subcmd), func(t *testing.T) {
 			inv, err := parseCLI([]string{"--config", "c.toml", string(subcmd), "--dry-run"}, io.Discard)
 			require.NoError(t, err)
@@ -163,7 +163,7 @@ func TestParseCLI_DryRunSupportedSubcommands(t *testing.T) {
 }
 
 func TestParseCLI_DryRunUnsupportedSubcommands(t *testing.T) {
-	for _, subcmd := range []SubcommandName{subcommandGC, subcommandReprocess, subcommandRecover} {
+	for _, subcmd := range []SubcommandName{subcommandReprocess, subcommandRecover} {
 		t.Run(string(subcmd), func(t *testing.T) {
 			_, err := parseCLI([]string{"--config", "c.toml", string(subcmd), "--dry-run"}, io.Discard)
 			require.ErrorIs(t, err, errDryRunNotSupported)
@@ -172,7 +172,7 @@ func TestParseCLI_DryRunUnsupportedSubcommands(t *testing.T) {
 }
 
 func TestRunCLI_DryRunUnsupportedSubcommandExits2(t *testing.T) {
-	for _, subcmd := range []SubcommandName{subcommandGC, subcommandReprocess, subcommandRecover} {
+	for _, subcmd := range []SubcommandName{subcommandReprocess, subcommandRecover} {
 		t.Run(string(subcmd), func(t *testing.T) {
 			exitCode := runCLI(context.Background(), []string{"--config", "c.toml", string(subcmd), "--dry-run"}, io.Discard, BootstrapOptions{})
 			assert.Equal(t, exitUsage, exitCode)
