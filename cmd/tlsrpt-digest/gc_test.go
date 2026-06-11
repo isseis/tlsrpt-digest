@@ -477,6 +477,7 @@ func TestGC_IMAPCredentialsMissing_NotifiesAndExits(t *testing.T) {
 	assert.Equal(t, notify.SystemErrorKindIMAPCredentialsMissing, spy.SystemErrors[0].Kind)
 	assert.Equal(t, 0, st.DeleteReportsBeforeCallCount, "DeleteReportsBefore should not be called before the credentials check")
 	assert.Equal(t, 0, st.DeleteEmailsBeforeCallCount, "DeleteEmailsBefore should not be called before the credentials check")
+	assert.Equal(t, 1, spy.FlushCount)
 }
 
 func TestGC_IMAPOperationError_Notifies(t *testing.T) {
@@ -564,6 +565,43 @@ func TestGC_DryRun_IMAPRetentionEnabled_PreviewsCandidates(t *testing.T) {
 	assert.Equal(t, Duration{Days: 30}.Cutoff(now), fakeFetcher.SearchOlderThanCalls[0])
 	assert.Empty(t, fakeFetcher.DeleteOlderThanCalls)
 	assert.Contains(t, buf.String(), "would_delete_imap_count=2")
+}
+
+func TestGC_DryRun_IMAPSearchError_Notifies(t *testing.T) {
+	buf := captureSlog(t)
+	st := storetestutil.NewFakeStore()
+	st.Reports["old"] = tlsrpt.Report{
+		ReportID: "old",
+		DateRange: tlsrpt.DateRange{
+			EndDatetime: time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	st.Emails[storetestutil.EmailKey{UID: 1, UIDValidity: 100}] = &storetestutil.FakeEmailEntry{
+		UID: 1, UIDValidity: 100, InternalDate: time.Date(2025, 12, 1, 0, 0, 0, 0, time.UTC),
+	}
+	spy := &SpyNotificationSink{}
+	cfg := gcIMAPRetentionConfig(30)
+	now := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+
+	fakeFetcher := &imaptestutil.FakeMailFetcher{SearchOlderThanErr: errors.New("imap search error")}
+	runner := &gcRunner{
+		now: func() time.Time { return now },
+		newMailFetcher: func(imap.Config) (imap.MailFetcher, error) {
+			return fakeFetcher, nil
+		},
+		credentials: func() (string, config.Secret) {
+			return "user", config.Secret("pass")
+		},
+	}
+	code, err := runner.Run(context.Background(), makeGCBoot(t, st, spy, cliOptions{DryRun: true}, cfg))
+	assert.Error(t, err)
+	assert.Equal(t, exitError, code)
+	require.Len(t, spy.SystemErrors, 1)
+	assert.Equal(t, notify.SystemErrorKindIMAPOperationFailed, spy.SystemErrors[0].Kind)
+	assert.Equal(t, 0, st.DeleteReportsBeforeCallCount)
+	assert.Equal(t, 0, st.DeleteEmailsBeforeCallCount)
+	assert.Contains(t, buf.String(), "would_delete_reports=1")
+	assert.Contains(t, buf.String(), "would_delete_emails=1")
 }
 
 func TestGC_DryRun_IMAPCredentialsMissing_WarnsAndContinues(t *testing.T) {
