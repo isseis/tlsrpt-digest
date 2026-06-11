@@ -6,17 +6,12 @@
 
 ## 概要
 
-```mermaid
-flowchart TD
-    A["main ブランチの最新コミットを確認"]
-    B["バージョンタグを作成<br>git tag -a vX.Y.Z HEAD"]
-    C["タグを push<br>git push origin vX.Y.Z"]
-    D["GitHub Actions: Release ワークフロー起動"]
-    E["GoReleaser 実行<br>・linux/amd64 バイナリビルド<br>・linux/arm64 バイナリビルド<br>・tar.gz アーカイブ作成<br>・checksums.txt 生成"]
-    F["GitHub Release 作成<br>・バイナリアーカイブ添付<br>・changelog 自動生成"]
-
-    A --> B --> C --> D --> E --> F
-```
+1. main ブランチの最新コミットを確認する
+2. バージョンタグを作成する（`git tag -a vX.Y.Z HEAD`）
+3. タグを push する（`git push origin vX.Y.Z`）
+4. GitHub Actions の Release ワークフローが起動する
+5. GoReleaser が linux/amd64・linux/arm64 バイナリをビルドし、tar.gz アーカイブと checksums.txt を生成する
+6. GitHub Release が作成され、アーカイブと changelog が添付される
 
 ---
 
