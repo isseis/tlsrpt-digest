@@ -96,12 +96,14 @@ GoReleaser automatically generates a changelog from the git log between the prev
 
 ## If a Tag Was Pushed by Mistake
 
-If the build has not yet started, you can cancel the release by deleting the tag.
+Delete the tag and, if the workflow is currently running, cancel it from the GitHub Actions page.
 
 ```bash
 git tag -d vX.Y.Z
 git push origin :refs/tags/vX.Y.Z
 ```
+
+To cancel the workflow, go to the [Actions tab](https://github.com/isseis/tlsrpt-digest/actions), select the relevant run, and click "Cancel workflow".
 
 If a GitHub Release has already been created, delete it manually from the GitHub Releases page.
 
