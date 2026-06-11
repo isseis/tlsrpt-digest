@@ -156,7 +156,7 @@ window_days = 7
 
 #### Basic Behavior (Opt-In)
 
-The default for `retention_days` is `0` (disabled). Deletion of emails on the IMAP mailbox is enabled only when the user explicitly sets a positive value (opt-in).
+The default for `retention_days` is `0` (disabled). Deletion of emails on the IMAP mailbox is enabled only when the user explicitly sets a positive value (opt-in). Here, "the IMAP mailbox" refers to the mailbox specified by `imap.mailbox`; `gc` does not delete emails in any other mailbox.
 
 Enabling this (setting `retention_days > 0`) makes IMAP credentials (`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`) required for `gc` to run. As long as `retention_days = 0` (the default), `gc` does not connect to IMAP and credentials are not required.
 
