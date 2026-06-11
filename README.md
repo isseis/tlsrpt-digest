@@ -1,5 +1,7 @@
 # tlsrpt-digest
 
+English | [日本語](README.ja.md)
+
 A tool that automatically fetches and parses SMTP TLS Reporting (RFC 8460) reports from an IMAP mailbox, sends an immediate alert to Slack when a TLS connection failure is detected, and sends a periodic summary under normal conditions.
 
 ## Table of Contents
