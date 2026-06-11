@@ -1147,7 +1147,7 @@
 - 有効化時に IMAP 認証情報が必須になること、TLSRPT 専用メールボックスの推奨、`gc --dry-run` での事前確認の推奨が記載されていること。
 - Gmail の Auto-Expunge / 「完全に削除する」設定が前提条件であることが記載されていること。
 - `fetch_days` / `--since` を `retention_days` 以下にする注意が記載されていること。
-- Phase 5 実施結果セクションに実 Gmail アカウントでの検証結果が記録されていること。
+- Phase 5 実施結果セクションに実アカウントでの検証結果が記録されていること（Gmail アカウントが利用できない場合は、代替アカウントでの検証結果と、Gmail 固有の挙動について未検証である旨・その代替理由が記録されていること）。
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した（#162）
@@ -1166,7 +1166,7 @@
 | M2 | Phase 2 | `internal/imap` 拡張（`go-imap-uidplus` 依存追加・`DeleteOlderThan` / `SearchOlderThan` 実装・`FakeMailFetcher` 更新） | AC-08, AC-12, AC-15〜AC-17 をカバーするテストと、greenmail の UIDPLUS 対応状況の記録 |
 | M3 | Phase 3 | `internal/store` の `CountReportsBefore` / `CountEmailsBefore` 追加 | AC-10 のストア側テスト |
 | M4 | Phase 4 | `gc` サブコマンドへの IMAP 削除統合・`--dry-run` 対応 | AC-03, AC-07, AC-09〜AC-11, AC-13, AC-14 をカバーするテスト |
-| M5 | Phase 5 | README 更新（オプトイン手順・専用メールボックス推奨・Gmail 設定前提・`--since` 注意）と実 Gmail アカウントでの手動検証 | 更新された `README.ja.md` / `README.md` と Phase 5 実施結果の記録 |
+| M5 | Phase 5 | README 更新（オプトイン手順・専用メールボックス推奨・Gmail 設定前提・`--since` 注意）と実アカウントでの手動検証 | 更新された `README.ja.md` / `README.md` と Phase 5 実施結果の記録 |
 
 Phase 1〜3 は互いに独立しており並行可能である（`02_architecture.md` §8）。Phase 4 は Phase 1〜3 すべてに依存する（config の `RetentionDays`、`MailFetcher.DeleteOlderThan`/`SearchOlderThan`、`Store.CountReportsBefore`/`CountEmailsBefore` をいずれも利用するため）。Phase 5 は Phase 4 で追加される `gc --dry-run` の挙動を README に記載するため、Phase 4 の完了後に実施する。
 
