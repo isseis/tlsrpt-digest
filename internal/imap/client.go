@@ -363,6 +363,9 @@ func (c *imapClient) DeleteOlderThan(ctx context.Context, cutoff time.Time) (int
 		return 0, nil
 	}
 
+	// If UidExpunge fails after UidStore succeeds, the messages remain flagged
+	// \Deleted until the next DeleteOlderThan run retries them (uidSearchBefore
+	// does not filter by flag, so this is self-healing).
 	seqSet := uidsToSeqSet(uids)
 	storeItem := goimap.FormatFlagsOp(goimap.AddFlags, false)
 	if err := c.session.UidStore(seqSet, storeItem, []any{goimap.DeletedFlag}, nil); err != nil {
