@@ -1,5 +1,7 @@
 # tlsrpt-digest
 
+[English](README.md) | 日本語
+
 SMTP TLS Reporting (RFC 8460) レポートを IMAP メールボックスから自動取得・解析し、TLS 接続の失敗を検出したときに即時アラートを、正常時には定期サマリを Slack で通知するツールです。
 
 ## 目次
