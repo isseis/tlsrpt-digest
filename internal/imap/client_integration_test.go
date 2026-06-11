@@ -468,7 +468,7 @@ func TestIntegration_UIDValidity_Change(t *testing.T) {
 
 // TestIntegration_DeleteOlderThan verifies DeleteOlderThan removes a message
 // whose INTERNALDATE is before cutoff, or records greenmail's UIDPLUS support
-// status if the server does not support UID EXPUNGE (AC-12 fallback).
+// status if the server does not support UID EXPUNGE.
 func TestIntegration_DeleteOlderThan(t *testing.T) {
 	cfg, smtpAddr := loadSMTPTestConfig(t)
 	messageID := testMessageID()
