@@ -183,8 +183,6 @@ func TestImapClient_DeleteOlderThan_ZeroCutoff(t *testing.T) {
 }
 
 func TestImapClient_DeleteOlderThan_UIDPLUSUnsupported(t *testing.T) {
-	t.Parallel()
-
 	var logBuf bytes.Buffer
 	oldLogger := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelInfo})))
