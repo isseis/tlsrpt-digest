@@ -120,6 +120,13 @@ tls_ca_cert = ""
 # 1 通あたりの最大メッセージサイズ（バイト）（省略時: 1048576 = 1 MiB、0 を指定すると制限なし）
 max_message_bytes = 1048576
 
+# IMAP メールボックス上のメール保持期間（日数）（省略時: 0 = 無効）
+# 0 より大きい値を設定すると、gc 実行時に INTERNALDATE（日付截断）が
+# (今日 - retention_days) より古い IMAP メールを削除する（不可逆操作）。
+# 有効化する場合は、imap.fetch_days と summary.window_days の
+# いずれと比べても大きいか等しい値にすること（設定エラーで起動を拒否する）。
+retention_days = 0
+
 [notify.slack]
 # Slack Webhook URL の許可ホスト名（Webhook URL のホスト名と一致させること）
 # 誤った送信先への通知を防ぐためのセキュリティ検証。スキームやポート番号は含めないこと
@@ -141,6 +148,14 @@ max_email_age_days = 30
 # summary コマンドが対象とする期間（日数）（省略時: 7）
 window_days = 7
 ```
+
+### IMAP メールボックスの保持期間（`imap.retention_days`）について
+
+- `retention_days` のデフォルトは `0`（無効）です。利用者が明示的に正の値を設定したときのみ、IMAP メールボックス上のメール削除が有効化されます（オプトイン）。
+- 有効化する（`retention_days > 0` にする）と、`gc` の実行に IMAP 認証情報（`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`）が必須になります。`retention_days = 0`（デフォルト）のままであれば、`gc` は IMAP に接続せず、認証情報も不要です。
+- IMAP からのメール削除は不可逆操作であり、削除対象を TLSRPT レポートに限定する絞り込みは行われません。そのため、TLSRPT レポート受信専用のメールボックスを使用することを推奨します。また、有効化する前に `gc --dry-run` で削除候補件数を確認することを推奨します。
+- Gmail を使用する場合の前提条件: Gmail の IMAP 設定（「メール転送と POP/IMAP」タブ）で、メッセージに `\Deleted` が付与され EXPUNGE されたときの挙動がデフォルトの「メールをアーカイブする」のままだと、UID EXPUNGE はラベル除去（全メールへの移動）となりストレージは解放されません。サーバー上の蓄積を実際に抑止するには、「完全に削除する」または「ゴミ箱に移動」（+ ゴミ箱メールの自動完全削除）に変更する必要があります。
+- `imap.fetch_days`（および `fetch --since` で指定する取得期間）は `imap.retention_days` 以下にしてください。それより古いメールは `gc` によって IMAP 上から削除され、以後 `fetch` で取得できなくなります。
 
 ---
 
@@ -201,11 +216,17 @@ tlsrpt-digest --config path summary [--dry-run] [--window duration]
 
 ### gc
 
-保持期間を超えた古いデータを削除します。
+保持期間を超えた古いデータを削除します。`imap.retention_days` を設定している場合は、IMAP メールボックス上の古いメールも削除します（不可逆操作。詳細は[IMAP メールボックスの保持期間について](#imap-メールボックスの保持期間imapretention_daysについて)を参照）。
 
 ```bash
-tlsrpt-digest --config path gc [--before duration] [--max-email-age duration]
+tlsrpt-digest --config path gc [--dry-run] [--before duration] [--max-email-age duration]
 ```
+
+| オプション | 説明 |
+|---|---|
+| `--dry-run` | ローカルストア・IMAP メールボックスとも削除を行わず、削除対象の件数（IMAP は対象 UID のサンプルも含む）をログ出力する |
+| `--before duration` | レポート JSON データの保持期間の上書き（デフォルト: config の `store.retention_days`） |
+| `--max-email-age duration` | `.eml` ファイルの保持期間の上書き（デフォルト: config の `store.max_email_age_days`） |
 
 ### reprocess
 
