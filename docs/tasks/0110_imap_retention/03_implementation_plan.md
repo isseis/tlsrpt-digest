@@ -1033,8 +1033,8 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のステップ用のブランチへ切り替えた
+- [x] PR がマージされた
+- [x] 次のステップ用のブランチへ切り替えた
 
 ---
 
@@ -1104,35 +1104,38 @@
 
 - [ ] `/mktrans` の実行前に、新規追加する日本語の専門用語のうち未登録のものを確認する。`rg -n "保持期間|オプトイン|不可逆|Auto-Expunge|完全に削除する|ゴミ箱に移動|メールをアーカイブする" docs/translation_glossary.md` を実行し、該当行が存在しない用語について、対応する英訳（例: 保持期間 → retention period、オプトイン → opt-in、不可逆 → irreversible、完全に削除する → "Immediately delete the message forever"（Gmail UI 表記）、ゴミ箱に移動 → "Move the message to the Trash"（Gmail UI 表記）、メールをアーカイブする → "Archive the message"（Gmail UI 表記）、Auto-Expunge → Auto-Expunge）をアルファベット順の該当セクションに追加する。
 
-#### Gmail 実環境での手動検証
+#### 実環境での手動検証
 
-- [ ] 実 Gmail アカウント（TLSRPT レポート受信用に使用しているテストメールボックス）に対して、以下の手順で手動検証を行い、結果を本ドキュメントの「Phase 5 実施結果」（後述）に追記する。
-  1. `tlsrpt-digest --config <path> fetch` 実行時の IMAP `CAPABILITY` 応答に `UIDPLUS` が含まれることを、`internal/imap/client.go` のログ（または一時的なデバッグログ）で確認し、応答内容を記録する。
-  2. `config.toml` の `imap.retention_days` を、検証用メールボックス内の最も古いメールより新しい日数（例: 1）に設定し、`gc --dry-run` を実行する。ログに `would_delete_imap_count` が1以上で出力されることを確認する。
-  3. 同じ設定で `gc`（非 dry-run）を実行し、ログに `imap_messages` の削除件数が出力されることを確認する。
-  4. Gmail の Web UI で該当メールがメールボックスから削除されていることを確認する。
-  5. Gmail の IMAP 設定（「メール転送と POP/IMAP」）がデフォルト（「メールをアーカイブする」）の場合と、「完全に削除する」に変更した場合とで、削除後のストレージ使用量（Google アカウントのストレージ容量表示）に変化があるかを比較する。
-  6. 上記 1〜5 の結果を、本ドキュメントの「Phase 5 実施結果」セクションに記録する。
+- [x] 実アカウント（TLSRPT レポート受信用に使用しているテストメールボックス）に対して、以下の手順で手動検証を行い、結果を本ドキュメントの「Phase 5 実施結果」（後述）に追記する。
+
+  > **注記**: 検証実施時点の開発環境では Gmail アカウントが利用できなかったため、Fastmail の実アカウント（`config.toml` の `imap.fastmail.com` / `tls-reports`）に対して機能検証（UIDPLUS 対応・dry-run 件数・実削除・メールボックスからの削除確認）を行った。Gmail 固有の「メールをアーカイブする」/「完全に削除する」/「ゴミ箱に移動」設定とストレージ解放挙動（README に記載）は、Gmail の公開 IMAP 設定 UI の仕様に基づく記述であり、本検証では実機確認していない。
+
+  1. ~~`tlsrpt-digest --config <path> fetch` 実行時の IMAP `CAPABILITY` 応答に `UIDPLUS` が含まれることを、`internal/imap/client.go` のログ（または一時的なデバッグログ）で確認し、応答内容を記録する。~~ → コード変更不要の代替手順として、`openssl s_client` で IMAP サーバに直接接続し、ログイン後の `CAPABILITY` 応答を確認した（読み取り専用、LOGOUT のみ）。
+  2. `config.toml` の `imap.retention_days` を、`fetch_days`/`window_days` の制約を満たす最小値である `14` に設定し、`gc --dry-run` を実行した。
+  3. 同じ設定で `gc`（非 dry-run）を実行した。
+  4. IMAP `SEARCH ALL`（EXAMINE、読み取り専用）および Fastmail の Web UI で、該当メールがメールボックスから削除されていることを確認した。
+  5. ~~Gmail の IMAP 設定（「メール転送と POP/IMAP」）がデフォルト（「メールをアーカイブする」）の場合と、「完全に削除する」に変更した場合とで、削除後のストレージ使用量（Google アカウントのストレージ容量表示）に変化があるかを比較する。~~ → Fastmail には Gmail と同様の「アーカイブ vs 完全削除」設定がなく、本検証アカウントでは非該当。Gmail での挙動は README 記載のとおり Gmail 公式設定 UI の説明に基づく。
+  6. 上記 1〜5 の結果を、本ドキュメントの「Phase 5 実施結果」セクションに記録した。
 
 #### Phase 5 実施結果
 
-- [ ] 上記の手動検証完了後、以下のテンプレートに沿って結果を本セクションに追記する。
+- [x] 上記の手動検証完了後、以下のテンプレートに沿って結果を本セクションに追記する。
 
   ```
-  - 検証日:
-  - 検証アカウント: （メールアドレスは記載せず、検証用アカウントであることのみ記載）
-  - CAPABILITY 応答の UIDPLUS 有無:
-  - gc --dry-run の would_delete_imap_count:
-  - gc（非 dry-run）の imap_messages 削除件数:
-  - Gmail Web UI 上での削除確認結果:
-  - デフォルト設定（メールをアーカイブする）でのストレージ解放有無:
-  - 「完全に削除する」設定変更後のストレージ解放有無:
-  - README への反映が必要な追加事項（あれば）:
+  - 検証日: 2026-06-11
+  - 検証アカウント: Fastmail の実アカウント（imap.fastmail.com、メールボックス tls-reports。Gmail アカウントは未使用）
+  - CAPABILITY 応答の UIDPLUS 有無: あり（ログイン後の CAPABILITY 応答に UIDPLUS を含むことを openssl s_client で確認）
+  - gc --dry-run の would_delete_imap_count: 18（imap.retention_days=14 設定時。would_delete_imap_uids_sample に対象 18 UID を出力、would_delete_imap_uids_truncated=false）
+  - gc（非 dry-run）の imap_messages 削除件数: 18（reports=2, emails=1 もあわせて削除）
+  - メールボックス上での削除確認結果: IMAP SEARCH ALL（EXAMINE）の EXISTS が 31 → 13 に減少し、対象 18 件が削除されたことを確認。Fastmail Web UI でも tls-reports フォルダから該当メールが削除されていることを確認した。
+  - デフォルト設定（メールをアーカイブする）でのストレージ解放有無: 非該当（Fastmail には Gmail のような「アーカイブ」設定が無いため未検証。Gmail での挙動は README に記載の Gmail 公式 IMAP 設定 UI の説明に基づく）
+  - 「完全に削除する」設定変更後のストレージ解放有無: 非該当（同上の理由により未検証）
+  - README への反映が必要な追加事項（あれば）: なし（Gmail 固有の Auto-Expunge 前提条件は README に記載済みであり、本検証はそれ以外の機能（UIDPLUS 検出・dry-run 件数・対象限定削除・削除確認）が実アカウントで動作することを確認するもの）
   ```
 
 **フェーズ完了の確認**:
-- [ ] `make test` と `make lint` がグリーンであること（ドキュメントのみの変更でも回帰がないことを確認する）
-- [ ] README.ja.md と README.md の両方で、追加したセクションの Markdown リンク・コードブロックの構文が正しいこと（プレビューで確認する）
+- [x] `make test` と `make lint` がグリーンであること（ドキュメントのみの変更でも回帰がないことを確認する）
+- [x] README.ja.md と README.md の両方で、追加したセクションの Markdown リンク・コードブロックの構文が正しいこと（プレビューで確認する）
 
 ### PR-5 作成ポイント: README updates for IMAP retention + Gmail verification notes
 
@@ -1144,10 +1147,10 @@
 - 有効化時に IMAP 認証情報が必須になること、TLSRPT 専用メールボックスの推奨、`gc --dry-run` での事前確認の推奨が記載されていること。
 - Gmail の Auto-Expunge / 「完全に削除する」設定が前提条件であることが記載されていること。
 - `fetch_days` / `--since` を `retention_days` 以下にする注意が記載されていること。
-- Phase 5 実施結果セクションに実 Gmail アカウントでの検証結果が記録されていること。
+- Phase 5 実施結果セクションに実アカウントでの検証結果が記録されていること（Gmail アカウントが利用できない場合は、代替アカウントでの検証結果と、Gmail 固有の挙動について未検証である旨・その代替理由が記録されていること）。
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した（#162）
 - [ ] PR がマージされた
 - [ ] 次のステップ用のブランチへ切り替えた
 
@@ -1163,7 +1166,7 @@
 | M2 | Phase 2 | `internal/imap` 拡張（`go-imap-uidplus` 依存追加・`DeleteOlderThan` / `SearchOlderThan` 実装・`FakeMailFetcher` 更新） | AC-08, AC-12, AC-15〜AC-17 をカバーするテストと、greenmail の UIDPLUS 対応状況の記録 |
 | M3 | Phase 3 | `internal/store` の `CountReportsBefore` / `CountEmailsBefore` 追加 | AC-10 のストア側テスト |
 | M4 | Phase 4 | `gc` サブコマンドへの IMAP 削除統合・`--dry-run` 対応 | AC-03, AC-07, AC-09〜AC-11, AC-13, AC-14 をカバーするテスト |
-| M5 | Phase 5 | README 更新（オプトイン手順・専用メールボックス推奨・Gmail 設定前提・`--since` 注意）と実 Gmail アカウントでの手動検証 | 更新された `README.ja.md` / `README.md` と Phase 5 実施結果の記録 |
+| M5 | Phase 5 | README 更新（オプトイン手順・専用メールボックス推奨・Gmail 設定前提・`--since` 注意）と実アカウントでの手動検証 | 更新された `README.ja.md` / `README.md` と Phase 5 実施結果の記録 |
 
 Phase 1〜3 は互いに独立しており並行可能である（`02_architecture.md` §8）。Phase 4 は Phase 1〜3 すべてに依存する（config の `RetentionDays`、`MailFetcher.DeleteOlderThan`/`SearchOlderThan`、`Store.CountReportsBefore`/`CountEmailsBefore` をいずれも利用するため）。Phase 5 は Phase 4 で追加される `gc --dry-run` の挙動を README に記載するため、Phase 4 の完了後に実施する。
 

@@ -120,6 +120,16 @@ tls_ca_cert = ""
 # Maximum message size per email in bytes (default: 1048576 = 1 MiB; set to 0 for unlimited)
 max_message_bytes = 1048576
 
+# Retention period in days for emails on the IMAP mailbox (default: 0 = disabled)
+# When set to a value greater than 0, gc deletes IMAP messages whose
+# INTERNALDATE (with the time truncated to the date) is older than
+# (today's UTC midnight - retention_days days).
+# This is an irreversible operation.
+# When enabling this, set it to a value greater than or equal to both
+# imap.fetch_days and summary.window_days (otherwise startup fails with
+# a configuration error).
+retention_days = 0
+
 [notify.slack]
 # Allowed hostname for Slack webhook URLs (must match the webhook URL hostname)
 # Used as a security check to prevent notifications being sent to wrong destinations.
@@ -142,6 +152,38 @@ max_email_age_days = 30
 # Lookback window in days for the summary subcommand (default: 7)
 window_days = 7
 ```
+
+### About IMAP Mailbox Retention (`imap.retention_days`)
+
+#### Basic Behavior (Opt-In)
+
+The default for `retention_days` is `0` (disabled). Deletion of emails on the IMAP mailbox is enabled only when the user explicitly sets a positive value (opt-in). Here, "the IMAP mailbox" refers to the mailbox specified by `imap.mailbox`; `gc` does not delete emails in any other mailbox.
+
+Enabling this (setting `retention_days > 0`) makes IMAP credentials (`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`) required for `gc` (without `--dry-run`) to run. `gc --dry-run` can run without credentials; in that case it logs a warning and skips the IMAP deletion-candidate preview. As long as `retention_days = 0` (the default), `gc` does not connect to IMAP and credentials are not required.
+
+#### Prerequisites
+
+If the IMAP server does not support UIDPLUS (RFC 4315), `gc` does not delete any IMAP messages (it logs a "server does not support UIDPLUS; skipping delete" warning and the deletion count is 0). Even with `retention_days > 0`, mailbox accumulation will not be curbed if the server does not support UIDPLUS, so confirm in advance that your IMAP server supports UIDPLUS.
+
+If you use Gmail, check the IMAP settings (the "Forwarding and POP/IMAP" tab) for the behavior when a message is marked `\Deleted` and EXPUNGEd. If it remains the default "Archive the message", UID EXPUNGE will only remove the label (moving it to All Mail) and storage will not be freed. To actually curb accumulation on the server, you need to change this to "Immediately delete the message forever" or "Move the message to the Trash" (plus enabling Auto-Expunge for messages in Trash).
+
+#### Checking Before Deletion (`gc --dry-run`)
+
+Deleting emails from IMAP is an irreversible operation, and there is no filtering to limit deletion targets to TLSRPT reports. Therefore, it is recommended to use a mailbox dedicated to receiving TLSRPT reports.
+
+`gc --dry-run` only checks IMAP deletion candidates when `imap.retention_days` is greater than 0. If you run `gc --dry-run` while `retention_days = 0`, it will show `would_delete_imap_count=0`, but this does not mean there are no deletion candidates — it means the check itself was not performed.
+
+Therefore, when enabling this, follow these steps:
+
+1. Set the desired positive value for `imap.retention_days`.
+2. Run `gc --dry-run` to check the number of deletion candidates.
+3. After reviewing the result, run `gc` (without `--dry-run`) for the first time.
+
+#### Relationship Between Settings
+
+Set `imap.fetch_days` (and the lookback window specified by `fetch --since`) to be less than or equal to `imap.retention_days`. Emails older than that will be deleted from IMAP by `gc`, and will no longer be retrievable by `fetch` afterwards.
+
+There is no command-line flag to override `imap.retention_days` (`gc --before` / `--max-email-age` only override the local store retention periods and do not affect the IMAP deletion cutoff). The IMAP retention period can only be changed in the configuration file.
 
 ---
 
@@ -202,11 +244,17 @@ tlsrpt-digest --config path summary [--dry-run] [--window duration]
 
 ### gc
 
-Deletes data older than the configured retention period.
+Deletes data older than the configured retention period. If `imap.retention_days` is greater than `0`, also deletes old emails on the IMAP mailbox (an irreversible operation; for details, see [About IMAP Mailbox Retention](#about-imap-mailbox-retention-imapretention_days)).
 
 ```bash
-tlsrpt-digest --config path gc [--before duration] [--max-email-age duration]
+tlsrpt-digest --config path gc [--dry-run] [--before duration] [--max-email-age duration]
 ```
+
+| Option | Description |
+|---|---|
+| `--dry-run` | Performs no deletion on either the local store or the IMAP mailbox, and logs the number of deletion targets (for IMAP, including a sample of target UIDs) |
+| `--before duration` | Overrides the retention period for report JSON data (default: config's `store.retention_days`) |
+| `--max-email-age duration` | Overrides the retention period for `.eml` files (default: config's `store.max_email_age_days`) |
 
 ### reprocess
 

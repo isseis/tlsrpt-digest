@@ -120,6 +120,13 @@ tls_ca_cert = ""
 # 1 通あたりの最大メッセージサイズ（バイト）（省略時: 1048576 = 1 MiB、0 を指定すると制限なし）
 max_message_bytes = 1048576
 
+# IMAP メールボックス上のメール保持期間（日数）（省略時: 0 = 無効）
+# 0 より大きい値を設定すると、gc 実行時に INTERNALDATE（時刻を切り捨てた日付）が
+# (本日の UTC 0 時 - retention_days 日) より古い IMAP メールを削除する（不可逆操作）。
+# 有効化する場合は、imap.fetch_days と summary.window_days の
+# いずれと比べても大きいか等しい値にすること（設定エラーで起動を拒否する）。
+retention_days = 0
+
 [notify.slack]
 # Slack Webhook URL の許可ホスト名（Webhook URL のホスト名と一致させること）
 # 誤った送信先への通知を防ぐためのセキュリティ検証。スキームやポート番号は含めないこと
@@ -141,6 +148,38 @@ max_email_age_days = 30
 # summary コマンドが対象とする期間（日数）（省略時: 7）
 window_days = 7
 ```
+
+### IMAP メールボックスの保持期間（`imap.retention_days`）について
+
+#### 基本動作（オプトイン）
+
+`retention_days` のデフォルトは `0`（無効）です。利用者が明示的に正の値を設定したときのみ、IMAP メールボックス上のメール削除が有効化されます（オプトイン）。ここでの「IMAP メールボックス」は `imap.mailbox` で指定したメールボックスを指し、`gc` はそれ以外のメールボックスのメールを削除しません。
+
+有効化する（`retention_days > 0` にする）と、（dry-run なしの）`gc` の実行に IMAP 認証情報（`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`）が必須になります。`gc --dry-run` は認証情報が無くても実行でき、その場合は警告ログを出力したうえで IMAP 上の削除候補確認をスキップします。`retention_days = 0`（デフォルト）のままであれば、`gc` は IMAP に接続せず、認証情報も不要です。
+
+#### 前提条件
+
+IMAP サーバーが UIDPLUS（RFC 4315）に対応していない場合、`gc` は IMAP メールを削除しません（`server does not support UIDPLUS; skipping delete` という警告ログを出力し、削除件数は 0 になります）。`retention_days > 0` を設定していても、サーバーが UIDPLUS に対応していなければメールボックスの蓄積は抑止されないため、事前に IMAP サーバーが UIDPLUS に対応していることを確認してください。
+
+Gmail を使用する場合は、IMAP 設定（「メール転送と POP/IMAP」タブ）で、メッセージに `\Deleted` が付与され EXPUNGE されたときの挙動を確認してください。デフォルトの「メールをアーカイブする」のままだと、UID EXPUNGE はラベル除去（「すべてのメール」への移動）となりストレージは解放されません。サーバー上の蓄積を実際に抑止するには、「メールを完全に削除する」または「ゴミ箱に移動する」（+ ゴミ箱メールの自動完全削除）に変更する必要があります。
+
+#### 削除前の確認（`gc --dry-run`）
+
+IMAP からのメール削除は不可逆操作であり、削除対象を TLSRPT レポートに限定する絞り込みは行われません。そのため、TLSRPT レポート受信専用のメールボックスを使用することを推奨します。
+
+`gc --dry-run` は `imap.retention_days` が 0 より大きい場合のみ IMAP 上の削除候補を確認します。`retention_days = 0` のまま `gc --dry-run` を実行すると `would_delete_imap_count=0` と表示されますが、これは削除候補が存在しないという意味ではなく、確認自体が行われていないことを意味します。
+
+そのため、有効化する際は次の手順で進めてください。
+
+1. 希望する正の値を `imap.retention_days` に設定する。
+2. `gc --dry-run` を実行して削除候補件数を確認する。
+3. 結果を確認したうえで、（dry-run なしの）`gc` を初めて実行する。
+
+#### 設定値の関係
+
+`imap.fetch_days`（および `fetch --since` で指定する取得期間）は `imap.retention_days` 以下にしてください。それより古いメールは `gc` によって IMAP 上から削除され、以後 `fetch` で取得できなくなります。
+
+`imap.retention_days` を上書きするコマンドラインフラグはありません（`gc --before` / `--max-email-age` はローカルストアの保持期間のみを上書きし、IMAP 削除のカットオフには影響しません）。IMAP の保持期間は設定ファイルでのみ変更できます。
 
 ---
 
@@ -201,11 +240,17 @@ tlsrpt-digest --config path summary [--dry-run] [--window duration]
 
 ### gc
 
-保持期間を超えた古いデータを削除します。
+保持期間を超えた古いデータを削除します。`imap.retention_days` が `0` より大きい場合は、IMAP メールボックス上の古いメールも削除します（不可逆操作。詳細は[IMAP メールボックスの保持期間について](#imap-メールボックスの保持期間imapretention_daysについて)を参照）。
 
 ```bash
-tlsrpt-digest --config path gc [--before duration] [--max-email-age duration]
+tlsrpt-digest --config path gc [--dry-run] [--before duration] [--max-email-age duration]
 ```
+
+| オプション | 説明 |
+|---|---|
+| `--dry-run` | ローカルストア・IMAP メールボックスとも削除を行わず、削除対象の件数（IMAP は対象 UID のサンプルも含む）をログ出力する |
+| `--before duration` | レポート JSON データの保持期間の上書き（デフォルト: config の `store.retention_days`） |
+| `--max-email-age duration` | `.eml` ファイルの保持期間の上書き（デフォルト: config の `store.max_email_age_days`） |
 
 ### reprocess
 
