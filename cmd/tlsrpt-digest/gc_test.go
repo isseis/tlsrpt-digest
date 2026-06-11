@@ -539,6 +539,7 @@ func TestGC_DryRun_NoDeletions(t *testing.T) {
 	assert.Equal(t, 0, st.DeleteEmailsBeforeCallCount)
 	assert.Contains(t, buf.String(), "would_delete_reports=1")
 	assert.Contains(t, buf.String(), "would_delete_emails=1")
+	assert.Contains(t, buf.String(), "would_delete_imap_count=0")
 }
 
 func TestGC_DryRun_IMAPRetentionEnabled_PreviewsCandidates(t *testing.T) {

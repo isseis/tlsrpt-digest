@@ -148,7 +148,11 @@ func (r *gcRunner) runDryRun(ctx context.Context, boot *BootContext, mailbox str
 	// IMAP search below fails.
 	logGCDryRunLocalSummary(reportCutoff, emailCutoff, reportCount, emailCount)
 
-	if imapEnabled {
+	if !imapEnabled {
+		// imap.retention_days = 0: no IMAP connection, but still log the
+		// IMAP candidate count (0) for consistency with the enabled case.
+		logGCDryRunIMAPSummary(nil)
+	} else {
 		username, password := r.credentials()
 		if username == "" || string(password) == "" {
 			// Missing credentials are only an error for non-dry-run deletion;
