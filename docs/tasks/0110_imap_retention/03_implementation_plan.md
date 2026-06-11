@@ -1149,7 +1149,7 @@
 - `fetch_days` / `--since` を `retention_days` 以下にする注意が記載されていること。
 - Phase 5 実施結果セクションに実 Gmail アカウントでの検証結果が記録されていること。
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のステップ用のブランチへ切り替えた
