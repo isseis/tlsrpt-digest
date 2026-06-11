@@ -853,7 +853,7 @@
 
   // runDryRun performs the dry-run gc flow: count local deletion candidates and,
   // if IMAP retention is enabled, preview IMAP deletion candidates via SearchOlderThan.
-  // No records, files, or IMAP messages are deleted (AC-10).
+  // No records, files, or IMAP messages are deleted.
   func (r *gcRunner) runDryRun(ctx context.Context, boot *BootContext, mailbox string, reportCutoff, emailCutoff, imapCutoff time.Time, imapEnabled bool) (int, error) {
       reportCount, err := boot.Store.CountReportsBefore(reportCutoff)
       if err != nil {
@@ -867,22 +867,26 @@
           return exitError, fmt.Errorf("gc: count emails: %w", err)
       }
 
-      var imapUIDs []uint32
+      // Log local counts before the IMAP preview so they are not lost if the
+      // IMAP search below fails.
+      logGCDryRunLocalSummary(reportCutoff, emailCutoff, reportCount, emailCount)
+
       if imapEnabled {
           username, password := r.credentials()
           if username == "" || string(password) == "" {
-              // AC-11 applies only to non-dry-run; in dry-run, missing credentials
-              // only disable the IMAP preview.
+              // Missing credentials are only an error for non-dry-run deletion;
+              // in dry-run, they only disable the IMAP preview.
               slog.Warn("gc: dry-run: imap credentials missing; skipping imap deletion preview", "mailbox", mailbox)
+              logGCDryRunIMAPSummary(nil)
           } else {
-              imapUIDs, err = r.searchIMAPOlderThan(ctx, boot, mailbox, IMAPCredentials{Username: username, Password: password}, imapCutoff)
+              imapUIDs, err := r.searchIMAPOlderThan(ctx, boot, mailbox, IMAPCredentials{Username: username, Password: password}, imapCutoff)
               if err != nil {
                   return exitError, err
               }
+              logGCDryRunIMAPSummary(imapUIDs)
           }
       }
 
-      logGCDryRunSummary(reportCutoff, emailCutoff, reportCount, emailCount, imapUIDs)
       if err := boot.Notifier.Flush(ctx); err != nil {
           slog.Warn("gc: dry-run flush notifications", "error", err)
       }
@@ -890,7 +894,7 @@
   }
 
   // searchIMAPOlderThan connects to IMAP and previews messages older than cutoff via
-  // SearchOlderThan (read-only, AC-10).
+  // SearchOlderThan (read-only).
   func (r *gcRunner) searchIMAPOlderThan(ctx context.Context, boot *BootContext, mailbox string, creds IMAPCredentials, cutoff time.Time) ([]uint32, error) {
       fetcher, err := r.newMailFetcher(buildIMAPConfig(boot.Config, creds))
       if err != nil {
@@ -911,21 +915,28 @@
       return uids, nil
   }
 
-  // logGCDryRunSummary logs what would have been deleted in a real (non-dry) run,
-  // including the cutoff times used for each candidate set (architecture §3.6).
-  // imapUIDs is nil when IMAP retention is disabled or credentials were unavailable.
-  func logGCDryRunSummary(reportCutoff, emailCutoff time.Time, reportCount, emailCount int, imapUIDs []uint32) {
+  // logGCDryRunLocalSummary logs what local report records and .eml files would
+  // have been deleted in a real (non-dry) run, including the cutoff times used
+  // for each candidate set. It is logged before any IMAP preview so the local
+  // counts are not lost if the IMAP step fails (architecture §3.6).
+  func logGCDryRunLocalSummary(reportCutoff, emailCutoff time.Time, reportCount, emailCount int) {
+      slog.Info("gc: dry-run: local deletion candidates; no records or files deleted",
+          "would_delete_reports", reportCount,
+          "report_cutoff", reportCutoff,
+          "would_delete_emails", emailCount,
+          "email_cutoff", emailCutoff)
+  }
+
+  // logGCDryRunIMAPSummary logs the IMAP messages that would have been deleted
+  // in a real (non-dry) run. imapUIDs is nil when credentials were unavailable.
+  func logGCDryRunIMAPSummary(imapUIDs []uint32) {
       sample := imapUIDs
       truncated := false
       if len(sample) > dryRunUIDSampleMax {
           sample = sample[:dryRunUIDSampleMax]
           truncated = true
       }
-      slog.Info("gc: dry-run complete; no records deleted, no IMAP messages deleted",
-          "would_delete_reports", reportCount,
-          "report_cutoff", reportCutoff,
-          "would_delete_emails", emailCount,
-          "email_cutoff", emailCutoff,
+      slog.Info("gc: dry-run: imap deletion candidates; no messages deleted",
           "would_delete_imap_count", len(imapUIDs),
           "would_delete_imap_uids_sample", sample,
           "would_delete_imap_uids_truncated", truncated)
