@@ -120,6 +120,15 @@ tls_ca_cert = ""
 # Maximum message size per email in bytes (default: 1048576 = 1 MiB; set to 0 for unlimited)
 max_message_bytes = 1048576
 
+# Retention period in days for emails on the IMAP mailbox (default: 0 = disabled)
+# When set to a value greater than 0, gc deletes IMAP messages whose
+# INTERNALDATE (date-truncated) is older than (today - retention_days).
+# This is an irreversible operation.
+# When enabling this, set it to a value greater than or equal to both
+# imap.fetch_days and summary.window_days (otherwise startup fails with
+# a configuration error).
+retention_days = 0
+
 [notify.slack]
 # Allowed hostname for Slack webhook URLs (must match the webhook URL hostname)
 # Used as a security check to prevent notifications being sent to wrong destinations.
@@ -142,6 +151,14 @@ max_email_age_days = 30
 # Lookback window in days for the summary subcommand (default: 7)
 window_days = 7
 ```
+
+### About IMAP Mailbox Retention (`imap.retention_days`)
+
+- The default for `retention_days` is `0` (disabled). Deletion of emails on the IMAP mailbox is enabled only when the user explicitly sets a positive value (opt-in).
+- Enabling this (setting `retention_days > 0`) makes IMAP credentials (`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`) required for `gc` to run. As long as `retention_days = 0` (the default), `gc` does not connect to IMAP and credentials are not required.
+- Deleting emails from IMAP is an irreversible operation, and there is no filtering to limit deletion targets to TLSRPT reports. Therefore, it is recommended to use a mailbox dedicated to receiving TLSRPT reports. It is also recommended to check the number of deletion candidates with `gc --dry-run` before enabling this.
+- Prerequisite when using Gmail: In Gmail's IMAP settings (the "Forwarding and POP/IMAP" tab), if the behavior when a message is marked `\Deleted` and EXPUNGEd remains the default "Archive the message", UID EXPUNGE will only remove the label (moving it to All Mail) and storage will not be freed. To actually curb accumulation on the server, you need to change this to "Immediately delete the message forever" or "Move the message to the Trash" (plus enabling Auto-Expunge for messages in Trash).
+- Set `imap.fetch_days` (and the lookback window specified by `fetch --since`) to be less than or equal to `imap.retention_days`. Emails older than that will be deleted from IMAP by `gc`, and will no longer be retrievable by `fetch` afterwards.
 
 ---
 
@@ -202,11 +219,17 @@ tlsrpt-digest --config path summary [--dry-run] [--window duration]
 
 ### gc
 
-Deletes data older than the configured retention period.
+Deletes data older than the configured retention period. If `imap.retention_days` is configured, also deletes old emails on the IMAP mailbox (an irreversible operation; for details, see [About IMAP Mailbox Retention](#about-imap-mailbox-retention-imapretention_days)).
 
 ```bash
-tlsrpt-digest --config path gc [--before duration] [--max-email-age duration]
+tlsrpt-digest --config path gc [--dry-run] [--before duration] [--max-email-age duration]
 ```
+
+| Option | Description |
+|---|---|
+| `--dry-run` | Performs no deletion on either the local store or the IMAP mailbox, and logs the number of deletion targets (for IMAP, including a sample of target UIDs) |
+| `--before duration` | Overrides the retention period for report JSON data (default: config's `store.retention_days`) |
+| `--max-email-age duration` | Overrides the retention period for `.eml` files (default: config's `store.max_email_age_days`) |
 
 ### reprocess
 
