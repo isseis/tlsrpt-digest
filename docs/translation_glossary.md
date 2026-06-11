@@ -191,7 +191,7 @@
 | 識別子 | identifier | タスク ID などの一意の識別子 |
 | 冪等 | idempotent | |
 | 冪等性 | idempotence | |
-| 完全に削除する | "Immediately delete the message forever" | Gmail UI 表記。「ゴミ箱に移動」設定への変更後に、サーバー上のストレージを実際に解放する挙動 |
+| メールを完全に削除する | "Immediately delete the message forever" | Gmail UI 表記。「ゴミ箱に移動する」設定への変更後に、サーバー上のストレージを実際に解放する挙動 |
 | インジェクション | injection | コマンドインジェクションの文脈では "injection" |
 | 整合性 | integrity | |
 | インターフェース | interface | |
@@ -258,7 +258,7 @@
 | Mock server | mock server | モックサーバー |
 | 監視 | monitoring | |
 | モード | mode | |
-| ゴミ箱に移動 | "Move the message to the Trash" | Gmail UI 表記。`\Deleted` + EXPUNGE 時の挙動を「メールをアーカイブする」から変更する選択肢の一つ |
+| ゴミ箱に移動する | "Move the message to the Trash" | Gmail UI 表記。`\Deleted` + EXPUNGE 時の挙動を「メールをアーカイブする」から変更する選択肢の一つ |
 
 ### N
 

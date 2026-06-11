@@ -122,7 +122,7 @@ max_message_bytes = 1048576
 
 # Retention period in days for emails on the IMAP mailbox (default: 0 = disabled)
 # When set to a value greater than 0, gc deletes IMAP messages whose
-# INTERNALDATE (date-truncated) is older than (today - retention_days).
+# INTERNALDATE (with the time truncated to the date) is older than (today - retention_days).
 # This is an irreversible operation.
 # When enabling this, set it to a value greater than or equal to both
 # imap.fetch_days and summary.window_days (otherwise startup fails with
