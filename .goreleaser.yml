@@ -18,12 +18,10 @@ builds:
 
 archives:
   - id: tlsrpt-digest
-    formats: [tar.gz]
     files:
       - LICENSE
       - README.md
       - README.ja.md
-      - config.toml
 
 checksum:
   name_template: checksums.txt
