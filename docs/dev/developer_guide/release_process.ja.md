@@ -15,7 +15,7 @@ flowchart TD
     E["GoReleaser 実行<br>・linux/amd64 バイナリビルド<br>・linux/arm64 バイナリビルド<br>・tar.gz アーカイブ作成<br>・checksums.txt 生成"]
     F["GitHub Release 作成<br>・バイナリアーカイブ添付<br>・changelog 自動生成"]
 
-    A --> B --> C --> D --> D --> E --> F
+    A --> B --> C --> D --> E --> F
 ```
 
 ---
