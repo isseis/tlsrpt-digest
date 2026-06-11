@@ -57,7 +57,10 @@ func (r *gcRunner) Run(ctx context.Context, boot *BootContext) (int, error) {
 		imapCutoff = Duration{Days: boot.Config.IMAP.RetentionDays}.Cutoff(now)
 	}
 
-	// Step 2: IMAP credentials are required only for non-dry-run IMAP deletion.
+	// Step 2: Treat missing IMAP credentials as fatal only when this run will
+	// actually delete IMAP messages (imapEnabled && non-dry-run). In dry-run,
+	// runDryRun fetches credentials separately and only warns if they are
+	// missing, since no deletion can happen anyway.
 	var creds IMAPCredentials
 	if imapEnabled && !boot.Options.DryRun {
 		username, password := r.credentials()
