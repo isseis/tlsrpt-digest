@@ -6,12 +6,12 @@
 
 ## 概要
 
-1. main ブランチの最新コミットを確認する
-2. バージョンタグを作成する（`git tag -a vX.Y.Z HEAD`）
-3. タグを push する（`git push origin vX.Y.Z`）
-4. GitHub Actions の Release ワークフローが起動する
-5. GoReleaser が linux/amd64・linux/arm64 バイナリをビルドし、tar.gz アーカイブと checksums.txt を生成する
-6. GitHub Release が作成され、アーカイブと changelog が添付される
+1. main ブランチの最新コミットを確認する。
+2. バージョンタグを作成する（`git tag -a vX.Y.Z HEAD`）。
+3. タグを push する（`git push origin vX.Y.Z`）。
+4. GitHub Actions の Release ワークフローが起動する。
+5. GoReleaser が linux/amd64・linux/arm64 バイナリをビルドし、tar.gz アーカイブと checksums.txt を生成する。
+6. GitHub Release が作成され、アーカイブと changelog が添付される。
 
 ---
 
@@ -96,12 +96,14 @@ GoReleaser は前回タグから今回タグまでの git log をもとに chang
 
 ## タグを誤って push した場合
 
-ビルドが開始する前であれば、タグを削除してリリースをキャンセルできます。
+タグを削除し、ワークフローが実行中であれば GitHub Actions のページからキャンセルしてください。
 
 ```bash
 git tag -d vX.Y.Z
 git push origin :refs/tags/vX.Y.Z
 ```
+
+ワークフローのキャンセルは [Actions タブ](https://github.com/isseis/tlsrpt-digest/actions) で対象の実行を選択し、「Cancel workflow」を実行します。
 
 GitHub Release が作成済みの場合は、GitHub の Releases ページから手動で削除してください。
 
