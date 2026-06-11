@@ -25,7 +25,9 @@
 | アプリケーション | application | |
 | 引数 | argument | コマンドの引数 |
 | 配列 | array | |
+| メールをアーカイブする | "Archive the message" | Gmail UI 表記。`\Deleted` + EXPUNGE 時の Gmail のデフォルト挙動（ラベル除去のみでストレージは解放されない） |
 | 代替案 | alternative | |
+| Auto-Expunge | Auto-Expunge | IMAP サーバが `\Deleted` 付与済みメッセージを自動的に EXPUNGE する挙動 |
 | 型アサーション | type assertion | Go言語の文脈 |
 
 ### B
@@ -189,6 +191,7 @@
 | 識別子 | identifier | タスク ID などの一意の識別子 |
 | 冪等 | idempotent | |
 | 冪等性 | idempotence | |
+| 完全に削除する | "Immediately delete the message forever" | Gmail UI 表記。「ゴミ箱に移動」設定への変更後に、サーバー上のストレージを実際に解放する挙動 |
 | インジェクション | injection | コマンドインジェクションの文脈では "injection" |
 | 整合性 | integrity | |
 | インターフェース | interface | |
@@ -197,6 +200,7 @@
 | インポート | import | |
 | 影響 | impact | |
 | 整数 | integer | |
+| 不可逆 | irreversible | リモート削除など取り消せない操作の文脈 |
 | 不変条件 | invariant | |
 
 ### K
@@ -254,6 +258,7 @@
 | Mock server | mock server | モックサーバー |
 | 監視 | monitoring | |
 | モード | mode | |
+| ゴミ箱に移動 | "Move the message to the Trash" | Gmail UI 表記。`\Deleted` + EXPUNGE 時の挙動を「メールをアーカイブする」から変更する選択肢の一つ |
 
 ### N
 
@@ -270,6 +275,7 @@
 |--------|---------|------|
 | 操作 | operation | |
 | オプション | optional | |
+| オプトイン | opt-in | デフォルト無効・利用者が明示的に有効化する設計の文脈 |
 | 残留（修飾語） | leftover / residual | 名詞を修飾する場合（「残留マニフェスト」→ "leftover manifest"） |
 | 残留（ステージング文脈） | orphaned | クリーンアップされずに残ったステージングファイル・ディレクトリ |
 | 残留物 | residual / leftover | 述語名詞として使う場合（「内容は残留物」→ "contents are leftover residue"） |
@@ -346,6 +352,7 @@
 | 解決する | resolve / resolving | |
 | 解決策 | solution | |
 | リソース | resource | |
+| 保持期間 | retention period | メールやレポートデータをサーバー・ストア上に保持する期間の文脈 |
 | 戻り値 | return value | |
 | 責務 | responsibility | |
 | 責務分担 | responsibility split | コンポーネント間の責務の切り分け |
