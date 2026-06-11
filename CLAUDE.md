@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - [Package Reference](docs/dev/developer_guide/package_reference.md) - Detailed package structure
 - [Task Identification](docs/dev/developer_guide/task_identification.md) - How slash commands identify the target task directory
 - [Robustness Principle](docs/dev/developer_guide/robustness_principle.md) - Be conservative in output, liberal in input (Postel's Law)
+- Release Process: [JA](docs/dev/developer_guide/release_process.ja.md) - How to tag and publish a GitHub Release
 
 **Task Templates:**
 - [docs/tasks/0000_template/](docs/tasks/0000_template/) — Template files for new task directories
