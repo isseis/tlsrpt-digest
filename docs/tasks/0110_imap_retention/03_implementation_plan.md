@@ -284,7 +284,7 @@
   - 確認結果: `func NewClient(c *client.Client) *Client`、`func (c *Client) UidExpunge(seqSet *imap.SeqSet, ch chan uint32) error`（`Capability = "UIDPLUS"` も定義済み）。想定シグネチャ（引数1個）と異なり `ch chan uint32` を取るため、`uidplusSession.UidExpunge` 内で `nil` を渡すラッパーとした。
 - [x] 以降のタスクは次のシグネチャを想定して記述している。`go doc` の結果がこれと異なる場合（API 自体が想定と大きく異なる場合を含む）、`internal/imap/client.go` の `uidplusSession` 型定義と `dialTLS` の実装を実際のシグネチャ、または§1の `go.mod` フォールバックに合わせて修正する。
   - `func uidplus.NewClient(c *imapclient.Client) *uidplus.Client`
-  - `func (c *uidplus.Client) UidExpunge(seqset *goimap.SeqSet) error`
+  - `func (c *uidplus.Client) UidExpunge(seqSet *goimap.SeqSet, ch chan uint32) error`（実際のシグネチャ。上記「依存関係の追加と API 確認」で確認済み）
   - 上記の通り `UidExpunge` の実シグネチャに合わせて `uidplusSession.UidExpunge(seqset) error { return s.uidplus.UidExpunge(seqset, nil) }` とした。`uidplus.Capability`（`"UIDPLUS"`）を `DeleteOlderThan` の capability 照会に再利用し、独自定数は追加していない。
 - [x] `go doc github.com/emersion/go-imap.DeletedFlag` で `goimap.DeletedFlag`（`"\Deleted"`）が go-imap v1.2.1 の `imap` パッケージに定義済みであることを確認する（`SeenFlag` と同じ定数グループ、`message.go`、確認済み）。
 
