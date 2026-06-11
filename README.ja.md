@@ -122,7 +122,7 @@ max_message_bytes = 1048576
 
 # IMAP メールボックス上のメール保持期間（日数）（省略時: 0 = 無効）
 # 0 より大きい値を設定すると、gc 実行時に INTERNALDATE（時刻を切り捨てた日付）が
-# (今日 - retention_days) より古い IMAP メールを削除する（不可逆操作）。
+# (本日の UTC 0 時 - retention_days 日) より古い IMAP メールを削除する（不可逆操作）。
 # 有効化する場合は、imap.fetch_days と summary.window_days の
 # いずれと比べても大きいか等しい値にすること（設定エラーで起動を拒否する）。
 retention_days = 0
@@ -155,7 +155,7 @@ window_days = 7
 
 `retention_days` のデフォルトは `0`（無効）です。利用者が明示的に正の値を設定したときのみ、IMAP メールボックス上のメール削除が有効化されます（オプトイン）。ここでの「IMAP メールボックス」は `imap.mailbox` で指定したメールボックスを指し、`gc` はそれ以外のメールボックスのメールを削除しません。
 
-有効化する（`retention_days > 0` にする）と、`gc` の実行に IMAP 認証情報（`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`）が必須になります。`retention_days = 0`（デフォルト）のままであれば、`gc` は IMAP に接続せず、認証情報も不要です。
+有効化する（`retention_days > 0` にする）と、（dry-run なしの）`gc` の実行に IMAP 認証情報（`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`）が必須になります。`gc --dry-run` は認証情報が無くても実行でき、その場合は警告ログを出力したうえで IMAP 上の削除候補確認をスキップします。`retention_days = 0`（デフォルト）のままであれば、`gc` は IMAP に接続せず、認証情報も不要です。
 
 #### 前提条件
 
@@ -240,7 +240,7 @@ tlsrpt-digest --config path summary [--dry-run] [--window duration]
 
 ### gc
 
-保持期間を超えた古いデータを削除します。`imap.retention_days` を設定している場合は、IMAP メールボックス上の古いメールも削除します（不可逆操作。詳細は[IMAP メールボックスの保持期間について](#imap-メールボックスの保持期間imapretention_daysについて)を参照）。
+保持期間を超えた古いデータを削除します。`imap.retention_days` が `0` より大きい場合は、IMAP メールボックス上の古いメールも削除します（不可逆操作。詳細は[IMAP メールボックスの保持期間について](#imap-メールボックスの保持期間imapretention_daysについて)を参照）。
 
 ```bash
 tlsrpt-digest --config path gc [--dry-run] [--before duration] [--max-email-age duration]
