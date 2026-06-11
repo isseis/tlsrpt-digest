@@ -584,7 +584,7 @@
 - `SearchOlderThan` が EXAMINE のみで状態を変更しないこと。
 - `go-imap-uidplus` の実際の API が `go doc` の確認結果と一致していること。
 
-- [ ] `make test && make lint` がグリーンであることを確認した
+- [x] `make test && make lint` がグリーンであることを確認した
 - [ ] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のステップ用のブランチへ切り替えた
