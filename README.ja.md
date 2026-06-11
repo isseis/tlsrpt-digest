@@ -153,7 +153,8 @@ window_days = 7
 
 - `retention_days` のデフォルトは `0`（無効）です。利用者が明示的に正の値を設定したときのみ、IMAP メールボックス上のメール削除が有効化されます（オプトイン）。
 - 有効化する（`retention_days > 0` にする）と、`gc` の実行に IMAP 認証情報（`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`）が必須になります。`retention_days = 0`（デフォルト）のままであれば、`gc` は IMAP に接続せず、認証情報も不要です。
-- IMAP からのメール削除は不可逆操作であり、削除対象を TLSRPT レポートに限定する絞り込みは行われません。そのため、TLSRPT レポート受信専用のメールボックスを使用することを推奨します。また、有効化する前に `gc --dry-run` で削除候補件数を確認することを推奨します。
+- IMAP サーバーが UIDPLUS（RFC 4315）に対応していない場合、`gc` は IMAP メールを削除しません（`server does not support UIDPLUS; skipping delete` という警告ログを出力し、削除件数は 0 になります）。`retention_days > 0` を設定していても、サーバーが UIDPLUS に対応していなければメールボックスの蓄積は抑止されないため、事前に IMAP サーバーが UIDPLUS に対応していることを確認してください。
+- IMAP からのメール削除は不可逆操作であり、削除対象を TLSRPT レポートに限定する絞り込みは行われません。そのため、TLSRPT レポート受信専用のメールボックスを使用することを推奨します。`gc --dry-run` は `imap.retention_days` が 0 より大きい場合のみ IMAP 上の削除候補を確認します。`retention_days = 0` のまま `gc --dry-run` を実行すると `would_delete_imap_count=0` と表示されますが、これは削除候補が存在しないという意味ではなく、確認自体が行われていないことを意味します。そのため、有効化する際は、まず希望する正の値を `imap.retention_days` に設定したうえで `gc --dry-run` を実行して削除候補件数を確認し、その結果を確認してから（dry-run なしの）`gc` を初めて実行してください。
 - Gmail を使用する場合の前提条件: Gmail の IMAP 設定（「メール転送と POP/IMAP」タブ）で、メッセージに `\Deleted` が付与され EXPUNGE されたときの挙動がデフォルトの「メールをアーカイブする」のままだと、UID EXPUNGE はラベル除去（「すべてのメール」への移動）となりストレージは解放されません。サーバー上の蓄積を実際に抑止するには、「メールを完全に削除する」または「ゴミ箱に移動する」（+ ゴミ箱メールの自動完全削除）に変更する必要があります。
 - `imap.fetch_days`（および `fetch --since` で指定する取得期間）は `imap.retention_days` 以下にしてください。それより古いメールは `gc` によって IMAP 上から削除され、以後 `fetch` で取得できなくなります。
 - `imap.retention_days` を上書きするコマンドラインフラグはありません（`gc --before` / `--max-email-age` はローカルストアの保持期間のみを上書きし、IMAP 削除のカットオフには影響しません）。IMAP の保持期間は設定ファイルでのみ変更できます。
