@@ -717,8 +717,8 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した（#160）
-- [ ] PR がマージされた
-- [ ] 次のステップ用のブランチへ切り替えた
+- [x] PR がマージされた
+- [x] 次のステップ用のブランチへ切り替えた
 
 ---
 
@@ -726,7 +726,7 @@
 
 #### 変更ファイル: `cmd/tlsrpt-digest/gc.go`
 
-- [ ] `gcRunner` 構造体に `fetchRunner`（`fetch.go` 36-42行目）と同じパターンで `newMailFetcher` と `credentials` フィールドを追加する。
+- [x] `gcRunner` 構造体に `fetchRunner`（`fetch.go` 36-42行目）と同じパターンで `newMailFetcher` と `credentials` フィールドを追加する。
 
   ```go
   // gcRunner implements SubcommandRunner for the gc subcommand.
@@ -737,7 +737,7 @@
   }
   ```
 
-- [ ] `newGCRunner` を以下のように変更する。
+- [x] `newGCRunner` を以下のように変更する。
 
   ```go
   func newGCRunner() *gcRunner {
@@ -751,7 +751,7 @@
   }
   ```
 
-- [ ] `Run` を、`02_architecture.md` §6.1 のフロー（recovery チェック → IMAP 認証情報チェック（非 dry-run かつ `retention_days > 0` のときのみ）→ dry-run 分岐）に従って書き換える。Step 1（recovery チェック）は変更しない。Step 2 以降を以下のように置き換える。
+- [x] `Run` を、`02_architecture.md` §6.1 のフロー（recovery チェック → IMAP 認証情報チェック（非 dry-run かつ `retention_days > 0` のときのみ）→ dry-run 分岐）に従って書き換える。Step 1（recovery チェック）は変更しない。Step 2 以降を以下のように置き換える。
 
   ```go
   // Run executes the gc subcommand: delete (or, in dry-run, count) old report
@@ -853,7 +853,7 @@
 
   // runDryRun performs the dry-run gc flow: count local deletion candidates and,
   // if IMAP retention is enabled, preview IMAP deletion candidates via SearchOlderThan.
-  // No records, files, or IMAP messages are deleted (AC-10).
+  // No records, files, or IMAP messages are deleted.
   func (r *gcRunner) runDryRun(ctx context.Context, boot *BootContext, mailbox string, reportCutoff, emailCutoff, imapCutoff time.Time, imapEnabled bool) (int, error) {
       reportCount, err := boot.Store.CountReportsBefore(reportCutoff)
       if err != nil {
@@ -867,22 +867,26 @@
           return exitError, fmt.Errorf("gc: count emails: %w", err)
       }
 
-      var imapUIDs []uint32
+      // Log local counts before the IMAP preview so they are not lost if the
+      // IMAP search below fails.
+      logGCDryRunLocalSummary(reportCutoff, emailCutoff, reportCount, emailCount)
+
       if imapEnabled {
           username, password := r.credentials()
           if username == "" || string(password) == "" {
-              // AC-11 applies only to non-dry-run; in dry-run, missing credentials
-              // only disable the IMAP preview.
+              // Missing credentials are only an error for non-dry-run deletion;
+              // in dry-run, they only disable the IMAP preview.
               slog.Warn("gc: dry-run: imap credentials missing; skipping imap deletion preview", "mailbox", mailbox)
+              logGCDryRunIMAPSummary(nil)
           } else {
-              imapUIDs, err = r.searchIMAPOlderThan(ctx, boot, mailbox, IMAPCredentials{Username: username, Password: password}, imapCutoff)
+              imapUIDs, err := r.searchIMAPOlderThan(ctx, boot, mailbox, IMAPCredentials{Username: username, Password: password}, imapCutoff)
               if err != nil {
                   return exitError, err
               }
+              logGCDryRunIMAPSummary(imapUIDs)
           }
       }
 
-      logGCDryRunSummary(reportCutoff, emailCutoff, reportCount, emailCount, imapUIDs)
       if err := boot.Notifier.Flush(ctx); err != nil {
           slog.Warn("gc: dry-run flush notifications", "error", err)
       }
@@ -890,7 +894,7 @@
   }
 
   // searchIMAPOlderThan connects to IMAP and previews messages older than cutoff via
-  // SearchOlderThan (read-only, AC-10).
+  // SearchOlderThan (read-only).
   func (r *gcRunner) searchIMAPOlderThan(ctx context.Context, boot *BootContext, mailbox string, creds IMAPCredentials, cutoff time.Time) ([]uint32, error) {
       fetcher, err := r.newMailFetcher(buildIMAPConfig(boot.Config, creds))
       if err != nil {
@@ -911,21 +915,28 @@
       return uids, nil
   }
 
-  // logGCDryRunSummary logs what would have been deleted in a real (non-dry) run,
-  // including the cutoff times used for each candidate set (architecture §3.6).
-  // imapUIDs is nil when IMAP retention is disabled or credentials were unavailable.
-  func logGCDryRunSummary(reportCutoff, emailCutoff time.Time, reportCount, emailCount int, imapUIDs []uint32) {
+  // logGCDryRunLocalSummary logs what local report records and .eml files would
+  // have been deleted in a real (non-dry) run, including the cutoff times used
+  // for each candidate set. It is logged before any IMAP preview so the local
+  // counts are not lost if the IMAP step fails (architecture §3.6).
+  func logGCDryRunLocalSummary(reportCutoff, emailCutoff time.Time, reportCount, emailCount int) {
+      slog.Info("gc: dry-run: local deletion candidates; no records or files deleted",
+          "would_delete_reports", reportCount,
+          "report_cutoff", reportCutoff,
+          "would_delete_emails", emailCount,
+          "email_cutoff", emailCutoff)
+  }
+
+  // logGCDryRunIMAPSummary logs the IMAP messages that would have been deleted
+  // in a real (non-dry) run. imapUIDs is nil when credentials were unavailable.
+  func logGCDryRunIMAPSummary(imapUIDs []uint32) {
       sample := imapUIDs
       truncated := false
       if len(sample) > dryRunUIDSampleMax {
           sample = sample[:dryRunUIDSampleMax]
           truncated = true
       }
-      slog.Info("gc: dry-run complete; no records deleted, no IMAP messages deleted",
-          "would_delete_reports", reportCount,
-          "report_cutoff", reportCutoff,
-          "would_delete_emails", emailCount,
-          "email_cutoff", emailCutoff,
+      slog.Info("gc: dry-run: imap deletion candidates; no messages deleted",
           "would_delete_imap_count", len(imapUIDs),
           "would_delete_imap_uids_sample", sample,
           "would_delete_imap_uids_truncated", truncated)
@@ -934,13 +945,13 @@
 
   `dryRunUIDSampleMax`（`fetch.go` 375行目）はパッケージ内の既存定数をそのまま再利用する（重複定義しない）。
 
-- [ ] `import` ブロックに `"os"` と `"github.com/isseis/tlsrpt-digest/internal/imap"` を追加する。
+- [x] `import` ブロックに `"os"` と `"github.com/isseis/tlsrpt-digest/internal/imap"` を追加する。
 
-- [ ] `gcReportCutoff` / `gcEmailCutoff` / `gcNotifyKind` / `notifyGCSystemError` は変更しない。
+- [x] `gcReportCutoff` / `gcEmailCutoff` / `gcNotifyKind` / `notifyGCSystemError` は変更しない。
 
 #### 変更ファイル: `cmd/tlsrpt-digest/main.go`
 
-- [ ] `validateFlags` 内の dry-run 対応サブコマンドのチェックを以下のように変更する（AC-10 の前提）。
+- [x] `validateFlags` 内の dry-run 対応サブコマンドのチェックを以下のように変更する（AC-10 の前提）。
 
   変更前:
   ```go
@@ -956,7 +967,7 @@
   }
   ```
 
-- [ ] `printDetailedHelp` の `Subcommands:` 一覧（236行目）にある `gc` の一行説明を、IMAP メッセージ削除にも触れるように変更する。
+- [x] `printDetailedHelp` の `Subcommands:` 一覧（236行目）にある `gc` の一行説明を、IMAP メッセージ削除にも触れるように変更する。
 
   変更前:
   ```
@@ -968,7 +979,7 @@
     gc          Delete report data, .eml files, and (if imap.retention_days > 0) old IMAP messages
   ```
 
-- [ ] `printDetailedHelp` の `gc:` セクションに `-n, --dry-run` の説明行を追加する。
+- [x] `printDetailedHelp` の `gc:` セクションに `-n, --dry-run` の説明行を追加する。
 
   変更前:
   ```
@@ -987,14 +998,14 @@
 
 #### 変更ファイル: `cmd/tlsrpt-digest/main_test.go`
 
-- [ ] `TestParseCLI_DryRunSupportedSubcommands`（155-163行目）のループ対象に `subcommandGC` を追加する: `[]SubcommandName{subcommandFetch, subcommandSummary, subcommandGC}`。
-- [ ] `TestParseCLI_DryRunUnsupportedSubcommands`（165-172行目）のループ対象から `subcommandGC` を除去する: `[]SubcommandName{subcommandReprocess, subcommandRecover}`。
-- [ ] `TestRunCLI_DryRunUnsupportedSubcommandExits2`（174-181行目）のループ対象から `subcommandGC` を除去する: `[]SubcommandName{subcommandReprocess, subcommandRecover}`。
+- [x] `TestParseCLI_DryRunSupportedSubcommands`（155-163行目）のループ対象に `subcommandGC` を追加する: `[]SubcommandName{subcommandFetch, subcommandSummary, subcommandGC}`。
+- [x] `TestParseCLI_DryRunUnsupportedSubcommands`（165-172行目）のループ対象から `subcommandGC` を除去する: `[]SubcommandName{subcommandReprocess, subcommandRecover}`。
+- [x] `TestRunCLI_DryRunUnsupportedSubcommandExits2`（174-181行目）のループ対象から `subcommandGC` を除去する: `[]SubcommandName{subcommandReprocess, subcommandRecover}`。
 
 #### 変更ファイル: `cmd/tlsrpt-digest/gc_test.go`
 
-- [ ] `import` ブロックに `imaptestutil "github.com/isseis/tlsrpt-digest/internal/imap/testutil"` と `"github.com/isseis/tlsrpt-digest/internal/imap"` を追加する。
-- [ ] 以下の新規テストを追加する。`makeGCBoot` の第5引数 `cfg` には、`cfg.IMAP.RetentionDays` を設定した `*config.Config` を渡す（`cfg.IMAP.Host`/`Port`/`Mailbox` は既存の `makeGCBoot` デフォルトと同じ値を設定する）。
+- [x] `import` ブロックに `imaptestutil "github.com/isseis/tlsrpt-digest/internal/imap/testutil"` と `"github.com/isseis/tlsrpt-digest/internal/imap"` を追加する。
+- [x] 以下の新規テストを追加する。`makeGCBoot` の第5引数 `cfg` には、`cfg.IMAP.RetentionDays` を設定した `*config.Config` を渡す（`cfg.IMAP.Host`/`Port`/`Mailbox` は既存の `makeGCBoot` デフォルトと同じ値を設定する）。
   - `TestGC_IMAPRetentionDisabled_NoIMAPConnection`（AC-09）: `cfg.IMAP.RetentionDays = 0`（デフォルト）のまま、`runner.newMailFetcher` に呼び出された場合は `t.Fatal` するクロージャを設定する。`runner.Run` が `exitOK` を返し、`newMailFetcher` が呼ばれないこと（IMAP 未接続でローカル GC のみ実行されること）を確認する。
   - `TestGC_IMAPRetentionEnabled_DeletesOlderThan`（AC-07, AC-08連携）: `cfg.IMAP.RetentionDays = 30`、`now = time.Date(2026, 1, 15, ...)` とする。`fakeFetcher := &imaptestutil.FakeMailFetcher{DeleteOlderThanResult: 2}` を用意し、`runner.newMailFetcher = func(imap.Config) (imap.MailFetcher, error) { return fakeFetcher, nil }`、`runner.credentials = func() (string, config.Secret) { return "user", config.Secret("pass") }` を設定する。`runner.Run` が `exitOK` を返し、`fakeFetcher.DeleteOlderThanCalls` に `Duration{Days: 30}.Cutoff(now)` と一致する1件のカットオフが記録されていることを検証する。
   - `TestGC_IMAPCredentialsMissing_NotifiesAndExits`（AC-11）: `cfg.IMAP.RetentionDays = 30`、`runner.credentials = func() (string, config.Secret) { return "", "" }` を設定する（`runner.newMailFetcher` は呼ばれた場合 `t.Fatal` するクロージャとする）。`runner.Run` が `exitError, nil` を返し、`spy.SystemErrors` に `notify.SystemErrorKindIMAPCredentialsMissing` が1件記録されていること、`st.DeleteReportsBeforeCallCount == 0` かつ `st.DeleteEmailsBeforeCallCount == 0`（ローカル削除より先にエラー終了すること）を検証する。
@@ -1004,9 +1015,9 @@
   - `TestGC_DryRun_IMAPCredentialsMissing_WarnsAndContinues`（AC-10, AC-11の dry-run 適用外確認）: `cfg.IMAP.RetentionDays = 30`、`opts := cliOptions{DryRun: true}`、`runner.credentials = func() (string, config.Secret) { return "", "" }`（`runner.newMailFetcher` は呼ばれた場合 `t.Fatal` するクロージャとする）。`captureSlog(t)` でログを捕捉し、`runner.Run` が `exitOK` を返し、`spy.SystemErrors` が空であること（AC-11 は dry-run に適用されないこと）、ログに `level=WARN` と `"imap credentials missing"` を含む行が出力されること、ログに `"would_delete_imap_count=0"` が含まれることを検証する。
 
 **フェーズ完了の確認**:
-- [ ] `make fmt` を実行し差分がないこと
-- [ ] `make test` が通過すること
-- [ ] `make lint` が通過すること
+- [x] `make fmt` を実行し差分がないこと
+- [x] `make test` が通過すること
+- [x] `make lint` が通過すること
 
 ### PR-4 作成ポイント: gc subcommand IMAP retention integration + --dry-run
 
@@ -1020,8 +1031,8 @@
 - dry-run でローカル削除・IMAP 削除のいずれも実行されず、件数のみがログ出力されること（AC-10）。
 - `gc --dry-run` が `main.go` の許可リストに追加され、`--dry-run` 未対応サブコマンド一覧（reprocess・recover）からは除外されたままであること。
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した
 - [ ] PR がマージされた
 - [ ] 次のステップ用のブランチへ切り替えた
 
