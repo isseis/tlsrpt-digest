@@ -54,4 +54,16 @@ type MailFetcher interface {
 	Download(ctx context.Context, uids []uint32) (map[uint32][]byte, error)
 	MarkSeen(ctx context.Context, uids []uint32) error
 	Close() error
+
+	// DeleteOlderThan deletes messages whose INTERNALDATE (truncated to date) is
+	// before cutoff. If cutoff is zero, it does nothing and returns (0, nil)
+	// (AC-16). If the server does not support UIDPLUS, it logs a warning and
+	// returns (0, nil) without setting any flags (AC-12).
+	DeleteOlderThan(ctx context.Context, cutoff time.Time) (deleted int, err error)
+
+	// SearchOlderThan returns the UIDs of messages whose INTERNALDATE (truncated
+	// to date) is before cutoff, using a read-only (EXAMINE) selection. It does
+	// not modify mailbox state. Used to preview deletion candidates in dry-run
+	// (AC-10).
+	SearchOlderThan(ctx context.Context, cutoff time.Time) ([]uint32, error)
 }

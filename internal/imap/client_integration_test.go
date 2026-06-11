@@ -465,3 +465,72 @@ func TestIntegration_UIDValidity_Change(t *testing.T) {
 	v2 := imaptestutil.FetchUIDValidity(t, testCfg, mailbox)
 	require.NotEqual(t, v1, v2)
 }
+
+// TestIntegration_DeleteOlderThan verifies DeleteOlderThan removes a message
+// whose INTERNALDATE is before cutoff, or records greenmail's UIDPLUS support
+// status if the server does not support UID EXPUNGE (AC-12 fallback).
+func TestIntegration_DeleteOlderThan(t *testing.T) {
+	cfg, smtpAddr := loadSMTPTestConfig(t)
+	messageID := testMessageID()
+	injectTestMail(t, smtpAddr, cfg.Username, "delete-older-than-test", "test body", messageID)
+
+	ctx := context.Background()
+
+	client1, err := imap.NewIMAPClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client1.Close() })
+
+	result, err := client1.FetchMeta(ctx, time.Now().AddDate(-1, 0, 0))
+	require.NoError(t, err)
+
+	var wantUID uint32
+	for _, meta := range result.Messages {
+		if normalizeMessageID(meta.MessageID) == normalizeMessageID(messageID) {
+			wantUID = meta.UID
+			break
+		}
+	}
+	require.NotZero(t, wantUID, "injected message not found in FetchMeta result")
+
+	// cutoff is tomorrow so the message's INTERNALDATE (today) is before
+	// truncateToDate(cutoff) (tomorrow 00:00).
+	cutoff := time.Now().AddDate(0, 0, 1)
+	deleted, err := client1.DeleteOlderThan(ctx, cutoff)
+	require.NoError(t, err)
+
+	client2, err := imap.NewIMAPClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client2.Close() })
+
+	gotUIDs, err := client2.SearchOlderThan(ctx, cutoff)
+	require.NoError(t, err)
+
+	if deleted > 0 {
+		require.NotContains(t, gotUIDs, wantUID, "message must be deleted when UIDPLUS is supported")
+	} else {
+		require.Contains(t, gotUIDs, wantUID, "message must remain when UIDPLUS is not supported")
+	}
+	t.Logf("greenmail UIDPLUS support: deleted=%d (>0 means UIDPLUS supported)", deleted)
+}
+
+// TestIntegration_SearchOlderThan_ReadOnly verifies SearchOlderThan is
+// idempotent: repeated calls on the same session return the same UIDs,
+// confirming EXAMINE does not mutate mailbox state.
+func TestIntegration_SearchOlderThan_ReadOnly(t *testing.T) {
+	cfg, smtpAddr := loadSMTPTestConfig(t)
+	messageID := testMessageID()
+	injectTestMail(t, smtpAddr, cfg.Username, "search-older-than-test", "test body", messageID)
+
+	ctx := context.Background()
+	cutoff := time.Now().AddDate(0, 0, 1)
+
+	client, err := imap.NewIMAPClient(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = client.Close() })
+
+	uids1, err := client.SearchOlderThan(ctx, cutoff)
+	require.NoError(t, err)
+	uids2, err := client.SearchOlderThan(ctx, cutoff)
+	require.NoError(t, err)
+	require.Equal(t, uids1, uids2)
+}

@@ -23,6 +23,14 @@ type FakeMailFetcher struct {
 	MarkSeenErr   error
 	MarkSeenCalls [][]uint32
 
+	DeleteOlderThanResult int
+	DeleteOlderThanErr    error
+	DeleteOlderThanCalls  []time.Time
+
+	SearchOlderThanResult []uint32
+	SearchOlderThanErr    error
+	SearchOlderThanCalls  []time.Time
+
 	CloseErr error
 }
 
@@ -50,6 +58,24 @@ func (f *FakeMailFetcher) Download(_ context.Context, uids []uint32) (map[uint32
 func (f *FakeMailFetcher) MarkSeen(_ context.Context, uids []uint32) error {
 	f.MarkSeenCalls = append(f.MarkSeenCalls, cloneUIDs(uids))
 	return f.MarkSeenErr
+}
+
+// DeleteOlderThan implements imap.MailFetcher.
+func (f *FakeMailFetcher) DeleteOlderThan(_ context.Context, cutoff time.Time) (int, error) {
+	f.DeleteOlderThanCalls = append(f.DeleteOlderThanCalls, cutoff)
+	if f.DeleteOlderThanErr != nil {
+		return 0, f.DeleteOlderThanErr
+	}
+	return f.DeleteOlderThanResult, nil
+}
+
+// SearchOlderThan implements imap.MailFetcher.
+func (f *FakeMailFetcher) SearchOlderThan(_ context.Context, cutoff time.Time) ([]uint32, error) {
+	f.SearchOlderThanCalls = append(f.SearchOlderThanCalls, cutoff)
+	if f.SearchOlderThanErr != nil {
+		return nil, f.SearchOlderThanErr
+	}
+	return f.SearchOlderThanResult, nil
 }
 
 // Close implements imap.MailFetcher.
