@@ -55,7 +55,7 @@ git tag -a vX.Y.Z HEAD -m "Release vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-タグのフォーマットは `v[数字].[数字].[数字]` です（例：`v1.0.0`、`v0.2.1`）。このパターンに合致しないタグ（`vtest` など）はリリースワークフローを起動しません。
+タグのフォーマットは `v[数字].[数字].[数字]` です（例：`v1.0.0`、`v0.2.1`）。ワークフローのトリガーパターン `v[0-9]*.[0-9]*.[0-9]*` は GitHub Actions のグロブ形式であり、`v1.2.3-rc1` や `vtest` のような形式も一部マッチする場合があります。意図しないリリースを防ぐため、タグは必ず `vX.Y.Z`（数字のみ）の形式で作成してください。
 
 ### 4. GitHub Actions のワークフローを確認する
 
@@ -69,8 +69,8 @@ GitHub Release には次のファイルが添付されます。
 
 | ファイル | 内容 |
 |---|---|
-| `tlsrpt-digest_vX.Y.Z_linux_amd64.tar.gz` | Linux (x86-64) バイナリと付属ファイル |
-| `tlsrpt-digest_vX.Y.Z_linux_arm64.tar.gz` | Linux (ARM64) バイナリと付属ファイル |
+| `tlsrpt-digest_X.Y.Z_linux_amd64.tar.gz` | Linux (x86-64) バイナリと付属ファイル |
+| `tlsrpt-digest_X.Y.Z_linux_arm64.tar.gz` | Linux (ARM64) バイナリと付属ファイル |
 | `checksums.txt` | 全アーカイブの SHA-256 チェックサム |
 
 各 tar.gz アーカイブには次のファイルが含まれます。
