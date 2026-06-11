@@ -1044,7 +1044,7 @@
 
 #### 変更ファイル: `README.ja.md`（先に編集する）
 
-- [ ] 「全設定項目」コードブロック（98-143行目）の `[imap]` セクションに `retention_days` の項目を追加する。`max_message_bytes` の項目（120-121行目）の直後に以下を追加する。
+- [x] 「全設定項目」コードブロック（98-143行目）の `[imap]` セクションに `retention_days` の項目を追加する。`max_message_bytes` の項目（120-121行目）の直後に以下を追加する。
 
   ```toml
 
@@ -1056,14 +1056,24 @@
   retention_days = 0
   ```
 
-- [ ] 「全設定項目」コードブロックの直後（144行目の ```` ``` ```` の後）に、新しいサブセクション「### IMAP メールボックスの保持期間（`imap.retention_days`）について」を追加し、以下の内容を含める。
+  > **実施結果との差分**: 「日付截断」はレビューで「時刻を切り捨てた日付」に修正し、「(今日 - retention_days)」は「(本日の UTC 0 時 - retention_days 日)」に修正した（`--since` / `--window` の表記との整合のため）。
+
+- [x] 「全設定項目」コードブロックの直後（144行目の ```` ``` ```` の後）に、新しいサブセクション「### IMAP メールボックスの保持期間（`imap.retention_days`）について」を追加し、以下の内容を含める。
   - `retention_days` のデフォルトは `0`（無効）であり、利用者が明示的に正の値を設定したときのみ IMAP 上のメール削除が有効化されること（オプトイン）。
   - 有効化する（`retention_days > 0` にする）と、`gc` の実行に IMAP 認証情報（`TLSRPT_IMAP_USERNAME` / `TLSRPT_IMAP_PASSWORD`）が必須になること。`retention_days = 0`（デフォルト）のままであれば `gc` は IMAP に接続せず、認証情報も不要であること。
   - IMAP からのメール削除は不可逆操作であり、削除対象を TLSRPT レポートに限定する絞り込みは行われないこと。そのため、TLSRPT レポート受信専用のメールボックスを使用することを推奨し、有効化する前に `gc --dry-run` で削除候補件数を確認することを推奨する。
   - Gmail を使用する場合の前提条件: Gmail の IMAP 設定（「メール転送と POP/IMAP」タブ）で、メッセージが `\Deleted` 付与・EXPUNGE されたときの挙動がデフォルトの「メールをアーカイブする」のままだと、UID EXPUNGE はラベル除去（全メールへの移動）となりストレージは解放されないこと。サーバー上の蓄積を実際に抑止するには、「完全に削除する」または「ゴミ箱に移動」（+ ゴミ箱メールの自動完全削除）に変更する必要があること。
   - `imap.fetch_days`（および `fetch --since` で指定する取得期間）は `imap.retention_days` 以下にすること。それより古いメールは `gc` によって IMAP 上から削除され、以後 `fetch` で取得できなくなること。
 
-- [ ] `### gc` サブコマンドの説明（202-208行目）を以下のように変更する。
+  > **実施結果との差分**: レビュー対応として、上記内容に加えて以下も追記し、4 つの `####` サブセクション（基本動作（オプトイン）/ 前提条件 / 削除前の確認（`gc --dry-run`）/ 設定値の関係）に再構成した。
+  > - UIDPLUS（RFC 4315）非対応サーバーでは `gc` がメールを削除しない旨の注意。
+  > - `imap.retention_days = 0` のまま `gc --dry-run` を実行すると `would_delete_imap_count=0` と表示されるが、これは削除候補なしを意味しないという注意と、有効化時の推奨手順（`retention_days` 設定 → `gc --dry-run` → `gc`）。
+  > - 「IMAP メールボックス」が `imap.mailbox` で指定したメールボックスを指す旨の明記。
+  > - `imap.retention_days` を上書きする CLI フラグが無い旨の明記。
+  > - Gmail UI 表記の精緻化（「全メール」→「すべてのメール」、「完全に削除する」→「メールを完全に削除する」、「ゴミ箱に移動」→「ゴミ箱に移動する」）。
+  > - `gc --dry-run` で IMAP 認証情報が無くても実行できる旨の明記。
+
+- [x] `### gc` サブコマンドの説明（202-208行目）を以下のように変更する。
 
   変更前:
   ```
@@ -1097,12 +1107,12 @@
 
 #### 変更ファイル: `README.md`（`/mktrans` で反映する）
 
-- [ ] `README.ja.md` の編集が完了したら `/mktrans` を実行し、`README.md` の対応箇所（「All Configuration Items」コードブロックの `[imap]` セクション、新規セクション「IMAP Mailbox Retention (`imap.retention_days`)」、`### gc` サブコマンドの説明とオプション表）に翻訳を反映する。
-- [ ] 翻訳後、`README.md` の新規セクションが `01_requirements.md` の用語（`retention_days`、`SystemErrorKindIMAPCredentialsMissing` 等）および `02_architecture.md` §3.3・§5.1・§5.3 の説明内容と整合していることを確認する。
+- [x] `README.ja.md` の編集が完了したら `/mktrans` を実行し、`README.md` の対応箇所（「All Configuration Items」コードブロックの `[imap]` セクション、新規セクション「IMAP Mailbox Retention (`imap.retention_days`)」、`### gc` サブコマンドの説明とオプション表）に翻訳を反映する。
+- [x] 翻訳後、`README.md` の新規セクションが `01_requirements.md` の用語（`retention_days`、`SystemErrorKindIMAPCredentialsMissing` 等）および `02_architecture.md` §3.3・§5.1・§5.3 の説明内容と整合していることを確認する。
 
 #### 変更ファイル: `docs/translation_glossary.md`
 
-- [ ] `/mktrans` の実行前に、新規追加する日本語の専門用語のうち未登録のものを確認する。`rg -n "保持期間|オプトイン|不可逆|Auto-Expunge|完全に削除する|ゴミ箱に移動|メールをアーカイブする" docs/translation_glossary.md` を実行し、該当行が存在しない用語について、対応する英訳（例: 保持期間 → retention period、オプトイン → opt-in、不可逆 → irreversible、完全に削除する → "Immediately delete the message forever"（Gmail UI 表記）、ゴミ箱に移動 → "Move the message to the Trash"（Gmail UI 表記）、メールをアーカイブする → "Archive the message"（Gmail UI 表記）、Auto-Expunge → Auto-Expunge）をアルファベット順の該当セクションに追加する。
+- [x] `/mktrans` の実行前に、新規追加する日本語の専門用語のうち未登録のものを確認する。`rg -n "保持期間|オプトイン|不可逆|Auto-Expunge|完全に削除する|ゴミ箱に移動|メールをアーカイブする" docs/translation_glossary.md` を実行し、該当行が存在しない用語について、対応する英訳（例: 保持期間 → retention period、オプトイン → opt-in、不可逆 → irreversible、完全に削除する → "Immediately delete the message forever"（Gmail UI 表記）、ゴミ箱に移動 → "Move the message to the Trash"（Gmail UI 表記）、メールをアーカイブする → "Archive the message"（Gmail UI 表記）、Auto-Expunge → Auto-Expunge）をアルファベット順の該当セクションに追加する。
 
 #### 実環境での手動検証
 
@@ -1151,8 +1161,7 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した（#162）
-- [ ] PR がマージされた
-- [ ] 次のステップ用のブランチへ切り替えた
+- [x] PR がマージされた
 
 ---
 
@@ -1263,11 +1272,11 @@ greenmail が UIDPLUS に対応しない場合、`TestIntegration_DeleteOlderTha
 
 ## 6. 実装チェックリスト
 
-- [ ] PR-1 マージ済み（対象ステップ: Phase 1）
-- [ ] PR-2 マージ済み（対象ステップ: Phase 2）
-- [ ] PR-3 マージ済み（対象ステップ: Phase 3）
-- [ ] PR-4 マージ済み（対象ステップ: Phase 4）
-- [ ] PR-5 マージ済み（対象ステップ: Phase 5）
+- [x] PR-1 マージ済み（対象ステップ: Phase 1）
+- [x] PR-2 マージ済み（対象ステップ: Phase 2）
+- [x] PR-3 マージ済み（対象ステップ: Phase 3）
+- [x] PR-4 マージ済み（対象ステップ: Phase 4）
+- [x] PR-5 マージ済み（対象ステップ: Phase 5）
 
 ---
 
