@@ -121,6 +121,16 @@ type Store interface {
 	// and {uidvalidity} directories are removed; cleanup failures are logged as WARN
 	// and never returned as errors.
 	DeleteEmailsBefore(cutoff time.Time) (deleted int, err error)
+
+	// CountReportsBefore returns the number of report records whose
+	// date-range.end-datetime < cutoff, without deleting them. The predicate
+	// mirrors DeleteReportsBefore exactly. Works on read-only stores.
+	CountReportsBefore(cutoff time.Time) (count int, err error)
+
+	// CountEmailsBefore returns the number of .eml files whose internal_date < cutoff,
+	// without deleting them. Returns 0, nil immediately if cutoff is zero. The predicate
+	// mirrors DeleteEmailsBefore exactly. Works on read-only stores.
+	CountEmailsBefore(cutoff time.Time) (count int, err error)
 }
 
 // fileStore is the concrete implementation of Store.

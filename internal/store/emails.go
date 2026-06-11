@@ -310,6 +310,25 @@ func (s *fileStore) DeleteEmailsBefore(cutoff time.Time) (deleted int, err error
 	return deleted, errors.Join(deleteErrs...)
 }
 
+// CountEmailsBefore implements Store.CountEmailsBefore.
+func (s *fileStore) CountEmailsBefore(cutoff time.Time) (count int, err error) {
+	if cutoff.IsZero() {
+		return 0, nil
+	}
+
+	df, err := s.loadDataFile()
+	if err != nil {
+		return 0, fmt.Errorf("CountEmailsBefore: load data file: %w", err)
+	}
+
+	for _, entry := range df.Emails {
+		if entry.InternalDate.Before(cutoff) {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // cleanupEmptyDirs removes empty {uidvalidity}/{YYYYMM} and {uidvalidity} directories
 // for the given GC'd entries. Failures are logged as WARN and never returned as errors.
 func (s *fileStore) cleanupEmptyDirs(gcEntries []internalEmailIndexEntry) {

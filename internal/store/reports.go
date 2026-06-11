@@ -122,3 +122,18 @@ func (s *fileStore) DeleteReportsBefore(cutoff time.Time) (deleted int, err erro
 
 	return deleted, nil
 }
+
+// CountReportsBefore implements Store.CountReportsBefore.
+func (s *fileStore) CountReportsBefore(cutoff time.Time) (count int, err error) {
+	df, err := s.loadDataFile()
+	if err != nil {
+		return 0, fmt.Errorf("CountReportsBefore: load data file: %w", err)
+	}
+
+	for _, r := range df.Reports {
+		if r.DateRange.EndDatetime.Before(cutoff) {
+			count++
+		}
+	}
+	return count, nil
+}

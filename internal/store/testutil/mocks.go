@@ -285,6 +285,31 @@ func (f *FakeStore) DeleteEmailsBefore(cutoff time.Time) (int, error) {
 	return deleted, nil
 }
 
+// CountReportsBefore implements store.Store.
+func (f *FakeStore) CountReportsBefore(cutoff time.Time) (int, error) {
+	count := 0
+	for _, r := range f.Reports {
+		if r.DateRange.EndDatetime.Before(cutoff) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// CountEmailsBefore implements store.Store.
+func (f *FakeStore) CountEmailsBefore(cutoff time.Time) (int, error) {
+	if cutoff.IsZero() {
+		return 0, nil
+	}
+	count := 0
+	for _, entry := range f.Emails {
+		if entry.InternalDate.Before(cutoff) {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // ResetForRecovery implements store.Store.
 // Clears all reports and emails, sets UIDValidity to currUIDValidity, and
 // clears Recovery and PendingReset. Returns ErrRecoveryRequiredMissing if
