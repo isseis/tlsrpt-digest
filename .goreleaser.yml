@@ -3,6 +3,7 @@ version: 2
 before:
   hooks:
     - go mod tidy
+    - bash -c 'git diff --exit-code go.mod go.sum || (echo "go.mod/go.sum is not up to date; run go mod tidy and commit the changes" && exit 1)'
 
 builds:
   - id: tlsrpt-digest
@@ -30,6 +31,6 @@ changelog:
   sort: asc
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
+      - '^docs(\([^)]*\))?:'
+      - '^test(\([^)]*\))?:'
+      - '^chore(\([^)]*\))?:'
