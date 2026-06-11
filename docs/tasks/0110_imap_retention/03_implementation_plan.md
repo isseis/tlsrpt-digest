@@ -269,8 +269,8 @@
 
 - [x] `make test && make lint` がグリーンであることを確認した
 - [x] PR を作成した
-- [ ] PR がマージされた
-- [ ] 次のステップ用のブランチへ切り替えた
+- [x] PR がマージされた
+- [x] 次のステップ用のブランチへ切り替えた
 
 ---
 
@@ -278,16 +278,19 @@
 
 #### 依存関係の追加と API 確認: `go.mod` / `go.sum`
 
-- [ ] `go get github.com/emersion/go-imap-uidplus@latest` を実行し、`go.mod` の `require` ブロックに依存を追加する（現状は未追加であることをローカルモジュールキャッシュ不在で確認済み）。取得に失敗した場合（モジュールが存在しない等）、§1「既存コード調査結果」の `go.mod` フォールバックに切り替え、本タスクのチェック項目をフォールバック実施として記録する。
-- [ ] `go get` が成功した場合、`go doc github.com/emersion/go-imap-uidplus` および `go doc github.com/emersion/go-imap-uidplus.Client`（パッケージ名・型名は実際の `go doc` 出力に従って読み替える）を実行し、コンストラクタのシグネチャと `UidExpunge` のシグネチャを確認する。確認結果を本ファイルの本タスク完了時に追記する（Phase 2 完了条件を参照）。
-- [ ] 以降のタスクは次のシグネチャを想定して記述している。`go doc` の結果がこれと異なる場合（API 自体が想定と大きく異なる場合を含む）、`internal/imap/client.go` の `uidplusSession` 型定義と `dialTLS` の実装を実際のシグネチャ、または§1の `go.mod` フォールバックに合わせて修正する。
+- [x] `go get github.com/emersion/go-imap-uidplus@latest` を実行し、`go.mod` の `require` ブロックに依存を追加する（現状は未追加であることをローカルモジュールキャッシュ不在で確認済み）。取得に失敗した場合（モジュールが存在しない等）、§1「既存コード調査結果」の `go.mod` フォールバックに切り替え、本タスクのチェック項目をフォールバック実施として記録する。
+  - 取得成功（`v0.0.0-20200503180755-e75854c361e9`）。フォールバックは不要だった。
+- [x] `go get` が成功した場合、`go doc github.com/emersion/go-imap-uidplus` および `go doc github.com/emersion/go-imap-uidplus.Client`（パッケージ名・型名は実際の `go doc` 出力に従って読み替える）を実行し、コンストラクタのシグネチャと `UidExpunge` のシグネチャを確認する。確認結果を本ファイルの本タスク完了時に追記する（Phase 2 完了条件を参照）。
+  - 確認結果: `func NewClient(c *client.Client) *Client`、`func (c *Client) UidExpunge(seqSet *imap.SeqSet, ch chan uint32) error`（`Capability = "UIDPLUS"` も定義済み）。想定シグネチャ（引数1個）と異なり `ch chan uint32` を取るため、`uidplusSession.UidExpunge` 内で `nil` を渡すラッパーとした。
+- [x] 以降のタスクは次のシグネチャを想定して記述している。`go doc` の結果がこれと異なる場合（API 自体が想定と大きく異なる場合を含む）、`internal/imap/client.go` の `uidplusSession` 型定義と `dialTLS` の実装を実際のシグネチャ、または§1の `go.mod` フォールバックに合わせて修正する。
   - `func uidplus.NewClient(c *imapclient.Client) *uidplus.Client`
-  - `func (c *uidplus.Client) UidExpunge(seqset *goimap.SeqSet) error`
-- [ ] `go doc github.com/emersion/go-imap.DeletedFlag` で `goimap.DeletedFlag`（`"\Deleted"`）が go-imap v1.2.1 の `imap` パッケージに定義済みであることを確認する（`SeenFlag` と同じ定数グループ、`message.go`、確認済み）。
+  - `func (c *uidplus.Client) UidExpunge(seqSet *goimap.SeqSet, ch chan uint32) error`（実際のシグネチャ。上記「依存関係の追加と API 確認」で確認済み）
+  - 上記の通り `UidExpunge` の実シグネチャに合わせて `uidplusSession.UidExpunge(seqset) error { return s.uidplus.UidExpunge(seqset, nil) }` とした。`uidplus.Capability`（`"UIDPLUS"`）を `DeleteOlderThan` の capability 照会に再利用し、独自定数は追加していない。
+- [x] `go doc github.com/emersion/go-imap.DeletedFlag` で `goimap.DeletedFlag`（`"\Deleted"`）が go-imap v1.2.1 の `imap` パッケージに定義済みであることを確認する（`SeenFlag` と同じ定数グループ、`message.go`、確認済み）。
 
 #### 変更ファイル: `internal/imap/imap.go`
 
-- [ ] `MailFetcher` インターフェースに、`02_architecture.md` §3.2 のコード片（ドキュメントコメント含む）をそのまま追加し、`DeleteOlderThan` と `SearchOlderThan` を末尾に定義する。
+- [x] `MailFetcher` インターフェースに、`02_architecture.md` §3.2 のコード片（ドキュメントコメント含む）をそのまま追加し、`DeleteOlderThan` と `SearchOlderThan` を末尾に定義する。
 
   ```go
   // DeleteOlderThan deletes messages whose INTERNALDATE (truncated to date) is
@@ -305,14 +308,14 @@
 
 #### 変更ファイル: `internal/imap/client.go`
 
-- [ ] `imapSession` インターフェース（28-36 行目）に以下の 2 メソッドを追加する。
+- [x] `imapSession` インターフェース（28-36 行目）に以下の 2 メソッドを追加する。
 
   ```go
   Support(name string) (bool, error)
   UidExpunge(seqset *goimap.SeqSet) error
   ```
 
-- [ ] `dialTLS`（38-42 行目）が返す値を、go-imap-uidplus でラップした型に変更する。`*imapclient.Client` は `Support(string) (bool, error)` を既に実装しているため（`client/cmd_any.go`、確認済み）、`UidExpunge` のみを委譲する新規型 `uidplusSession` を定義する。
+- [x] `dialTLS`（38-42 行目）が返す値を、go-imap-uidplus でラップした型に変更する。`*imapclient.Client` は `Support(string) (bool, error)` を既に実装しているため（`client/cmd_any.go`、確認済み）、`UidExpunge` のみを委譲する新規型 `uidplusSession` を定義する。
 
   ```go
   // uidplusSession wraps *imapclient.Client to add RFC 4315 UID EXPUNGE support
@@ -337,7 +340,7 @@
 
   `uidplus` は `github.com/emersion/go-imap-uidplus` のインポートエイリアス（`go doc` で確認した実際のパッケージ名に合わせる）。
 
-- [ ] `imapClient` に、SELECT と UID SEARCH BEFORE をそれぞれ単独で実行するヘルパーを追加する（`MarkSeen`（266-289 行目）の SELECT 部分と `truncateToDate`（291-293 行目）を再利用し、`DeleteOlderThan` / `SearchOlderThan` で共有する）。
+- [x] `imapClient` に、SELECT と UID SEARCH BEFORE をそれぞれ単独で実行するヘルパーを追加する（`MarkSeen`（266-289 行目）の SELECT 部分と `truncateToDate`（291-293 行目）を再利用し、`DeleteOlderThan` / `SearchOlderThan` で共有する）。
 
   ```go
   // selectMailbox selects the configured mailbox (read-write or read-only) and
@@ -365,7 +368,7 @@
   }
   ```
 
-- [ ] `DeleteOlderThan` を実装する（処理順序は `02_architecture.md` §6.2 のフロー図に従う: cutoff ゼロ値 → UIDPLUS 対応確認 → read-write SELECT → read-only チェック → UID SEARCH BEFORE → 0 件チェック → `\Deleted` 付与 → UID EXPUNGE）。
+- [x] `DeleteOlderThan` を実装する（処理順序は `02_architecture.md` §6.2 のフロー図に従う: cutoff ゼロ値 → UIDPLUS 対応確認 → read-write SELECT → read-only チェック → UID SEARCH BEFORE → 0 件チェック → `\Deleted` 付与 → UID EXPUNGE）。
 
   ```go
   const uidplusCapability = "UIDPLUS"
@@ -415,7 +418,7 @@
   }
   ```
 
-- [ ] `SearchOlderThan` を実装する（EXAMINE のみ、状態変更なし）。
+- [x] `SearchOlderThan` を実装する（EXAMINE のみ、状態変更なし）。
 
   ```go
   func (c *imapClient) SearchOlderThan(ctx context.Context, cutoff time.Time) ([]uint32, error) {
@@ -437,11 +440,11 @@
   }
   ```
 
-- [ ] `import` ブロックに `uidplus "github.com/emersion/go-imap-uidplus"`（実際のパッケージ名に合わせる）を追加する。`log/slog` は既存の import に含まれているため追加不要。
+- [x] `import` ブロックに `uidplus "github.com/emersion/go-imap-uidplus"`（実際のパッケージ名に合わせる）を追加する。`log/slog` は既存の import に含まれているため追加不要。
 
 #### 変更ファイル: `internal/imap/client_test.go`
 
-- [ ] `fakeSession` 構造体（172-179 行目）に以下のフィールドを追加する。
+- [x] `fakeSession` 構造体（172-179 行目）に以下のフィールドを追加する。
 
   ```go
   supportResult       map[string]bool
@@ -463,9 +466,9 @@
   }
   ```
 
-- [ ] `Select`（185-193 行目）に `selectReadOnlyCalls` への記録を追加する: `f.selectReadOnlyCalls = append(f.selectReadOnlyCalls, readOnly)`（第 2 引数を `_` から `readOnly` に変更する）。
-- [ ] `UidSearch`（196-201 行目）に `f.uidSearchCriteria = criteria` を追加する（第 1 引数を `_` から `criteria` に変更する）。
-- [ ] `UidStore`（211-213 行目）の本体を、呼び出しを記録するように変更する。
+- [x] `Select`（185-193 行目）に `selectReadOnlyCalls` への記録を追加する: `f.selectReadOnlyCalls = append(f.selectReadOnlyCalls, readOnly)`（第 2 引数を `_` から `readOnly` に変更する）。
+- [x] `UidSearch`（196-201 行目）に `f.uidSearchCriteria = criteria` を追加する（第 1 引数を `_` から `criteria` に変更する）。
+- [x] `UidStore`（211-213 行目）の本体を、呼び出しを記録するように変更する。
 
   ```go
   func (f *fakeSession) UidStore(seqset *goimap.SeqSet, item goimap.StoreItem, flags any, _ chan *goimap.Message) error {
@@ -474,7 +477,7 @@
   }
   ```
 
-- [ ] `//revive:enable:var-naming`（215 行目）の直前に以下のメソッドを追加する。
+- [x] `//revive:enable:var-naming`（215 行目）の直前に以下のメソッドを追加する。
 
   ```go
   func (f *fakeSession) Support(name string) (bool, error) {
@@ -490,7 +493,7 @@
   }
   ```
 
-- [ ] 以下の新規テストを追加する。すべて `&imapClient{cfg: Config{Mailbox: "INBOX"}, session: s}` のパターン（既存の `TestClose_SendsIMAPCloseOnlyAfterEXAMINE` 等と同様）で `fakeSession` を構築する。
+- [x] 以下の新規テストを追加する。すべて `&imapClient{cfg: Config{Mailbox: "INBOX"}, session: s}` のパターン（既存の `TestClose_SendsIMAPCloseOnlyAfterEXAMINE` 等と同様）で `fakeSession` を構築する。
   - `TestImapClient_DeleteOlderThan_ZeroCutoff`: `cutoff = time.Time{}` で呼び出し、`(0, nil)` を返すこと、および `s.supportErr = errors.New("must not be called")` を設定しても発生しないこと（capability 照会前に early return することの確認、AC-16）。
   - `TestImapClient_DeleteOlderThan_UIDPLUSUnsupported`: `s.supportResult = map[string]bool{"UIDPLUS": false}` のとき `(0, nil)` を返し、`len(s.uidStoreCalls) == 0` かつ `len(s.uidExpungeCalls) == 0` であること、`slog.Warn` が出力されること（`bytes.Buffer` + `slog.SetDefault(slog.New(slog.NewTextHandler(...)))` + `t.Cleanup` で捕捉し `level=WARN` を含むことを検証、AC-12）。
   - `TestImapClient_DeleteOlderThan_Success`: `s.supportResult = map[string]bool{"UIDPLUS": true}`、`s.selectMailboxStatus = &goimap.MailboxStatus{Name: "INBOX", ReadOnly: false}`、`s.uidSearchResult = []uint32{5, 6}` のとき `(2, nil)` を返すこと、`s.selectReadOnlyCalls` の最後の値が `false`（read-write SELECT）であること、`s.uidSearchCriteria.Before` が `truncateToDate(cutoff)` と一致すること、`s.uidStoreCalls` に 1 件の呼び出しがあり `flags` が `[]any{goimap.DeletedFlag}` であること、`s.uidExpungeCalls` に 1 件の呼び出しがあり対象 UID が `{5, 6}` のみであること（AC-08, AC-15）。
@@ -502,7 +505,7 @@
 
 #### 変更ファイル: `internal/imap/testutil/mocks.go`
 
-- [ ] `FakeMailFetcher` 構造体（14-27 行目）に以下のフィールドを追加する。
+- [x] `FakeMailFetcher` 構造体（14-27 行目）に以下のフィールドを追加する。
 
   ```go
   DeleteOlderThanResult int
@@ -514,7 +517,7 @@
   SearchOlderThanCalls  []time.Time
   ```
 
-- [ ] `Close` メソッド（55-58 行目）の前に、`MarkSeen`（49-53 行目）と同じパターンで以下のメソッドを追加する（AC-17）。
+- [x] `Close` メソッド（55-58 行目）の前に、`MarkSeen`（49-53 行目）と同じパターンで以下のメソッドを追加する（AC-17）。
 
   ```go
   // DeleteOlderThan implements imap.MailFetcher.
@@ -538,12 +541,12 @@
 
 #### 変更ファイル: `internal/imap/testutil/mocks_test.go`
 
-- [ ] `TestFakeMailFetcherDeleteOlderThan`（新規）を追加する。`TestFakeMailFetcherMarkSeen`（45-58 行目）と同じ形式で、`DeleteOlderThanCalls` に呼び出し時の `cutoff` が記録されること、`DeleteOlderThanResult` / `DeleteOlderThanErr` がそれぞれ返却されることを検証する。
-- [ ] `TestFakeMailFetcherSearchOlderThan`（新規）を追加する。同様に `SearchOlderThanCalls` への記録と結果・エラーの返却を検証する。
+- [x] `TestFakeMailFetcherDeleteOlderThan`（新規）を追加する。`TestFakeMailFetcherMarkSeen`（45-58 行目）と同じ形式で、`DeleteOlderThanCalls` に呼び出し時の `cutoff` が記録されること、`DeleteOlderThanResult` / `DeleteOlderThanErr` がそれぞれ返却されることを検証する。
+- [x] `TestFakeMailFetcherSearchOlderThan`（新規）を追加する。同様に `SearchOlderThanCalls` への記録と結果・エラーの返却を検証する。
 
 #### 変更ファイル: `internal/imap/client_integration_test.go`
 
-- [ ] `TestIntegration_DeleteOlderThan`（新規）を追加する。`loadSMTPTestConfig(t)` を使う（`TestIntegration_FetchMeta`/`_Download`/`_MarkSeen` と同じパターンで、テストごとに一意な受信者アドレス＝一意な INBOX を割り当てるため、greenmail 上の他テストのメールボックスとは独立しており削除操作が他テストに影響しない）。
+- [x] `TestIntegration_DeleteOlderThan`（新規）を追加する。`loadSMTPTestConfig(t)` を使う（`TestIntegration_FetchMeta`/`_Download`/`_MarkSeen` と同じパターンで、テストごとに一意な受信者アドレス＝一意な INBOX を割り当てるため、greenmail 上の他テストのメールボックスとは独立しており削除操作が他テストに影響しない）。
   1. `injectTestMail` で 1 通のテストメールを送信する（`messageID := testMessageID()`）。
   2. 1つ目のセッション（`client1`、取得直後に `t.Cleanup(func() { _ = client1.Close() })` を登録）で `client1.FetchMeta(ctx, time.Now().AddDate(-1, 0, 0))` を呼び、`TestIntegration_Download` と同じ `normalizeMessageID` 比較で注入したメールの UID（`wantUID`）を取得する（`require.NotZero(t, wantUID)`）。
   3. 同じ `client1` で `DeleteOlderThan(ctx, cutoff)` を呼ぶ（`cutoff = time.Now().AddDate(0, 0, 1)` とすることで、注入したメールの INTERNALDATE（当日）が `truncateToDate(cutoff)`（翌日 00:00）より前になるようにする）。
@@ -552,16 +555,22 @@
      - `deleted > 0`（UIDPLUS 対応）の場合: `require.NotContains(t, gotUIDs, wantUID)`（削除済み）。
      - `deleted == 0`（UIDPLUS 非対応、AC-12 のフォールバック）の場合: `require.Contains(t, gotUIDs, wantUID)`（削除されていない）。
   6. いずれの場合も `t.Logf("greenmail UIDPLUS support: deleted=%d (>0 means UIDPLUS supported)", deleted)` で結果を記録し、テスト出力から greenmail の UIDPLUS 対応状況を確認できるようにする。
-- [ ] `TestIntegration_SearchOlderThan_ReadOnly`（新規）を追加する。`loadSMTPTestConfig(t)` で一意な INBOX を割り当て、テストメール注入後、同一セッションで `SearchOlderThan(ctx, cutoff)` を 2 回連続で呼び、両方とも同じ UID 集合を返すこと（EXAMINE のみで状態変更が無く、結果が冪等であること）を検証する。
-- [ ] 上記 2 テストの実行結果（greenmail が UIDPLUS を広告するか、`deleted` が 0 より大きいか）を、本ファイルの「フェーズ完了の確認」のチェック項目で記録する。
+- [x] `TestIntegration_SearchOlderThan_ReadOnly`（新規）を追加する。`loadSMTPTestConfig(t)` で一意な INBOX を割り当て、テストメール注入後、同一セッションで `SearchOlderThan(ctx, cutoff)` を 2 回連続で呼び、両方とも同じ UID 集合を返すこと（EXAMINE のみで状態変更が無く、結果が冪等であること）を検証する。
+- [x] 上記 2 テストの実行結果（greenmail が UIDPLUS を広告するか、`deleted` が 0 より大きいか）を、本ファイルの「フェーズ完了の確認」のチェック項目で記録する。
 
 **フェーズ完了の確認**:
-- [ ] `go doc` での API 確認結果（コンストラクタ・`UidExpunge` の実シグネチャ）、または `go-imap-uidplus` が利用できず§1の `go.mod` フォールバック（`Execute` による直接 `UID EXPUNGE` 送信）に切り替えた旨を本セクションの依存関係タスクに追記済みであること
-- [ ] `make fmt` を実行し差分がないこと
-- [ ] `make test` が通過すること（`-tags integration` 抜きのユニットテスト）
-- [ ] `go test -tags integration ./internal/imap/...` を実行し、greenmail に対する `TestIntegration_DeleteOlderThan` / `TestIntegration_SearchOlderThan_ReadOnly` を含む統合テストが通過すること
-- [ ] `make lint` が通過すること
-- [ ] greenmail の UIDPLUS 対応状況（`TestIntegration_DeleteOlderThan` の `deleted` が 0 より大きいか）を本セクションに記録すること
+- [x] `go doc` での API 確認結果（コンストラクタ・`UidExpunge` の実シグネチャ）、または `go-imap-uidplus` が利用できず§1の `go.mod` フォールバック（`Execute` による直接 `UID EXPUNGE` 送信）に切り替えた旨を本セクションの依存関係タスクに追記済みであること
+  - 上記「依存関係の追加と API 確認」セクションに記録済み（`go-imap-uidplus` を利用、フォールバック不要）。
+- [x] `make fmt` を実行し差分がないこと
+  - 差分なし。
+- [x] `make test` が通過すること（`-tags integration` 抜きのユニットテスト）
+  - 通過。
+- [x] `go test -tags integration ./internal/imap/...` を実行し、greenmail に対する `TestIntegration_DeleteOlderThan` / `TestIntegration_SearchOlderThan_ReadOnly` を含む統合テストが通過すること
+  - 通過。
+- [x] `make lint` が通過すること
+  - 0 issues。
+- [x] greenmail の UIDPLUS 対応状況（`TestIntegration_DeleteOlderThan` の `deleted` が 0 より大きいか）を本セクションに記録すること
+  - greenmail は UIDPLUS に対応している（`deleted=1`）。AC-12 のフォールバックパス（UIDPLUS 非対応時の警告ログ + 0 件削除）はユニットテスト `TestImapClient_DeleteOlderThan_UIDPLUSUnsupported` でのみ検証されている。
 
 ### PR-2 作成ポイント: MailFetcher.DeleteOlderThan / SearchOlderThan (UID EXPUNGE)
 
@@ -575,8 +584,8 @@
 - `SearchOlderThan` が EXAMINE のみで状態を変更しないこと。
 - `go-imap-uidplus` の実際の API が `go doc` の確認結果と一致していること。
 
-- [ ] `make test && make lint` がグリーンであることを確認した
-- [ ] PR を作成した
+- [x] `make test && make lint` がグリーンであることを確認した
+- [x] PR を作成した（#159）
 - [ ] PR がマージされた
 - [ ] 次のステップ用のブランチへ切り替えた
 

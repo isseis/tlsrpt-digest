@@ -56,6 +56,56 @@ func TestFakeMailFetcherMarkSeen(t *testing.T) {
 	require.Equal(t, [][]uint32{{5, 8}}, f.MarkSeenCalls)
 }
 
+func TestFakeMailFetcherDeleteOlderThan(t *testing.T) {
+	t.Parallel()
+
+	t.Run("records calls and returns result", func(t *testing.T) {
+		t.Parallel()
+		cutoff := time.Now()
+		f := &FakeMailFetcher{DeleteOlderThanResult: 3}
+
+		got, err := f.DeleteOlderThan(context.Background(), cutoff)
+		require.NoError(t, err)
+		require.Equal(t, 3, got)
+		require.Equal(t, []time.Time{cutoff}, f.DeleteOlderThanCalls)
+	})
+
+	t.Run("injected error", func(t *testing.T) {
+		t.Parallel()
+		deleteErr := errors.New("delete error")
+		f := &FakeMailFetcher{DeleteOlderThanErr: deleteErr}
+
+		got, err := f.DeleteOlderThan(context.Background(), time.Now())
+		require.ErrorIs(t, err, deleteErr)
+		require.Zero(t, got)
+	})
+}
+
+func TestFakeMailFetcherSearchOlderThan(t *testing.T) {
+	t.Parallel()
+
+	t.Run("records calls and returns result", func(t *testing.T) {
+		t.Parallel()
+		cutoff := time.Now()
+		f := &FakeMailFetcher{SearchOlderThanResult: []uint32{5, 6}}
+
+		got, err := f.SearchOlderThan(context.Background(), cutoff)
+		require.NoError(t, err)
+		require.Equal(t, []uint32{5, 6}, got)
+		require.Equal(t, []time.Time{cutoff}, f.SearchOlderThanCalls)
+	})
+
+	t.Run("injected error", func(t *testing.T) {
+		t.Parallel()
+		searchErr := errors.New("search error")
+		f := &FakeMailFetcher{SearchOlderThanErr: searchErr}
+
+		got, err := f.SearchOlderThan(context.Background(), time.Now())
+		require.ErrorIs(t, err, searchErr)
+		require.Nil(t, got)
+	})
+}
+
 func TestFakeMailFetcherClose(t *testing.T) {
 	t.Parallel()
 

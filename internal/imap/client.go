@@ -16,6 +16,7 @@ import (
 	"time"
 
 	goimap "github.com/emersion/go-imap"
+	uidplus "github.com/emersion/go-imap-uidplus"
 	imapclient "github.com/emersion/go-imap/client"
 )
 
@@ -33,12 +34,30 @@ type imapSession interface {
 	UidSearch(criteria *goimap.SearchCriteria) ([]uint32, error)
 	UidFetch(seqset *goimap.SeqSet, items []goimap.FetchItem, ch chan *goimap.Message) error
 	UidStore(seqset *goimap.SeqSet, item goimap.StoreItem, flags any, ch chan *goimap.Message) error
+	Support(name string) (bool, error)
+	UidExpunge(seqset *goimap.SeqSet) error
 }
 
 type dialTLSFunc func(addr string, tlsConfig *tls.Config) (imapSession, error)
 
+// uidplusSession wraps *imapclient.Client to add RFC 4315 UID EXPUNGE support
+// via go-imap-uidplus, satisfying imapSession.
+type uidplusSession struct {
+	*imapclient.Client
+	uidplus *uidplus.Client
+}
+
+//revive:disable-next-line:var-naming // matches imapSession.UidExpunge and go-imap's Uid* naming convention
+func (s *uidplusSession) UidExpunge(seqset *goimap.SeqSet) error {
+	return s.uidplus.UidExpunge(seqset, nil)
+}
+
 var dialTLS dialTLSFunc = func(addr string, tlsConfig *tls.Config) (imapSession, error) {
-	return imapclient.DialTLS(addr, tlsConfig)
+	c, err := imapclient.DialTLS(addr, tlsConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &uidplusSession{Client: c, uidplus: uidplus.NewClient(c)}, nil
 }
 
 type imapClient struct {
@@ -271,11 +290,10 @@ func (c *imapClient) MarkSeen(ctx context.Context, uids []uint32) error {
 		return nil
 	}
 
-	status, err := c.session.Select(c.cfg.Mailbox, false)
+	status, err := c.selectMailbox(false)
 	if err != nil {
-		return fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
+		return fmt.Errorf("imap: mark seen: %w", err)
 	}
-	c.lastSelectReadOnly = status.ReadOnly
 	if status.ReadOnly {
 		return ErrMailboxReadOnly
 	}
@@ -286,6 +304,95 @@ func (c *imapClient) MarkSeen(ctx context.Context, uids []uint32) error {
 		return fmt.Errorf("imap: mark seen: %w", err)
 	}
 	return nil
+}
+
+// selectMailbox selects the configured mailbox (read-write or read-only) and
+// records lastSelectReadOnly for Close().
+func (c *imapClient) selectMailbox(readOnly bool) (*goimap.MailboxStatus, error) {
+	status, err := c.session.Select(c.cfg.Mailbox, readOnly)
+	if err != nil {
+		return nil, fmt.Errorf("imap: select mailbox %s: %w", c.cfg.Mailbox, err)
+	}
+	c.lastSelectReadOnly = status.ReadOnly
+	return status, nil
+}
+
+// uidSearchBefore returns UIDs whose INTERNALDATE is before cutoff.date
+// (date-truncated, RFC 3501 BEFORE semantics). The mailbox must already be
+// selected.
+func (c *imapClient) uidSearchBefore(cutoff time.Time) ([]uint32, error) {
+	criteria := goimap.NewSearchCriteria()
+	criteria.Before = truncateToDate(cutoff)
+	uids, err := c.session.UidSearch(criteria)
+	if err != nil {
+		return nil, fmt.Errorf("imap: uid search before %s: %w", criteria.Before.Format("2006-01-02"), err)
+	}
+	return uids, nil
+}
+
+func (c *imapClient) DeleteOlderThan(ctx context.Context, cutoff time.Time) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, fmt.Errorf("imap: delete older than: %w", err)
+	}
+	if cutoff.IsZero() {
+		return 0, nil
+	}
+
+	supported, err := c.session.Support(uidplus.Capability)
+	if err != nil {
+		return 0, fmt.Errorf("imap: delete older than: check %s support: %w", uidplus.Capability, err)
+	}
+	if !supported {
+		slog.Warn("imap: server does not support UIDPLUS; skipping delete", "mailbox", c.cfg.Mailbox)
+		return 0, nil
+	}
+
+	status, err := c.selectMailbox(false)
+	if err != nil {
+		return 0, fmt.Errorf("imap: delete older than: %w", err)
+	}
+	if status.ReadOnly {
+		return 0, ErrMailboxReadOnly
+	}
+
+	uids, err := c.uidSearchBefore(cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("imap: delete older than: %w", err)
+	}
+	if len(uids) == 0 {
+		return 0, nil
+	}
+
+	// If UidExpunge fails after UidStore succeeds, the messages remain flagged
+	// \Deleted until the next DeleteOlderThan run retries them (uidSearchBefore
+	// does not filter by flag, so this is self-healing).
+	seqSet := uidsToSeqSet(uids)
+	storeItem := goimap.FormatFlagsOp(goimap.AddFlags, false)
+	if err := c.session.UidStore(seqSet, storeItem, []any{goimap.DeletedFlag}, nil); err != nil {
+		return 0, fmt.Errorf("imap: delete older than: mark deleted: %w", err)
+	}
+	if err := c.session.UidExpunge(seqSet); err != nil {
+		return 0, fmt.Errorf("imap: delete older than: uid expunge: %w", err)
+	}
+	return len(uids), nil
+}
+
+func (c *imapClient) SearchOlderThan(ctx context.Context, cutoff time.Time) ([]uint32, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("imap: search older than: %w", err)
+	}
+	if cutoff.IsZero() {
+		return []uint32{}, nil
+	}
+
+	if _, err := c.selectMailbox(true); err != nil {
+		return nil, fmt.Errorf("imap: search older than: %w", err)
+	}
+	uids, err := c.uidSearchBefore(cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("imap: search older than: %w", err)
+	}
+	return uids, nil
 }
 
 func truncateToDate(v time.Time) time.Time {
