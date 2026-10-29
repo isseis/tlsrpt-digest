@@ -411,7 +411,7 @@ crontab (edit with `crontab -e`):
 
 ## Contributing
 
-For the development workflow from environment setup to PR merge, see the [Developer Onboarding Guide](docs/dev/developer_guide/development_process.ja.md).
+For the development workflow from environment setup to PR merge, see the [Developer Onboarding Guide](docs/dev/developer_guide/development_process.md).
 
 ---
 
